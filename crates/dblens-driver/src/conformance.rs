@@ -173,7 +173,8 @@ pub async fn cancel_running_query(f: &Fixture) {
     let result = run(c.as_mut(), f.long_running, &[]).await;
     canceller.await.expect("取消任务异常退出").expect("发送取消失败");
     assert_eq!(result.unwrap_err(), Error::Cancelled);
-    assert!(started.elapsed() < Duration::from_secs(5), "取消耗时过长：{:?}", started.elapsed());
+    // 达梦服务器端的取消约 3～4 秒才生效（见 docs/notes/dameng-dpi-spike.md），上限放宽到 10 秒
+    assert!(started.elapsed() < Duration::from_secs(10), "取消耗时过长：{:?}", started.elapsed());
     c.ping().await.expect("取消后连接应仍可用");
 }
 

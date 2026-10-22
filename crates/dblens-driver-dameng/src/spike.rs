@@ -13,7 +13,7 @@ use crate::handles::{Con, Env, Stmt, succeeded};
 use crate::load;
 
 /// 不取消时在测试库上约需 130 秒的查询。
-const SLOW_SQL: &str = "SELECT COUNT(*) FROM SYSOBJECTS a, SYSOBJECTS b, SYSOBJECTS c     WHERE a.ID + b.ID + c.ID > 0 AND LENGTH(a.NAME || b.NAME || c.NAME) > 0";
+const SLOW_SQL: &str = "SELECT COUNT(*) FROM SYSOBJECTS a, SYSOBJECTS b, SYSOBJECTS c WHERE a.ID + b.ID + c.ID > 0 AND LENGTH(a.NAME || b.NAME || c.NAME) > 0";
 
 fn connect() -> Con {
     let url = std::env::var("DBLENS_TEST_DM_URL").expect("请设置 DBLENS_TEST_DM_URL");
