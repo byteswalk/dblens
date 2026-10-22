@@ -127,11 +127,16 @@ pub fn locate_with(
             let mut c = Vec::new();
             for (var, subdirs) in lib.home_vars() {
                 if let Some(home) = env(var) {
-                    c.extend(subdirs.iter().map(|s| PathBuf::from(&home).join(s)));
+                    // 空子目录表示 home 本身，不做 join，避免末尾多出分隔符
+                    c.extend(subdirs.iter().map(|s| {
+                        let base = PathBuf::from(&home);
+                        if s.is_empty() { base } else { base.join(s) }
+                    }));
                 }
             }
+            // 只接受绝对路径：空项和相对路径会按当前目录解析，存在库被从工作目录加载的风险
             if let Some(paths) = env(search_path_var()) {
-                c.extend(std::env::split_paths(&paths));
+                c.extend(std::env::split_paths(&paths).filter(|p| p.is_absolute()));
             }
             c.extend(common.iter().cloned());
             c
@@ -163,14 +168,21 @@ pub fn expand_common(patterns: &[&str]) -> Vec<PathBuf> {
         let (Some(parent), Some(stem)) = (prefix.parent(), prefix.file_name()) else { continue };
         let stem = stem.to_string_lossy().into_owned();
         let Ok(entries) = std::fs::read_dir(parent) else { continue };
-        let mut found: Vec<PathBuf> = entries
+        // 版本键：目录名中的数字段按数值比较（23_26 > 23_9），非数字段忽略，溢出的段跳过
+        let mut found: Vec<(Vec<u64>, PathBuf)> = entries
             .flatten()
             .map(|e| e.path())
             .filter(|p| p.is_dir() && p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(&stem)))
+            .map(|p| {
+                let name = p.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                let key: Vec<u64> =
+                    name.split(|c: char| !c.is_ascii_digit()).filter_map(|d| d.parse().ok()).collect();
+                (key, p)
+            })
             .collect();
-        found.sort();
-        found.reverse();
-        out.extend(found);
+        // 降序：版本号大的在前，版本键相同时按路径名降序作为稳定的次序
+        found.sort_by(|a, b| b.cmp(a));
+        out.extend(found.into_iter().map(|(_, p)| p));
     }
     out
 }
@@ -236,6 +248,44 @@ mod tests {
         };
         let env = move |k: &str| (k == var).then(|| joined.clone());
         assert_eq!(locate_with(NativeLib::OracleClient, None, &env, &[]).unwrap(), b);
+    }
+
+    #[test]
+    fn search_path_ignores_empty_and_relative_entries() {
+        let root = temp("path-relative");
+        let good = root.join("good");
+        put_lib(&good, NativeLib::OracleClient);
+
+        // 只有空项和相对路径：都不能成为候选，因此候选列表为空
+        let joined = std::env::join_paths([Path::new(""), Path::new("relative_dir")]).unwrap();
+        let env = move |k: &str| (k == search_path_var()).then(|| joined.clone());
+        let err = locate_with(NativeLib::OracleClient, None, &env, &[]).unwrap_err();
+        let Error::DriverUnavailable { hint } = err else { panic!("应为 DriverUnavailable") };
+        assert!(hint.ends_with("已查找："), "{hint}");
+
+        // 空项与绝对路径混合：绝对路径仍然有效
+        let joined = std::env::join_paths([Path::new(""), good.as_path()]).unwrap();
+        let env = move |k: &str| (k == search_path_var()).then(|| joined.clone());
+        assert_eq!(locate_with(NativeLib::OracleClient, None, &env, &[]).unwrap(), good);
+    }
+
+    #[test]
+    fn newer_versions_sort_numerically() {
+        let root = temp("numeric");
+        for name in ["instantclient_23_9", "instantclient_23_26", "instantclient_9_2", "instantclient_19_8"] {
+            put_lib(&root.join(name), NativeLib::OracleClient);
+        }
+        let pattern = format!("{}*", root.join("instantclient_").display());
+        let dirs = expand_common(&[pattern.as_str()]);
+        assert_eq!(
+            dirs,
+            vec![
+                root.join("instantclient_23_26"),
+                root.join("instantclient_23_9"),
+                root.join("instantclient_19_8"),
+                root.join("instantclient_9_2"),
+            ]
+        );
     }
 
     #[test]
