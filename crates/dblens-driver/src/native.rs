@@ -1,1 +1,263 @@
-//! 原生客户端库查找（Task 2 实现）。
+//! 查找运行时动态加载的原生客户端库（Oracle Instant Client、达梦 DPI）。
+//! 查找顺序：设置中指定的目录（指定后只查这一处）→ 专属环境变量 → 库搜索路径变量 → 常见安装位置。
+
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+
+use dblens_core::{Error, Result};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeLib {
+    OracleClient,
+    DamengDpi,
+}
+
+impl NativeLib {
+    /// 当前平台上的库文件名。
+    pub fn file_name(self) -> &'static str {
+        match self {
+            NativeLib::OracleClient => {
+                if cfg!(windows) {
+                    "oci.dll"
+                } else if cfg!(target_os = "macos") {
+                    "libclntsh.dylib"
+                } else {
+                    "libclntsh.so"
+                }
+            }
+            NativeLib::DamengDpi => {
+                if cfg!(windows) {
+                    "dmdpi.dll"
+                } else if cfg!(target_os = "macos") {
+                    "libdmdpi.dylib"
+                } else {
+                    "libdmdpi.so"
+                }
+            }
+        }
+    }
+
+    fn display_name(self) -> &'static str {
+        match self {
+            NativeLib::OracleClient => "Oracle 客户端库",
+            NativeLib::DamengDpi => "达梦 DPI 库",
+        }
+    }
+
+    fn install_hint(self) -> &'static str {
+        match self {
+            NativeLib::OracleClient => {
+                "请安装 Oracle Instant Client（Basic 或 Basic Light），然后在连接设置中指定其目录，或设置 ORACLE_HOME / PATH"
+            }
+            NativeLib::DamengDpi => {
+                "请安装达梦客户端（含 DPI 驱动），然后在连接设置中指定 dmdpi 所在目录，或设置 DM_HOME"
+            }
+        }
+    }
+
+    /// （环境变量，其下要查找的子目录）
+    fn home_vars(self) -> &'static [(&'static str, &'static [&'static str])] {
+        match self {
+            NativeLib::OracleClient => &[("ORACLE_HOME", &["", "bin", "lib"])],
+            NativeLib::DamengDpi => &[("DM_HOME", &["bin", "drivers/dpi"])],
+        }
+    }
+
+    /// 常见安装位置。以 `*` 结尾表示按前缀匹配同级的所有子目录。
+    fn common_patterns(self) -> &'static [&'static str] {
+        match self {
+            NativeLib::OracleClient => {
+                if cfg!(windows) {
+                    &[
+                        "C:\\oracle\\instantclient*",
+                        "C:\\instantclient*",
+                        "D:\\oracle\\instantclient*",
+                        "E:\\oracle\\instantclient*",
+                    ]
+                } else if cfg!(target_os = "macos") {
+                    &["/opt/oracle/instantclient*"]
+                } else {
+                    &[
+                        "/opt/oracle/instantclient*",
+                        "/usr/lib/oracle/23/client64/lib",
+                        "/usr/lib/oracle/21/client64/lib",
+                        "/usr/lib/oracle/19/client64/lib",
+                    ]
+                }
+            }
+            NativeLib::DamengDpi => {
+                if cfg!(windows) {
+                    &["C:\\dmdbms\\bin", "D:\\dmdbms\\bin", "C:\\dmdbms\\drivers\\dpi"]
+                } else if cfg!(target_os = "macos") {
+                    &[]
+                } else {
+                    &["/opt/dmdbms/bin", "/home/dmdba/dmdbms/bin", "/dm8/bin"]
+                }
+            }
+        }
+    }
+}
+
+fn search_path_var() -> &'static str {
+    if cfg!(windows) {
+        "PATH"
+    } else if cfg!(target_os = "macos") {
+        "DYLD_LIBRARY_PATH"
+    } else {
+        "LD_LIBRARY_PATH"
+    }
+}
+
+/// 查找库所在的目录。
+pub fn locate(lib: NativeLib, configured: Option<&Path>) -> Result<PathBuf> {
+    let common = expand_common(lib.common_patterns());
+    locate_with(lib, configured, &|k| std::env::var_os(k), &common)
+}
+
+/// 可注入环境变量和常见目录的查找，供测试使用。
+pub fn locate_with(
+    lib: NativeLib,
+    configured: Option<&Path>,
+    env: &dyn Fn(&str) -> Option<OsString>,
+    common: &[PathBuf],
+) -> Result<PathBuf> {
+    let candidates: Vec<PathBuf> = match configured {
+        Some(dir) => vec![dir.to_path_buf()],
+        None => {
+            let mut c = Vec::new();
+            for (var, subdirs) in lib.home_vars() {
+                if let Some(home) = env(var) {
+                    c.extend(subdirs.iter().map(|s| PathBuf::from(&home).join(s)));
+                }
+            }
+            if let Some(paths) = env(search_path_var()) {
+                c.extend(std::env::split_paths(&paths));
+            }
+            c.extend(common.iter().cloned());
+            c
+        }
+    };
+    candidates.iter().find(|d| d.join(lib.file_name()).is_file()).cloned().ok_or_else(|| {
+        let tried: Vec<String> = candidates.iter().map(|p| p.display().to_string()).collect();
+        Error::DriverUnavailable {
+            hint: format!(
+                "未找到{}（{}）。{}。已查找：{}",
+                lib.display_name(),
+                lib.file_name(),
+                lib.install_hint(),
+                tried.join("；")
+            ),
+        }
+    })
+}
+
+/// 展开常见安装位置。`前缀*` 匹配同级目录中名字以该前缀开头的子目录，按名称倒序（新版本在前）。
+pub fn expand_common(patterns: &[&str]) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for pattern in patterns {
+        let Some(prefix) = pattern.strip_suffix('*') else {
+            out.push(PathBuf::from(pattern));
+            continue;
+        };
+        let prefix = Path::new(prefix);
+        let (Some(parent), Some(stem)) = (prefix.parent(), prefix.file_name()) else { continue };
+        let stem = stem.to_string_lossy().into_owned();
+        let Ok(entries) = std::fs::read_dir(parent) else { continue };
+        let mut found: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir() && p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(&stem)))
+            .collect();
+        found.sort();
+        found.reverse();
+        out.extend(found);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn temp(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("dblens-native-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn put_lib(dir: &Path, lib: NativeLib) {
+        fs::create_dir_all(dir).unwrap();
+        fs::write(dir.join(lib.file_name()), b"").unwrap();
+    }
+
+    fn no_env(_: &str) -> Option<OsString> {
+        None
+    }
+
+    #[test]
+    fn configured_dir_is_the_only_place_searched() {
+        let root = temp("configured");
+        let good = root.join("good");
+        put_lib(&good, NativeLib::DamengDpi);
+        assert_eq!(locate_with(NativeLib::DamengDpi, Some(good.as_path()), &no_env, &[]).unwrap(), good);
+
+        // 指定了目录但里面没有库：即使环境变量里能找到，也要报错
+        let empty = root.join("empty");
+        fs::create_dir_all(&empty).unwrap();
+        let env = |k: &str| (k == "DM_HOME").then(|| good.clone().into_os_string());
+        let err = locate_with(NativeLib::DamengDpi, Some(empty.as_path()), &env, &[]).unwrap_err();
+        assert!(matches!(err, Error::DriverUnavailable { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn home_variable_subdirectories() {
+        let home = temp("home");
+        put_lib(&home.join("bin"), NativeLib::DamengDpi);
+        let env = |k: &str| (k == "DM_HOME").then(|| home.clone().into_os_string());
+        assert_eq!(locate_with(NativeLib::DamengDpi, None, &env, &[]).unwrap(), home.join("bin"));
+    }
+
+    #[test]
+    fn search_path_variable() {
+        let root = temp("path");
+        let a = root.join("a");
+        let b = root.join("b");
+        fs::create_dir_all(&a).unwrap();
+        put_lib(&b, NativeLib::OracleClient);
+        let joined = std::env::join_paths([&a, &b]).unwrap();
+        let var = if cfg!(windows) {
+            "PATH"
+        } else if cfg!(target_os = "macos") {
+            "DYLD_LIBRARY_PATH"
+        } else {
+            "LD_LIBRARY_PATH"
+        };
+        let env = move |k: &str| (k == var).then(|| joined.clone());
+        assert_eq!(locate_with(NativeLib::OracleClient, None, &env, &[]).unwrap(), b);
+    }
+
+    #[test]
+    fn common_dirs_and_prefix_expansion_prefers_newest() {
+        let root = temp("common");
+        put_lib(&root.join("instantclient_19_8"), NativeLib::OracleClient);
+        put_lib(&root.join("instantclient_23_5"), NativeLib::OracleClient);
+        let pattern = format!("{}*", root.join("instantclient_").display());
+        let dirs = expand_common(&[pattern.as_str()]);
+        assert_eq!(dirs, vec![root.join("instantclient_23_5"), root.join("instantclient_19_8")]);
+        assert_eq!(
+            locate_with(NativeLib::OracleClient, None, &no_env, &dirs).unwrap(),
+            root.join("instantclient_23_5")
+        );
+    }
+
+    #[test]
+    fn not_found_hint_lists_tried_dirs() {
+        let root = temp("missing");
+        let err = locate_with(NativeLib::DamengDpi, None, &no_env, std::slice::from_ref(&root)).unwrap_err();
+        let Error::DriverUnavailable { hint } = err else { panic!("应为 DriverUnavailable") };
+        assert!(hint.contains(NativeLib::DamengDpi.file_name()), "{hint}");
+        assert!(hint.contains(&root.display().to_string()), "{hint}");
+    }
+}
