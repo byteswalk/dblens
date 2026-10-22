@@ -1,7 +1,9 @@
 //! 驱动接口：所有数据库驱动都实现这里的 `Driver` / `Connection` / `ExecStream`。
 
+pub mod blocking;
 mod cancel;
 mod exec;
+pub mod native;
 mod params;
 mod traits;
 

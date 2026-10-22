@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [features]
-conformance = ["dep:tokio"]
+conformance = []
 
 [dependencies]
 async-trait.workspace = true
@@ -14,7 +14,7 @@ dblens-core.workspace = true
 futures.workspace = true
 percent-encoding.workspace = true
 serde.workspace = true
-tokio = { workspace = true, optional = true }
+tokio.workspace = true
 url.workspace = true
 
 [dev-dependencies]
