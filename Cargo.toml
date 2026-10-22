@@ -11,6 +11,7 @@ publish = false
 [workspace.dependencies]
 dblens-core = { path = "crates/dblens-core" }
 dblens-driver = { path = "crates/dblens-driver" }
+dblens-dialect = { path = "crates/dblens-dialect" }
 
 async-trait = "0.1.92"
 base64 = "0.23.1"

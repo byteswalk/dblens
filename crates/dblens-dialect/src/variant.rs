@@ -1,0 +1,141 @@
+//! 方言家族与具体产品变体的识别。
+
+use dblens_driver::{DriverId, ServerInfo};
+use serde::{Deserialize, Serialize};
+
+/// 方言家族：语法规则基本相同的一组数据库。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Family {
+    MySql,
+    Postgres,
+    Oracle,
+    Dameng,
+}
+
+/// 具体的数据库产品。兼容库复用所属家族的规则，只在个别地方覆盖。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Variant {
+    MySql,
+    MariaDb,
+    TiDb,
+    /// OceanBase 的 MySQL 模式。
+    OceanBase,
+    Postgres,
+    Kingbase,
+    OpenGauss,
+    GaussDb,
+    HighGo,
+    Oracle,
+    Dameng,
+}
+
+impl Variant {
+    pub fn family(self) -> Family {
+        match self {
+            Variant::MySql | Variant::MariaDb | Variant::TiDb | Variant::OceanBase => Family::MySql,
+            Variant::Postgres
+            | Variant::Kingbase
+            | Variant::OpenGauss
+            | Variant::GaussDb
+            | Variant::HighGo => Family::Postgres,
+            Variant::Oracle => Family::Oracle,
+            Variant::Dameng => Family::Dameng,
+        }
+    }
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Variant::MySql => "MySQL",
+            Variant::MariaDb => "MariaDB",
+            Variant::TiDb => "TiDB",
+            Variant::OceanBase => "OceanBase（MySQL 模式）",
+            Variant::Postgres => "PostgreSQL",
+            Variant::Kingbase => "人大金仓 KingbaseES",
+            Variant::OpenGauss => "openGauss",
+            Variant::GaussDb => "GaussDB",
+            Variant::HighGo => "瀚高 HighGo",
+            Variant::Oracle => "Oracle",
+            Variant::Dameng => "达梦 DM",
+        }
+    }
+
+    /// 没有服务器信息时使用的基础变体。
+    pub fn base(driver: DriverId) -> Variant {
+        match driver {
+            DriverId::Mysql => Variant::MySql,
+            DriverId::Postgres => Variant::Postgres,
+            DriverId::Oracle => Variant::Oracle,
+            DriverId::Dameng => Variant::Dameng,
+        }
+    }
+
+    /// 根据驱动和服务器返回的版本字符串识别具体产品，识别不出时退回基础变体。
+    /// 注意：PolarDB-MySQL、GoldenDB 等的 `VERSION()` 与 MySQL 无法区分，会识别为 MySQL。
+    pub fn detect(driver: DriverId, info: &ServerInfo) -> Variant {
+        let v = info.version.to_ascii_lowercase();
+        match driver {
+            DriverId::Mysql if v.contains("mariadb") => Variant::MariaDb,
+            DriverId::Mysql if v.contains("tidb") => Variant::TiDb,
+            DriverId::Mysql if v.contains("oceanbase") => Variant::OceanBase,
+            DriverId::Postgres if v.contains("kingbase") => Variant::Kingbase,
+            DriverId::Postgres if v.contains("opengauss") => Variant::OpenGauss,
+            DriverId::Postgres if v.contains("gaussdb") => Variant::GaussDb,
+            DriverId::Postgres if v.contains("highgo") => Variant::HighGo,
+            _ => Variant::base(driver),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn info(product: &str, version: &str) -> ServerInfo {
+        ServerInfo { product: product.into(), version: version.into() }
+    }
+
+    #[test]
+    fn detects_mysql_family_variants() {
+        assert_eq!(Variant::detect(DriverId::Mysql, &info("MySQL", "8.4.3")), Variant::MySql);
+        assert_eq!(
+            Variant::detect(DriverId::Mysql, &info("MySQL", "11.4.4-MariaDB-ubu2404")),
+            Variant::MariaDb
+        );
+        assert_eq!(Variant::detect(DriverId::Mysql, &info("MySQL", "8.0.11-TiDB-v7.5.1")), Variant::TiDb);
+        assert_eq!(
+            Variant::detect(DriverId::Mysql, &info("MySQL", "5.7.25-OceanBase_CE-v4.2.1.2")),
+            Variant::OceanBase
+        );
+    }
+
+    #[test]
+    fn detects_postgres_family_variants() {
+        let pg = "PostgreSQL 17.2 (Debian 17.2-1.pgdg120+1) on x86_64-pc-linux-gnu";
+        assert_eq!(Variant::detect(DriverId::Postgres, &info("PostgreSQL", pg)), Variant::Postgres);
+        let kb = "KingbaseES V008R006C008B0014 on x86_64-pc-linux-gnu, compiled by gcc";
+        assert_eq!(Variant::detect(DriverId::Postgres, &info("PostgreSQL", kb)), Variant::Kingbase);
+        let og = "(openGauss 5.0.1 build 33b035fd) compiled at 2023-12-15 on x86_64-unknown-linux-gnu";
+        assert_eq!(Variant::detect(DriverId::Postgres, &info("PostgreSQL", og)), Variant::OpenGauss);
+        let gs = "gaussdb (GaussDB Kernel 505.1.0 build 2c0ba3b1) compiled at 2024-03-01";
+        assert_eq!(Variant::detect(DriverId::Postgres, &info("PostgreSQL", gs)), Variant::GaussDb);
+        let hg = "HighGo Security Enterprise Edition Release 4.5.8 on x86_64";
+        assert_eq!(Variant::detect(DriverId::Postgres, &info("PostgreSQL", hg)), Variant::HighGo);
+    }
+
+    #[test]
+    fn oracle_and_dameng_and_families() {
+        let ora = "Oracle AI Database 26ai Free Release 23.26.0.0.0 - Develop, Learn, and Run for Free";
+        assert_eq!(Variant::detect(DriverId::Oracle, &info("Oracle", ora)), Variant::Oracle);
+        assert_eq!(
+            Variant::detect(DriverId::Dameng, &info("DM", "DM Database Server 64 V8")),
+            Variant::Dameng
+        );
+        assert_eq!(Variant::TiDb.family(), Family::MySql);
+        assert_eq!(Variant::Kingbase.family(), Family::Postgres);
+        assert_eq!(Variant::Dameng.family(), Family::Dameng);
+        assert_eq!(Variant::base(DriverId::Postgres), Variant::Postgres);
+        assert_eq!(Variant::Kingbase.display_name(), "人大金仓 KingbaseES");
+    }
+}
