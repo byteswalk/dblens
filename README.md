@@ -21,6 +21,11 @@ cargo test --workspace
 | `DBLENS_TEST_MYSQL_URL` | `mysql://root:dblens@127.0.0.1:3306/dblens_test` |
 | `DBLENS_TEST_MARIADB_URL` | `mysql://root:dblens@127.0.0.1:3307/dblens_test` |
 | `DBLENS_TEST_PG_URL` | `postgres://postgres:dblens@127.0.0.1:5432/dblens_test` |
+| `DBLENS_TEST_DM_URL` | `dm://SYSDBA:密码@127.0.0.1:5236` |
+| `DBLENS_TEST_ORACLE_URL` | `oracle://dblens:dblens@127.0.0.1:1521/FREEPDB1` |
+
+- 达梦和 Oracle 驱动在运行时加载本机的客户端库：达梦需要安装达梦客户端（dmdpi），Oracle 需要 Instant Client。库所在目录可以用 URL 参数 `dpi_lib_dir` / `oracle_client_lib_dir` 指定，不指定时会按 `DM_HOME` / `ORACLE_HOME`、PATH 和常见安装位置自动查找。
+- 达梦集成测试只能在本地运行（CI 中没有达梦镜像）；达梦 DPI 技术验证：`cargo test -p dblens-driver-dameng spike -- --ignored --nocapture --test-threads=1`。
 
 有 Docker 时可以一键启动这三个测试库：
 
