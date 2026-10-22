@@ -112,3 +112,48 @@ async fn null_and_binary_params() {
     assert_eq!(events, vec![ExecEvent::Affected(0)]);
     run(&mut conn, &format!("DROP TABLE {t}"), &[]).await;
 }
+
+/// 从手动提交切回自动提交时，未提交的事务应被提交（Connection::set_autocommit 的约定）。
+#[tokio::test]
+async fn switching_back_to_autocommit_commits_pending_work() {
+    let Some(mut conn) = connect_or_skip().await else { return };
+    let t = "DBLENS_DM_AUTOCOMMIT";
+    run(&mut conn, &format!("DROP TABLE IF EXISTS {t}"), &[]).await;
+    run(&mut conn, &format!("CREATE TABLE {t} (id INT)"), &[]).await;
+    conn.set_autocommit(false).await.unwrap();
+    run(&mut conn, &format!("INSERT INTO {t} VALUES (1)"), &[]).await;
+    // 不调用 commit，直接切回自动提交
+    conn.set_autocommit(true).await.unwrap();
+    let Some(mut other) = connect_or_skip().await else { return };
+    let n = first_value(&run(&mut other, &format!("SELECT COUNT(*) FROM {t}"), &[]).await);
+    run(&mut conn, &format!("DROP TABLE {t}"), &[]).await;
+    assert_eq!(n, Value::Int(1), "切回自动提交后，其他连接应能看到未显式提交的行");
+}
+
+/// 空字符串与空二进制作为参数：绑定不能出错，也不能读到无效内存。
+#[tokio::test]
+async fn empty_string_and_binary_params() {
+    let Some(mut conn) = connect_or_skip().await else { return };
+    let t = "DBLENS_DM_EMPTY_PARAMS";
+    run(&mut conn, &format!("DROP TABLE IF EXISTS {t}"), &[]).await;
+    run(&mut conn, &format!("CREATE TABLE {t} (id INT, name VARCHAR(100), data VARBINARY(100))"), &[]).await;
+    let insert = format!("INSERT INTO {t} VALUES (?, ?, ?)");
+    let events =
+        run(&mut conn, &insert, &[Value::Int(1), Value::String(String::new()), Value::Bytes(Vec::new())])
+            .await;
+    assert_eq!(events, vec![ExecEvent::Affected(1)]);
+    let select = format!(
+        "SELECT name, data, CASE WHEN name IS NULL THEN 1 ELSE 0 END, CASE WHEN data IS NULL THEN 1 ELSE 0 END FROM {t} WHERE id = ?"
+    );
+    let events = run(&mut conn, &select, &[Value::Int(1)]).await;
+    let row = events
+        .iter()
+        .find_map(|e| if let ExecEvent::Rows(rows) = e { Some(rows[0].clone()) } else { None })
+        .unwrap();
+    run(&mut conn, &format!("DROP TABLE {t}"), &[]).await;
+    // DM（默认兼容模式）不像 Oracle 那样把 '' 当作 NULL：空字符串和空二进制都原样读回，IS NULL 为假
+    assert_eq!(
+        row,
+        vec![Value::String(String::new()), Value::Bytes(Vec::new()), Value::Int(0), Value::Int(0)]
+    );
+}

@@ -9,7 +9,7 @@ use dblens_driver::blocking::{BlockingConnection, BlockingExec};
 use dblens_driver::{CancelHandle, ColumnMeta, ExecEvent, ServerInfo};
 
 use crate::ffi::*;
-use crate::handles::{ColDesc, Con, Stmt, diag, succeeded};
+use crate::handles::{ColDesc, Con, Stmt, succeeded};
 use crate::types::{DmType, PREVIEW, ParamData, bytes_value, classify, param_data, type_name, with_scale};
 
 /// 语句被 dpi_cancel 中断时 DM 返回的错误码（「操作被取消」，见技术验证笔记）。
@@ -38,11 +38,18 @@ pub(crate) struct DmConnection {
     con: Con,
     current: Current,
     cancelled: Arc<AtomicBool>,
+    /// 当前是否为自动提交；连接建立时已开启。
+    autocommit: bool,
 }
 
 impl DmConnection {
     pub(crate) fn new(con: Con) -> Self {
-        DmConnection { con, current: Arc::new(Mutex::new(None)), cancelled: Arc::new(AtomicBool::new(false)) }
+        DmConnection {
+            con,
+            current: Arc::new(Mutex::new(None)),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            autocommit: true,
+        }
     }
 
     /// 取消句柄：加锁后对当前语句调用 dpi_cancel。持锁期间工作线程不会释放该语句。
@@ -59,7 +66,10 @@ impl DmConnection {
                         // dpi_cancel 允许从其他线程对正在执行的语句调用（技术验证 spike_2）
                         let rt = unsafe { dpi.dpi_cancel(ptr.0) };
                         if !succeeded(rt) {
-                            return Err(diag(&dpi, DSQL_HANDLE_STMT as i64, ptr.0 as dhandle));
+                            // 取消没有发出：清除标志，免得这次执行之后的真实错误被误报为"已取消"。
+                            // 不在这里读语句句柄的诊断信息：工作线程可能正在并发使用该句柄
+                            cancelled.store(false, Ordering::SeqCst);
+                            return Err(Error::internal(format!("dpi_cancel 失败，返回码 {rt}")));
                         }
                     }
                     Ok(())
@@ -97,17 +107,28 @@ fn bind_params(stmt: &Stmt<'_>, params: &[Value]) -> Result<ParamBuffers> {
     let mut bufs = ParamBuffers { data: Vec::with_capacity(params.len()), lens: vec![0; params.len()] };
     let mut kinds = Vec::with_capacity(params.len());
     for v in params {
-        let (c_type, sql_type, bytes, null) = match param_data(v)? {
-            ParamData::Null => (DSQL_C_NCHAR as i64, DSQL_VARCHAR as i64, vec![0u8], true),
-            ParamData::Text(b) => (DSQL_C_NCHAR as i64, DSQL_VARCHAR as i64, b, false),
-            ParamData::Binary(b) => (DSQL_C_BINARY as i64, DSQL_VARBINARY as i64, b, false),
+        let (c_type, sql_type, bytes, len) = match param_data(v)? {
+            ParamData::Null => {
+                (DSQL_C_NCHAR as i64, DSQL_VARCHAR as i64, Vec::new(), DSQL_NULL_DATA as slength)
+            }
+            ParamData::Text(b) => {
+                let len = b.len() as slength;
+                (DSQL_C_NCHAR as i64, DSQL_VARCHAR as i64, b, len)
+            }
+            ParamData::Binary(b) => {
+                let len = b.len() as slength;
+                (DSQL_C_BINARY as i64, DSQL_VARBINARY as i64, b, len)
+            }
         };
-        kinds.push((c_type, sql_type, null));
+        // NULL 和空值（'' 或空二进制）也给 DPI 一个真实分配的 1 字节缓冲区，不传空 Vec 的悬空指针；
+        // 实际长度由 lens 给出（0 或 DSQL_NULL_DATA）
+        let bytes = if bytes.is_empty() { vec![0u8] } else { bytes };
+        kinds.push((c_type, sql_type, len));
         bufs.data.push(bytes);
     }
     let ParamBuffers { data, lens } = &mut bufs;
-    for (i, (c_type, sql_type, null)) in kinds.into_iter().enumerate() {
-        lens[i] = if null { DSQL_NULL_DATA as slength } else { data[i].len() as slength };
+    for (i, (c_type, sql_type, len)) in kinds.into_iter().enumerate() {
+        lens[i] = len;
         // SAFETY: data[i] 与 lens[i] 都已按最终长度分配，之后不再增删元素，不会重新分配；
         // 整体移动 ParamBuffers（以及其中的 Vec）不改变堆上地址。调用方把返回的 ParamBuffers
         // 存进 DmExec，与语句句柄同生命周期，因此这些地址在 exec 返回之前（以及之后）一直有效
@@ -246,7 +267,8 @@ impl BlockingConnection for DmConnection {
             Err(e) => {
                 // 语句句柄即将随 stmt 释放，必须先从"当前语句"中移除，否则取消会作用到已释放的句柄
                 self.set_current(None);
-                return Err(e);
+                // exec 刚返回时到达的取消也可能让 describe 出错
+                return Err(map_cancel(&self.cancelled, e));
             }
         };
         Ok(Box::new(DmExec {
@@ -261,7 +283,14 @@ impl BlockingConnection for DmConnection {
     }
 
     fn set_autocommit(&mut self, on: bool) -> Result<()> {
-        self.con.set_autocommit(on)
+        // 约定：从手动切回自动时提交未完成的事务。DPI 设置属性时实测也会提交，
+        // 但这不是文档保证的行为，所以这里显式提交
+        if on && !self.autocommit {
+            self.con.commit()?;
+        }
+        self.con.set_autocommit(on)?;
+        self.autocommit = on;
+        Ok(())
     }
 
     fn commit(&mut self) -> Result<()> {
