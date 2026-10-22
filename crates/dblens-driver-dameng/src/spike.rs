@@ -224,3 +224,37 @@ fn spike_5_load_with_forward_slashes() {
     println!("加载 {path}");
     load::open_library(std::path::Path::new(&path)).expect("用正斜杠路径加载 dmdpi 失败");
 }
+
+#[test]
+#[ignore]
+fn spike_6_update_zero_rows() {
+    // 影响 0 行的 UPDATE 按 DPI/ODBC 语义可能返回 DSQL_NO_DATA，exec_direct / exec 应视为成功
+    let con = connect();
+    let table = "DBLENS_SPIKE_NO_DATA";
+    // 先删再建，前一次运行中途失败留下的表不影响本次
+    let _ = Stmt::new(&con).unwrap().exec_direct(&format!("DROP TABLE {table}"));
+    Stmt::new(&con).unwrap().exec_direct(&format!("CREATE TABLE {table} (ID INT, V VARCHAR(10))")).unwrap();
+    Stmt::new(&con).unwrap().exec_direct(&format!("INSERT INTO {table} VALUES (1, 'a')")).unwrap();
+    let update = format!("UPDATE {table} SET V = 'b' WHERE 1 = 0");
+
+    // 先看 DM 实际的返回值
+    let raw = Stmt::new(&con).unwrap();
+    let sql = std::ffi::CString::new(update.as_str()).unwrap();
+    let rt = unsafe { con.dpi().dpi_exec_direct(raw.h, sql.as_ptr() as _) };
+    println!("dpi_exec_direct 原始返回值：{rt}（DSQL_NO_DATA = {DSQL_NO_DATA}）");
+    let raw = Stmt::new(&con).unwrap();
+    raw.prepare(&update).unwrap();
+    let rt = unsafe { con.dpi().dpi_exec(raw.h) };
+    println!("dpi_prepare + dpi_exec 原始返回值：{rt}");
+
+    let direct = Stmt::new(&con).unwrap();
+    direct.exec_direct(&update).expect("exec_direct 影响 0 行应成功");
+    assert_eq!(direct.row_count().unwrap(), 0);
+    let prepared = Stmt::new(&con).unwrap();
+    prepared.prepare(&update).unwrap();
+    prepared.exec().expect("prepare + exec 影响 0 行应成功");
+    assert_eq!(prepared.row_count().unwrap(), 0);
+    println!("exec_direct / exec 均成功，row_count = 0");
+
+    Stmt::new(&con).unwrap().exec_direct(&format!("DROP TABLE {table}")).unwrap();
+}

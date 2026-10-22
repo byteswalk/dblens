@@ -46,3 +46,4 @@
 11. **`Env` 需要 `Sync`**：多个 `Con` 通过 `Arc` 共享同一个 `Env`（环境句柄），本任务给 `Env` 加了 `unsafe impl Sync`；同一 env 上并发 `dpi_alloc_con` 的线程安全性按 ODBC 惯例假定成立，尚未专门验证。
 12. **临时 `allow(dead_code)`**：`lib.rs` 中 `handles`、`load` 模块的 `#[allow(dead_code)]` 在驱动本体接入后去掉。
 13. Linux 下 `libdmdpi.so` 的依赖加载（`LD_LIBRARY_PATH`）本次未验证。
+14. **影响 0 行的 UPDATE 在 DM 上返回 DSQL_SUCCESS（0），不是 DSQL_NO_DATA**（`exec_direct` 与 `prepare` + `exec` 都实测为 0，`row_count` 为 0，见 `spike_6`）。`Stmt::exec_direct` / `exec` 仍把 NO_DATA 当作成功，以防其他版本或语句类型返回 100；判断"没有影响行"要用 `row_count`，不能看返回值。

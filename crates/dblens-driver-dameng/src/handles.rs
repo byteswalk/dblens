@@ -179,10 +179,15 @@ impl<'c> Stmt<'c> {
         }
     }
 
+    /// 执行语句的返回值检查：按 DPI/ODBC 语义，影响 0 行的 UPDATE/DELETE 可能返回 DSQL_NO_DATA，这不是错误。
+    fn check_exec(&self, rt: DPIRETURN) -> Result<()> {
+        if is(rt, DSQL_NO_DATA as i64) { Ok(()) } else { self.check(rt) }
+    }
+
     pub(crate) fn exec_direct(&self, sql: &str) -> Result<()> {
         let sql = cstring(sql)?;
         let rt = unsafe { self.con.dpi().dpi_exec_direct(self.h, sql.as_ptr() as _) };
-        self.check(rt)
+        self.check_exec(rt)
     }
 
     pub(crate) fn prepare(&self, sql: &str) -> Result<()> {
@@ -193,11 +198,16 @@ impl<'c> Stmt<'c> {
 
     pub(crate) fn exec(&self) -> Result<()> {
         let rt = unsafe { self.con.dpi().dpi_exec(self.h) };
-        self.check(rt)
+        self.check_exec(rt)
     }
 
-    /// 绑定一个输入参数。`buf` 和 `len` 必须活到 `exec` 返回之后。
-    pub(crate) fn bind_param(
+    /// 绑定一个输入参数（`index` 从 1 开始）。DPI 只记下 `buf` 和 `len` 的地址，到 `exec` 时才读取。
+    ///
+    /// # Safety
+    ///
+    /// `buf` 和 `len` 指向的内存必须保持有效且不被移动，直到本语句随后的 `exec` 返回
+    /// （或语句被释放）为止；在此之前不能释放、重新分配或移动它们。
+    pub(crate) unsafe fn bind_param(
         &self,
         index: usize,
         c_type: i64,

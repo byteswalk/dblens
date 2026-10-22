@@ -22,9 +22,60 @@ pub(crate) fn load(params: &ConnectParams) -> Result<Arc<DmDpi>> {
     let path = dir.join(NativeLib::DamengDpi.file_name());
     let library = open_library(&path)?;
     let dpi = unsafe { DmDpi::from_library(library) }.map_err(|e| unavailable(&path, e))?;
+    // 缺少函数时直接返回、不缓存：用户换一个目录（或升级客户端）后可以重试
+    verify_functions(&dpi, &path)?;
     let dpi = Arc::new(dpi);
     loaded.push((dir, dpi.clone()));
     Ok(dpi)
+}
+
+/// 本 crate 调用的全部 DPI 函数。bindgen 生成的方法在函数缺失时会 panic，
+/// 所以加载时先检查，缺失时报告驱动不可用。新用到一个 DPI 函数时，要加到这里。
+macro_rules! required_functions {
+    ($($name:ident),* $(,)?) => {
+        fn missing_functions(dpi: &DmDpi) -> Vec<&'static str> {
+            let mut missing = Vec::new();
+            $(
+                if dpi.$name.is_err() {
+                    missing.push(stringify!($name));
+                }
+            )*
+            missing
+        }
+    };
+}
+
+required_functions!(
+    dpi_alloc_env,
+    dpi_free_env,
+    dpi_alloc_con,
+    dpi_free_con,
+    dpi_alloc_stmt,
+    dpi_free_stmt,
+    dpi_set_con_attr,
+    dpi_login,
+    dpi_logout,
+    dpi_commit,
+    dpi_rollback,
+    dpi_exec_direct,
+    dpi_prepare,
+    dpi_exec,
+    dpi_bind_param,
+    dpi_number_columns,
+    dpi_desc_column,
+    dpi_fetch,
+    dpi_get_data,
+    dpi_row_count,
+    dpi_get_diag_rec,
+    dpi_cancel,
+);
+
+fn verify_functions(dpi: &DmDpi, path: &Path) -> Result<()> {
+    let missing = missing_functions(dpi);
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(unavailable(path, format!("缺少 DPI 函数 {}，达梦客户端版本可能过旧", missing.join("、"))))
 }
 
 fn unavailable(path: &Path, e: impl std::fmt::Display) -> Error {
@@ -55,4 +106,25 @@ pub(crate) fn open_library(path: &Path) -> Result<libloading::Library> {
 pub(crate) fn open_library(path: &Path) -> Result<libloading::Library> {
     // Linux 上 libdmdpi.so 的依赖要靠 LD_LIBRARY_PATH 找到，结论见技术验证笔记
     unsafe { libloading::Library::new(path) }.map_err(|e| unavailable(path, e))
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_functions_are_reported_as_driver_unavailable() {
+        // 用一个肯定不含 DPI 函数的系统 DLL 模拟版本不符的客户端
+        let library = unsafe { libloading::Library::new("kernel32.dll") }.unwrap();
+        let dpi = unsafe { DmDpi::from_library(library) }.unwrap();
+        assert_eq!(missing_functions(&dpi).len(), 22);
+        let path = Path::new(r"C:\fake\dmdpi.dll");
+        match verify_functions(&dpi, path) {
+            Err(Error::DriverUnavailable { hint }) => {
+                assert!(hint.contains(r"C:\fake\dmdpi.dll"), "{hint}");
+                assert!(hint.contains("dpi_cancel") && hint.contains("dpi_alloc_env"), "{hint}");
+            }
+            other => panic!("应报告驱动不可用：{other:?}"),
+        }
+    }
 }
