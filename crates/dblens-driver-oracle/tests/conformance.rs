@@ -165,3 +165,52 @@ async fn dbms_output_from_trigger_is_collected_after_dml() {
     collect_all(s.as_mut(), 100).await.unwrap();
     assert_eq!(events, vec![ExecEvent::Message("触发器".into()), ExecEvent::Affected(1)]);
 }
+
+/// 非 LOB 的大值（LONG RAW）也必须按预览上限截断，与 MySQL、PG、达梦的驱动行为一致。
+/// 之所以用 LONG RAW 而不是 LONG：驱动把字符串参数按 NVARCHAR2 绑定，超过约 16383 个字符写入 LONG 列会被破坏，
+/// 没法构造出大于 64 KiB 的 LONG；而 LONG RAW 可以通过字节参数正常写入。
+#[tokio::test]
+async fn long_raw_column_over_preview_limit_is_capped() {
+    let Some(mut conn) = connect_or_skip().await else { return };
+    let table = format!("DBLENS_LONGRAW_{}", std::process::id());
+    let drop_sql = format!(
+        "BEGIN EXECUTE IMMEDIATE 'DROP TABLE {table}'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;"
+    );
+    // 先清理上次中断可能残留的表
+    let mut s = conn.execute(&drop_sql, &[]).await.unwrap();
+    collect_all(s.as_mut(), 100).await.unwrap();
+    drop(s);
+    let create = format!("CREATE TABLE {table} (v LONG RAW)");
+    let mut s = conn.execute(&create, &[]).await.unwrap();
+    collect_all(s.as_mut(), 100).await.unwrap();
+    drop(s);
+    let insert = format!("INSERT INTO {table} (v) VALUES (:1)");
+    let select = format!("SELECT v FROM {table}");
+    let result = async {
+        let params = [Value::Bytes(vec![7u8; 100000])];
+        let mut s = conn.execute(&insert, &params).await?;
+        collect_all(s.as_mut(), 100).await?;
+        drop(s);
+        let mut s = conn.execute(&select, &[]).await?;
+        let events = collect_all(s.as_mut(), 100).await?;
+        dblens_core::Result::Ok(events)
+    }
+    .await;
+    // 无论成败都先删表，再断言
+    let mut s = conn.execute(&drop_sql, &[]).await.unwrap();
+    collect_all(s.as_mut(), 100).await.unwrap();
+    let value = result
+        .unwrap()
+        .into_iter()
+        .find_map(|e| if let ExecEvent::Rows(rows) = e { Some(rows[0][0].clone()) } else { None })
+        .expect("应返回一行");
+    match value {
+        Value::Lob(lob) => {
+            assert!(lob.binary && lob.truncated);
+            assert_eq!(lob.total_len, 100000);
+            // 预览是前 65536 字节的 base64：ceil(65536 / 3) * 4 = 87384 个字符
+            assert_eq!(lob.preview.len(), 87384);
+        }
+        other => panic!("LONG RAW 列应被截断为 LOB 预览，实际是 {other:?}"),
+    }
+}

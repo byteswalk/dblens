@@ -10,8 +10,6 @@ mod types;
 #[cfg(test)]
 mod spike;
 
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use dblens_core::{Error, Result};
 use dblens_driver::blocking::into_async;
@@ -26,7 +24,7 @@ pub struct DmDriver;
 fn connect_blocking(p: &ConnectParams) -> Result<DmConnection> {
     let dpi = load::load(p)?;
     // 每个连接使用自己的环境句柄，不在连接之间共享
-    let env = Arc::new(Env::new(dpi)?);
+    let env = Env::new(dpi)?;
     let mut con = Con::new(env)?;
     // 必须在登录前设置：列名、数据、错误信息因此都是 UTF-8
     con.set_attr_int(DSQL_ATTR_LOCAL_CODE as i64, PG_UTF8 as i64)?;

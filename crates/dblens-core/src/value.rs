@@ -38,6 +38,12 @@ pub struct LobPreview {
     pub binary: bool,
     /// 文本 LOB：前 N 字节对应的文本；二进制 LOB：前 N 字节的 base64。
     pub preview: String,
+    /// 完整内容的长度，单位因来源而异：
+    /// - `cap_large` 产生的预览，以及 MySQL、PG、达梦驱动的文本/二进制预览：字节数（文本为 UTF-8 字节数）；
+    /// - Oracle 的 CLOB/NCLOB：数据库报告的大小，单位是 UTF-16 代码单元（字符数）；
+    ///   Oracle 的 BLOB 与非 LOB 大值仍是字节数。
+    ///
+    /// 在各驱动统一单位之前，使用方不得假定所有驱动的 `total_len` 单位相同。
     pub total_len: u64,
     pub truncated: bool,
 }

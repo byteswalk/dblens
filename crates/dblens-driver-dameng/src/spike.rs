@@ -2,7 +2,6 @@
 //! `cargo test -p dblens-driver-dameng spike -- --ignored --nocapture --test-threads=1`
 //! 需要环境变量 DBLENS_TEST_DM_URL。结论写入 docs/notes/dameng-dpi-spike.md。
 
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dblens_driver::ConnectParams;
@@ -19,7 +18,7 @@ fn connect() -> Con {
     let url = std::env::var("DBLENS_TEST_DM_URL").expect("请设置 DBLENS_TEST_DM_URL");
     let (_, p): (_, ConnectParams) = ConnectParams::from_url(&url).unwrap();
     let dpi = load::load(&p).expect("加载 dmdpi 失败");
-    let env = Arc::new(Env::new(dpi).unwrap());
+    let env = Env::new(dpi).unwrap();
     let mut con = Con::new(env).unwrap();
     con.set_attr_int(DSQL_ATTR_LOCAL_CODE as i64, PG_UTF8 as i64).expect("设置 UTF-8 失败");
     con.set_attr_int(DSQL_ATTR_LOGIN_PORT as i64, i64::from(p.port)).unwrap();

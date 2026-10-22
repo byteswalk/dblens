@@ -97,6 +97,8 @@ jobs:
           curl -fsSLo /tmp/ic.zip https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip
           sudo mkdir -p /opt/oracle && sudo unzip -q /tmp/ic.zip -d /opt/oracle
           sudo ln -sfn "$(ls -d /opt/oracle/instantclient_* | head -1)" /opt/oracle/instantclient
+          echo /opt/oracle/instantclient | sudo tee /etc/ld.so.conf.d/oracle-instantclient.conf
+          sudo ldconfig
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: 运行 Oracle 一致性测试（不允许跳过）

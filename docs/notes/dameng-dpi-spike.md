@@ -34,8 +34,10 @@
 4. **CLOB/文本长度单位是字节**：`dpi_get_data`（`DSQL_C_NCHAR`）报告的长度是客户端编码（UTF-8）下的剩余字节数，不是字符数；第一次调用的值即总字节数，
    后续调用报告的是剩余字节数，不能当成总长累加。判断预览是否完整、显示"共 N 字符"时，需要另取 `DBMS_LOB.GETLENGTH` 或按字节说明。
 5. **分块会切断 UTF-8 字符**：每块的有效字节 = 缓冲区长度 − 1（结尾 \0），不保证落在字符边界。必须先拼接字节再解码；截断预览时要退回到字符边界再 `from_utf8`。
-6. **`get_data` 的 `limit` 判断**：当前实现用 `out.len() > limit`，而文本每块只有 65535 字节，64 KB 的限额会多读一整块（spike_3 中 10 万字节被全部读完）。
-   Task 4 应改为按"读到 ≥ limit 即停"并让预览截断在 limit 处（及字符边界），或者把块大小设为 limit + 1。
+6. **`get_data` 的 `limit` 判断**：文本每块只有 65535 字节，64 KB 的限额会多读一整块（spike_3 中 10 万字节被全部读完）。
+   Task 4 最终没有改成"读到 ≥ limit 即停"，而是保留 `out.len() > limit` 的判断，目的是让读到的字节数一旦超过限额，
+   后续的 `cap_large` 一定会触发，把值截断在 limit 处（并退回到字符边界）。另外 `bytes_value` 在数据库报告的总长度大于已读字节数时，
+   一律把值标记为截断的 LOB 预览（`total_len` 取数据库报告的总长度），所以提前停止读取不会把不完整的内容当作完整值返回。
 7. **VARCHAR 的列精度是字节数**（`'数洞'` 精度 6，库为 UTF-8、`LENGTH_IN_CHAR=0`），类型映射时不要把精度当作字符数。
 8. **必须在登录前设置 `DSQL_ATTR_LOCAL_CODE = PG_UTF8`**：列名、数据和错误信息因此都是 UTF-8；错误信息中可能带换行和"第 N 行, 第 M 列"的位置描述，
    需要时可从中解析 `position`，并去掉多余的换行。
@@ -43,7 +45,7 @@
    `dpi_get_data` 的列号是 `udint2`；`slength`/`ulength` 为 i64/u64；`DPIRETURN` 为 i16；`DSQL_*` 常量生成为 `u32`（`DSQL_NULL_DATA` 为 `i32`），比较时需转换。
    `dpi_fetch` 的输出参数 `row_num`（`ulength*`）按名字是本次取到的行数，本次未使用其值。
 10. **Windows DLL 加载**：保留 `LOAD_WITH_ALTERED_SEARCH_PATH`，并保留路径分隔符归一化（用户在设置里填正斜杠目录很常见）。
-11. **`Env` 需要 `Sync`**：多个 `Con` 通过 `Arc` 共享同一个 `Env`（环境句柄），本任务给 `Env` 加了 `unsafe impl Sync`；同一 env 上并发 `dpi_alloc_con` 的线程安全性按 ODBC 惯例假定成立，尚未专门验证。
+11. **每个连接使用自己的 `Env`**：`connect_blocking` 为每个连接单独创建环境句柄（`Env`），由对应的 `Con` 直接持有（不再用 `Arc` 共享），连接之间不共享，因此不存在同一 env 上并发 `dpi_alloc_con` 的线程安全问题，`Env` 也不需要 `Sync`（只保留 `Send`，句柄随连接移交给工作线程）。
 12. **临时 `allow(dead_code)`**：`lib.rs` 中 `handles`、`load` 模块的 `#[allow(dead_code)]` 在驱动本体接入后去掉。
 13. Linux 下 `libdmdpi.so` 的依赖加载（`LD_LIBRARY_PATH`）本次未验证。
 14. **影响 0 行的 UPDATE 在 DM 上返回 DSQL_SUCCESS（0），不是 DSQL_NO_DATA**（`exec_direct` 与 `prepare` + `exec` 都实测为 0，`row_count` 为 0，见 `spike_6`）。`Stmt::exec_direct` / `exec` 仍把 NO_DATA 当作成功，以防其他版本或语句类型返回 100；判断"没有影响行"要用 `row_count`，不能看返回值。

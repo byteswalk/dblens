@@ -70,14 +70,12 @@ impl Drop for Env {
     }
 }
 
-// 句柄只在单个工作线程上使用（取消除外，见 conn.rs），可以跨线程移交
+// 句柄只在单个工作线程上使用（取消除外，见 conn.rs），可以跨线程移交。
+// 每个连接独占自己的 Env（由 Con 直接持有，不共享），所以不需要 Sync
 unsafe impl Send for Env {}
-// Env 由多个 Con 通过 Arc 共享；共享后只用于 dpi_alloc_con / dpi_free_env（后者在最后一个引用释放时调用），
-// 与 ODBC 环境句柄一样按线程安全使用
-unsafe impl Sync for Env {}
 
 pub(crate) struct Con {
-    env: Arc<Env>,
+    env: Env,
     pub(crate) h: dhcon,
     logged_in: bool,
 }
@@ -85,7 +83,7 @@ pub(crate) struct Con {
 unsafe impl Send for Con {}
 
 impl Con {
-    pub(crate) fn new(env: Arc<Env>) -> Result<Self> {
+    pub(crate) fn new(env: Env) -> Result<Self> {
         let mut h: dhcon = std::ptr::null_mut();
         let rt = unsafe { env.dpi.dpi_alloc_con(env.h, &mut h) };
         if !succeeded(rt) {

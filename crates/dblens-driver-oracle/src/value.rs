@@ -61,6 +61,10 @@ fn lob_preview(binary: bool, bytes: Vec<u8>, total: u64, complete: bool) -> Valu
 const LOB_READ_CHUNK: usize = 16 * 1024;
 
 /// 读取 LOB 的前 N 字节作为预览。CLOB 的 size() 单位是字符（UTF-16 单元），BLOB 是字节。
+///
+/// 因此 CLOB/NCLOB 预览的 `LobPreview.total_len` 是 UTF-16 代码单元数（字符数），而 BLOB 和
+/// `cap_large` 产生的预览（以及 MySQL、PG、达梦驱动）是字节数。各驱动的单位尚未统一，
+/// 使用方不得假定 `total_len` 在不同驱动之间单位相同。
 fn read_lob(mut lob: impl Read + Lob, binary: bool) -> Result<Value> {
     let total = lob.size().map_err(map_err)?;
     let mut bytes = Vec::new();

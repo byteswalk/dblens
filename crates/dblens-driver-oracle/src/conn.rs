@@ -54,7 +54,12 @@ pub(crate) struct OraExec {
 }
 
 fn convert_row(row: &OraRow) -> Result<Row> {
-    row.sql_values().iter().map(oracle_value).collect()
+    // CLOB/NCLOB/BLOB 在 oracle_value 中已按预览读取（得到 Value::Lob，cap_large 对其原样放行）；
+    // 这里再统一截断 LONG、LONG RAW 和超长 VARCHAR2 等非 LOB 的大值，与 MySQL、PG、达梦驱动一致
+    row.sql_values()
+        .iter()
+        .map(|v| oracle_value(v).map(|v| v.cap_large(dblens_core::DEFAULT_LOB_PREVIEW_BYTES)))
+        .collect()
 }
 
 impl BlockingExec for OraExec {
