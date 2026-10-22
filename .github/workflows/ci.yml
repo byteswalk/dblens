@@ -28,6 +28,7 @@ jobs:
   integration:
     name: 驱动集成测试
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       mysql:
         image: mysql:8.4
@@ -66,12 +67,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: 运行驱动一致性测试（不允许跳过）
         run: |
+          set -eo pipefail
           cargo test -p dblens-driver-mysql -p dblens-driver-postgres --test conformance -- --nocapture 2>&1 | tee test.log
           if grep -q "跳过" test.log; then echo "有测试被跳过，环境变量未生效"; exit 1; fi
 
   oracle:
     name: Oracle 驱动集成测试
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       oracle:
         image: gvenzl/oracle-free:23-slim
@@ -91,12 +94,13 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y libaio1t64 unzip
           sudo ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
-          curl -sSLo /tmp/ic.zip https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip
+          curl -fsSLo /tmp/ic.zip https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip
           sudo mkdir -p /opt/oracle && sudo unzip -q /tmp/ic.zip -d /opt/oracle
           sudo ln -sfn "$(ls -d /opt/oracle/instantclient_* | head -1)" /opt/oracle/instantclient
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: 运行 Oracle 一致性测试（不允许跳过）
         run: |
+          set -eo pipefail
           cargo test -p dblens-driver-oracle -- --nocapture 2>&1 | tee test.log
           if grep -q "跳过" test.log; then echo "有测试被跳过，环境变量未生效"; exit 1; fi
