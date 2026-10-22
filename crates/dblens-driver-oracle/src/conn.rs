@@ -107,12 +107,15 @@ impl BlockingConnection for OracleConnection {
                 rows: Some(rs),
             }));
         }
-        stmt.execute(&refs).map_err(map_err)?;
-        let affected = stmt.row_count().map_err(map_err)?;
-        let mut pending: VecDeque<ExecEvent> = VecDeque::new();
-        if stmt.is_plsql() {
-            pending.extend(drain_output(&self.conn)?.into_iter().map(ExecEvent::Message));
+        if let Err(e) = stmt.execute(&refs) {
+            // 出错前已写入缓冲区的 DBMS_OUTPUT 要丢弃，否则会混进下一条语句的消息；收取本身的错误不能掩盖原错误
+            let _ = drain_output(&self.conn);
+            return Err(map_err(e));
         }
+        let affected = stmt.row_count().map_err(map_err)?;
+        // 任何非查询语句都要收取：触发器等也可能写 DBMS_OUTPUT，不能留给之后无关的语句
+        let mut pending: VecDeque<ExecEvent> =
+            drain_output(&self.conn)?.into_iter().map(ExecEvent::Message).collect();
         if self.autocommit && !stmt.is_ddl() {
             self.conn.commit().map_err(map_err)?;
         }

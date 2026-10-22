@@ -37,7 +37,7 @@ pub(crate) fn column_meta(info: &ColumnInfo) -> ColumnMeta {
     }
 }
 
-/// `complete` 为 false 时，`bytes` 比预览长度多读了几个字节，cap_large 一定会把它转成预览。
+/// `complete` 为 false 时，`bytes` 超过了预览长度，cap_large 一定会把它转成预览。
 fn lob_preview(binary: bool, bytes: Vec<u8>, total: u64, complete: bool) -> Value {
     let value = if binary {
         Value::Bytes(bytes)
@@ -56,16 +56,31 @@ fn lob_preview(binary: bool, bytes: Vec<u8>, total: u64, complete: bool) -> Valu
     }
 }
 
-/// 读取 LOB 的前 N 字节作为预览。CLOB 的 size() 单位是字符，BLOB 是字节。
+/// 每次读取的缓冲区大小。必须明显大于 oracle crate 读取字符 LOB 的最小缓冲区（400 字节），
+/// 否则它会因为放不下一个完整字符而报错；也不能用 `Take` 把最后一次读取的缓冲区压得很小。
+const LOB_READ_CHUNK: usize = 16 * 1024;
+
+/// 读取 LOB 的前 N 字节作为预览。CLOB 的 size() 单位是字符（UTF-16 单元），BLOB 是字节。
 fn read_lob(mut lob: impl Read + Lob, binary: bool) -> Result<Value> {
     let total = lob.size().map_err(map_err)?;
     let mut bytes = Vec::new();
-    let want = DEFAULT_LOB_PREVIEW_BYTES as u64 + 4;
-    (&mut lob)
-        .take(want)
-        .read_to_end(&mut bytes)
-        .map_err(|e| Error::internal(format!("读取 LOB 失败：{e}")))?;
-    let complete = (bytes.len() as u64) < want;
+    let mut chunk = vec![0u8; LOB_READ_CHUNK];
+    // 读到超过预览长度或读完为止；每次都是整块读取，字符 LOB 由 crate 保证只返回完整字符
+    while bytes.len() <= DEFAULT_LOB_PREVIEW_BYTES {
+        let n = lob.read(&mut chunk).map_err(|e| Error::internal(format!("读取 LOB 失败：{e}")))?;
+        if n == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&chunk[..n]);
+    }
+    // 完整性：二进制按字节数比较；字符 LOB 按 UTF-16 单元数比较（与 size() 同单位），
+    // 不能用字节数判断，因为中文等多字节字符的字节数与字符数不同
+    let read_units = if binary {
+        bytes.len() as u64
+    } else {
+        String::from_utf8_lossy(&bytes).encode_utf16().count() as u64
+    };
+    let complete = read_units == total && bytes.len() <= DEFAULT_LOB_PREVIEW_BYTES;
     Ok(lob_preview(binary, bytes, total, complete))
 }
 
