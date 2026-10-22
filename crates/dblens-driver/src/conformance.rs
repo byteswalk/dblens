@@ -142,12 +142,16 @@ pub async fn transaction_commit_and_rollback(f: &Fixture) {
     run(c.as_mut(), &(f.create_table)(t), &[]).await.expect("建表失败");
 
     c.set_autocommit(false).await.expect("关闭自动提交失败");
-    run(c.as_mut(), &(f.insert_with_params)(t), &[Value::Int(1), Value::String("a".into())]).await.expect("插入失败");
+    run(c.as_mut(), &(f.insert_with_params)(t), &[Value::Int(1), Value::String("a".into())])
+        .await
+        .expect("插入失败");
     c.rollback().await.expect("回滚失败");
     let n = as_i64(&single_value(&run(c.as_mut(), &(f.count_rows)(t), &[]).await.expect("计数失败")));
     assert_eq!(n, 0, "回滚后应为 0 行");
 
-    run(c.as_mut(), &(f.insert_with_params)(t), &[Value::Int(2), Value::String("b".into())]).await.expect("插入失败");
+    run(c.as_mut(), &(f.insert_with_params)(t), &[Value::Int(2), Value::String("b".into())])
+        .await
+        .expect("插入失败");
     c.commit().await.expect("提交失败");
     c.set_autocommit(true).await.expect("恢复自动提交失败");
 

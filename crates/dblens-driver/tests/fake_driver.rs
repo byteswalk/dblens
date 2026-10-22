@@ -47,7 +47,11 @@ impl ExecStream for FakeStream {
 
 #[async_trait]
 impl Connection for FakeConn {
-    async fn execute<'a>(&'a mut self, _sql: &'a str, _params: &'a [Value]) -> Result<Box<dyn ExecStream + 'a>> {
+    async fn execute<'a>(
+        &'a mut self,
+        _sql: &'a str,
+        _params: &'a [Value],
+    ) -> Result<Box<dyn ExecStream + 'a>> {
         Ok(Box::new(FakeStream {
             pending: vec![ExecEvent::ResultEnd],
             rows_left: (1..=5).map(|i| vec![Value::Int(i)]).collect(),
@@ -91,10 +95,8 @@ async fn trait_objects_stream_in_batches() {
     let mut conn = driver.connect(&params).await.unwrap();
     let mut stream = conn.execute("select", &[]).await.unwrap();
     let events = collect_all(stream.as_mut(), 2).await.unwrap();
-    let sizes: Vec<usize> = events
-        .iter()
-        .filter_map(|e| if let ExecEvent::Rows(r) = e { Some(r.len()) } else { None })
-        .collect();
+    let sizes: Vec<usize> =
+        events.iter().filter_map(|e| if let ExecEvent::Rows(r) = e { Some(r.len()) } else { None }).collect();
     assert_eq!(sizes, vec![2, 2, 1]);
     assert!(matches!(events.first(), Some(ExecEvent::ResultStart { .. })));
     assert_eq!(events.last(), Some(&ExecEvent::ResultEnd));

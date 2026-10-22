@@ -182,7 +182,10 @@ mod tests {
         let id = Column {
             name: "id".into(),
             ordinal: 1,
-            data_type: ColumnType { native: "NUMBER(10)".into(), logical: LogicalType::Decimal { precision: Some(10), scale: Some(0) } },
+            data_type: ColumnType {
+                native: "NUMBER(10)".into(),
+                logical: LogicalType::Decimal { precision: Some(10), scale: Some(0) },
+            },
             nullable: false,
             default: None,
             comment: Some("主键".into()),
@@ -192,7 +195,10 @@ mod tests {
         let name = Column {
             name: "name".into(),
             ordinal: 2,
-            data_type: ColumnType { native: "VARCHAR2(100 CHAR)".into(), logical: LogicalType::VarChar { len: Some(100) } },
+            data_type: ColumnType {
+                native: "VARCHAR2(100 CHAR)".into(),
+                logical: LogicalType::VarChar { len: Some(100) },
+            },
             nullable: true,
             default: Some("'无名'".into()),
             comment: Some("姓名".into()),
@@ -204,7 +210,10 @@ mod tests {
             comment: Some("人员".into()),
             columns: vec![id, name],
             primary_key: Some(PrimaryKey { name: Some("pk_person".into()), columns: vec!["id".into()] }),
-            uniques: vec![UniqueConstraint { name: Some("uk_person_name".into()), columns: vec!["name".into()] }],
+            uniques: vec![UniqueConstraint {
+                name: Some("uk_person_name".into()),
+                columns: vec!["name".into()],
+            }],
             foreign_keys: vec![ForeignKey {
                 name: Some("fk_person_dept".into()),
                 columns: vec!["dept_id".into()],
@@ -221,13 +230,23 @@ mod tests {
                 unique: false,
                 method: Some("NORMAL".into()),
             }],
-            triggers: vec![Trigger { name: "trg".into(), timing: Some("BEFORE".into()), events: vec!["INSERT".into()], definition: None }],
+            triggers: vec![Trigger {
+                name: "trg".into(),
+                timing: Some("BEFORE".into()),
+                events: vec!["INSERT".into()],
+                definition: None,
+            }],
             partition: None,
         };
         Schema {
             name: "HR".into(),
             tables: vec![table],
-            views: vec![View { name: "v_person".into(), comment: None, definition: Some("select * from person".into()), columns: vec![] }],
+            views: vec![View {
+                name: "v_person".into(),
+                comment: None,
+                definition: Some("select * from person".into()),
+                columns: vec![],
+            }],
             materialized_views: vec![],
             sequences: vec![Sequence {
                 name: "seq_person".into(),
@@ -239,7 +258,12 @@ mod tests {
                 cache: Some(20),
             }],
             routines: vec![Routine { name: "pkg_hr".into(), kind: RoutineKind::Package, source: None }],
-            synonyms: vec![Synonym { name: "emp".into(), target_schema: Some("SCOTT".into()), target_name: "EMP".into(), db_link: None }],
+            synonyms: vec![Synonym {
+                name: "emp".into(),
+                target_schema: Some("SCOTT".into()),
+                target_name: "EMP".into(),
+                db_link: None,
+            }],
         }
     }
 

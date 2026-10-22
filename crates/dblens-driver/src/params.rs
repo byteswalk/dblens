@@ -61,7 +61,8 @@ impl ConnectParams {
         let decode = |v: &str| percent_decode_str(v).decode_utf8_lossy().into_owned();
         let host = u.host_str().ok_or_else(|| Error::connect("连接 URL 缺少主机名"))?.to_string();
         let database = Some(decode(u.path().trim_start_matches('/'))).filter(|d| !d.is_empty());
-        let options: BTreeMap<String, String> = u.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
+        let options: BTreeMap<String, String> =
+            u.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
         let connect_timeout = match options.get("connect_timeout") {
             Some(v) => Duration::from_secs(
                 v.parse().map_err(|_| Error::connect(format!("connect_timeout 不是有效的秒数：{v}")))?,
@@ -110,9 +111,13 @@ mod tests {
 
     #[test]
     fn parses_mysql_url_with_encoded_password() {
-        let (id, p) = ConnectParams::from_url("mysql://root:p%40ss%3Aw@db.local:3307/app?charset=utf8mb4").unwrap();
+        let (id, p) =
+            ConnectParams::from_url("mysql://root:p%40ss%3Aw@db.local:3307/app?charset=utf8mb4").unwrap();
         assert_eq!(id, DriverId::Mysql);
-        assert_eq!((p.host.as_str(), p.port, p.user.as_str(), p.password.as_str()), ("db.local", 3307, "root", "p@ss:w"));
+        assert_eq!(
+            (p.host.as_str(), p.port, p.user.as_str(), p.password.as_str()),
+            ("db.local", 3307, "root", "p@ss:w")
+        );
         assert_eq!(p.database.as_deref(), Some("app"));
         assert_eq!(p.options.get("charset").map(String::as_str), Some("utf8mb4"));
         assert_eq!(p.connect_timeout, ConnectParams::DEFAULT_CONNECT_TIMEOUT);

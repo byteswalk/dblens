@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: 检查（${{ matrix.os }}）
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装工具链（读取 rust-toolchain.toml）
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  integration:
+    name: 驱动集成测试
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: dblens
+          MYSQL_DATABASE: dblens_test
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -pdblens"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: dblens
+          MARIADB_DATABASE: dblens_test
+        ports: ["3307:3306"]
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: dblens
+          POSTGRES_DB: dblens_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DBLENS_TEST_MYSQL_URL: mysql://root:dblens@127.0.0.1:3306/dblens_test
+      DBLENS_TEST_MARIADB_URL: mysql://root:dblens@127.0.0.1:3307/dblens_test
+      DBLENS_TEST_PG_URL: postgres://postgres:dblens@127.0.0.1:5432/dblens_test
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: 运行驱动一致性测试（不允许跳过）
+        run: |
+          cargo test -p dblens-driver-mysql -p dblens-driver-postgres --test conformance -- --nocapture 2>&1 | tee test.log
+          if grep -q "跳过" test.log; then echo "有测试被跳过，环境变量未生效"; exit 1; fi

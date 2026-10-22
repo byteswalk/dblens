@@ -121,7 +121,9 @@ impl<'a> FromSql<'a> for RawValue<'a> {
 /// 读取一行中第 `idx` 列的值。
 pub(crate) fn pg_value(row: &Row, idx: usize) -> Result<Value> {
     let ty = row.columns()[idx].type_().clone();
-    let fail = |e: tokio_postgres::Error| Error::internal(format!("读取第 {} 列（{}）失败：{e}", idx + 1, ty.name()));
+    let fail = |e: tokio_postgres::Error| {
+        Error::internal(format!("读取第 {} 列（{}）失败：{e}", idx + 1, ty.name()))
+    };
     macro_rules! get {
         ($t:ty, $f:expr) => {
             row.try_get::<_, Option<$t>>(idx).map_err(fail)?.map($f)
@@ -192,7 +194,9 @@ impl ToSql for PgParam<'_> {
             Value::DateTimeTz(dt) => dt.to_sql(ty, out),
             Value::Json(j) => j.to_sql(ty, out),
             Value::Uuid(u) => u.to_sql(ty, out),
-            Value::Lob(_) | Value::Other { .. } => Err(format!("该类型的值不能作为参数绑定：{:?}", self.0).into()),
+            Value::Lob(_) | Value::Other { .. } => {
+                Err(format!("该类型的值不能作为参数绑定：{:?}", self.0).into())
+            }
         }
     }
 

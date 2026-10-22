@@ -38,10 +38,18 @@ pub(crate) fn native_type_name(col: &Column) -> String {
             if is_binary(col) { "BLOB" } else { "TEXT" }
         }
         MYSQL_TYPE_VARCHAR | MYSQL_TYPE_VAR_STRING => {
-            if is_binary(col) { "VARBINARY" } else { "VARCHAR" }
+            if is_binary(col) {
+                "VARBINARY"
+            } else {
+                "VARCHAR"
+            }
         }
         MYSQL_TYPE_STRING => {
-            if is_binary(col) { "BINARY" } else { "CHAR" }
+            if is_binary(col) {
+                "BINARY"
+            } else {
+                "CHAR"
+            }
         }
         _ => "UNKNOWN",
     };
@@ -55,7 +63,8 @@ pub(crate) fn native_type_name(col: &Column) -> String {
 pub(crate) fn column_meta(col: &Column) -> ColumnMeta {
     let table = col.org_table_str();
     let source = col.org_name_str();
-    let is_decimal = matches!(col.column_type(), ColumnType::MYSQL_TYPE_DECIMAL | ColumnType::MYSQL_TYPE_NEWDECIMAL);
+    let is_decimal =
+        matches!(col.column_type(), ColumnType::MYSQL_TYPE_DECIMAL | ColumnType::MYSQL_TYPE_NEWDECIMAL);
     ColumnMeta {
         name: col.name_str().into_owned(),
         type_name: native_type_name(col),
@@ -100,7 +109,8 @@ fn other(col: &Column, text: String) -> Value {
 #[allow(clippy::too_many_arguments)]
 fn date_value(col: &Column, y: u16, mo: u8, d: u8, h: u8, mi: u8, s: u8, us: u32) -> Value {
     let date = NaiveDate::from_ymd_opt(y.into(), mo.into(), d.into());
-    let is_date_only = matches!(col.column_type(), ColumnType::MYSQL_TYPE_DATE | ColumnType::MYSQL_TYPE_NEWDATE);
+    let is_date_only =
+        matches!(col.column_type(), ColumnType::MYSQL_TYPE_DATE | ColumnType::MYSQL_TYPE_NEWDATE);
     match (date, is_date_only) {
         (Some(date), true) => Value::Date(date),
         (Some(date), false) => match date.and_hms_micro_opt(h.into(), mi.into(), s.into(), us) {
@@ -145,7 +155,9 @@ fn bytes_value(b: Vec<u8>, col: &Column) -> Value {
             let s = text();
             NaiveTime::parse_from_str(&s, "%H:%M:%S%.f").map(Value::Time).unwrap_or_else(|_| other(col, s))
         }
-        MYSQL_TYPE_JSON => serde_json::from_slice(&b).map(Value::Json).unwrap_or_else(|_| Value::String(text())),
+        MYSQL_TYPE_JSON => {
+            serde_json::from_slice(&b).map(Value::Json).unwrap_or_else(|_| Value::String(text()))
+        }
         MYSQL_TYPE_BIT | MYSQL_TYPE_GEOMETRY => Value::Bytes(b),
         _ if is_binary(col) => Value::Bytes(b),
         _ => Value::String(text()),
@@ -205,9 +217,15 @@ mod tests {
 
     #[test]
     fn text_protocol_integers() {
-        assert_eq!(to_value(MyValue::Bytes(b"-42".to_vec()), &col(ColumnType::MYSQL_TYPE_LONGLONG)), Value::Int(-42));
+        assert_eq!(
+            to_value(MyValue::Bytes(b"-42".to_vec()), &col(ColumnType::MYSQL_TYPE_LONGLONG)),
+            Value::Int(-42)
+        );
         let unsigned = col(ColumnType::MYSQL_TYPE_LONGLONG).with_flags(ColumnFlags::UNSIGNED_FLAG);
-        assert_eq!(to_value(MyValue::Bytes(b"18446744073709551615".to_vec()), &unsigned), Value::UInt(u64::MAX));
+        assert_eq!(
+            to_value(MyValue::Bytes(b"18446744073709551615".to_vec()), &unsigned),
+            Value::UInt(u64::MAX)
+        );
         assert_eq!(native_type_name(&unsigned), "BIGINT UNSIGNED");
     }
 
@@ -217,12 +235,18 @@ mod tests {
             to_value(MyValue::Bytes(b"123.4500".to_vec()), &col(ColumnType::MYSQL_TYPE_NEWDECIMAL)),
             Value::Decimal("123.4500".into())
         );
-        assert_eq!(to_value(MyValue::Bytes(b"1.5".to_vec()), &col(ColumnType::MYSQL_TYPE_DOUBLE)), Value::Float(1.5));
+        assert_eq!(
+            to_value(MyValue::Bytes(b"1.5".to_vec()), &col(ColumnType::MYSQL_TYPE_DOUBLE)),
+            Value::Float(1.5)
+        );
         assert_eq!(
             to_value(MyValue::Bytes("数洞".as_bytes().to_vec()), &col(ColumnType::MYSQL_TYPE_VAR_STRING)),
             Value::String("数洞".into())
         );
-        assert_eq!(to_value(MyValue::Bytes(vec![1, 2, 3]), &bin(ColumnType::MYSQL_TYPE_VAR_STRING)), Value::Bytes(vec![1, 2, 3]));
+        assert_eq!(
+            to_value(MyValue::Bytes(vec![1, 2, 3]), &bin(ColumnType::MYSQL_TYPE_VAR_STRING)),
+            Value::Bytes(vec![1, 2, 3])
+        );
         assert_eq!(native_type_name(&bin(ColumnType::MYSQL_TYPE_BLOB)), "BLOB");
         assert_eq!(native_type_name(&col(ColumnType::MYSQL_TYPE_BLOB)), "TEXT");
     }
@@ -234,8 +258,13 @@ mod tests {
             Value::Date(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap())
         );
         assert_eq!(
-            to_value(MyValue::Bytes(b"2024-02-29 13:45:30.123456".to_vec()), &col(ColumnType::MYSQL_TYPE_DATETIME)),
-            Value::DateTime(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap().and_hms_micro_opt(13, 45, 30, 123456).unwrap())
+            to_value(
+                MyValue::Bytes(b"2024-02-29 13:45:30.123456".to_vec()),
+                &col(ColumnType::MYSQL_TYPE_DATETIME)
+            ),
+            Value::DateTime(
+                NaiveDate::from_ymd_opt(2024, 2, 29).unwrap().and_hms_micro_opt(13, 45, 30, 123456).unwrap()
+            )
         );
         assert_eq!(
             to_value(MyValue::Bytes(b"2024-02-29 13:45:30".to_vec()), &col(ColumnType::MYSQL_TYPE_TIMESTAMP)),
@@ -266,7 +295,9 @@ mod tests {
         );
         assert_eq!(
             to_value(MyValue::Date(2024, 2, 29, 13, 45, 30, 5), &col(ColumnType::MYSQL_TYPE_DATETIME)),
-            Value::DateTime(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap().and_hms_micro_opt(13, 45, 30, 5).unwrap())
+            Value::DateTime(
+                NaiveDate::from_ymd_opt(2024, 2, 29).unwrap().and_hms_micro_opt(13, 45, 30, 5).unwrap()
+            )
         );
         assert_eq!(
             to_value(MyValue::Time(false, 0, 13, 45, 30, 0), &col(ColumnType::MYSQL_TYPE_TIME)),

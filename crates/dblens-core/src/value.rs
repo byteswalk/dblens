@@ -27,7 +27,10 @@ pub enum Value {
     /// 大字段预览：只保留前若干字节。
     Lob(LobPreview),
     /// 暂不认识的类型，保留类型名和文本表示。
-    Other { type_name: String, text: String },
+    Other {
+        type_name: String,
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,7 +98,10 @@ mod tests {
     fn json_shape_is_tagged() {
         assert_eq!(serde_json::to_value(Value::Int(42)).unwrap(), serde_json::json!({"t":"int","v":42}));
         assert_eq!(serde_json::to_value(Value::Null).unwrap(), serde_json::json!({"t":"null"}));
-        assert_eq!(serde_json::to_value(Value::Bytes(vec![1, 2, 3])).unwrap(), serde_json::json!({"t":"bytes","v":"AQID"}));
+        assert_eq!(
+            serde_json::to_value(Value::Bytes(vec![1, 2, 3])).unwrap(),
+            serde_json::json!({"t":"bytes","v":"AQID"})
+        );
     }
 
     #[test]
@@ -112,7 +118,12 @@ mod tests {
             Value::Date(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()),
             Value::Time(chrono::NaiveTime::from_hms_micro_opt(13, 45, 30, 123456).unwrap()),
             Value::DateTime(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap().and_hms_opt(1, 2, 3).unwrap()),
-            Value::DateTimeTz(chrono::FixedOffset::east_opt(8 * 3600).unwrap().with_ymd_and_hms(2024, 2, 29, 13, 45, 30).unwrap()),
+            Value::DateTimeTz(
+                chrono::FixedOffset::east_opt(8 * 3600)
+                    .unwrap()
+                    .with_ymd_and_hms(2024, 2, 29, 13, 45, 30)
+                    .unwrap(),
+            ),
             Value::Interval("0 mons 1 days 02:03:04".into()),
             Value::Json(serde_json::json!({"a": [1, 2]})),
             Value::Uuid(uuid::Uuid::nil()),
@@ -134,12 +145,18 @@ mod tests {
     fn cap_large_truncates_on_char_boundary() {
         // "数" 占 3 字节，limit=4 时只能保留一个完整字符
         let v = Value::String("数洞数洞".into()).cap_large(4);
-        assert_eq!(v, Value::Lob(LobPreview { binary: false, preview: "数".into(), total_len: 12, truncated: true }));
+        assert_eq!(
+            v,
+            Value::Lob(LobPreview { binary: false, preview: "数".into(), total_len: 12, truncated: true })
+        );
     }
 
     #[test]
     fn cap_large_encodes_binary_preview() {
         let v = Value::Bytes(vec![1, 2, 3, 4, 5]).cap_large(3);
-        assert_eq!(v, Value::Lob(LobPreview { binary: true, preview: "AQID".into(), total_len: 5, truncated: true }));
+        assert_eq!(
+            v,
+            Value::Lob(LobPreview { binary: true, preview: "AQID".into(), total_len: 5, truncated: true })
+        );
     }
 }
