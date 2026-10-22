@@ -1,0 +1,18 @@
+[package]
+name = "dblens-driver-oracle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+dblens-core.workspace = true
+dblens-driver.workspace = true
+oracle.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+dblens-driver = { workspace = true, features = ["conformance"] }
+tokio.workspace = true
