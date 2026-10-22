@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[workspace.dependencies]
+dblens-core = { path = "crates/dblens-core" }
+dblens-driver = { path = "crates/dblens-driver" }
+
+async-trait = "0.1.92"
+base64 = "0.23.1"
+bytes = "1.12.1"
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "serde"] }
+futures = "0.3.34"
+mysql_async = { version = "0.37.1", default-features = false, features = ["default-rustls"] }
+percent-encoding = "2.3.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-postgres = { version = "0.7.18", features = ["with-chrono-0_4", "with-serde_json-1", "with-uuid-1"] }
+url = "2.5.8"
+uuid = { version = "1.28.0", features = ["serde"] }
