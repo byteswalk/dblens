@@ -1,0 +1,20 @@
+# 驱动集成测试用的数据库。端口与 README 中的环境变量示例一致。
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: dblens
+      MYSQL_DATABASE: dblens_test
+    ports: ["3306:3306"]
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: dblens
+      MARIADB_DATABASE: dblens_test
+    ports: ["3307:3306"]
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: dblens
+      POSTGRES_DB: dblens_test
+    ports: ["5432:5432"]
