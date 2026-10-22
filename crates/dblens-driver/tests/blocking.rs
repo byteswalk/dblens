@@ -52,6 +52,15 @@ impl BlockingConnection for Fake {
             }
             return Err(Error::Cancelled);
         }
+        // 模拟慢语句：阻塞 N 毫秒后返回 1 行，用于测试异步侧丢弃 execute future 的情形。
+        if let Some(ms) = sql.strip_prefix("slow:") {
+            std::thread::sleep(Duration::from_millis(ms.parse().unwrap()));
+            return Ok(Box::new(FakeExec {
+                rows_left: vec![vec![Value::Int(1)]],
+                started: false,
+                ended: false,
+            }));
+        }
         let n: i64 = sql.strip_prefix("rows:").expect("测试 SQL 格式为 rows:N").parse().unwrap();
         Ok(Box::new(FakeExec {
             rows_left: (1..=n).map(|i| vec![Value::Int(i)]).collect(),
@@ -154,6 +163,22 @@ async fn dropping_stream_early_allows_next_execute() {
         .map(|e| if let ExecEvent::Rows(r) = e { r.len() } else { 0 })
         .sum();
     assert_eq!(rows, 3);
+}
+
+#[tokio::test]
+async fn dropped_execute_future_does_not_wedge_connection() {
+    let (mut conn, _) = setup();
+    // 慢语句超时：execute future 被丢弃，但工作线程仍会执行该语句并持有执行流。
+    assert!(tokio::time::timeout(Duration::from_millis(50), conn.execute("slow:300", &[])).await.is_err());
+    conn.ping().await.unwrap();
+    let mut stream = conn.execute("rows:2", &[]).await.unwrap();
+    let rows: usize = collect_all(stream.as_mut(), 100)
+        .await
+        .unwrap()
+        .iter()
+        .map(|e| if let ExecEvent::Rows(r) = e { r.len() } else { 0 })
+        .sum();
+    assert_eq!(rows, 2);
 }
 
 #[tokio::test]

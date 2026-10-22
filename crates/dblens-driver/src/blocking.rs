@@ -170,6 +170,16 @@ struct AsyncConnection {
     cancel: CancelHandle,
 }
 
+impl AsyncConnection {
+    /// 发送普通命令。先发 `EndExec`，释放被丢弃的 `execute` future 留下的执行流：
+    /// 那条语句仍会在工作线程上执行，若不释放，工作线程会一直停在执行流循环里，之后所有命令都会被拒绝。
+    /// 工作线程空闲时 `EndExec` 是空操作；发送失败说明工作线程已退出，由随后的 `call` 报告。
+    async fn request<T: Send>(&self, make: impl FnOnce(Reply<T>) -> Cmd) -> Result<T> {
+        let _ = self.tx.send(Cmd::EndExec);
+        call(&self.tx, make).await
+    }
+}
+
 #[async_trait]
 impl Connection for AsyncConnection {
     async fn execute<'a>(
@@ -178,7 +188,7 @@ impl Connection for AsyncConnection {
         params: &'a [Value],
     ) -> Result<Box<dyn ExecStream + 'a>> {
         let (sql, params) = (sql.to_string(), params.to_vec());
-        call(&self.tx, |reply| Cmd::Execute { sql, params, reply }).await?;
+        self.request(|reply| Cmd::Execute { sql, params, reply }).await?;
         Ok(Box::new(AsyncExec { tx: &self.tx, finished: false }))
     }
 
@@ -187,27 +197,27 @@ impl Connection for AsyncConnection {
     }
 
     async fn set_autocommit(&mut self, on: bool) -> Result<()> {
-        call(&self.tx, |reply| Cmd::SetAutocommit { on, reply }).await
+        self.request(|reply| Cmd::SetAutocommit { on, reply }).await
     }
 
     async fn commit(&mut self) -> Result<()> {
-        call(&self.tx, |reply| Cmd::Commit { reply }).await
+        self.request(|reply| Cmd::Commit { reply }).await
     }
 
     async fn rollback(&mut self) -> Result<()> {
-        call(&self.tx, |reply| Cmd::Rollback { reply }).await
+        self.request(|reply| Cmd::Rollback { reply }).await
     }
 
     async fn ping(&mut self) -> Result<()> {
-        call(&self.tx, |reply| Cmd::Ping { reply }).await
+        self.request(|reply| Cmd::Ping { reply }).await
     }
 
     async fn server_info(&mut self) -> Result<ServerInfo> {
-        call(&self.tx, |reply| Cmd::ServerInfo { reply }).await
+        self.request(|reply| Cmd::ServerInfo { reply }).await
     }
 
     async fn close(self: Box<Self>) -> Result<()> {
-        call(&self.tx, |reply| Cmd::Close { reply }).await
+        self.request(|reply| Cmd::Close { reply }).await
     }
 }
 
