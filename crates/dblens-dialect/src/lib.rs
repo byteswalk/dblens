@@ -3,6 +3,7 @@
 pub mod ident;
 pub mod literal;
 mod split;
+pub mod types;
 mod variant;
 
 pub use split::{SqlStatement, split_statements};
