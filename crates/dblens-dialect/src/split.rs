@@ -1,5 +1,15 @@
 //! SQL 语句拆分：处理字符串、注释、PG 的 $$ 引号、MySQL 的 DELIMITER 命令，
 //! 以及 Oracle/达梦的 PL/SQL 块和 `/` 结束符。保留每条语句在原文中的字节范围，便于定位出错位置。
+//!
+//! ## 已知限制
+//! - Oracle/达梦的 PL/SQL 块必须有单独一行的 `/` 才会结束；没有的话，后面的语句会被并入（与 SQL*Plus 一致）。
+//! - `CREATE TYPE ... AS OBJECT` 的类型定义与 `CREATE JAVA SOURCE` 不被当作块处理。
+//! - 不支持 PG 的 `BEGIN ATOMIC`。
+//! - MySQL 的存储过程等程序体需要先用 `DELIMITER` 改结束符。
+//! - 不识别 SQL*Plus 命令（`SET`、`PROMPT`、`SPOOL`、`@` 等）。
+//! - `/` 后面跟注释时不算结束符。
+//! - `q''` 的定界符必须是 ASCII 字符。
+//! - 达梦是否支持 `q''` 字符串尚未验证。
 
 use crate::Family;
 
@@ -47,6 +57,11 @@ fn is_ident_byte(c: u8) -> bool {
     c.is_ascii_alphanumeric() || c == b'_' || c >= 0x80
 }
 
+/// 不算语句内容的字符：Unicode 空白与 BOM。
+fn is_blank(c: char) -> bool {
+    c.is_whitespace() || c == '\u{feff}'
+}
+
 impl Splitter<'_> {
     fn plsql(&self) -> bool {
         matches!(self.family, Family::Oracle | Family::Dameng)
@@ -66,12 +81,18 @@ impl Splitter<'_> {
                 self.finish(end);
                 continue;
             }
-            if !self.b[self.i].is_ascii_whitespace() {
+            let c = self.char_here();
+            if !is_blank(c) {
                 self.mark_code();
             }
-            self.i += 1;
+            self.i += c.len_utf8();
         }
         self.finish(self.b.len());
+    }
+
+    /// `self.i` 处的字符；`self.i` 始终位于字符边界上。
+    fn char_here(&self) -> char {
+        self.sql[self.i..].chars().next().unwrap_or('\0')
     }
 
     /// 遇到第一段非注释内容时记下，并判断是否是 PL/SQL 块的开头。
@@ -85,16 +106,13 @@ impl Splitter<'_> {
     /// 结束当前语句（范围到 `end` 为止），并从 `self.i` 开始新语句。
     fn finish(&mut self, end: usize) {
         if self.has_code {
-            let mut s = self.stmt_start;
-            let mut e = end;
-            while s < e && self.b[s].is_ascii_whitespace() {
-                s += 1;
-            }
-            while e > s && self.b[e - 1].is_ascii_whitespace() {
-                e -= 1;
-            }
-            if s < e {
-                self.out.push(SqlStatement { text: self.sql[s..e].to_string(), start: s, end: e });
+            let seg = &self.sql[self.stmt_start..end];
+            let rest = seg.trim_start_matches(is_blank);
+            let text = rest.trim_end_matches(is_blank);
+            if !text.is_empty() {
+                let s = end - rest.len();
+                let e = s + text.len();
+                self.out.push(SqlStatement { text: text.to_string(), start: s, end: e });
             }
         }
         self.stmt_start = self.i;
@@ -112,17 +130,15 @@ impl Splitter<'_> {
         let line = self.b[j..line_end].trim_ascii_end();
         let next_line = (line_end + 1).min(self.b.len());
         match self.family {
+            // 只在语句开头识别；语句中间的 delimiter 是普通标识符（如 `SELECT a,\n  delimiter AS d`）
             Family::MySql
-                if line.len() > 9
+                if !self.has_code
+                    && line.len() > 9
                     && line[..9].eq_ignore_ascii_case(b"delimiter")
                     && line[9].is_ascii_whitespace() =>
             {
-                let new = line[9..].trim_ascii();
-                if new.is_empty() {
-                    return false;
-                }
                 self.finish(self.i);
-                self.delimiter = new.to_vec();
+                self.delimiter = line[9..].trim_ascii().to_vec();
                 self.i = next_line;
                 self.stmt_start = next_line;
                 true
@@ -196,6 +212,14 @@ impl Splitter<'_> {
             Some(scan_quoted(b, i + 1, b'"', self.family == Family::MySql))
         } else if c == b'`' && self.family == Family::MySql {
             Some(scan_quoted(b, i + 1, b'`', false))
+        } else if matches!(c, b'n' | b'N')
+            && self.family == Family::Oracle
+            && matches!(b.get(i + 1), Some(b'q' | b'Q'))
+            && b.get(i + 2) == Some(&b'\'')
+            && !prev_is_ident
+        {
+            // Oracle 的 nq'X…X' 字符串（national 字符集的 q-quote）
+            Some(scan_q_quote(b, i + 3))
         } else if matches!(c, b'q' | b'Q')
             && self.family == Family::Oracle
             && b.get(i + 1) == Some(&b'\'')
@@ -380,8 +404,12 @@ mod tests {
             texts(sql, Family::MySql),
             ["CREATE PROCEDURE p() BEGIN SELECT 1; SELECT 2; END", "SELECT 3"]
         );
-        // DELIMITER 前未结束的语句也会被结束
-        assert_eq!(texts("SELECT 0\ndelimiter //\nSELECT 1//", Family::MySql), ["SELECT 0", "SELECT 1"]);
+        assert_eq!(texts("SELECT 0;\ndelimiter //\nSELECT 1//", Family::MySql), ["SELECT 0", "SELECT 1"]);
+        // 语句中间的 delimiter 不是命令
+        assert_eq!(
+            texts("SELECT a,\n  delimiter AS d FROM t", Family::MySql),
+            ["SELECT a,\n  delimiter AS d FROM t"]
+        );
     }
 
     #[test]
@@ -442,5 +470,43 @@ mod tests {
     #[test]
     fn unterminated_string_runs_to_end() {
         assert_eq!(texts("SELECT 'abc; SELECT 2", Family::MySql), ["SELECT 'abc; SELECT 2"]);
+    }
+
+    #[test]
+    fn unicode_whitespace_and_bom_are_not_code() {
+        assert!(texts("\u{3000};", Family::MySql).is_empty());
+        assert!(texts("\u{feff}", Family::Postgres).is_empty());
+        assert_eq!(
+            texts("\u{feff}SELECT 1;\u{3000}SELECT 2\u{3000}", Family::MySql),
+            ["SELECT 1", "SELECT 2"]
+        );
+    }
+
+    #[test]
+    fn mysql_bare_delimiter_is_plain_statement() {
+        assert_eq!(texts("DELIMITER\nSELECT 1;", Family::MySql), ["DELIMITER\nSELECT 1"]);
+    }
+
+    #[test]
+    fn oracle_nq_quote() {
+        assert_eq!(texts("SELECT nq'[it's;x]' FROM dual; SELECT 2 FROM dual", Family::Oracle).len(), 2);
+    }
+
+    #[test]
+    fn every_char_prefix_splits_without_panic() {
+        let sql = "-- 注释;\nSELECT '数据;\\' FROM t; /* 块 */ # 井\nDELIMITER //\n\
+                   SELECT $$体;$$, $a$标;$a$, q'[中;]', nq'<x>' FROM DUAL//\nDELIMITER ;\n\
+                   SELECT \"双;\", `反;` ;\nBEGIN NULL; END;\n/\n\u{3000}SELECT 1 -- 行尾\u{feff}";
+        let families = [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng];
+        let ends = sql.char_indices().map(|(i, _)| i).chain(std::iter::once(sql.len()));
+        for end in ends {
+            let prefix = &sql[..end];
+            for family in families {
+                for s in split_statements(prefix, family) {
+                    assert!(!s.text.is_empty(), "空语句：{prefix:?}");
+                    assert_eq!(&prefix[s.start..s.end], s.text, "偏移量与文本不一致：{prefix:?}");
+                }
+            }
+        }
     }
 }
