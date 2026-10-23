@@ -40,13 +40,14 @@ impl Dialect {
     }
 
     /// 跳过自增列和生成列。没有可插入的列时，MySQL 用 `() VALUES ()`，PG 用 `DEFAULT VALUES`，
-    /// Oracle/达梦对第一列写 `DEFAULT`；表一列都没有时只返回一行注释。此时 `params` 为空。
+    /// Oracle/达梦对第一个非生成列（通常是自增列）写 `DEFAULT`（虚拟列不接受 `DEFAULT`）；
+    /// 找不到这样的列时只返回一行注释。此时 `params` 为空。
     pub fn insert_sql(&self, schema: Option<&str>, table: &Table) -> DmlTemplate {
         let target = self.qualified(schema, &table.name);
         let cols: Vec<&Column> =
             table.columns.iter().filter(|c| !c.auto_increment && c.generated.is_none()).collect();
         let sql = if cols.is_empty() {
-            match (self.family(), table.columns.first()) {
+            match (self.family(), table.columns.iter().find(|c| c.generated.is_none())) {
                 (Family::MySql, _) => format!("INSERT INTO {target} () VALUES ()"),
                 (Family::Postgres, _) => format!("INSERT INTO {target} DEFAULT VALUES"),
                 (Family::Oracle | Family::Dameng, Some(first)) => {
@@ -255,8 +256,13 @@ mod tests {
         let only_auto = table("t", vec![auto("id")], &[]);
         let mut gen_col = col("g", None);
         gen_col.generated = Some("1".into());
-        let auto_and_gen = table("t", vec![auto("id"), gen_col], &[]);
+        let auto_and_gen = table("t", vec![gen_col.clone(), auto("id")], &[]);
+        let only_gen = table("t", vec![gen_col], &[]);
         let none = table("t", vec![], &[]);
+        // 只有生成列：Oracle/达梦找不到能写 DEFAULT 的列
+        for v in [Variant::Oracle, Variant::Dameng] {
+            assert_eq!(Dialect::new(v).insert_sql(None, &only_gen).sql, "-- 没有可插入的列：\"t\"");
+        }
         let sql = |v: Variant, t: &Table| Dialect::new(v).insert_sql(None, t);
         for t in [&only_auto, &auto_and_gen] {
             assert_eq!(sql(Variant::MySql, t).sql, "INSERT INTO t () VALUES ()");
