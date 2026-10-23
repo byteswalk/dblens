@@ -5,29 +5,42 @@ use serde::{Deserialize, Serialize};
 
 /// 方言家族：语法规则基本相同的一组数据库。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum Family {
+    #[serde(rename = "mysql")]
     MySql,
+    #[serde(rename = "postgres")]
     Postgres,
+    #[serde(rename = "oracle")]
     Oracle,
+    #[serde(rename = "dameng")]
     Dameng,
 }
 
 /// 具体的数据库产品。兼容库复用所属家族的规则，只在个别地方覆盖。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum Variant {
+    #[serde(rename = "mysql")]
     MySql,
+    #[serde(rename = "mariadb")]
     MariaDb,
+    #[serde(rename = "tidb")]
     TiDb,
     /// OceanBase 的 MySQL 模式。
+    #[serde(rename = "oceanbase")]
     OceanBase,
+    #[serde(rename = "postgres")]
     Postgres,
+    #[serde(rename = "kingbase")]
     Kingbase,
+    #[serde(rename = "opengauss")]
     OpenGauss,
+    #[serde(rename = "gaussdb")]
     GaussDb,
+    #[serde(rename = "highgo")]
     HighGo,
+    #[serde(rename = "oracle")]
     Oracle,
+    #[serde(rename = "dameng")]
     Dameng,
 }
 
@@ -137,5 +150,13 @@ mod tests {
         assert_eq!(Variant::Dameng.family(), Family::Dameng);
         assert_eq!(Variant::base(DriverId::Postgres), Variant::Postgres);
         assert_eq!(Variant::Kingbase.display_name(), "人大金仓 KingbaseES");
+    }
+
+    #[test]
+    fn detection_is_gated_by_driver_and_falls_back() {
+        assert_eq!(Variant::detect(DriverId::Postgres, &info("MySQL", "11.4.4-MariaDB")), Variant::Postgres);
+        assert_eq!(Variant::detect(DriverId::Mysql, &info("MySQL", "some unknown")), Variant::MySql);
+        assert_eq!(serde_json::to_string(&Variant::OpenGauss).unwrap(), "\"opengauss\"");
+        assert_eq!(serde_json::to_string(&Family::MySql).unwrap(), "\"mysql\"");
     }
 }
