@@ -22,6 +22,9 @@ M0-3a（方言核心）在逐任务审查和全分支终审中，有一部分问
   - `TIMESTAMP '… +08:00'`、`TIME '…'`、`1e300` 这几种字面量；
   - 末尾追加 `LIMIT … OFFSET …` 的分页写法；
   - VARCHAR 最大长度 8188 是否随页大小变化。
+  - 自增（IDENTITY）列能否接受 `INSERT … (col) VALUES (DEFAULT)`：没有可插入列时生成的就是这种写法，Oracle 可以，达梦未验证。
+- 金仓、openGauss、GaussDB 在 Oracle 兼容模式下，不加引号的标识符会转成大写，需要按变体覆盖 `ident` 的规则。
+- Oracle 不允许标识符里出现 `"`，即使写成两个 `""` 也不行。目前生成的语句会执行失败，不会出现注入，但应该在生成前就报错。
 - 金仓、openGauss 在 Oracle 兼容模式下，`decode(…,'hex')` 可能和 Oracle 的 `DECODE` 函数重名冲突，需要实测；冲突的话改用 `E'\\x…'::bytea`。
 
 ## M0-4 之前
@@ -54,6 +57,7 @@ M0-3a（方言核心）在逐任务审查和全分支终审中，有一部分问
   - PG 的 `json` 映射为 `JSONB`，会丢键的顺序和重复键；
   - 参数溢出（如 `number(4294967296)`）会被悄悄当作不限精度。
 - 字面量：
+  - Oracle 浮点：`1e300`、`5e-324` 这样不带后缀的写法会按 NUMBER 解析，超出范围时上溢报错或下溢成 0；应加 `d` 后缀或写成 `TO_BINARY_DOUBLE(…)`；
   - `-0.0` 写出时丢负号；
   - 带指数的 Decimal 文本（如 `1.0E+30`）在 MySQL 中会按 DOUBLE 解析，丢精度；
   - Oracle 的空二进制写成 `HEXTORAW('')`，在 Oracle 中等于 NULL；

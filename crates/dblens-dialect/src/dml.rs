@@ -53,7 +53,10 @@ impl Dialect {
                 (Family::Oracle | Family::Dameng, Some(first)) => {
                     format!("INSERT INTO {target} ({}) VALUES (DEFAULT)", self.ident(&first.name))
                 }
-                (Family::Oracle | Family::Dameng, None) => format!("-- 没有可插入的列：{target}"),
+                // 带引号的表名里可能有换行，写进行注释前必须压成一行，否则换行后的内容会被执行
+                (Family::Oracle | Family::Dameng, None) => {
+                    format!("-- 没有可插入的列：{}", target.split_whitespace().collect::<Vec<_>>().join(" "))
+                }
             }
         } else {
             let names: Vec<String> = cols.iter().map(|c| self.ident(&c.name)).collect();
@@ -262,6 +265,14 @@ mod tests {
         // 只有生成列：Oracle/达梦找不到能写 DEFAULT 的列
         for v in [Variant::Oracle, Variant::Dameng] {
             assert_eq!(Dialect::new(v).insert_sql(None, &only_gen).sql, "-- 没有可插入的列：\"t\"");
+        }
+        // 表名里的换行不能逃出注释
+        let hostile = Table { name: "x\nDROP TABLE y --".into(), ..Default::default() };
+        for v in [Variant::Oracle, Variant::Dameng] {
+            let d = Dialect::new(v);
+            let out = d.insert_sql(Some("s"), &hostile).sql;
+            assert!(!out.contains('\n'), "{v:?}: {out}");
+            assert!(d.split(&out).is_empty(), "{v:?}: {out}");
         }
         let sql = |v: Variant, t: &Table| Dialect::new(v).insert_sql(None, t);
         for t in [&only_auto, &auto_and_gen] {
