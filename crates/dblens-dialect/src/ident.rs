@@ -43,10 +43,19 @@ fn needs_quote(family: Family, name: &str) -> bool {
         Family::Postgres => !name.chars().any(|c| c.is_ascii_uppercase()),
         Family::Oracle | Family::Dameng => !name.chars().any(|c| c.is_ascii_lowercase()),
     };
-    !case_ok || RESERVED.contains(&name.to_ascii_uppercase().as_str())
+    !case_ok || is_reserved(family, &name.to_ascii_uppercase())
 }
 
-/// PostgreSQL、MySQL、Oracle、达梦保留字与特殊值函数名（如 CURRENT_USER、SYSDATE）的并集。多加引号不会出错，所以宁多勿少；新增方言时要补充。
+fn is_reserved(family: Family, upper: &str) -> bool {
+    // PUBLIC 只在 Oracle/达梦中是保留字；PG 的 public 是常见的默认模式名，MySQL 中也不是保留字
+    if upper == "PUBLIC" && matches!(family, Family::Postgres | Family::MySql) {
+        return false;
+    }
+    RESERVED.binary_search(&upper).is_ok()
+}
+
+/// PostgreSQL、MySQL（8.0/8.4）、Oracle、达梦保留字与特殊值函数名（如 CURRENT_USER、SYSDATE）的并集，按字节序排列。
+/// 多加引号不会出错，所以宁多勿少；个别词只在部分方言中保留（如 PUBLIC），由 `is_reserved` 按家族豁免。新增方言时要补充。
 const RESERVED: &[&str] = &[
     "ACCESS",
     "ACCESSIBLE",
@@ -60,6 +69,7 @@ const RESERVED: &[&str] = &[
     "ARRAY",
     "AS",
     "ASC",
+    "ASENSITIVE",
     "ASYMMETRIC",
     "AUDIT",
     "AUTHORIZATION",
@@ -95,6 +105,8 @@ const RESERVED: &[&str] = &[
     "CONVERT",
     "CREATE",
     "CROSS",
+    "CUBE",
+    "CUME_DIST",
     "CURRENT",
     "CURRENT_CATALOG",
     "CURRENT_DATE",
@@ -108,6 +120,7 @@ const RESERVED: &[&str] = &[
     "DATABASES",
     "DATE",
     "DAY_HOUR",
+    "DAY_MICROSECOND",
     "DAY_MINUTE",
     "DAY_SECOND",
     "DEC",
@@ -117,6 +130,7 @@ const RESERVED: &[&str] = &[
     "DEFERRABLE",
     "DELAYED",
     "DELETE",
+    "DENSE_RANK",
     "DESC",
     "DESCRIBE",
     "DETERMINISTIC",
@@ -130,6 +144,7 @@ const RESERVED: &[&str] = &[
     "EACH",
     "ELSE",
     "ELSEIF",
+    "EMPTY",
     "ENCLOSED",
     "END",
     "ESCAPED",
@@ -141,7 +156,10 @@ const RESERVED: &[&str] = &[
     "FALSE",
     "FETCH",
     "FILE",
+    "FIRST_VALUE",
     "FLOAT",
+    "FLOAT4",
+    "FLOAT8",
     "FOR",
     "FORCE",
     "FOREIGN",
@@ -154,9 +172,11 @@ const RESERVED: &[&str] = &[
     "GET",
     "GRANT",
     "GROUP",
+    "GROUPING",
     "GROUPS",
     "HAVING",
     "HIGH_PRIORITY",
+    "HOUR_MICROSECOND",
     "HOUR_MINUTE",
     "HOUR_SECOND",
     "IDENTIFIED",
@@ -176,18 +196,29 @@ const RESERVED: &[&str] = &[
     "INSENSITIVE",
     "INSERT",
     "INT",
+    "INT1",
+    "INT2",
+    "INT3",
+    "INT4",
+    "INT8",
     "INTEGER",
     "INTERSECT",
     "INTERVAL",
     "INTO",
+    "IO_AFTER_GTIDS",
+    "IO_BEFORE_GTIDS",
     "IS",
     "ISNULL",
     "ITERATE",
     "JOIN",
+    "JSON_TABLE",
     "KEY",
     "KEYS",
     "KILL",
+    "LAG",
+    "LAST_VALUE",
     "LATERAL",
+    "LEAD",
     "LEADING",
     "LEAVE",
     "LEFT",
@@ -205,11 +236,19 @@ const RESERVED: &[&str] = &[
     "LONGTEXT",
     "LOOP",
     "LOW_PRIORITY",
+    "MANUAL",
+    "MASTER_BIND",
+    "MASTER_SSL_VERIFY_SERVER_CERT",
     "MATCH",
     "MAXEXTENTS",
     "MAXVALUE",
+    "MEDIUMBLOB",
     "MEDIUMINT",
+    "MEDIUMTEXT",
+    "MIDDLEINT",
     "MINUS",
+    "MINUTE_MICROSECOND",
+    "MINUTE_SECOND",
     "MLSLABEL",
     "MOD",
     "MODE",
@@ -222,6 +261,9 @@ const RESERVED: &[&str] = &[
     "NOT",
     "NOTNULL",
     "NOWAIT",
+    "NO_WRITE_TO_BINLOG",
+    "NTH_VALUE",
+    "NTILE",
     "NULL",
     "NUMBER",
     "NUMERIC",
@@ -232,6 +274,7 @@ const RESERVED: &[&str] = &[
     "ONLINE",
     "ONLY",
     "OPTIMIZE",
+    "OPTIMIZER_COSTS",
     "OPTION",
     "OPTIONALLY",
     "OR",
@@ -241,8 +284,10 @@ const RESERVED: &[&str] = &[
     "OUTFILE",
     "OVER",
     "OVERLAPS",
+    "PARALLEL",
     "PARTITION",
     "PCTFREE",
+    "PERCENT_RANK",
     "PLACING",
     "PRECISION",
     "PRIMARY",
@@ -251,11 +296,13 @@ const RESERVED: &[&str] = &[
     "PROCEDURE",
     "PUBLIC",
     "PURGE",
+    "QUALIFY",
     "RANGE",
     "RANK",
     "RAW",
     "READ",
     "READS",
+    "READ_WRITE",
     "REAL",
     "RECURSIVE",
     "REFERENCES",
@@ -277,8 +324,10 @@ const RESERVED: &[&str] = &[
     "ROWID",
     "ROWNUM",
     "ROWS",
+    "ROW_NUMBER",
     "SCHEMA",
     "SCHEMAS",
+    "SECOND_MICROSECOND",
     "SELECT",
     "SENSITIVE",
     "SEPARATOR",
@@ -298,6 +347,9 @@ const RESERVED: &[&str] = &[
     "SQLEXCEPTION",
     "SQLSTATE",
     "SQLWARNING",
+    "SQL_BIG_RESULT",
+    "SQL_CALC_FOUND_ROWS",
+    "SQL_SMALL_RESULT",
     "SSL",
     "START",
     "STARTING",
@@ -307,12 +359,15 @@ const RESERVED: &[&str] = &[
     "SYMMETRIC",
     "SYNONYM",
     "SYSDATE",
+    "SYSTEM",
     "SYSTEM_USER",
     "TABLE",
     "TABLESAMPLE",
     "TERMINATED",
     "THEN",
+    "TINYBLOB",
     "TINYINT",
+    "TINYTEXT",
     "TO",
     "TOP",
     "TRAILING",
@@ -326,6 +381,7 @@ const RESERVED: &[&str] = &[
     "UNSIGNED",
     "UPDATE",
     "USAGE",
+    "USE",
     "USER",
     "USING",
     "UTC_DATE",
@@ -336,12 +392,14 @@ const RESERVED: &[&str] = &[
     "VARBINARY",
     "VARCHAR",
     "VARCHAR2",
+    "VARCHARACTER",
     "VARIADIC",
     "VARYING",
     "VERBOSE",
     "VIEW",
     "VIRTUAL",
     "WHEN",
+    "WHENEVER",
     "WHERE",
     "WHILE",
     "WINDOW",
@@ -410,6 +468,25 @@ mod tests {
         assert_eq!(ident(Family::Oracle, "UID"), "\"UID\"");
         assert_eq!(ident(Family::Dameng, "TOP"), "\"TOP\"");
         assert!(RESERVED.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn mysql_8_reserved_words_and_oracle_extras() {
+        for w in ["system", "lead", "lag", "use", "empty", "row_number", "int4", "sql_calc_found_rows"] {
+            assert_eq!(ident(Family::MySql, w), format!("`{w}`"), "{w}");
+        }
+        assert_eq!(ident(Family::Oracle, "WHENEVER"), "\"WHENEVER\"");
+        // 二分查找要求每个词都能被找到
+        assert!(RESERVED.iter().all(|w| RESERVED.binary_search(w).is_ok()));
+    }
+
+    #[test]
+    fn public_is_reserved_only_for_oracle_and_dameng() {
+        assert_eq!(ident(Family::Postgres, "public"), "public");
+        assert_eq!(ident(Family::MySql, "public"), "public");
+        assert_eq!(ident(Family::Oracle, "PUBLIC"), "\"PUBLIC\"");
+        assert_eq!(ident(Family::Dameng, "PUBLIC"), "\"PUBLIC\"");
+        assert_eq!(ident(Family::Postgres, "PUBLIC"), "\"PUBLIC\"");
     }
 
     #[test]

@@ -187,7 +187,8 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "INTEGER" | "INT" | "SMALLINT" => L::Decimal { precision: Some(38), scale: Some(0) },
             // Oracle 的 FLOAT(n) 是二进制精度的 NUMBER 子类型，按无限定的 NUMBER 处理
             "FLOAT" => L::Decimal { precision: None, scale: None },
-            "REAL" | "DOUBLE PRECISION" => L::Float { bits: 64 },
+            // REAL 与 DOUBLE PRECISION 是 NUMBER 的子类型 FLOAT(63)/FLOAT(126)，不是 IEEE 浮点，与 FLOAT 同样处理
+            "REAL" | "DOUBLE PRECISION" => L::Decimal { precision: None, scale: None },
             "BINARY_FLOAT" => L::Float { bits: 32 },
             "BINARY_DOUBLE" => L::Float { bits: 64 },
             "VARCHAR2" | "NVARCHAR2" | "VARCHAR" => L::VarChar { len },
@@ -247,6 +248,10 @@ fn decimal_native(family: Family, precision: Option<u32>, scale: Option<i32>) ->
         Family::Oracle => ("NUMBER", "NUMBER", 38),
         Family::Dameng => ("DEC", "DEC", 38),
     };
+    // 精度 0 在各库都无效，按无限定处理
+    let precision = precision.filter(|&p| p > 0);
+    // Oracle 小数位范围 -84..=127
+    let scale = if family == Family::Oracle { scale.map(|v| v.clamp(-84, 127)) } else { scale };
     let (mut p, mut s) = match (precision, scale) {
         (None, None) => return bare.into(),
         // 只有小数位没有精度（Oracle 的 NUMBER(*,s)）：补最大精度 38
@@ -307,9 +312,23 @@ fn dameng_varchar(n: u32) -> String {
     if n <= 8188 { format!("VARCHAR({n} CHAR)") } else { "TEXT".into() }
 }
 
+/// 长度为 0 的字符/二进制类型在各库都无效，按 1 处理。
+fn fix_zero_len(logical: &LogicalType) -> LogicalType {
+    use LogicalType as L;
+    let one = |len: &Option<u32>| len.map(|n| n.max(1));
+    match logical {
+        L::Char { len } => L::Char { len: one(len) },
+        L::VarChar { len } => L::VarChar { len: one(len) },
+        L::Binary { len } => L::Binary { len: one(len) },
+        L::VarBinary { len } => L::VarBinary { len: one(len) },
+        other => other.clone(),
+    }
+}
+
 /// 逻辑类型 → 该方言的原生类型文本（用于建表和跨库迁移）。
 pub fn native_type(family: Family, logical: &LogicalType) -> String {
     use LogicalType as L;
+    let logical = &fix_zero_len(logical);
     match family {
         Family::MySql => match logical {
             L::Bool => "TINYINT(1)".into(),
@@ -342,8 +361,9 @@ pub fn native_type(family: Family, logical: &LogicalType) -> String {
             L::Date => "DATE".into(),
             L::Time { precision } => with_precision(family, "TIME", *precision),
             L::Timestamp { tz: false, precision } => with_precision(family, "DATETIME", *precision),
-            // 带时区的时间戳也用 DATETIME：MySQL 的 TIMESTAMP 只覆盖 1970–2038 年，
-            // 所以迁移层要把值先转成 UTC 再写入。MySQL 原生 timestamp 映射回逻辑类型时仍是 tz: true。
+            // 带时区的时间戳也用 DATETIME：MySQL 的 TIMESTAMP 只覆盖 1970–2038 年。
+            // 值按其自身偏移的本地时间写入（与 literal.rs 和 MySQL 驱动一致）；是否先统一换算成 UTC
+            // 是 M5（数据迁移）之前待定的决策。MySQL 原生 timestamp 映射回逻辑类型时仍是 tz: true。
             L::Timestamp { tz: true, precision } => with_precision(family, "DATETIME", *precision),
             // MySQL 没有时间间隔类型，按文本存储
             L::Interval => "VARCHAR(100)".into(),
@@ -444,7 +464,11 @@ pub fn native_type(family: Family, logical: &LogicalType) -> String {
             .into(),
             L::Float { bits } => if *bits <= 32 { "REAL" } else { "DOUBLE" }.into(),
             L::Decimal { precision, scale } => decimal_native(family, *precision, *scale),
-            L::Char { len } => with_len("CHAR", Some(len.unwrap_or(1))),
+            // 与 VARCHAR 一样显式按字符计长；超过 8188 时按 VARCHAR 规则处理
+            L::Char { len } => match len.unwrap_or(1) {
+                n if n > 8188 => dameng_varchar(n),
+                n => format!("CHAR({n} CHAR)"),
+            },
             L::VarChar { len: Some(n) } => dameng_varchar(*n),
             L::VarChar { len: None } | L::Text => "TEXT".into(),
             // BINARY/VARBINARY 上限 8188 字节，超出改 BLOB
@@ -692,8 +716,9 @@ mod tests {
                 ("DEC(10,2)", dec(Some(10), Some(2))),
                 ("DECIMAL(8)", dec(Some(8), None)),
                 ("NUMERIC(6,3)", dec(Some(6), Some(3))),
-                ("REAL", L::Float { bits: 64 }),
-                ("DOUBLE PRECISION", L::Float { bits: 64 }),
+                // REAL / DOUBLE PRECISION 是 NUMBER 子类型，与 FLOAT 一样
+                ("REAL", dec(None, None)),
+                ("DOUBLE PRECISION", dec(None, None)),
                 ("BINARY_DOUBLE", L::Float { bits: 64 }),
                 ("VARCHAR2(100 CHAR)", L::VarChar { len: Some(100) }),
                 ("NVARCHAR2(20)", L::VarChar { len: Some(20) }),
@@ -860,7 +885,45 @@ mod tests {
             (Family::Dameng, L::VarBinary { len: Some(8189) }, "BLOB"),
             (Family::Dameng, L::Binary { len: Some(8188) }, "BINARY(8188)"),
             (Family::Dameng, L::Binary { len: Some(8189) }, "BLOB"),
-            (Family::Dameng, L::Char { len: Some(10) }, "CHAR(10)"),
+            (Family::Dameng, L::Char { len: Some(10) }, "CHAR(10 CHAR)"),
+            (Family::Dameng, L::Char { len: None }, "CHAR(1 CHAR)"),
+            (Family::Dameng, L::Char { len: Some(8188) }, "CHAR(8188 CHAR)"),
+            (Family::Dameng, L::Char { len: Some(8189) }, "TEXT"),
+        ];
+        for (f, l, expected) in cases {
+            assert_eq!(native_type(*f, l), *expected, "{f:?} {l:?}");
+        }
+    }
+
+    #[test]
+    fn degenerate_sizes() {
+        let cases: &[(Family, L, &str)] = &[
+            // 精度 0 视为无限定
+            (Family::MySql, dec(Some(0), None), "DECIMAL(65,30)"),
+            (Family::Postgres, dec(Some(0), None), "NUMERIC"),
+            (Family::Oracle, dec(Some(0), None), "NUMBER"),
+            (Family::Dameng, dec(Some(0), None), "DEC"),
+            (Family::Oracle, dec(Some(0), Some(2)), "NUMBER(38,2)"),
+            // 长度 0 视为 1
+            (Family::MySql, L::Char { len: Some(0) }, "CHAR(1)"),
+            (Family::MySql, L::VarChar { len: Some(0) }, "VARCHAR(1)"),
+            (Family::MySql, L::Binary { len: Some(0) }, "BINARY(1)"),
+            (Family::MySql, L::VarBinary { len: Some(0) }, "VARBINARY(1)"),
+            (Family::Postgres, L::Char { len: Some(0) }, "CHAR(1)"),
+            (Family::Postgres, L::VarChar { len: Some(0) }, "VARCHAR(1)"),
+            (Family::Oracle, L::Char { len: Some(0) }, "CHAR(1 CHAR)"),
+            (Family::Oracle, L::VarChar { len: Some(0) }, "VARCHAR2(1 CHAR)"),
+            (Family::Oracle, L::VarBinary { len: Some(0) }, "RAW(1)"),
+            (Family::Oracle, L::Binary { len: Some(0) }, "RAW(1)"),
+            (Family::Dameng, L::Char { len: Some(0) }, "CHAR(1 CHAR)"),
+            (Family::Dameng, L::VarChar { len: Some(0) }, "VARCHAR(1 CHAR)"),
+            (Family::Dameng, L::Binary { len: Some(0) }, "BINARY(1)"),
+            (Family::Dameng, L::VarBinary { len: Some(0) }, "VARBINARY(1)"),
+            // Oracle 小数位范围 -84..=127
+            (Family::Oracle, dec(Some(10), Some(-100)), "NUMBER(10,-84)"),
+            (Family::Oracle, dec(Some(10), Some(-84)), "NUMBER(10,-84)"),
+            (Family::Oracle, dec(Some(38), Some(200)), "NUMBER"),
+            (Family::Oracle, dec(None, Some(i32::MIN)), "NUMBER(38,-84)"),
         ];
         for (f, l, expected) in cases {
             assert_eq!(native_type(*f, l), *expected, "{f:?} {l:?}");
@@ -949,6 +1012,8 @@ mod tests {
                     ("NUMBER(5,-2)", "NUMBER(5,-2)"),
                     ("INTEGER", "NUMBER(38,0)"),
                     ("FLOAT", "NUMBER"),
+                    ("REAL", "NUMBER"),
+                    ("DOUBLE PRECISION", "NUMBER"),
                     ("BINARY_FLOAT", "BINARY_FLOAT"),
                     ("BINARY_DOUBLE", "BINARY_DOUBLE"),
                     ("VARCHAR2(100 CHAR)", "VARCHAR2(100 CHAR)"),
@@ -980,7 +1045,7 @@ mod tests {
                     ("NUMBER(8)", "DEC(8)"),
                     ("REAL", "REAL"),
                     ("DOUBLE", "DOUBLE"),
-                    ("CHAR(3)", "CHAR(3)"),
+                    ("CHAR(3)", "CHAR(3 CHAR)"),
                     ("VARCHAR(50)", "VARCHAR(50 CHAR)"),
                     ("VARCHAR(50 CHAR)", "VARCHAR(50 CHAR)"),
                     ("TEXT", "TEXT"),

@@ -366,7 +366,6 @@ dependencies = [
  "dblens-driver",
  "serde",
  "serde_json",
- "uuid",
 ]
 
 [[package]]

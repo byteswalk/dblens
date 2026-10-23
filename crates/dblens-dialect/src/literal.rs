@@ -24,9 +24,12 @@ pub fn literal(family: Family, v: &Value) -> Result<String> {
         Value::Bytes(b) => bytes_literal(family, b)?,
         Value::Date(d) => format!("DATE '{}'", d.format("%Y-%m-%d")),
         Value::Time(t) => {
-            let text = t.format("%H:%M:%S%.f").to_string();
-            // Oracle 没有 TIME 类型，按字符串写出
-            if family == Family::Oracle { string_literal(family, &text)? } else { format!("TIME '{text}'") }
+            // Oracle 没有 TIME 类型，按 'HH24:MI:SS.FF6' 文本写出（与 types.rs 的存储约定一致，固定 6 位小数）
+            if family == Family::Oracle {
+                string_literal(family, &t.format("%H:%M:%S%.6f").to_string())?
+            } else {
+                format!("TIME '{}'", t.format("%H:%M:%S%.f"))
+            }
         }
         Value::DateTime(dt) => format!("TIMESTAMP '{}'", dt.format("%Y-%m-%d %H:%M:%S%.f")),
         Value::DateTimeTz(dt) => match family {
@@ -110,8 +113,7 @@ fn string_literal(family: Family, s: &str) -> Result<String> {
     }
     Ok(match family {
         Family::MySql if s.contains('\\') || s.contains('\0') => {
-            let hex: String = s.bytes().map(|b| format!("{b:02X}")).collect();
-            format!("_utf8mb4 X'{hex}'")
+            format!("_utf8mb4 X'{}'", hex_upper(s.as_bytes()))
         }
         Family::MySql | Family::Dameng => quoted(s),
         Family::Postgres if s.contains('\\') => {
@@ -157,8 +159,13 @@ fn oracle_chunks(s: &str, max: usize) -> Vec<String> {
 /// Oracle 的 HEXTORAW 字面量上限对应 4000 个十六进制字符，即 2000 字节。
 const ORACLE_RAW_MAX: usize = 2000;
 
+/// 大写十六进制文本，每字节两位。
+fn hex_upper(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02X}")).collect()
+}
+
 fn bytes_literal(family: Family, b: &[u8]) -> Result<String> {
-    let hex: String = b.iter().map(|x| format!("{x:02X}")).collect();
+    let hex = hex_upper(b);
     Ok(match family {
         Family::MySql => format!("X'{hex}'"),
         Family::Postgres => format!("decode('{hex}','hex')"),
@@ -247,6 +254,27 @@ mod tests {
         assert_eq!(lit(Family::Postgres, Value::DateTimeTz(tz)), "TIMESTAMPTZ '2024-02-29 13:45:30+08:00'");
         assert_eq!(lit(Family::Oracle, Value::DateTimeTz(tz)), "TIMESTAMP '2024-02-29 13:45:30 +08:00'");
         assert_eq!(lit(Family::MySql, Value::DateTimeTz(tz)), "TIMESTAMP '2024-02-29 13:45:30'");
+    }
+
+    #[test]
+    fn oracle_time_has_fixed_six_fraction_digits() {
+        let whole = NaiveTime::from_hms_opt(1, 2, 3).unwrap();
+        let milli = NaiveTime::from_hms_milli_opt(1, 2, 3, 450).unwrap();
+        assert_eq!(lit(Family::Oracle, Value::Time(whole)), "'01:02:03.000000'");
+        assert_eq!(lit(Family::Oracle, Value::Time(milli)), "'01:02:03.450000'");
+        // 其他方言保持原有写法
+        assert_eq!(lit(Family::MySql, Value::Time(whole)), "TIME '01:02:03'");
+        assert_eq!(lit(Family::Postgres, Value::Time(milli)), "TIME '01:02:03.450'");
+        assert_eq!(lit(Family::Dameng, Value::Time(whole)), "TIME '01:02:03'");
+    }
+
+    #[test]
+    fn hex_helper_is_shared() {
+        assert_eq!(hex_upper(&[0x00, 0x0f, 0xab, 0xff]), "000FABFF");
+        assert_eq!(hex_upper(&[]), "");
+        // 字符串与字节两处使用同一个编码
+        assert_eq!(lit(Family::MySql, Value::String("\\".into())), "_utf8mb4 X'5C'");
+        assert_eq!(lit(Family::MySql, Value::Bytes(vec![0x5c])), "X'5C'");
     }
 
     #[test]

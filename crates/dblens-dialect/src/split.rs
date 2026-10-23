@@ -6,6 +6,8 @@
 //! - `CREATE TYPE ... AS OBJECT` 的类型定义与 `CREATE JAVA SOURCE` 不被当作块处理。
 //! - 不支持 PG 的 `BEGIN ATOMIC`。
 //! - MySQL 的存储过程等程序体需要先用 `DELIMITER` 改结束符。
+//! - 单独一行、没有参数的 `DELIMITER` 不是有效命令，会当作 SQL 原样发给服务器。
+//! - `DELIMITER` 只在语句开头识别，与 mysql 客户端一致。
 //! - 不识别 SQL*Plus 命令（`SET`、`PROMPT`、`SPOOL`、`@` 等）。
 //! - `/` 后面跟注释时不算结束符。
 //! - `q''` 的定界符必须是 ASCII 字符。
