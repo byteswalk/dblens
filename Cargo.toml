@@ -13,6 +13,7 @@ dblens-core = { path = "crates/dblens-core" }
 dblens-driver = { path = "crates/dblens-driver" }
 dblens-api = { path = "crates/dblens-api" }
 dblens-dialect = { path = "crates/dblens-dialect" }
+dblens-desktop = { path = "crates/dblens-desktop" }
 dblens-server = { path = "crates/dblens-server" }
 dblens-service = { path = "crates/dblens-service" }
 dblens-driver-dameng = { path = "crates/dblens-driver-dameng" }
@@ -42,6 +43,9 @@ rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sqlparser = "0.63.0"
+tauri = "2.12.5"
+tauri-build = "2.7.4"
+tauri-plugin-global-shortcut = "2.4.1"
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
@@ -50,6 +54,7 @@ tokio-postgres-rustls = "0.14.0"
 tokio-tungstenite = "0.30.0"
 tower = { version = "0.5.3", features = ["util"] }
 tracing = "0.1.44"
+tracing-appender = "0.2.5"
 tracing-subscriber = "0.3.23"
 url = "2.5.8"
 uuid = { version = "1.28.0", features = ["serde", "v4"] }
