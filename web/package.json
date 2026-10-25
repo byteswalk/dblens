@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "tauri": "cd .. && tauri",
+    "package": "cd .. && tauri build --config crates/dblens-desktop/tauri.bundle.json"
   },
   "dependencies": {
     "@ant-design/icons": "6.3.4",
@@ -17,6 +19,7 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",

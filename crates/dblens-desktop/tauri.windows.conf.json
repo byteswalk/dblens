@@ -1,0 +1,6 @@
+{
+  "mainBinaryName": "DBLens",
+  "bundle": {
+    "targets": ["nsis"]
+  }
+}

@@ -2,6 +2,12 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "DBLens",
   "identifier": "com.dblens.desktop",
+  "build": {
+    "beforeBuildCommand": {
+      "script": "pnpm build",
+      "cwd": "../../web"
+    }
+  },
   "app": {
     "windows": [],
     "security": {
@@ -9,13 +15,27 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
+    "publisher": "DBLens",
+    "copyright": "Copyright © 2026 DBLens",
+    "category": "DeveloperTool",
+    "shortDescription": "数洞：跨平台数据库管理工具",
+    "longDescription": "数洞（DBLens）是支持 MySQL 系、PostgreSQL 系、Oracle 和达梦的跨平台数据库管理工具。",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "SimpChinese"
+        ],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }
