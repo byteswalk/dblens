@@ -18,9 +18,18 @@ use crate::error::map_err;
 
 pub struct MySqlDriver;
 
+/// mysql_async 使用 rustls 的进程级默认加密实现。同一个程序里同时编进了 aws-lc-rs 和 ring 时（桌面版的更新插件用 ring），
+/// rustls 无法自动选择，建 TLS 连接时会直接 panic。所以用 TLS 之前先装上 aws-lc-rs；已经有默认实现时保持不变。
+fn ensure_crypto_provider() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+}
+
 /// TLS 选项：`require` 只加密不校验证书；`verify` 校验证书链和主机名，`tls_ca` 为额外信任的 CA 证书。
 /// 取消查询时另开的连接沿用同一份选项。
 fn ssl_opts(mode: &TlsMode) -> Option<SslOpts> {
+    if !matches!(mode, TlsMode::Disable) {
+        ensure_crypto_provider();
+    }
     match mode {
         TlsMode::Disable => None,
         TlsMode::Require => Some(
@@ -66,5 +75,17 @@ impl Driver for MySqlDriver {
             .map_err(|_| Error::connect(format!("连接超时（{} 秒）", p.connect_timeout.as_secs())))?
             .map_err(map_err)?;
         Ok(Box::new(MySqlConnection { conn, opts }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tls_installs_a_default_crypto_provider() {
+        assert!(ssl_opts(&TlsMode::Disable).is_none());
+        assert!(ssl_opts(&TlsMode::Require).is_some());
+        assert!(rustls::crypto::CryptoProvider::get_default().is_some(), "建 TLS 连接前已有进程级默认实现");
     }
 }

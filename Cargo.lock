@@ -1137,6 +1137,7 @@ dependencies = [
  "dblens-core",
  "dblens-driver",
  "mysql_async",
+ "rustls",
  "serde_json",
  "tokio",
 ]
