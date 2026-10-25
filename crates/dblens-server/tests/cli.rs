@@ -1,0 +1,40 @@
+//! 启动真实的 dblens-server 进程，读出它打印的地址和令牌，再用 HTTP 请求验证令牌校验。
+
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpStream;
+use std::process::{Command, Stdio};
+
+/// 发一个最简单的 HTTP/1.1 GET 请求，返回状态码。
+fn get_status(addr: &str, path: &str, token: Option<&str>) -> u16 {
+    let mut stream = TcpStream::connect(addr).unwrap();
+    let auth = token.map(|t| format!("Authorization: Bearer {t}\r\n")).unwrap_or_default();
+    write!(stream, "GET {path} HTTP/1.1\r\nHost: {addr}\r\n{auth}Connection: close\r\n\r\n").unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    response.split_whitespace().nth(1).unwrap().parse().unwrap()
+}
+
+#[test]
+fn prints_address_and_token_and_enforces_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_dblens-server"))
+        .args(["--listen", "127.0.0.1:0", "--data-dir"])
+        .arg(dir.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    let first = lines.next().unwrap().unwrap();
+    let second = lines.next().unwrap().unwrap();
+    let addr = first.rsplit("http://").next().unwrap().trim().to_string();
+    let token = second.split('：').nth(1).unwrap().trim().to_string();
+    assert_eq!(token.len(), 64, "{second}");
+
+    assert_eq!(get_status(&addr, "/api/profiles", None), 401);
+    assert_eq!(get_status(&addr, "/api/profiles", Some("wrong")), 401);
+    assert_eq!(get_status(&addr, "/api/profiles", Some(&token)), 200);
+    assert!(dir.path().join("dblens.db").is_file(), "本地库建在指定的数据目录中");
+    child.kill().unwrap();
+    let _ = child.wait();
+}
