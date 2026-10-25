@@ -1,0 +1,178 @@
+---
+source: crates/dblens-dialect/tests/meta_snapshots.rs
+expression: out
+---
+-- [schemas] []
+SELECT s.SCHEMA_NAME AS name,
+       CASE WHEN s.SCHEMA_NAME IN ('mysql', 'sys', 'information_schema', 'performance_schema') THEN 1 ELSE 0 END AS is_system
+FROM information_schema.SCHEMATA s
+ORDER BY s.SCHEMA_NAME
+
+-- [tables] [String("HR"), String("EMP"), String("%员工%"), String("%员工%")]
+-- SYSTEM VERSIONED tables are base tables here; SEQUENCE objects are excluded.
+SELECT t.TABLE_NAME AS name,
+       NULLIF(t.TABLE_COMMENT, '') AS comment,
+       CASE WHEN t.CREATE_OPTIONS LIKE '%partitioned%' THEN
+         (SELECT CONCAT(p.PARTITION_METHOD, ' (', COALESCE(p.PARTITION_EXPRESSION, ''), ')')
+            FROM information_schema.PARTITIONS p
+           WHERE p.TABLE_SCHEMA = t.TABLE_SCHEMA AND p.TABLE_NAME = t.TABLE_NAME
+           ORDER BY p.PARTITION_ORDINAL_POSITION LIMIT 1)
+       END AS `partition`
+FROM information_schema.TABLES t
+WHERE t.TABLE_SCHEMA = ?
+  AND t.TABLE_TYPE IN ('BASE TABLE', 'SYSTEM VERSIONED')
+  AND t.TABLE_NAME = ?
+  AND (UPPER(t.TABLE_NAME) LIKE UPPER(?) ESCAPE '!'
+       OR UPPER(COALESCE(t.TABLE_COMMENT, '')) LIKE UPPER(?) ESCAPE '!')
+ORDER BY t.TABLE_NAME
+
+-- [views] [String("HR"), String("%员工%")]
+SELECT v.TABLE_NAME AS name, NULL AS comment
+FROM information_schema.VIEWS v
+WHERE v.TABLE_SCHEMA = ?
+  AND UPPER(v.TABLE_NAME) LIKE UPPER(?) ESCAPE '!'
+ORDER BY v.TABLE_NAME
+
+-- [sequences] [String("HR"), String("%员工%")]
+-- LIMITATION: MariaDB has no catalog view with sequence parameters (no information_schema.SEQUENCES);
+-- they live only in the sequence object itself (SELECT * FROM schema.seq / SHOW CREATE SEQUENCE), which a
+-- single static query cannot reach. So only the names are returned (other columns NULL). The service layer
+-- may enrich each row with `SELECT start_value, increment, minimum_value, maximum_value, cycle_option, cache_size FROM `schema`.`seq``.
+SELECT t.TABLE_NAME AS name,
+       NULL AS start_value, NULL AS increment, NULL AS min_value, NULL AS max_value, NULL AS cycle, NULL AS cache
+FROM information_schema.TABLES t
+WHERE t.TABLE_SCHEMA = ?
+  AND t.TABLE_TYPE = 'SEQUENCE'
+  AND UPPER(t.TABLE_NAME) LIKE UPPER(?) ESCAPE '!'
+ORDER BY t.TABLE_NAME
+
+-- [routines] [String("HR"), String("%员工%"), String("%员工%")]
+SELECT r.ROUTINE_NAME AS name, r.ROUTINE_TYPE AS kind, NULLIF(r.ROUTINE_COMMENT, '') AS comment
+FROM information_schema.ROUTINES r
+WHERE r.ROUTINE_SCHEMA = ?
+  AND r.ROUTINE_TYPE IN ('PROCEDURE', 'FUNCTION')
+  AND (UPPER(r.ROUTINE_NAME) LIKE UPPER(?) ESCAPE '!'
+       OR UPPER(COALESCE(r.ROUTINE_COMMENT, '')) LIKE UPPER(?) ESCAPE '!')
+ORDER BY r.ROUTINE_NAME, r.ROUTINE_TYPE
+
+-- [columns] [String("HR"), String("EMP")]
+-- Joined to TABLES only to drop SEQUENCE objects (they expose pseudo columns). MariaDB COLUMN_DEFAULT is already
+-- SQL text ('abc' quoted, expressions raw) but uses the string NULL for "no default".
+SELECT c.TABLE_NAME AS table_name,
+       c.COLUMN_NAME AS name,
+       c.ORDINAL_POSITION AS ordinal,
+       c.COLUMN_TYPE AS type_text,
+       CASE WHEN c.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END AS nullable,
+       CASE WHEN c.GENERATION_EXPRESSION IS NOT NULL THEN NULL ELSE NULLIF(c.COLUMN_DEFAULT, 'NULL') END AS default_value,
+       NULLIF(c.COLUMN_COMMENT, '') AS comment,
+       CASE WHEN c.EXTRA LIKE '%auto\_increment%' THEN 1 ELSE 0 END AS auto_increment,
+       NULLIF(c.GENERATION_EXPRESSION, '') AS `generated`
+FROM information_schema.COLUMNS c
+JOIN information_schema.TABLES t
+  ON t.TABLE_SCHEMA = c.TABLE_SCHEMA AND t.TABLE_NAME = c.TABLE_NAME AND t.TABLE_TYPE <> 'SEQUENCE'
+WHERE c.TABLE_SCHEMA = ?
+  AND c.TABLE_NAME = ?
+ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION
+
+-- [keys] [String("HR"), String("EMP")]
+-- Same as the base but without the MySQL-only STATISTICS.EXPRESSION probe (no functional indexes in MariaDB).
+SELECT tc.TABLE_NAME AS table_name,
+       tc.CONSTRAINT_NAME AS constraint_name,
+       CASE tc.CONSTRAINT_TYPE WHEN 'PRIMARY KEY' THEN 'P' WHEN 'UNIQUE' THEN 'U' ELSE 'F' END AS constraint_type,
+       k.COLUMN_NAME AS column_name,
+       k.ORDINAL_POSITION AS position,
+       k.REFERENCED_TABLE_SCHEMA AS ref_schema,
+       k.REFERENCED_TABLE_NAME AS ref_table,
+       k.REFERENCED_COLUMN_NAME AS ref_column,
+       rc.DELETE_RULE AS on_delete,
+       rc.UPDATE_RULE AS on_update
+FROM information_schema.TABLE_CONSTRAINTS tc
+JOIN information_schema.KEY_COLUMN_USAGE k
+  ON k.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+ AND k.TABLE_NAME = tc.TABLE_NAME
+ AND k.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+  ON tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+ AND rc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+ AND rc.TABLE_NAME = tc.TABLE_NAME
+ AND rc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+WHERE tc.TABLE_SCHEMA = ?
+  AND tc.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')
+  AND tc.TABLE_NAME = ?
+ORDER BY tc.TABLE_NAME, tc.CONSTRAINT_NAME, k.ORDINAL_POSITION
+
+-- [checks] [String("HR"), String("EMP")]
+-- CHECK_CONSTRAINTS has TABLE_NAME here. The implicit json_valid(col) check MariaDB attaches to every JSON column is skipped.
+SELECT cc.TABLE_NAME AS table_name,
+       cc.CONSTRAINT_NAME AS constraint_name,
+       cc.CHECK_CLAUSE AS expression
+FROM information_schema.CHECK_CONSTRAINTS cc
+WHERE cc.CONSTRAINT_SCHEMA = ?
+  AND cc.CHECK_CLAUSE <> CONCAT('json_valid(`', cc.CONSTRAINT_NAME, '`)')
+  AND cc.TABLE_NAME = ?
+ORDER BY cc.TABLE_NAME, cc.CONSTRAINT_NAME
+
+-- [indexes] [String("HR"), String("EMP")]
+-- No EXPRESSION column / functional indexes in MariaDB (an index on a generated column shows that column's name).
+SELECT s.TABLE_NAME AS table_name,
+       s.INDEX_NAME AS index_name,
+       CASE WHEN s.NON_UNIQUE = 0 THEN 1 ELSE 0 END AS is_unique,
+       s.INDEX_TYPE AS method,
+       s.COLUMN_NAME AS column_expr,
+       s.SEQ_IN_INDEX AS position,
+       CASE WHEN s.COLLATION = 'D' THEN 1 ELSE 0 END AS descending
+FROM information_schema.STATISTICS s
+WHERE s.TABLE_SCHEMA = ?
+  AND s.NON_UNIQUE = 1
+  AND s.TABLE_NAME = ?
+ORDER BY s.TABLE_NAME, s.INDEX_NAME, s.SEQ_IN_INDEX
+
+-- information_schema.KEYWORDS 不区分是否保留（约 700 个词），无法用来校验；保留字与 MySQL 基本相同，由 MySQL 的测试覆盖。
+-- 正文为空表示 MariaDB 没有这个查询。
+
+-- [triggers] [String("HR"), String("EMP")]
+-- definition: a CREATE TRIGGER statement rebuilt from TRIGGERS (FOLLOWS/PRECEDES order and DEFINER are not included).
+-- MySQL allows exactly one event per trigger, so events is that single event.
+SELECT t.EVENT_OBJECT_TABLE AS table_name,
+       t.TRIGGER_NAME AS name,
+       t.ACTION_TIMING AS timing,
+       t.EVENT_MANIPULATION AS events,
+       CONCAT('CREATE TRIGGER `', REPLACE(t.TRIGGER_NAME, '`', '``'), '` ', t.ACTION_TIMING, ' ', t.EVENT_MANIPULATION,
+              ' ON `', REPLACE(t.EVENT_OBJECT_TABLE, '`', '``'), '` FOR EACH ROW ', t.ACTION_STATEMENT) AS definition
+FROM information_schema.TRIGGERS t
+WHERE t.EVENT_OBJECT_SCHEMA = ?
+  AND t.EVENT_OBJECT_TABLE = ?
+ORDER BY t.EVENT_OBJECT_TABLE, t.TRIGGER_NAME
+
+-- [view_definition] [String("HR"), String("EMP")]
+SELECT v.VIEW_DEFINITION AS definition
+FROM information_schema.VIEWS v
+WHERE v.TABLE_SCHEMA = ?
+  AND v.TABLE_NAME = ?
+
+-- [routine_source] [String("HR"), String("EMP"), String("FUNCTION")]
+-- SHOW CREATE cannot take bound params, so the CREATE statement is rebuilt from ROUTINES + PARAMETERS
+-- (params, RETURNS, DETERMINISTIC, SQL SECURITY, COMMENT, body). One row, line = 1. Character-set clauses are not reproduced.
+SELECT 1 AS line,
+       CONCAT('CREATE ', r.ROUTINE_TYPE, ' `', REPLACE(r.ROUTINE_NAME, '`', '``'), '`(',
+              COALESCE((SELECT GROUP_CONCAT(
+                                 CONCAT(CASE WHEN r.ROUTINE_TYPE = 'PROCEDURE' THEN CONCAT(COALESCE(p.PARAMETER_MODE, 'IN'), ' ') ELSE '' END,
+                                        '`', REPLACE(p.PARAMETER_NAME, '`', '``'), '` ', p.DTD_IDENTIFIER)
+                                 ORDER BY p.ORDINAL_POSITION SEPARATOR ', ')
+                          FROM information_schema.PARAMETERS p
+                         WHERE p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA AND p.SPECIFIC_NAME = r.SPECIFIC_NAME
+                           AND p.ROUTINE_TYPE = r.ROUTINE_TYPE AND p.ORDINAL_POSITION > 0), ''),
+              ')',
+              CASE WHEN r.ROUTINE_TYPE = 'FUNCTION' THEN CONCAT(' RETURNS ', r.DTD_IDENTIFIER) ELSE '' END,
+              CHAR(10), '    ', r.SQL_DATA_ACCESS,
+              CASE WHEN r.IS_DETERMINISTIC = 'YES' THEN ' DETERMINISTIC' ELSE '' END,
+              ' SQL SECURITY ', r.SECURITY_TYPE,
+              CASE WHEN r.ROUTINE_COMMENT <> '' THEN CONCAT(' COMMENT ''', REPLACE(REPLACE(r.ROUTINE_COMMENT, '\\', '\\\\'), '''', ''''''), '''') ELSE '' END,
+              CHAR(10), COALESCE(r.ROUTINE_DEFINITION, '')) AS text
+FROM information_schema.ROUTINES r
+WHERE r.ROUTINE_SCHEMA = ?
+  AND r.ROUTINE_NAME = ?
+  AND r.ROUTINE_TYPE = ?
+
+-- [variant_probe] []
+SHOW VARIABLES LIKE 'polardb_version'

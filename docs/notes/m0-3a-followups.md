@@ -2,27 +2,11 @@
 
 M0-3a（方言核心）在逐任务审查和全分支终审中，有一部分问题判定为不阻塞合并，记录在这里。写 M0-3b / M0-4 / M1 / M5 的计划时逐条处理，或明确说明不做。
 
-## M0-3b 之前（写进 M0-3b 计划）
+## M0-3b 之前（M0-3b 未处理，没有实例可测）
 
-- `Dialect` 只保存变体，没有服务器版本。设计文档 6.3 节要求识别"具体产品和版本"，元数据模板也需要按版本分支，例如：
-  - MySQL 8.0.16 起才有 `CHECK_CONSTRAINTS`，MariaDB 是 10.2 起；
-  - PG 11 起才有 `pg_proc.prokind`；
-  - Oracle 12c 起才有标识列，23ai 起才有 BOOLEAN；
-  - Oracle 11g 的 ROWNUM 分页也依赖版本（目前 `paginate` 只支持 12c 以上的 `OFFSET … FETCH`）。
-- PolarDB 目前识别不出来（MySQL 驱动把 `product` 写死为 "MySQL"），需要额外查询 `@@version_comment` 或 `polardb_version` 变量。
-- 保留字表需要对照真实服务器校验：每个服务器报告的保留字都必须在表里。
-  - MySQL：`information_schema.KEYWORDS WHERE RESERVED=1`
-  - PG：`pg_get_keywords()` 中 catcode 为 R 或 T 的词
-  - Oracle 和达梦：`V$RESERVED_WORDS WHERE RESERVED='Y'`
-- 达梦行为待验证（M0-3a 时测试虚拟机未开，以下都是按文档或推测实现的）：
-  - `VARCHAR(n CHAR)` 和 `CHAR(n CHAR)` 语法，以及 `LENGTH_IN_CHAR` 的默认值；
-  - 不带精度的 `DEC` 的默认精度和标度（若标度默认为 0，溢出回退成 `DEC` 会丢小数，可改为 `DEC(38,min(s,37))`）；
-  - 字符串字面量的长度上限，以及是否需要像 Oracle 一样拆成 `TO_CLOB` 分块；
-  - `q'[...]'` 引号、`0x…` 二进制字面量、`''` 是否等于 NULL；
-  - `TIMESTAMP '… +08:00'`、`TIME '…'`、`1e300` 这几种字面量；
-  - 末尾追加 `LIMIT … OFFSET …` 的分页写法；
-  - VARCHAR 最大长度 8188 是否随页大小变化。
-  - 自增（IDENTITY）列能否接受 `INSERT … (col) VALUES (DEFAULT)`：没有可插入列时生成的就是这种写法，Oracle 可以，达梦未验证。
+M0-3b 已完成：Dialect 带服务器版本、识别 PolarDB、按真实服务器校验保留字表、在 DM8 上逐项验证达梦行为。验证结论见 `m0-3b-metadata.md`。
+
+- Oracle 11g 的 ROWNUM 分页：`Dialect` 已经有版本号，但 `paginate` 仍只支持 12c 以上的 `OFFSET … FETCH`。
 - 金仓、openGauss、GaussDB 在 Oracle 兼容模式下，不加引号的标识符会转成大写，需要按变体覆盖 `ident` 的规则。
 - Oracle 不允许标识符里出现 `"`，即使写成两个 `""` 也不行。目前生成的语句会执行失败，不会出现注入，但应该在生成前就报错。
 - 金仓、openGauss 在 Oracle 兼容模式下，`decode(…,'hex')` 可能和 Oracle 的 `DECODE` 函数重名冲突，需要实测；冲突的话改用 `E'\\x…'::bytea`。
@@ -64,3 +48,15 @@ M0-3a（方言核心）在逐任务审查和全分支终审中，有一部分问
   - 时间类：小数秒最多写 9 位（MySQL 只保留 6 位并四舍五入）；年份不在 1..9999 时写不出合法字面量；Oracle 的 RAW(16) 列不能接收带横线的 UUID 文本；Interval 按文本原样写出，跨库不通用；
   - 生成 SQL*Plus / DIsql 脚本时要加 `SET DEFINE OFF`（字符串里的 `&`）；负数字面量不能紧跟在 `-` 后面（`--7` 会变成注释）。
 - Oracle 的 `VARCHAR2(n CHAR)` 在 n≤4000 时保留。多字节值超过 4000 字节时插入会报 ORA-12899，这一点已接受。
+
+## M0-3b 新增
+
+- 元数据查询结果中，CLOB/LONG 文本超过驱动 64 KiB 预览上限时会变成 `Value::Lob` 预览，组装出的视图定义、程序源码会被截断。M1 实现"整体获取 LOB"后，服务层取源码时应改用完整获取。
+- MariaDB 序列的参数（起始值、步长等）只能对每个序列单独查询，`sequences` 目前只返回名字；Oracle 的序列没有起始值。
+- Oracle 整个 schema 的表明细在测试虚拟机上冷启动约 4 秒、服务器缓存热后约 0.2–0.5 秒（tables、indexes 最慢）。M0-4 的元数据缓存要避免重复取，必要时再优化这两条查询。
+- Oracle 的 `V$RESERVED_WORDS` 需要 SELECT_CATALOG_ROLE，只在测试中用到；普通用户执行会报 ORA-00942。
+- 达梦用 SQL 拿不到完整的版本号，只按主版本 8 处理。
+- MySQL/MariaDB 的 `routine_source` 是由目录拼出的 CREATE 语句，不含 DEFINER 和字符集子句；参数列表受 `group_concat_max_len`（默认 1024）限制。
+- 触发器定义在 MySQL、PG、达梦中是完整的 CREATE 语句，在 Oracle 中只有触发器体。
+- PG 部分索引的 WHERE 条件、索引的 INCLUDE 列、MySQL 前缀索引的长度，在结构模型中都还没有位置。M4 做结构比对前要补上。
+- 达梦空 INSERT 用 `DEFAULT VALUES`，表中有虚拟列时会失败（达梦不允许对虚拟列 INSERT）。

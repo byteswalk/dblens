@@ -4,7 +4,7 @@ M0-2（达梦与 Oracle 驱动）在逐任务审查和全分支最终审查中�
 
 ## M0-4 之前
 
-- 达梦登录失败目前统一报告为 `Connect`，没有细分出 `Auth`。原因是不想用错误密码去试探认证错误码，以免锁住测试账号。另外，达梦驱动没有使用 `ConnectParams.database`（模式）。
+- 达梦登录失败目前统一报告为 `Connect`，没有细分出 `Auth`。原因是不想用错误密码去试探认证错误码，以免锁住测试账号。
 - Oracle 连接串：服务名、SID 和主机名都没有转义；IPv6 地址没有加方括号；Easy Connect 的 `connect_timeout` 需要 19c 以上的客户端；不足 1 秒的超时会变成 0。
 - 原生库路径：配置里的 `dpi_lib_dir` / `oracle_client_lib_dir`，以及环境变量 `ORACLE_HOME` / `DM_HOME`，如果是相对路径，目前也会被接受。应该在加载前用 `std::path::absolute` 转成绝对路径。另外，`LOAD_WITH_ALTERED_SEARCH_PATH` 遇到相对路径时行为未定义。
 - 常见安装位置的扫描（`C:\instantclient*`、`C:\dmdbms\…` 以及 D/E 盘根目录下的目录）可能被其他本地用户预先放置恶意 DLL（CWE-427）。服务层应把找到的路径展示给用户确认，并写入设置，而不是每次都重新扫描。
