@@ -11,6 +11,7 @@ publish = false
 [workspace.dependencies]
 dblens-core = { path = "crates/dblens-core" }
 dblens-driver = { path = "crates/dblens-driver" }
+dblens-api = { path = "crates/dblens-api" }
 dblens-dialect = { path = "crates/dblens-dialect" }
 dblens-service = { path = "crates/dblens-service" }
 dblens-driver-dameng = { path = "crates/dblens-driver-dameng" }
@@ -20,12 +21,14 @@ dblens-driver-postgres = { path = "crates/dblens-driver-postgres" }
 
 argon2 = "0.6.0"
 async-trait = "0.1.92"
+axum = { version = "0.8.9", features = ["ws"] }
 base64 = "0.23.1"
 bytes = "1.12.1"
 chacha20poly1305 = "0.11.0"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "serde"] }
 directories = "6.0.0"
 futures = "0.3.34"
+http-body-util = "0.1.5"
 insta = "1.49.0"
 keyring = "4.2.0"
 libloading = "0.9.0"
@@ -43,6 +46,8 @@ thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-postgres = { version = "0.7.18", features = ["with-chrono-0_4", "with-serde_json-1", "with-uuid-1"] }
 tokio-postgres-rustls = "0.14.0"
+tokio-tungstenite = "0.30.0"
+tower = { version = "0.5.3", features = ["util"] }
 tracing = "0.1.44"
 url = "2.5.8"
 uuid = { version = "1.28.0", features = ["serde", "v4"] }

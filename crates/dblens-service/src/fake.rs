@@ -17,9 +17,9 @@ use dblens_driver::{
 };
 use tokio::sync::Notify;
 
-pub(crate) type Log = Arc<Mutex<Vec<String>>>;
+pub type Log = Arc<Mutex<Vec<String>>>;
 
-pub(crate) struct FakeDriver {
+pub struct FakeDriver {
     pub log: Log,
 }
 
@@ -49,14 +49,14 @@ impl Driver for FakeDriver {
     }
 }
 
-pub(crate) struct FakeConn {
+pub struct FakeConn {
     log: Log,
     cancelled: Arc<AtomicBool>,
     wake: Arc<Notify>,
 }
 
 impl FakeConn {
-    pub(crate) fn new(log: Log) -> Self {
+    pub fn new(log: Log) -> Self {
         Self { log, cancelled: Arc::new(AtomicBool::new(false)), wake: Arc::new(Notify::new()) }
     }
 }

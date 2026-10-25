@@ -11,6 +11,8 @@ mysql = ["dep:dblens-driver-mysql"]
 postgres = ["dep:dblens-driver-postgres"]
 oracle = ["dep:dblens-driver-oracle"]
 dameng = ["dep:dblens-driver-dameng"]
+# 公开测试用的假驱动 `fake`
+testing = []
 
 [dependencies]
 argon2.workspace = true
