@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { TOKEN_KEY, type TokenHost, bootstrapToken } from './token'
+import { TOKEN_IN_HASH, TOKEN_KEY, type TokenHost, bootstrapToken } from './token'
 
 function host(hash: string, stored: Record<string, string> = {}, injected?: string) {
   const calls: string[] = []
@@ -42,5 +42,15 @@ describe('bootstrapToken', () => {
 
   it('都没有时返回 null', () => {
     expect(bootstrapToken(host('#other=1').h)).toBeNull()
+  })
+})
+
+describe('TOKEN_IN_HASH', () => {
+  it('只认 # 后面的 token 参数', () => {
+    expect(TOKEN_IN_HASH.test('#token=abc')).toBe(true)
+    expect(TOKEN_IN_HASH.test('#x=1&token=abc')).toBe(true)
+    expect(TOKEN_IN_HASH.test('#tokenx=abc')).toBe(false)
+    expect(TOKEN_IN_HASH.test('#token=')).toBe(false)
+    expect(TOKEN_IN_HASH.test('')).toBe(false)
   })
 })

@@ -5,6 +5,9 @@
 
 export const TOKEN_KEY = 'dblens.token'
 
+/** 地址栏 # 后面的访问令牌。 */
+export const TOKEN_IN_HASH = /^#(?:.*&)?token=([^&]+)/
+
 /** 只用到 window 的这几个部分，测试时可以传入假对象。 */
 export interface TokenHost {
   __DBLENS__?: { token?: string }
@@ -16,7 +19,7 @@ export interface TokenHost {
 export function bootstrapToken(host: TokenHost): string | null {
   const injected = host.__DBLENS__?.token
   if (injected) return injected
-  const m = /^#(?:.*&)?token=([^&]+)/.exec(host.location.hash)
+  const m = TOKEN_IN_HASH.exec(host.location.hash)
   if (m) {
     const token = decodeURIComponent(m[1])
     try {
