@@ -64,7 +64,7 @@
 
 ## 2. 前端架构
 
-- **库**：
+- **库**（具体版本和选型理由见 2.1 节）：
   - Ant Design：控件、对话框；
   - Monaco：编辑器；
   - Glide Data Grid：结果表格，canvas 渲染；
@@ -91,7 +91,29 @@
   - Monaco 和 Glide Data Grid 跟着切换；
   - 设置为"跟随系统 / 亮色 / 暗色"三选一，"跟随系统"时随系统主题实时切换。
 
-### 2.1 与 Tauri 的边界
+### 2.1 开源选型：难点不从零实现
+
+原则（用户 2026-10-25 要求）：有难度的底层逻辑，凡是有成熟稳定的开源项目，都用它或参考它的代码，不自己从零开始。下表版本取自 2026-10-25 的 npm 仓库，许可证都可用于本项目。
+
+| 难点 | 选用 | 说明 |
+|---|---|---|
+| SQL 格式化 | `sql-formatter` 15.9（MIT） | 支持 mysql、mariadb、tidb、postgresql、plsql 等方言。DBLens 方言对应：MySQL 系用 mysql / mariadb / tidb，PG 系用 postgresql，Oracle 和达梦用 plsql |
+| 编辑器 | `monaco-editor` 0.57 + `@monaco-editor/react` 4.7（MIT） | 设计文档指定 |
+| 语法高亮、语法校验、上下文补全（MySQL 系、PG 系） | `monaco-sql-languages` 1.2 + `dt-sql-parser` 4.5（DTStack，MIT） | 基于 ANTLR4：词法高亮；语法错误标记；按光标位置给出该出现关键字还是库、表、列；收集语句中的表和别名（用于 `a.` 补全）。对象名称由我们按元数据缓存提供 |
+| 同上（Oracle、达梦） | ANTLR 官方语法库 grammars-v4 的 PL/SQL 语法 + `antlr4ng` + `antlr4-c3` | dt-sql-parser 没有 Oracle。按 dt-sql-parser 的做法（它本身就基于 antlr4ng 和 antlr4-c3）生成 Oracle 解析器，达梦语法与 Oracle 兼容，共用一套。达梦特有语法遇到不兼容时再在语法上补。在 M1b 中先做技术验证，确认解析速度和补全效果 |
+| 高亮兜底 | Monaco 自带的 sql / mysql / pgsql Monarch 规则 | 解析器加载前或解析失败时使用；PL/SQL 的 Monarch 规则以 Monaco 的 sql 规则为基础修改，不从零写 |
+| 结果表格 | `@glideapps/glide-data-grid` 6.0（MIT） | canvas 渲染，10 万行流畅 |
+| 可拖动面板 | `react-resizable-panels` 4.15（MIT） | |
+| 状态管理、服务端数据 | `zustand` 5、`@tanstack/react-query` 5（MIT） | |
+| 图标 | `@tabler/icons-react` 3.49（MIT） | 设计稿用的就是 Tabler，直接沿用 |
+| 语句拆分、语句分析（后端） | 沿用 M0：`dblens-dialect` 的拆分；`sqlparser` 0.63 做语句分析 | 已有，已测试 |
+| xlsx 导出（后端） | `rust_xlsxwriter`（MIT / Apache-2.0） | 设计文档指定 |
+
+执行计划在实现前要再确认：
+- 选定库的维护状态，看最近一年是否有发版；
+- 体积和按需加载的方式，Monaco 和 ANTLR 解析器都要懒加载。
+
+### 2.2 与 Tauri 的边界
 
 M0 的原则是"前端只通过 HTTP 和 WebSocket 调用业务，不用 Tauri IPC"。业务调用继续遵守这一条。原生能力（设计文档 4.1 节）是例外，经 Tauri 调用：
 - 自绘标题栏的窗口操作：最小化、最大化或还原、关闭、拖动、置顶切换；
@@ -151,4 +173,4 @@ M1 拆成三份子计划，按顺序执行，每份都能单独测试和使用�
 - SSH 隧道、连接分组（文件夹）：以后按需要再加。
 - 表数据编辑：属于 M2。M1 的"查看数据"只读。
 - 图形化执行计划、存储过程调试（设计文档第 13 节）。
-- 设计稿中的图标是 Tabler Icons。实现时用 antd 自带的图标，或者在 M1a 中决定是否引入 Tabler；风格保持一致即可。
+- 设计稿中的图标是 Tabler Icons，实现时用 `@tabler/icons-react`（2.1 节）。
