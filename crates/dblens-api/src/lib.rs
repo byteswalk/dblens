@@ -4,6 +4,7 @@
 mod auth;
 mod error;
 mod routes;
+mod ws;
 
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use dblens_service::Service;
 use tokio::net::TcpListener;
 
 pub use error::{ApiError, status_of};
+pub use ws::{DEFAULT_MAX_ROWS, utf16_offset};
 
 /// 接口的配置。
 #[derive(Debug, Clone)]
@@ -68,6 +70,7 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/sessions/{id}/rollback", post(routes::rollback))
         .route("/sessions/{id}/reconnect", post(routes::reconnect))
         .route("/sessions/{id}/cancel", post(routes::cancel))
+        .route("/sessions/{id}/ws", get(ws::upgrade))
         .layer(middleware::from_fn_with_state(state.clone(), auth::guard))
         .with_state(state);
     Router::new().nest("/api", api)

@@ -1,6 +1,7 @@
 //! 接口测试：服务层换成假驱动（见 `dblens_service::fake`），不需要真实数据库。
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::Router;
 use axum::body::Body;
@@ -8,8 +9,10 @@ use axum::http::{Request, StatusCode, header};
 use dblens_api::{ApiConfig, router};
 use dblens_service::fake::{FakeDriver, Log};
 use dblens_service::{DefaultPolicy, DriverRegistry, SecretBackend, Secrets, Service, Store};
+use futures::{SinkExt, StreamExt};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
+use tokio_tungstenite::tungstenite::Message;
 use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
@@ -172,4 +175,140 @@ async fn session_lifecycle_over_rest() {
     assert_eq!(st, StatusCode::NO_CONTENT);
     let (st, _) = call(&app, "GET", &format!("/api/sessions/{sid}"), None).await;
     assert_eq!(st, StatusCode::NOT_FOUND);
+}
+
+// ---- WebSocket ----
+
+type Ws = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// 启动真实的服务，打开一个会话并连上它的 WebSocket。
+async fn ws_session() -> (Ws, Arc<Service>, u64) {
+    let (app, service) = app();
+    let profile =
+        service.create_profile(serde_json::from_value(profile_json("p")).unwrap(), Some("pw")).unwrap();
+    let mut input = profile.input.clone();
+    input.environment = dblens_service::Environment::Dev;
+    service.update_profile(&profile.id, input).await.unwrap();
+    let sid = service.open_session(&profile.id).await.unwrap().id;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { dblens_api::serve(listener, app).await.unwrap() });
+    let url = format!("ws://{addr}/api/sessions/{sid}/ws?token={TOKEN}");
+    let (ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    (ws, service, sid)
+}
+
+async fn send(ws: &mut Ws, v: Value) {
+    ws.send(Message::Text(v.to_string().into())).await.unwrap();
+}
+
+async fn recv(ws: &mut Ws) -> Value {
+    loop {
+        let msg = tokio::time::timeout(Duration::from_secs(5), ws.next())
+            .await
+            .expect("5 秒内没有消息")
+            .unwrap()
+            .unwrap();
+        if let Message::Text(t) = msg {
+            return serde_json::from_str(&t).unwrap();
+        }
+    }
+}
+
+async fn quiet(ws: &mut Ws) -> bool {
+    tokio::time::timeout(Duration::from_millis(300), ws.next()).await.is_err()
+}
+
+#[tokio::test]
+async fn rows_wait_for_fetch_more() {
+    let (mut ws, _, _) = ws_session().await;
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 5", "max_rows": 2})).await;
+    assert_eq!(recv(&mut ws).await["type"], "statement_start");
+    assert_eq!(recv(&mut ws).await["type"], "result_start");
+    let rows = recv(&mut ws).await;
+    assert_eq!((rows["type"].clone(), rows["rows"].as_array().unwrap().len()), (json!("rows"), 2));
+    assert!(quiet(&mut ws).await, "没有 fetch_more 时不再推送");
+    send(&mut ws, json!({"type": "fetch_more", "max_rows": 2})).await;
+    assert_eq!(recv(&mut ws).await["rows"].as_array().unwrap().len(), 2);
+    send(&mut ws, json!({"type": "fetch_more", "max_rows": 10})).await;
+    assert_eq!(recv(&mut ws).await["rows"].as_array().unwrap().len(), 1);
+    // 不满一批：结果集已取完，后面的事件不用再 fetch_more
+    let rest: Vec<Value> = vec![recv(&mut ws).await, recv(&mut ws).await, recv(&mut ws).await];
+    assert_eq!(
+        rest.iter().map(|v| v["type"].as_str().unwrap()).collect::<Vec<_>>(),
+        ["result_end", "statement_end", "done"]
+    );
+}
+
+#[tokio::test]
+async fn offsets_are_utf16_and_errors_are_reported() {
+    let (mut ws, _, _) = ws_session().await;
+    let sql = "INSERT INTO t VALUES ('数洞😀'); ROWS 0";
+    send(&mut ws, json!({"type": "exec", "sql": sql})).await;
+    let mut starts = Vec::new();
+    loop {
+        let v = recv(&mut ws).await;
+        if v["type"] == "statement_start" {
+            starts.push(v["start"].as_u64().unwrap() as usize);
+        }
+        if v["type"] == "done" {
+            break;
+        }
+    }
+    let second_bytes = sql.find("ROWS").unwrap();
+    assert_eq!(starts[1], sql[..second_bytes].encode_utf16().count());
+    assert_ne!(starts[1], second_bytes);
+
+    send(&mut ws, json!({"type": "nonsense"})).await;
+    let e = recv(&mut ws).await;
+    assert_eq!((e["type"].clone(), e["error"]["kind"].clone()), (json!("error"), json!("invalid")));
+}
+
+#[tokio::test]
+async fn cancel_over_websocket() {
+    let (mut ws, _, _) = ws_session().await;
+    send(&mut ws, json!({"type": "exec", "sql": "SLEEP"})).await;
+    assert_eq!(recv(&mut ws).await["type"], "statement_start");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    send(&mut ws, json!({"type": "cancel"})).await;
+    let failed = recv(&mut ws).await;
+    assert_eq!(
+        (failed["type"].clone(), failed["error"]["kind"].clone()),
+        (json!("failed"), json!("cancelled"))
+    );
+    assert_eq!(recv(&mut ws).await["type"], "done");
+}
+
+#[tokio::test]
+async fn disconnect_mid_result_frees_the_session() {
+    let (mut ws, service, sid) = ws_session().await;
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 10", "max_rows": 1})).await;
+    for _ in 0..3 {
+        recv(&mut ws).await;
+    }
+    drop(ws);
+    for _ in 0..50 {
+        if !service.sessions.info(sid).unwrap().busy {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("断开后会话应恢复空闲");
+}
+
+#[tokio::test]
+async fn websocket_requires_token() {
+    let (app, service) = app();
+    let profile =
+        service.create_profile(serde_json::from_value(profile_json("p")).unwrap(), Some("pw")).unwrap();
+    let sid = service.open_session(&profile.id).await.unwrap().id;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { dblens_api::serve(listener, app).await.unwrap() });
+    assert!(tokio_tungstenite::connect_async(format!("ws://{addr}/api/sessions/{sid}/ws")).await.is_err());
+    assert!(
+        tokio_tungstenite::connect_async(format!("ws://{addr}/api/sessions/999/ws?token={TOKEN}"))
+            .await
+            .is_err()
+    );
 }
