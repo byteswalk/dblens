@@ -130,7 +130,7 @@ M0 的原则是"前端只通过 HTTP 和 WebSocket 调用业务，不用 Tauri I
 
 | 子计划 | 新增 |
 |---|---|
-| M1a | 设置存储：本地 SQLite 中的键值表，加 `GET/PUT /api/settings`；桌面程序的 Tauri 权限配置（2.1 节） |
+| M1a | 设置存储：本地 SQLite 中的键值表，加 `GET/PUT /api/settings`；桌面程序的 Tauri 权限配置（2.2 节） |
 | M1b | `exec` 消息增加 `continue_on_error`；`explain` 接口，按方言生成执行计划语句，结果以表格或文本返回；SQL 错误位置换算成 UTF-16 偏移，供编辑器标红 |
 | M1c | 历史：表和搜索接口，每条语句执行后由后端写入；收藏：带文件夹的表和增删改接口；运维查询模板：放在 `dblens-dialect`，与元数据模板相同的写法；查看 DDL：MySQL 系用 `SHOW CREATE`，Oracle / 达梦用 `DBMS_METADATA`，PostgreSQL 系由结构模型拼出；导出接口：后端重新执行查询，边取边写文件（CSV、xlsx、INSERT、JSON） |
 
