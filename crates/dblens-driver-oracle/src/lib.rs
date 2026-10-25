@@ -23,10 +23,18 @@ static CLIENT_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 fn init_client(p: &ConnectParams) -> Result<()> {
     let mut guard = CLIENT_DIR.lock().map_err(|_| Error::internal("Oracle 客户端初始化锁已损坏"))?;
-    if guard.is_some() {
-        return Ok(());
-    }
     let configured = p.options.get("oracle_client_lib_dir").map(PathBuf::from);
+    if let Some(loaded) = guard.as_ref() {
+        // 进程内无法换用另一个目录的客户端库：明确报错，而不是悄悄沿用已加载的那个
+        return match configured {
+            Some(dir) if dir != *loaded => Err(Error::invalid(format!(
+                "Oracle 客户端已从 {} 加载，换用 {} 需要重启程序",
+                loaded.display(),
+                dir.display()
+            ))),
+            _ => Ok(()),
+        };
+    }
     let dir = native::locate(NativeLib::OracleClient, configured.as_deref())?;
     oracle::InitParams::new()
         .oracle_client_lib_dir(dir.as_os_str())

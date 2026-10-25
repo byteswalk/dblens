@@ -121,12 +121,18 @@ pub fn locate_with(
     env: &dyn Fn(&str) -> Option<OsString>,
     common: &[PathBuf],
 ) -> Result<PathBuf> {
+    // 相对路径会按当前工作目录解析，存在从工作目录加载库的风险，一律拒绝
+    if let Some(dir) = configured.filter(|d| !d.is_absolute()) {
+        return Err(Error::DriverUnavailable {
+            hint: format!("{}目录必须是绝对路径：{}", lib.display_name(), dir.display()),
+        });
+    }
     let candidates: Vec<PathBuf> = match configured {
         Some(dir) => vec![dir.to_path_buf()],
         None => {
             let mut c = Vec::new();
             for (var, subdirs) in lib.home_vars() {
-                if let Some(home) = env(var) {
+                if let Some(home) = env(var).filter(|h| Path::new(h).is_absolute()) {
                     // 空子目录表示 home 本身，不做 join，避免末尾多出分隔符
                     c.extend(subdirs.iter().map(|s| {
                         let base = PathBuf::from(&home);
@@ -221,6 +227,18 @@ mod tests {
         let env = |k: &str| (k == "DM_HOME").then(|| good.clone().into_os_string());
         let err = locate_with(NativeLib::DamengDpi, Some(empty.as_path()), &env, &[]).unwrap_err();
         assert!(matches!(err, Error::DriverUnavailable { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn relative_configured_dir_and_home_are_rejected() {
+        let root = temp("relative");
+        put_lib(&root, NativeLib::DamengDpi);
+        let err =
+            locate_with(NativeLib::DamengDpi, Some(Path::new("drivers/dpi")), &no_env, &[]).unwrap_err();
+        assert!(matches!(&err, Error::DriverUnavailable { hint } if hint.contains("绝对路径")), "{err:?}");
+        // 相对路径的 DM_HOME 被忽略，继续查找常见目录
+        let env = |k: &str| (k == "DM_HOME").then(|| OsString::from("dmdbms"));
+        assert_eq!(locate_with(NativeLib::DamengDpi, None, &env, std::slice::from_ref(&root)).unwrap(), root);
     }
 
     #[test]
