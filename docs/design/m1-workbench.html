@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>数洞 M1 界面设计稿</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+<style>
+:root {
+  --bg: #f3f3f4; --panel: #ffffff; --panel-2: #f7f7f8; --hover: #ececee; --sel: #dbe8fb;
+  --border: #dcdce0; --border-strong: #c4c4ca; --text: #1f1f23; --text-2: #5c5c66; --muted: #9a9aa3;
+  --accent: #2f6fd6; --accent-bg: #e3edfc; --on-accent: #ffffff;
+  --ok: #2e8b4a; --ok-bg: #e4f3e8; --warn: #a96c00; --warn-bg: #fdf1d8; --danger: #c93a3a; --danger-bg: #fbe6e6;
+  --kw: #0b57c4; --str: #2e7d32; --num: #a3510a; --com: #8a8a93;
+  --env-dev: #2e8b4a; --env-test: #d29a12; --env-prod: #d33b3b; --env-none: #b4b4bb;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, "Noto Sans Mono CJK SC", monospace;
+  --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+:root[data-theme="dark"] {
+  --bg: #18181b; --panel: #1f1f23; --panel-2: #26262b; --hover: #2e2e34; --sel: #23395e;
+  --border: #33333a; --border-strong: #46464f; --text: #e6e6ea; --text-2: #a8a8b3; --muted: #6f6f7a;
+  --accent: #5b9bf3; --accent-bg: #1f3352; --on-accent: #0b1220;
+  --ok: #5cc27b; --ok-bg: #1b3324; --warn: #e2b04a; --warn-bg: #3a2f14; --danger: #f07070; --danger-bg: #3d1f1f;
+  --kw: #6ea8ff; --str: #8bd28f; --num: #f0a86a; --com: #6f6f7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #18181b; --panel: #1f1f23; --panel-2: #26262b; --hover: #2e2e34; --sel: #23395e;
+    --border: #33333a; --border-strong: #46464f; --text: #e6e6ea; --text-2: #a8a8b3; --muted: #6f6f7a;
+    --accent: #5b9bf3; --accent-bg: #1f3352; --on-accent: #0b1220;
+    --ok: #5cc27b; --ok-bg: #1b3324; --warn: #e2b04a; --warn-bg: #3a2f14; --danger: #f07070; --danger-bg: #3d1f1f;
+    --kw: #6ea8ff; --str: #8bd28f; --num: #f0a86a; --com: #6f6f7a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.5 var(--sans); }
+.page { max-width: 1520px; margin: 0 auto; padding: 16px; }
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.topbar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--text); padding: 3px 10px; font: inherit; cursor: pointer; white-space: nowrap; }
+.topbar > span { white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+section { margin: 28px 0; }
+section > h2 { font-size: 15px; margin: 0 0 4px; }
+section > p.note { color: var(--text-2); margin: 0 0 10px; max-width: 900px; }
+.stage { overflow-x: auto; padding-bottom: 8px; }
+.fit .frame { zoom: var(--fit, 1); }
+.frame { width: 1440px; height: 900px; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; background: var(--panel); display: flex; flex-direction: column; font-size: 12px; }
+.ti { font-size: 15px; vertical-align: -2px; }
+.row { display: flex; align-items: center; }
+.grow { flex: 1; min-width: 0; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.sec { color: var(--text-2); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 4px 0 2px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; height: 22px; background: var(--panel); }
+.btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 10px; height: 26px; background: var(--panel); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.iconbtn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--text-2); }
+.iconbtn:hover { background: var(--hover); }
+/* 标题栏 */
+.titlebar { height: 32px; background: var(--panel-2); border-bottom: 1px solid var(--border); padding-left: 10px; gap: 2px; }
+.titlebar .menu span { padding: 3px 8px; border-radius: 4px; }
+.titlebar .menu span:hover { background: var(--hover); }
+.titlebar .title { position: absolute; left: 50%; transform: translateX(-50%); color: var(--text-2); }
+.winbtn { width: 46px; height: 32px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); }
+.winbtn.close:hover { background: #e81123; color: #fff; }
+/* 主体 */
+.activity { width: 44px; background: var(--panel-2); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 4px; }
+.activity .a { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--text-2); position: relative; }
+.activity .a .ti { font-size: 20px; }
+.activity .a.on { color: var(--accent); }
+.activity .a.on::before { content: ""; position: absolute; left: -4px; top: 8px; bottom: 8px; width: 2px; background: var(--accent); border-radius: 2px; }
+.side { width: 270px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--panel); }
+.side-h { height: 32px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.filter { margin: 6px 8px; height: 26px; border: 1px solid var(--border); border-radius: 4px; padding: 0 8px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.tree { padding: 2px 0; line-height: 24px; }
+.tree div { padding-right: 8px; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+.tree div:hover { background: var(--hover); }
+.tree .sel { background: var(--sel); }
+.tree .cnt { color: var(--muted); margin-left: 4px; }
+.tree .cm { color: var(--muted); margin-left: 8px; overflow: hidden; text-overflow: ellipsis; }
+.env { font-size: 11px; padding: 0 5px; border-radius: 3px; margin-left: 6px; line-height: 16px; }
+.env.dev { color: var(--env-dev); background: var(--ok-bg); }
+.env.test { color: var(--warn); background: var(--warn-bg); }
+.env.prod { color: var(--danger); background: var(--danger-bg); font-weight: 600; }
+/* 标签页 */
+.tabs { height: 34px; background: var(--panel-2); border-bottom: 1px solid var(--border); align-items: stretch; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--border); border-top: 2px solid transparent; color: var(--text-2); max-width: 240px; }
+.tab.on { background: var(--panel); color: var(--text); }
+.tab .x { color: var(--muted); }
+.tab.dev { border-top-color: var(--env-dev); }
+.tab.prod { border-top-color: var(--env-prod); background: var(--danger-bg); color: var(--danger); }
+.toolbar { height: 34px; border-bottom: 1px solid var(--border); padding: 0 8px; gap: 6px; }
+.sep { width: 1px; height: 18px; background: var(--border-strong); margin: 0 4px; }
+.editor { flex: 1; display: flex; font-family: var(--mono); font-size: 13px; line-height: 20px; overflow: hidden; }
+.gutter { width: 48px; text-align: right; padding: 6px 10px 0 0; color: var(--muted); border-right: 1px solid var(--border); }
+.code { padding: 6px 12px; white-space: pre; }
+.code .k { color: var(--kw); font-weight: 600; }
+.code .s { color: var(--str); }
+.code .n { color: var(--num); }
+.code .c { color: var(--com); font-style: italic; }
+.code .cur { background: var(--hover); display: block; margin: 0 -12px; padding: 0 12px; }
+.code .err { text-decoration: underline wavy var(--danger); text-underline-offset: 3px; }
+.splitter { height: 5px; border-top: 1px solid var(--border-strong); cursor: row-resize; background: var(--panel-2); }
+.rtabs { height: 30px; background: var(--panel-2); border-bottom: 1px solid var(--border); padding: 0 6px; gap: 2px; }
+.rtab { height: 30px; display: flex; align-items: center; gap: 4px; padding: 0 10px; color: var(--text-2); border-bottom: 2px solid transparent; }
+.rtab.on { color: var(--text); border-bottom-color: var(--accent); background: var(--panel); }
+.rtab.bad { color: var(--danger); }
+.grid { font-family: var(--mono); font-size: 12px; overflow: hidden; }
+.grid .gr { display: grid; grid-template-columns: 44px 90px 120px 120px 190px 110px 1fr; border-bottom: 1px solid var(--border); height: 24px; align-items: center; }
+.grid .gh { height: 40px; background: var(--panel-2); font-family: var(--sans); }
+.grid .gh span { line-height: 1.25; }
+.grid .gh small { color: var(--muted); display: block; font-family: var(--mono); font-size: 11px; }
+.grid span { padding: 0 8px; border-right: 1px solid var(--border); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.grid .num { text-align: right; }
+.grid .null { color: var(--muted); font-style: italic; }
+.grid .idx { color: var(--muted); text-align: right; }
+.grid .on { background: var(--sel); }
+.grid .cellsel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.grid .lob { color: var(--accent); }
+.status { height: 24px; background: var(--panel-2); border-top: 1px solid var(--border); padding: 0 10px; gap: 16px; color: var(--text-2); font-size: 12px; }
+/* 弹层 */
+.overlay { position: relative; }
+.shade { position: absolute; inset: 0; background: rgba(0, 0, 0, .35); display: flex; align-items: center; justify-content: center; }
+.dialog { background: var(--panel); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 12px 40px rgba(0, 0, 0, .25); overflow: hidden; }
+.dialog .dh { height: 40px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; }
+.dialog .df { height: 52px; padding: 0 16px; border-top: 1px solid var(--border); gap: 8px; }
+.field { display: grid; grid-template-columns: 90px 1fr; gap: 10px 12px; align-items: center; }
+.input { height: 28px; border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 8px; display: flex; align-items: center; background: var(--panel); }
+.input.ph { color: var(--muted); }
+.menu-pop { position: absolute; background: var(--panel); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); padding: 4px 0; line-height: 28px; min-width: 200px; }
+.menu-pop div { padding: 0 12px; display: flex; align-items: center; gap: 8px; }
+.menu-pop div.hl { background: var(--sel); }
+.menu-pop hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.menu-pop kbd { margin-left: auto; color: var(--muted); font: 11px var(--sans); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--text-2); font-size: 12px; margin: 8px 0 0; }
+.panel-list .it { padding: 6px 12px; border-bottom: 1px solid var(--border); line-height: 1.45; }
+.panel-list .it .mono { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>数洞（DBLens）M1 查询工作台 · 界面设计稿</h1>
+  <span class="sec">v1 · 2026-10-25 · 画面按真实尺寸 1440×900 绘制</span>
+  <span class="grow"></span>
+  <span class="sec">主题</span>
+  <div class="seg" id="theme"><button data-v="system" aria-pressed="true">跟随系统</button><button data-v="light">亮色</button><button data-v="dark">暗色</button></div>
+  <span class="sec">缩放</span>
+  <div class="seg" id="zoom"><button data-v="fit" aria-pressed="true">适应宽度</button><button data-v="1">100%</button></div>
+</div>
+<div class="page fit" id="page">
+
+<section>
+  <h2>1. 主窗口（Windows，亮色/暗色跟随系统）</h2>
+  <p class="note">自绘标题栏（菜单、置顶、窗口按钮合并一行）；左侧活动栏切换四个侧栏；所有连接在一棵树里，环境色圆点标记；编辑器标签页绑定连接和会话，生产连接的标签整块标红；每个标签有自己的结果面板；底部状态栏。各区域之间的分隔线可拖动，大小会记住。</p>
+  <div class="stage"><div class="frame">
+    <div class="row titlebar" style="position:relative">
+      <i class="ti ti-database" style="color:var(--accent);font-size:16px;margin-right:6px"></i>
+      <div class="row menu"><span>文件</span><span>编辑</span><span>查看</span><span>SQL</span><span>窗口</span><span>帮助</span></div>
+      <span class="title">查询2 · prod-mysql — DBLens 数洞</span>
+      <span class="grow"></span>
+      <span class="iconbtn" title="窗口置顶（Ctrl+Shift+T）"><i class="ti ti-pin"></i></span>
+      <span class="winbtn"><i class="ti ti-minus"></i></span><span class="winbtn"><i class="ti ti-square"></i></span><span class="winbtn close"><i class="ti ti-x"></i></span>
+    </div>
+    <div class="row grow" style="align-items:stretch;min-height:0">
+      <div class="activity">
+        <span class="a on" title="数据库"><i class="ti ti-database"></i></span>
+        <span class="a" title="历史"><i class="ti ti-history"></i></span>
+        <span class="a" title="收藏"><i class="ti ti-star"></i></span>
+        <span class="a" title="运维查询"><i class="ti ti-tools"></i></span>
+        <span class="grow"></span>
+        <span class="a" title="设置"><i class="ti ti-settings"></i></span>
+      </div>
+      <div class="side">
+        <div class="row side-h">数据库<span class="grow"></span><span class="iconbtn" title="新建连接"><i class="ti ti-plus"></i></span><span class="iconbtn" title="刷新"><i class="ti ti-refresh"></i></span><span class="iconbtn" title="全部折叠"><i class="ti ti-fold"></i></span></div>
+        <div class="filter"><i class="ti ti-search"></i>按名称或注释过滤</div>
+        <div class="tree">
+          <div style="padding-left:6px"><i class="ti ti-chevron-down"></i><span class="dot" style="background:var(--env-dev)"></span><b>dev-pg</b><span class="env dev">开发</span><span class="cm">PostgreSQL 18.6</span></div>
+          <div style="padding-left:22px"><i class="ti ti-chevron-down"></i><i class="ti ti-schema"></i>public</div>
+          <div style="padding-left:38px"><i class="ti ti-chevron-down"></i><i class="ti ti-folder"></i>表<span class="cnt">12</span></div>
+          <div style="padding-left:58px" class="sel"><i class="ti ti-table"></i>orders<span class="cm">订单主表</span></div>
+          <div style="padding-left:58px"><i class="ti ti-table"></i>order_items<span class="cm">订单明细</span></div>
+          <div style="padding-left:58px"><i class="ti ti-table"></i>users<span class="cm">用户</span></div>
+          <div style="padding-left:58px"><i class="ti ti-table"></i>coupons</div>
+          <div style="padding-left:38px"><i class="ti ti-chevron-right"></i><i class="ti ti-folder"></i>视图<span class="cnt">3</span></div>
+          <div style="padding-left:38px"><i class="ti ti-chevron-right"></i><i class="ti ti-folder"></i>函数<span class="cnt">5</span></div>
+          <div style="padding-left:38px"><i class="ti ti-chevron-right"></i><i class="ti ti-folder"></i>序列<span class="cnt">4</span></div>
+          <div style="padding-left:22px"><i class="ti ti-chevron-right"></i><i class="ti ti-schema"></i>report</div>
+          <div style="padding-left:6px"><i class="ti ti-chevron-down"></i><span class="dot" style="background:var(--env-prod)"></span><b style="color:var(--danger)">prod-mysql</b><span class="env prod">生产</span><span class="cm">MySQL 8.4</span></div>
+          <div style="padding-left:22px"><i class="ti ti-chevron-right"></i><i class="ti ti-database"></i>shop</div>
+          <div style="padding-left:6px"><i class="ti ti-chevron-right"></i><span class="dot" style="background:var(--env-test)"></span><b>test-oracle</b><span class="env test">测试</span><span class="cm">Oracle 23ai</span></div>
+          <div style="padding-left:6px"><i class="ti ti-chevron-right"></i><span class="dot" style="background:var(--env-none)"></span><b>dm8</b><span class="cm">达梦 8</span></div>
+          <div style="padding-left:6px" class="muted"><i class="ti ti-chevron-right"></i><span class="dot" style="background:var(--env-none)"></span>kingbase-local<span class="cm">未连接</span></div>
+        </div>
+      </div>
+      <div class="grow" style="display:flex;flex-direction:column;min-width:0">
+        <div class="row tabs">
+          <div class="tab dev"><i class="ti ti-file-code"></i>查询1<span class="muted">dev-pg</span><i class="ti ti-x x"></i></div>
+          <div class="tab prod on"><i class="ti ti-file-code"></i>查询2<span>· 生产</span><i class="ti ti-point-filled" title="未保存"></i></div>
+          <div class="tab"><i class="ti ti-table"></i>orders<span class="muted">dev-pg</span><i class="ti ti-x x"></i></div>
+          <div class="tab"><i class="ti ti-plus"></i></div>
+        </div>
+        <div class="row toolbar">
+          <span class="iconbtn" title="执行当前语句（Ctrl+Enter）" style="color:var(--ok)"><i class="ti ti-player-play"></i></span>
+          <span class="iconbtn" title="执行全部（F5）"><i class="ti ti-player-track-next"></i></span>
+          <span class="iconbtn" title="停止" style="color:var(--danger)"><i class="ti ti-player-stop"></i></span>
+          <span class="chip" title="出错时">出错停止<i class="ti ti-chevron-down"></i></span>
+          <span class="sep"></span>
+          <span class="chip"><span class="dot" style="background:var(--env-prod)"></span>prod-mysql<i class="ti ti-chevron-down"></i></span>
+          <span class="chip"><i class="ti ti-database"></i>shop<i class="ti ti-chevron-down"></i></span>
+          <span class="sep"></span>
+          <span class="chip">手动提交<i class="ti ti-chevron-down"></i></span>
+          <span class="btn" style="height:22px"><i class="ti ti-check"></i>提交</span>
+          <span class="btn" style="height:22px"><i class="ti ti-arrow-back-up"></i>回滚</span>
+          <span style="color:var(--warn)"><i class="ti ti-alert-triangle"></i> 有 1 个未提交的事务</span>
+          <span class="grow"></span>
+          <span class="iconbtn" title="格式化（Shift+Alt+F）"><i class="ti ti-wand"></i></span>
+          <span class="iconbtn" title="执行计划"><i class="ti ti-binary-tree"></i></span>
+          <span class="iconbtn" title="收藏（Ctrl+D）"><i class="ti ti-star"></i></span>
+        </div>
+        <div class="editor" style="flex:0 0 330px">
+          <div class="gutter">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15</div>
+<div class="code"><span class="c">-- 昨日各渠道订单金额</span>
+<span class="k">select</span> o.channel,
+       <span class="k">count</span>(*)           <span class="k">as</span> orders,
+       <span class="k">sum</span>(o.amount)       <span class="k">as</span> amount
+<span class="k">from</span>   orders o
+<span class="k">join</span>   users u <span class="k">on</span> u.id = o.user_id
+<span class="k">where</span>  o.created_at &gt;= <span class="s">'2026-10-24'</span>
+<span class="cur">  <span class="k">and</span>  o.status <span class="k">in</span> (<span class="n">1</span>, <span class="n">2</span>)</span><span class="k">group by</span> o.channel
+<span class="k">order by</span> amount <span class="k">desc</span>;
+
+<span class="k">update</span> coupons <span class="k">set</span> <span class="err">expird_at</span> = <span class="k">now</span>() <span class="k">where</span> id = <span class="n">42</span>;
+</div>
+        </div>
+        <div class="splitter"></div>
+        <div class="row rtabs">
+          <span class="rtab on"><i class="ti ti-table"></i>结果 1<span class="muted">· 6 行</span></span>
+          <span class="rtab bad"><i class="ti ti-alert-circle"></i>语句 2 失败</span>
+          <span class="rtab"><i class="ti ti-message"></i>消息</span>
+          <span class="grow"></span>
+          <span class="iconbtn" title="导出"><i class="ti ti-download"></i></span>
+          <span class="iconbtn" title="复制"><i class="ti ti-copy"></i></span>
+        </div>
+        <div class="grid grow">
+          <div class="gr gh"><span class="idx">#</span><span>channel<small>varchar(16)</small></span><span>orders<small>bigint</small></span><span>amount<small>decimal(14,2)</small></span><span>first_at<small>datetime</small></span><span>top_user<small>varchar(64)</small></span><span>remark<small>text</small></span></div>
+          <div class="gr"><span class="idx">1</span><span>app</span><span class="num">12,804</span><span class="num">1,982,301.50</span><span>2026-10-24 00:00:12</span><span>张三</span><span>大促首日</span></div>
+          <div class="gr on"><span class="idx">2</span><span>web</span><span class="num">6,113</span><span class="num cellsel">803,224.00</span><span>2026-10-24 00:01:05</span><span>李四</span><span class="null">NULL</span></div>
+          <div class="gr"><span class="idx">3</span><span>mini</span><span class="num">4,920</span><span class="num">512,880.20</span><span>2026-10-24 00:00:47</span><span>王五</span><span class="lob">客户反馈小程序下单页偶发白屏，排查后… (2.3 KB)</span></div>
+          <div class="gr"><span class="idx">4</span><span>pos</span><span class="num">1,207</span><span class="num">96,410.00</span><span>2026-10-24 08:30:00</span><span>赵六</span><span class="null">NULL</span></div>
+          <div class="gr"><span class="idx">5</span><span>partner</span><span class="num">388</span><span class="num">41,020.90</span><span>2026-10-24 02:13:44</span><span class="null">NULL</span><span class="null">NULL</span></div>
+          <div class="gr"><span class="idx">6</span><span>other</span><span class="num">17</span><span class="num">1,203.00</span><span>2026-10-24 10:02:31</span><span>孙七</span><span>测试单</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="row status">
+      <span><i class="ti ti-plug-connected"></i> prod-mysql · MySQL 8.4.3</span>
+      <span style="color:var(--warn)">手动提交 · 事务中</span>
+      <span>结果 1：6 行 · 38 ms</span>
+      <span class="grow"></span>
+      <span>行 8，列 31</span><span>MySQL</span><span>UTF-8</span>
+    </div>
+  </div></div>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--env-dev)"></span>开发</span>
+    <span><span class="dot" style="background:var(--env-test)"></span>测试</span>
+    <span><span class="dot" style="background:var(--env-prod)"></span>生产（标签整块标红，执行危险语句前确认）</span>
+    <span><span class="dot" style="background:var(--env-none)"></span>未标记</span>
+    <span>波浪线：数据库返回的错误位置</span>
+  </div>
+</section>
+
+<section>
+  <h2>2. 新建 / 编辑连接</h2>
+  <p class="note">左侧选数据库类型，兼容库（MariaDB、TiDB、OceanBase、PolarDB、金仓、openGauss、瀚高等）连接后自动识别。Oracle、达梦缺客户端库时，在对话框里直接确认目录。密码默认存系统钥匙串；没有钥匙串的系统用主密码加密。</p>
+  <div class="stage"><div class="frame overlay" style="height:640px">
+    <div class="shade">
+      <div class="dialog" style="width:760px">
+        <div class="row dh">新建连接<span class="grow"></span><span class="iconbtn"><i class="ti ti-x"></i></span></div>
+        <div class="row" style="align-items:stretch;height:470px">
+          <div style="width:190px;border-right:1px solid var(--border);padding:10px 8px;line-height:32px">
+            <div class="muted" style="line-height:20px;padding:0 8px 4px">数据库类型</div>
+            <div style="padding:0 10px;border-radius:4px"><i class="ti ti-brand-mysql"></i> MySQL 系</div>
+            <div style="padding:0 10px;border-radius:4px"><i class="ti ti-elephant"></i> PostgreSQL 系</div>
+            <div style="padding:0 10px;border-radius:4px"><i class="ti ti-circle"></i> Oracle</div>
+            <div style="padding:0 10px;border-radius:4px;background:var(--sel)"><i class="ti ti-database"></i> 达梦 DM</div>
+            <div class="muted" style="line-height:1.5;padding:12px 8px 0;font-size:12px">MySQL 系含 MariaDB、TiDB、OceanBase-MySQL、PolarDB-MySQL；PostgreSQL 系含金仓、openGauss/GaussDB、瀚高。</div>
+          </div>
+          <div class="grow" style="padding:12px 20px">
+            <div class="row" style="gap:20px;border-bottom:1px solid var(--border);margin-bottom:14px;height:30px">
+              <span style="border-bottom:2px solid var(--accent);height:30px;display:flex;align-items:center">常规</span><span class="sec">SSL/TLS</span><span class="sec">高级</span>
+            </div>
+            <div style="padding:8px 10px;border-radius:4px;background:var(--warn-bg);color:var(--warn);margin-bottom:14px;line-height:1.6">
+              <i class="ti ti-alert-triangle"></i> 需要达梦 DPI 客户端库。已找到 <span class="mono">E:\dmdbms\drivers\dpi</span>
+              <div style="margin-top:4px"><span class="btn" style="height:24px">使用这个目录</span> <span class="btn" style="height:24px">选择其他目录…</span></div>
+            </div>
+            <div class="field">
+              <span class="sec">名称</span><div class="input">dm8-测试库</div>
+              <span class="sec">主机 / 端口</span><div class="row" style="gap:8px"><div class="input grow">192.168.10.20</div><div class="input" style="width:90px">5236</div></div>
+              <span class="sec">用户</span><div class="input">DBLENS_TEST</div>
+              <span class="sec">密码</span><div class="row" style="gap:10px"><div class="input grow">••••••••••</div><span><i class="ti ti-square-check" style="color:var(--accent)"></i> 保存到系统钥匙串</span></div>
+              <span class="sec">模式</span><div class="input ph">可选，登录后切换到这个模式</div>
+              <span class="sec">环境</span><div class="row" style="gap:6px"><span class="chip">无</span><span class="chip">开发</span><span class="chip" style="border-color:var(--warn);background:var(--warn-bg);color:var(--warn)">测试</span><span class="chip">生产</span><span class="muted" style="margin-left:8px">颜色可在「高级」里自定义</span></div>
+            </div>
+            <div style="margin-top:16px;padding:8px 10px;border-radius:4px;background:var(--ok-bg);color:var(--ok)"><i class="ti ti-circle-check"></i> 连接成功：DM Database Server 64 V8，识别为达梦，用时 86 ms</div>
+          </div>
+        </div>
+        <div class="row df"><span class="btn"><i class="ti ti-plug"></i>测试连接</span><span class="grow"></span><span class="btn">取消</span><span class="btn primary">保存</span></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="legend"><span>SSL/TLS：关闭 / 加密不校验 / 校验证书 + CA 文件（MySQL 系、PG 系）</span><span>高级：连接超时、Oracle 服务名或 SID、自定义颜色、其他驱动参数（键 = 值）</span></div>
+</section>
+
+<section>
+  <h2>3. 生产环境执行确认 · 对象树右键菜单 · 单元格查看</h2>
+  <p class="note">只在生产连接上，对没有 WHERE 的 UPDATE/DELETE、DROP、TRUNCATE 弹确认（DefaultPolicy）；之前的语句已执行，确认后从这条继续。右键「生成 SQL」插入当前编辑器，SELECT 每列附注释。双击超长单元格打开查看窗口。</p>
+  <div class="stage"><div class="frame overlay" style="height:520px;flex-direction:row">
+    <div style="width:480px;position:relative;border-right:1px solid var(--border)">
+      <div class="shade" style="position:absolute">
+        <div class="dialog" style="width:420px;border-color:var(--danger)">
+          <div class="row dh" style="background:var(--danger-bg);color:var(--danger)"><i class="ti ti-alert-octagon" style="margin-right:6px"></i>生产库 prod-mysql：需要确认</div>
+          <div style="padding:14px 16px;line-height:1.7">第 2 条语句没有 WHERE，会删除整张表的数据：
+            <div class="mono" style="background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin:8px 0">delete from orders</div>
+            第 1 条语句已执行。确认后从这条开始继续执行剩余语句。</div>
+          <div class="row df" style="justify-content:flex-end"><span class="btn">取消</span><span class="btn danger">仍然执行</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="width:430px;position:relative;border-right:1px solid var(--border);background:var(--panel)">
+      <div class="tree" style="padding-top:12px">
+        <div style="padding-left:22px"><i class="ti ti-chevron-down"></i><i class="ti ti-folder"></i>表<span class="cnt">12</span></div>
+        <div style="padding-left:42px" class="sel"><i class="ti ti-table"></i>orders</div>
+        <div style="padding-left:42px" class="sel"><i class="ti ti-table"></i>order_items</div>
+        <div style="padding-left:42px"><i class="ti ti-table"></i>users</div>
+      </div>
+      <div class="menu-pop" style="left:120px;top:60px">
+        <div><i class="ti ti-table"></i>查看数据</div>
+        <div><i class="ti ti-code"></i>查看 DDL</div>
+        <div class="hl"><i class="ti ti-file-code"></i>生成 SQL<i class="ti ti-chevron-right" style="margin-left:auto"></i></div>
+        <div><i class="ti ti-arrows-join"></i>生成关联查询<kbd>已选 2 张表</kbd></div>
+        <hr />
+        <div><i class="ti ti-copy"></i>复制名称<kbd>Ctrl+C</kbd></div>
+        <div><i class="ti ti-refresh"></i>刷新<kbd>F5</kbd></div>
+      </div>
+      <div class="menu-pop" style="left:322px;top:122px;min-width:110px">
+        <div>SELECT</div><div>INSERT</div><div>UPDATE</div><div>DELETE</div>
+      </div>
+    </div>
+    <div class="grow" style="position:relative">
+      <div class="shade" style="position:absolute">
+        <div class="dialog" style="width:440px">
+          <div class="row dh">remark · 第 3 行<span class="grow"></span><span class="iconbtn"><i class="ti ti-x"></i></span></div>
+          <div class="row" style="gap:16px;padding:0 16px;height:32px;border-bottom:1px solid var(--border)"><span style="border-bottom:2px solid var(--accent);height:32px;display:flex;align-items:center">文本</span><span class="sec">JSON</span><span class="sec">十六进制</span><span class="grow"></span><span class="muted">2.3 KB · 已截断预览</span></div>
+          <div class="mono" style="padding:12px 16px;height:220px;overflow:hidden;line-height:1.7">客户反馈小程序下单页偶发白屏，排查后确认为 CDN 节点缓存了旧版本脚本……</div>
+          <div class="row df"><span class="btn"><i class="ti ti-download"></i>读取完整内容</span><span class="grow"></span><span class="btn"><i class="ti ti-copy"></i>复制</span></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<section>
+  <h2>4. 侧栏：历史 · 收藏 · 运维查询</h2>
+  <p class="note">历史按执行自动记录，可搜索、按连接或失败过滤，双击插入编辑器。收藏按文件夹管理，Ctrl+D 收藏当前 SQL。运维查询随当前连接的方言变化，点击在新标签执行；kill 语句只生成，不自动执行。</p>
+  <div class="stage"><div class="frame" style="height:560px;flex-direction:row">
+    <div class="side" style="width:300px">
+      <div class="row side-h"><i class="ti ti-history" style="margin-right:6px"></i>历史<span class="grow"></span><span class="iconbtn"><i class="ti ti-trash"></i></span></div>
+      <div class="filter"><i class="ti ti-search"></i>搜索 SQL</div>
+      <div class="row" style="gap:6px;padding:0 8px 6px"><span class="chip">全部连接<i class="ti ti-chevron-down"></i></span><span class="chip">仅失败</span></div>
+      <div class="panel-list">
+        <div class="it"><span class="mono">select o.channel, count(*) as orders…</span><span class="muted"><i class="ti ti-check" style="color:var(--ok)"></i> prod-mysql · 6 行 · 38 ms · 10:42</span></div>
+        <div class="it"><span class="mono">delete from orders</span><span class="muted"><i class="ti ti-x" style="color:var(--danger)"></i> prod-mysql · 已取消 · 10:38</span></div>
+        <div class="it"><span class="mono">update coupons set expird_at = now()…</span><span class="muted"><i class="ti ti-x" style="color:var(--danger)"></i> prod-mysql · 1054 · 10:37</span></div>
+        <div class="it"><span class="mono">select * from users where id = 7</span><span class="muted"><i class="ti ti-check" style="color:var(--ok)"></i> dev-pg · 1 行 · 4 ms · 昨天</span></div>
+      </div>
+    </div>
+    <div class="side" style="width:300px">
+      <div class="row side-h"><i class="ti ti-star" style="margin-right:6px"></i>收藏<span class="grow"></span><span class="iconbtn"><i class="ti ti-folder-plus"></i></span></div>
+      <div class="filter"><i class="ti ti-search"></i>搜索名称或 SQL</div>
+      <div class="tree">
+        <div style="padding-left:8px"><i class="ti ti-chevron-down"></i><i class="ti ti-folder"></i>日报</div>
+        <div style="padding-left:28px" class="sel"><i class="ti ti-file-code"></i>昨日订单汇总</div>
+        <div style="padding-left:28px"><i class="ti ti-file-code"></i>退款明细</div>
+        <div style="padding-left:8px"><i class="ti ti-chevron-right"></i><i class="ti ti-folder"></i>排查</div>
+        <div style="padding-left:24px"><i class="ti ti-file-code"></i>未分类：慢接口订单</div>
+      </div>
+    </div>
+    <div class="side" style="width:300px">
+      <div class="row side-h"><i class="ti ti-tools" style="margin-right:6px"></i>运维查询</div>
+      <div style="padding:8px 12px" class="sec">针对：<b style="color:var(--text)">prod-mysql</b>（MySQL 8.4）</div>
+      <div class="tree">
+        <div style="padding-left:12px"><i class="ti ti-users"></i>当前会话</div>
+        <div style="padding-left:12px"><i class="ti ti-lock"></i>锁等待及 kill 语句</div>
+        <div style="padding-left:12px"><i class="ti ti-database"></i>库表空间占用</div>
+        <div style="padding-left:12px"><i class="ti ti-clock"></i>慢 SQL</div>
+      </div>
+      <div style="padding:10px 12px;color:var(--text-2);border-top:1px solid var(--border);margin-top:8px;line-height:1.6">Oracle 显示表空间、v$session；PostgreSQL 显示 pg_stat_activity、pg_locks；达梦显示 v$sessions、v$lock。</div>
+    </div>
+    <div class="grow" style="display:flex;align-items:center;justify-content:center;color:var(--muted)">（编辑区）</div>
+  </div></div>
+</section>
+
+<section>
+  <h2>5. 浏览器模式与 macOS</h2>
+  <p class="note">浏览器模式（dblens-server）：标题栏变成页面顶栏，只有菜单和标题，没有置顶和窗口按钮。macOS：保留系统红黄绿按钮（左上），菜单在屏幕顶部菜单栏，标题栏只放标题和置顶按钮。</p>
+  <div class="stage"><div class="frame" style="height:110px">
+    <div class="row titlebar" style="position:relative"><i class="ti ti-database" style="color:var(--accent);font-size:16px;margin-right:6px"></i><div class="row menu"><span>文件</span><span>编辑</span><span>查看</span><span>SQL</span><span>帮助</span></div><span class="title">DBLens 数洞（浏览器模式）</span></div>
+    <div class="row titlebar" style="position:relative;margin-top:16px;padding-left:12px"><span class="dot" style="background:#ff5f57;width:12px;height:12px"></span><span class="dot" style="background:#febc2e;width:12px;height:12px"></span><span class="dot" style="background:#28c840;width:12px;height:12px"></span><span class="title">查询1 · dev-pg — DBLens 数洞</span><span class="grow"></span><span class="iconbtn"><i class="ti ti-pin"></i></span></div>
+  </div></div>
+</section>
+</div>
+<script>
+(function () {
+  var root = document.documentElement, page = document.getElementById('page');
+  function press(group, v) { group.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === v)); }); }
+  document.getElementById('theme').addEventListener('click', function (e) {
+    var v = e.target.dataset && e.target.dataset.v; if (!v) return;
+    if (v === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', v);
+    press(this, v);
+  });
+  function fit() { page.style.setProperty('--fit', Math.min(1, (page.clientWidth - 32) / 1442)); }
+  document.getElementById('zoom').addEventListener('click', function (e) {
+    var v = e.target.dataset && e.target.dataset.v; if (!v) return;
+    page.classList.toggle('fit', v === 'fit'); press(this, v); fit();
+  });
+  window.addEventListener('resize', fit); fit();
+})();
+</script>
+</body>
+</html>
