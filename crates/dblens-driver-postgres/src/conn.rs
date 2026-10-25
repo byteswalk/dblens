@@ -15,6 +15,8 @@ pub struct PgConnection {
     pub(crate) conn_task: JoinHandle<()>,
     pub(crate) autocommit: bool,
     pub(crate) in_tx: bool,
+    /// 加密连接时的 TLS 连接器；取消请求也要用它建立连接（服务器可能只接受加密连接）。
+    pub(crate) tls: Option<tokio_postgres_rustls::MakeRustlsConnect>,
 }
 
 impl PgConnection {
@@ -61,9 +63,16 @@ impl Connection for PgConnection {
 
     fn cancel_handle(&self) -> CancelHandle {
         let token = self.client.cancel_token();
+        let tls = self.tls.clone();
         CancelHandle::new(move || {
-            let token = token.clone();
-            async move { token.cancel_query(NoTls).await.map_err(map_err) }
+            let (token, tls) = (token.clone(), tls.clone());
+            async move {
+                match tls {
+                    Some(t) => token.cancel_query(t).await,
+                    None => token.cancel_query(NoTls).await,
+                }
+                .map_err(map_err)
+            }
         })
     }
 

@@ -34,6 +34,7 @@ mysql_async = { version = "0.37.1", default-features = false, features = ["defau
 oracle = { version = "0.6.3", features = ["chrono"] }
 percent-encoding = "2.3.2"
 rusqlite = { version = "0.41.0", features = ["bundled"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sqlparser = "0.63.0"
@@ -41,6 +42,8 @@ tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-postgres = { version = "0.7.18", features = ["with-chrono-0_4", "with-serde_json-1", "with-uuid-1"] }
+tokio-postgres-rustls = "0.14.0"
 tracing = "0.1.44"
 url = "2.5.8"
 uuid = { version = "1.28.0", features = ["serde", "v4"] }
+webpki-roots = "1.0.11"
