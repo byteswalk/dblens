@@ -115,7 +115,8 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
     let n = t.name.as_str();
     // INTERVAL 按整词匹配；年月间隔（INTERVAL YEAR…）无法和日秒间隔互转，归为 Other
     if n == "INTERVAL" || n.starts_with("INTERVAL ") {
-        return if n.starts_with("INTERVAL YEAR") { L::Other } else { L::Interval };
+        let year_month = n.starts_with("INTERVAL YEAR") || n.starts_with("INTERVAL MONTH");
+        return if year_month { L::Other } else { L::Interval };
     }
     let len = arg_u32(&t.args, 0);
     let precision = arg_u8(&t.args, 0);
@@ -212,9 +213,10 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "DEC" | "DECIMAL" | "NUMERIC" | "NUMBER" => decimal(),
             "REAL" => L::Float { bits: 32 },
             "FLOAT" | "DOUBLE" | "DOUBLE PRECISION" => L::Float { bits: 64 },
-            "CHAR" | "CHARACTER" => L::Char { len },
-            "VARCHAR" | "VARCHAR2" => L::VarChar { len },
+            "CHAR" | "CHARACTER" | "NCHAR" => L::Char { len },
+            "VARCHAR" | "VARCHAR2" | "NVARCHAR" | "NVARCHAR2" | "CHARACTER VARYING" => L::VarChar { len },
             "TEXT" | "LONGVARCHAR" | "CLOB" => L::Text,
+            "JSON" | "JSONB" => L::Json,
             "BINARY" => L::Binary { len },
             "VARBINARY" | "RAW" => L::VarBinary { len },
             "BLOB" | "IMAGE" | "LONGVARBINARY" => L::Blob,
@@ -735,6 +737,7 @@ mod tests {
                 ("INTERVAL YEAR(2) TO MONTH", L::Other),
                 ("INTERVAL DAY(2) TO SECOND(6)", L::Interval),
                 ("INTERVALX", L::Other),
+                ("INTERVAL MONTH(2)", L::Other),
                 ("BFILE", L::Other),
                 ("BOOLEAN", L::Bool),
                 ("XMLTYPE", L::Other),
@@ -773,6 +776,9 @@ mod tests {
                 ("VARCHAR(50)", L::VarChar { len: Some(50) }),
                 ("VARCHAR(50 CHAR)", L::VarChar { len: Some(50) }),
                 ("VARCHAR2(50)", L::VarChar { len: Some(50) }),
+                ("NVARCHAR2(20)", L::VarChar { len: Some(20) }),
+                ("NCHAR(4)", L::Char { len: Some(4) }),
+                ("JSONB", L::Json),
                 ("TEXT", L::Text),
                 ("IMAGE", L::Blob),
                 ("DATETIME(6)", ts(false, Some(6))),

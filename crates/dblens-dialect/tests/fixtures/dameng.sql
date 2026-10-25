@@ -1,0 +1,221 @@
+-- @@ pre_drop_syn
+DROP SYNONYM IF EXISTS META_SYN_EMP
+-- @@ pre_drop_pkg
+DROP PACKAGE IF EXISTS META_PKG_META
+-- @@ pre_drop_proc
+DROP PROCEDURE IF EXISTS META_P_META
+-- @@ pre_drop_func
+DROP FUNCTION IF EXISTS META_F_META
+-- @@ pre_drop_mv
+DROP MATERIALIZED VIEW IF EXISTS META_MV_DEPT
+-- @@ pre_drop_view
+DROP VIEW IF EXISTS META_V_EMP
+-- @@ pre_drop_seq
+DROP SEQUENCE IF EXISTS META_SEQ_META
+-- @@ pre_drop_trg
+DROP TRIGGER IF EXISTS META_TRG_EMP
+-- @@ pre_drop_trg_dept
+DROP TRIGGER IF EXISTS META_TRG_DEPT
+-- @@ pre_drop_trg_v
+DROP TRIGGER IF EXISTS META_TRG_V_EMP
+-- @@ pre_drop_emp
+DROP TABLE IF EXISTS META_EMP CASCADE
+-- @@ pre_drop_dept
+DROP TABLE IF EXISTS META_DEPT CASCADE
+-- @@ pre_drop_part
+DROP TABLE IF EXISTS META_PART_T CASCADE
+-- @@ pre_drop_mixed
+DROP TABLE IF EXISTS "META_Mixed Case" CASCADE
+-- @@ pre_drop_cn
+DROP TABLE IF EXISTS "META_数洞表" CASCADE
+-- @@ pre_drop_ds
+DROP TABLE IF EXISTS META_DS_T CASCADE
+-- @@ pre_drop_ds2
+DROP TABLE IF EXISTS META_DS_T2 CASCADE
+-- @@ pre_drop_ds3
+DROP TABLE IF EXISTS META_DS_T3 CASCADE
+-- @@ pre_drop_scratch_t1
+DROP TABLE IF EXISTS META_T1
+-- @@ dept
+CREATE TABLE META_DEPT (
+  id INT IDENTITY(1,1) NOT NULL,
+  name VARCHAR(50 CHAR) NOT NULL,
+  CONSTRAINT META_PK_DEPT PRIMARY KEY (id),
+  CONSTRAINT META_UQ_DEPT_NAME UNIQUE (name)
+)
+-- @@ dept_c
+COMMENT ON TABLE META_DEPT IS '部门表'
+-- @@ dept_c1
+COMMENT ON COLUMN META_DEPT.id IS '部门编号'
+-- @@ dept_c2
+COMMENT ON COLUMN META_DEPT.name IS '部门名称'
+-- @@ emp
+CREATE TABLE META_EMP (
+  id BIGINT NOT NULL,
+  dept_id INT,
+  manager_id BIGINT,
+  name VARCHAR(100 CHAR) DEFAULT '无名' NOT NULL,
+  salary DEC(10,2),
+  created TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
+  bio CLOB,
+  photo BLOB,
+  name_upper VARCHAR(100 CHAR) GENERATED ALWAYS AS (UPPER(name)) VIRTUAL,
+  CONSTRAINT META_PK_EMP PRIMARY KEY (id),
+  CONSTRAINT META_FK_EMP_DEPT FOREIGN KEY (dept_id) REFERENCES META_DEPT (id) ON DELETE CASCADE,
+  CONSTRAINT META_FK_EMP_MGR FOREIGN KEY (manager_id) REFERENCES META_EMP (id) ON DELETE SET NULL,
+  CONSTRAINT META_CK_EMP_SALARY CHECK (salary >= 0),
+  CONSTRAINT META_UQ_EMP_DEPT_NAME UNIQUE (dept_id, name)
+)
+-- @@ emp_c
+COMMENT ON TABLE META_EMP IS '员工表'
+-- @@ emp_c1
+COMMENT ON COLUMN META_EMP.name IS '员工姓名'
+-- @@ ix_created
+CREATE INDEX META_IX_EMP_CREATED ON META_EMP (created DESC)
+-- @@ ix_upper
+CREATE INDEX META_IX_EMP_UPPER ON META_EMP (UPPER(name))
+-- @@ ix_multi
+CREATE INDEX META_IX_EMP_MULTI ON META_EMP (dept_id ASC, salary DESC)
+-- @@ ix_mix
+CREATE INDEX META_IX_EMP_MIX ON META_EMP (dept_id, UPPER(name) DESC, salary DESC)
+-- @@ ix_unique
+CREATE UNIQUE INDEX META_UX_DEPT ON META_DEPT (name, id)
+-- @@ ix_bitmap
+CREATE BITMAP INDEX META_BX_EMP ON META_EMP (salary)
+-- @@ trg
+CREATE OR REPLACE TRIGGER META_TRG_EMP BEFORE INSERT OR UPDATE ON META_EMP FOR EACH ROW
+BEGIN
+  :NEW.salary := NVL(:NEW.salary, 0);
+END;
+-- @@ trg_dept
+CREATE OR REPLACE TRIGGER META_TRG_DEPT AFTER DELETE OR UPDATE OR INSERT ON META_DEPT
+BEGIN
+  NULL;
+END;
+-- @@ view
+CREATE OR REPLACE VIEW META_V_EMP AS SELECT e.id, e.name, d.name AS dept_name FROM META_EMP e LEFT JOIN META_DEPT d ON e.dept_id = d.id
+-- @@ view_c
+COMMENT ON VIEW META_V_EMP IS '员工视图'
+-- @@ trg_view
+CREATE OR REPLACE TRIGGER META_TRG_V_EMP INSTEAD OF INSERT ON META_V_EMP FOR EACH ROW
+BEGIN
+  NULL;
+END;
+-- @@ mv
+CREATE MATERIALIZED VIEW META_MV_DEPT AS SELECT id, name FROM META_DEPT
+-- @@ seq
+CREATE SEQUENCE META_SEQ_META START WITH 100 INCREMENT BY 5 MAXVALUE 99999 CYCLE CACHE 10
+-- @@ proc
+CREATE OR REPLACE PROCEDURE META_P_META(p_id IN INT) AS
+BEGIN
+  NULL;
+END;
+-- @@ func
+CREATE OR REPLACE FUNCTION META_F_META(p_id IN INT) RETURN INT AS
+BEGIN
+  RETURN p_id + 1;
+END;
+-- @@ pkg
+CREATE OR REPLACE PACKAGE META_PKG_META AS
+  PROCEDURE hello;
+END META_PKG_META;
+-- @@ pkgbody
+CREATE OR REPLACE PACKAGE BODY META_PKG_META AS
+  PROCEDURE hello IS
+  BEGIN
+    NULL;
+  END;
+END META_PKG_META;
+-- @@ syn
+CREATE OR REPLACE SYNONYM META_SYN_EMP FOR META_EMP
+-- @@ part
+CREATE TABLE META_PART_T (
+  id INT NOT NULL,
+  d DATE
+) PARTITION BY RANGE (d) (
+  PARTITION p2023 VALUES LESS THAN (DATE '2024-01-01'),
+  PARTITION p2024 VALUES LESS THAN (DATE '2025-01-01'),
+  PARTITION pmax VALUES LESS THAN (MAXVALUE)
+)
+-- @@ mixed
+CREATE TABLE "META_Mixed Case" ("select" INT, "数洞" VARCHAR(20 CHAR), "Mixed Col" INT, CONSTRAINT "META_PK_Mixed" PRIMARY KEY ("select"))
+-- @@ mixed_c
+COMMENT ON COLUMN "META_Mixed Case"."数洞" IS '中文列'
+-- @@ cn
+CREATE TABLE "META_数洞表" (id INT)
+-- @@ ds
+CREATE TABLE META_DS_T (
+  c_tinyint TINYINT,
+  c_smallint SMALLINT,
+  c_int INT,
+  c_integer INTEGER,
+  c_bigint BIGINT,
+  c_byte BYTE,
+  c_bit BIT,
+  c_dec_bare DEC,
+  c_decimal_bare DECIMAL,
+  c_number_bare NUMBER,
+  c_numeric_bare NUMERIC,
+  c_dec_p DEC(10),
+  c_dec_ps DEC(10,2),
+  c_decimal_ps DECIMAL(20,4),
+  c_number_ps NUMBER(12,3),
+  c_numeric_ps NUMERIC(8,0),
+  c_dec_38 DEC(38,30),
+  c_number_star NUMBER(*,2),
+  c_float FLOAT,
+  c_float_p FLOAT(20),
+  c_double DOUBLE,
+  c_double_prec DOUBLE PRECISION,
+  c_real REAL,
+  c_char CHAR(10),
+  c_char_c CHAR(10 CHAR),
+  c_char_b CHAR(10 BYTE),
+  c_character CHARACTER(5),
+  c_varchar VARCHAR(100),
+  c_varchar_c VARCHAR(100 CHAR),
+  c_varchar_b VARCHAR(100 BYTE),
+  c_varchar2 VARCHAR2(50),
+  c_varchar2_c VARCHAR2(50 CHAR),
+  c_text TEXT,
+  c_longvarchar LONGVARCHAR,
+  c_clob CLOB,
+  c_blob BLOB,
+  c_image IMAGE,
+  c_longvarbinary LONGVARBINARY,
+  c_binary BINARY(16),
+  c_varbinary VARBINARY(100),
+  c_raw RAW(32),
+  c_date DATE,
+  c_time TIME,
+  c_time3 TIME(3),
+  c_timestamp TIMESTAMP,
+  c_timestamp3 TIMESTAMP(3),
+  c_timestamp6 TIMESTAMP(6),
+  c_timestamp9 TIMESTAMP(9),
+  c_datetime DATETIME,
+  c_datetime6 DATETIME(6),
+  c_timetz TIME WITH TIME ZONE,
+  c_timetz3 TIME(3) WITH TIME ZONE,
+  c_tstz TIMESTAMP WITH TIME ZONE,
+  c_tstz3 TIMESTAMP(3) WITH TIME ZONE,
+  c_tsltz TIMESTAMP WITH LOCAL TIME ZONE,
+  c_tsltz3 TIMESTAMP(3) WITH LOCAL TIME ZONE,
+  c_iym INTERVAL YEAR TO MONTH,
+  c_iym4 INTERVAL YEAR(4) TO MONTH,
+  c_iy INTERVAL YEAR,
+  c_im INTERVAL MONTH,
+  c_ids INTERVAL DAY TO SECOND,
+  c_ids53 INTERVAL DAY(5) TO SECOND(3),
+  c_id INTERVAL DAY,
+  c_ih INTERVAL HOUR,
+  c_ihm INTERVAL HOUR TO MINUTE,
+  c_ihs INTERVAL HOUR TO SECOND,
+  c_ims INTERVAL MINUTE TO SECOND,
+  c_isec INTERVAL SECOND,
+  c_bool BOOLEAN
+)
+-- @@ ds2_bfile
+CREATE TABLE META_DS_T2 (id INT, c_bfile BFILE)
+-- @@ ds3_extra
+CREATE TABLE META_DS_T3 (c_nchar NCHAR(10), c_nvarchar NVARCHAR(20), c_nvarchar2 NVARCHAR2(20), c_rowid ROWID, c_json JSON, c_xml XMLTYPE, c_long LONG, c_boolx BOOL, c_charvar CHARACTER VARYING(10), c_dtz DATETIME WITH TIME ZONE, c_ident BIGINT IDENTITY(10,2))

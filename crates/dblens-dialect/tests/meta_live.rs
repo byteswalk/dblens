@@ -364,3 +364,38 @@ async fn oracle_metadata() {
     let mv = meta::views(&d, MetaKey::MaterializedViews, &mv_rows, &columns).unwrap();
     assert!(!mv.is_empty());
 }
+
+#[tokio::test]
+async fn dameng_metadata() {
+    let Some(mut live) = connect("DBLENS_TEST_DM_URL").await else { return };
+    live.run_script(include_str!("fixtures/dameng.sql")).await;
+    let fx = Fx { schema: "DBLENS_TEST", upper: true };
+    let all = check_common(&mut live, fx).await;
+    let s = fx.schema;
+
+    assert!(table(&all, "META_PART_T").partition.as_deref().unwrap().starts_with("RANGE"));
+    let list = meta::objects(MetaKey::Tables, &live.rows(MetaKey::Tables, &args(s)).await).unwrap();
+    assert!(
+        !list.iter().any(|o| o.name.starts_with("BM$_") || o.name.starts_with("MTAB$_")),
+        "内部存储表不列出"
+    );
+    let emp = table(&all, "META_EMP");
+    assert!(emp.indexes.iter().any(|i| i.columns.iter().any(|c| has(&c.name, "upper"))), "函数索引");
+    assert!(emp.indexes.iter().all(|i| i.name != "META_PK_EMP"), "主键背后的索引不列出");
+
+    let seq = meta::sequences(&live.rows(MetaKey::Sequences, &args(s)).await).unwrap();
+    let q = seq.iter().find(|q| q.name == "META_SEQ_META").unwrap();
+    assert_eq!(
+        (q.start.as_deref(), q.increment.as_deref(), q.cycle, q.cache),
+        (Some("100"), Some("5"), true, Some(10))
+    );
+    let syn = meta::synonyms(&live.rows(MetaKey::Synonyms, &args(s)).await).unwrap();
+    assert!(syn.iter().any(|x| x.name == "META_SYN_EMP" && x.target_name == "META_EMP"), "{syn:?}");
+    let routines = meta::routines(&live.rows(MetaKey::Routines, &args(s)).await).unwrap();
+    assert!(routines.iter().any(|r| r.name == "META_PKG_META" && r.kind == RoutineKind::PackageBody));
+    let d = live.d;
+    let columns = live.rows(MetaKey::Columns, &args(s)).await;
+    let mv_rows = live.rows(MetaKey::MaterializedViews, &args(s)).await;
+    let mv = meta::views(&d, MetaKey::MaterializedViews, &mv_rows, &columns).unwrap();
+    assert_eq!(mv.iter().find(|v| v.name == "META_MV_DEPT").unwrap().columns.len(), 2);
+}

@@ -39,9 +39,9 @@ impl Dialect {
         format!("SELECT\n{}\nFROM {from}", lines.join("\n"))
     }
 
-    /// 跳过自增列和生成列。没有可插入的列时，MySQL 用 `() VALUES ()`，PG 用 `DEFAULT VALUES`，
-    /// Oracle/达梦对第一个非生成列（通常是自增列）写 `DEFAULT`（虚拟列不接受 `DEFAULT`）；
-    /// 找不到这样的列时只返回一行注释。此时 `params` 为空。
+    /// 跳过自增列和生成列。没有可插入的列时，MySQL 用 `() VALUES ()`，PG 和达梦用 `DEFAULT VALUES`
+    /// （达梦的标识列不接受显式的 `DEFAULT`）；Oracle 对第一个非生成列（通常是标识列）写 `DEFAULT`
+    /// （虚拟列不接受 `DEFAULT`），找不到这样的列时只返回一行注释。此时 `params` 为空。
     pub fn insert_sql(&self, schema: Option<&str>, table: &Table) -> DmlTemplate {
         let target = self.qualified(schema, &table.name);
         let cols: Vec<&Column> =
@@ -49,12 +49,12 @@ impl Dialect {
         let sql = if cols.is_empty() {
             match (self.family(), table.columns.iter().find(|c| c.generated.is_none())) {
                 (Family::MySql, _) => format!("INSERT INTO {target} () VALUES ()"),
-                (Family::Postgres, _) => format!("INSERT INTO {target} DEFAULT VALUES"),
-                (Family::Oracle | Family::Dameng, Some(first)) => {
+                (Family::Postgres | Family::Dameng, _) => format!("INSERT INTO {target} DEFAULT VALUES"),
+                (Family::Oracle, Some(first)) => {
                     format!("INSERT INTO {target} ({}) VALUES (DEFAULT)", self.ident(&first.name))
                 }
                 // 带引号的表名里可能有换行，写进行注释前必须压成一行，否则换行后的内容会被执行
-                (Family::Oracle | Family::Dameng, None) => {
+                (Family::Oracle, None) => {
                     format!("-- 没有可插入的列：{}", target.split_whitespace().collect::<Vec<_>>().join(" "))
                 }
             }
@@ -262,24 +262,28 @@ mod tests {
         let auto_and_gen = table("t", vec![gen_col.clone(), auto("id")], &[]);
         let only_gen = table("t", vec![gen_col], &[]);
         let none = table("t", vec![], &[]);
-        // 只有生成列：Oracle/达梦找不到能写 DEFAULT 的列
-        for v in [Variant::Oracle, Variant::Dameng] {
-            assert_eq!(Dialect::new(v).insert_sql(None, &only_gen).sql, "-- 没有可插入的列：\"t\"");
-        }
+        // 只有生成列：Oracle 找不到能写 DEFAULT 的列；达梦照样用 DEFAULT VALUES
+        assert_eq!(Dialect::new(Variant::Oracle).insert_sql(None, &only_gen).sql, "-- 没有可插入的列：\"t\"");
+        assert_eq!(
+            Dialect::new(Variant::Dameng).insert_sql(None, &only_gen).sql,
+            "INSERT INTO \"t\" DEFAULT VALUES"
+        );
         // 表名里的换行不能逃出注释
         let hostile = Table { name: "x\nDROP TABLE y --".into(), ..Default::default() };
-        for v in [Variant::Oracle, Variant::Dameng] {
-            let d = Dialect::new(v);
-            let out = d.insert_sql(Some("s"), &hostile).sql;
-            assert!(!out.contains('\n'), "{v:?}: {out}");
-            assert!(d.split(&out).is_empty(), "{v:?}: {out}");
-        }
+        let d = Dialect::new(Variant::Oracle);
+        let out = d.insert_sql(Some("s"), &hostile).sql;
+        assert!(!out.contains('\n'), "{out}");
+        assert!(d.split(&out).is_empty(), "{out}");
+        // 达梦生成的是真正的语句，换行留在带引号的表名里，仍是一条语句
+        let d = Dialect::new(Variant::Dameng);
+        let out = d.insert_sql(Some("s"), &hostile).sql;
+        assert_eq!(d.split(&out).len(), 1, "{out}");
         let sql = |v: Variant, t: &Table| Dialect::new(v).insert_sql(None, t);
         for t in [&only_auto, &auto_and_gen] {
             assert_eq!(sql(Variant::MySql, t).sql, "INSERT INTO t () VALUES ()");
             assert_eq!(sql(Variant::Postgres, t).sql, "INSERT INTO t DEFAULT VALUES");
             assert_eq!(sql(Variant::Oracle, t).sql, "INSERT INTO \"t\" (\"id\") VALUES (DEFAULT)");
-            assert_eq!(sql(Variant::Dameng, t).sql, "INSERT INTO \"t\" (\"id\") VALUES (DEFAULT)");
+            assert_eq!(sql(Variant::Dameng, t).sql, "INSERT INTO \"t\" DEFAULT VALUES");
             for v in VARIANTS {
                 assert!(sql(v, t).params.is_empty(), "{v:?}");
             }
@@ -288,11 +292,13 @@ mod tests {
         assert_eq!(sql(Variant::MySql, &none).sql, "INSERT INTO t () VALUES ()");
         assert_eq!(sql(Variant::Postgres, &none).sql, "INSERT INTO t DEFAULT VALUES");
         let none_upper = Table { name: "T".into(), ..Default::default() };
-        for v in [Variant::Oracle, Variant::Dameng] {
-            let out = Dialect::new(v).insert_sql(Some("HR"), &none_upper);
-            assert_eq!(out.sql, "-- 没有可插入的列：HR.T");
-            assert!(out.params.is_empty());
-        }
+        let out = Dialect::new(Variant::Oracle).insert_sql(Some("HR"), &none_upper);
+        assert_eq!(out.sql, "-- 没有可插入的列：HR.T");
+        assert!(out.params.is_empty());
+        assert_eq!(
+            Dialect::new(Variant::Dameng).insert_sql(Some("HR"), &none_upper).sql,
+            "INSERT INTO HR.T DEFAULT VALUES"
+        );
     }
 
     #[test]
