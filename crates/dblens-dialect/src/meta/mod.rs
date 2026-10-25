@@ -97,7 +97,7 @@ impl MetaKey {
 }
 
 /// 查询参数。`filter` 是用户在对象树过滤框里输入的原文（按名字或注释包含匹配，不区分大小写）。
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MetaArgs {
     pub schema: Option<String>,
     pub table: Option<String>,
