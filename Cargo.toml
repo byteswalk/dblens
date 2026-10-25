@@ -12,13 +12,19 @@ publish = false
 dblens-core = { path = "crates/dblens-core" }
 dblens-driver = { path = "crates/dblens-driver" }
 dblens-dialect = { path = "crates/dblens-dialect" }
+dblens-driver-dameng = { path = "crates/dblens-driver-dameng" }
+dblens-driver-mysql = { path = "crates/dblens-driver-mysql" }
+dblens-driver-oracle = { path = "crates/dblens-driver-oracle" }
+dblens-driver-postgres = { path = "crates/dblens-driver-postgres" }
 
 async-trait = "0.1.92"
 base64 = "0.23.1"
 bytes = "1.12.1"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "serde"] }
 futures = "0.3.34"
+insta = "1.49.0"
 libloading = "0.9.0"
+minijinja = "3.0.3"
 mysql_async = { version = "0.37.1", default-features = false, features = ["default-rustls"] }
 oracle = { version = "0.6.3", features = ["chrono"] }
 percent-encoding = "2.3.2"

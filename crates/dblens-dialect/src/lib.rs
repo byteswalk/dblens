@@ -3,6 +3,7 @@
 mod dml;
 pub mod ident;
 pub mod literal;
+pub mod meta;
 mod split;
 pub mod types;
 mod variant;
@@ -15,6 +16,8 @@ pub use dml::DmlTemplate;
 pub use split::{SqlStatement, split_statements};
 pub use variant::{Family, Variant};
 pub use version::parse_version;
+
+use meta::{MetaArgs, MetaKey, MetaQuery, MetaRows};
 
 /// 某个具体数据库的方言：变体和服务器版本。可以随意复制；所有方法都是纯计算。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +45,15 @@ impl Dialect {
     /// 还没有服务器信息时使用该驱动的基础方言。
     pub fn for_driver(driver: DriverId) -> Self {
         Self::new(Variant::base(driver))
+    }
+
+    /// 用 `MetaKey::VariantProbe` 的查询结果细化变体：目前只用于从 MySQL 中识别出 PolarDB
+    /// （`SHOW VARIABLES LIKE 'polardb_version'` 有结果）。
+    pub fn refine(self, probe: &MetaRows) -> Self {
+        match self.variant {
+            Variant::MySql if !probe.is_empty() => Self { variant: Variant::PolarDb, ..self },
+            _ => self,
+        }
     }
 
     pub fn version(&self) -> Option<u32> {
@@ -94,6 +106,19 @@ impl Dialect {
 
     pub fn native_type(&self, logical: &LogicalType) -> String {
         types::native_type(self.family(), logical)
+    }
+
+    /// 该方言是否有这种元数据查询（如 MySQL 没有物化视图和同义词）。
+    pub fn has_meta(&self, key: MetaKey) -> bool {
+        meta::sections(self.variant).contains_key(key.as_str())
+    }
+
+    /// 生成元数据查询；该方言没有这种查询时返回 None。
+    pub fn meta_query(&self, key: MetaKey, args: &MetaArgs) -> Result<Option<MetaQuery>> {
+        match meta::sections(self.variant).get(key.as_str()) {
+            None => Ok(None),
+            Some(t) => meta::render(key, t, self.family(), self.version.unwrap_or(u32::MAX), args).map(Some),
+        }
     }
 }
 
@@ -184,5 +209,29 @@ mod tests {
         assert_eq!(Dialect::new(Variant::Oracle).version(), None);
         assert_eq!(Dialect::new(Variant::Oracle).with_version(Some(110200)).version(), Some(110200));
         assert_eq!(Variant::PolarDb.family(), Family::MySql);
+    }
+    #[test]
+    fn refine_finds_polardb() {
+        let d = Dialect::new(Variant::MySql).with_version(Some(80016));
+        let probe = MetaRows::new(
+            vec!["Variable_name".into(), "Value".into()],
+            vec![vec![Value::String("polardb_version".into()), Value::String("8.0.2.2.20".into())]],
+        );
+        assert_eq!(d.refine(&probe).variant(), Variant::PolarDb);
+        assert_eq!(d.refine(&probe).version(), Some(80016));
+        assert_eq!(d.refine(&MetaRows::default()).variant(), Variant::MySql);
+        assert_eq!(Dialect::new(Variant::MariaDb).refine(&probe).variant(), Variant::MariaDb);
+    }
+
+    #[test]
+    fn meta_query_is_none_when_the_dialect_lacks_the_key() {
+        let probe =
+            Dialect::new(Variant::MySql).meta_query(MetaKey::VariantProbe, &MetaArgs::default()).unwrap();
+        assert!(probe.unwrap().sql.contains("polardb_version"));
+        assert!(Dialect::new(Variant::PolarDb).has_meta(MetaKey::VariantProbe));
+        assert!(!Dialect::new(Variant::Postgres).has_meta(MetaKey::VariantProbe));
+        let none =
+            Dialect::new(Variant::Postgres).meta_query(MetaKey::VariantProbe, &MetaArgs::default()).unwrap();
+        assert!(none.is_none());
     }
 }
