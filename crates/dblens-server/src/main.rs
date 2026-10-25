@@ -2,11 +2,15 @@
 //!
 //! ```text
 //! dblens-server [--listen 127.0.0.1:8742] [--data-dir 目录] [--web-dir 目录] [--allow-origin 来源]...
+//!               [--update-url 地址] [--no-update-check]
 //! ```
 //!
 //! 启动时生成一次访问令牌并打印出来，本次运行期间有效。首期只供单用户使用，多用户鉴权留给团队版。
 //!
 //! 前端页面默认取可执行文件旁边的 `web/` 目录；找不到时只提供接口，并在日志中提示。
+//!
+//! 启动后在后台检查一次新版本（默认读 GitHub Releases 的 `latest.json`，`--update-url` 可改成内网地址），
+//! 有新版本时在日志中提示，不会自动替换自己。
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -14,6 +18,8 @@ use std::sync::Arc;
 
 use dblens_api::{ApiConfig, new_token, router, serve, with_web};
 use dblens_service::{Service, default_data_dir};
+
+mod update;
 
 const DEFAULT_LISTEN: &str = "127.0.0.1:8742";
 
@@ -23,10 +29,11 @@ struct Args {
     data_dir: Option<PathBuf>,
     web_dir: Option<PathBuf>,
     allowed_origins: Vec<String>,
+    /// 更新源；`None` 表示不检查新版本。
+    update_url: Option<String>,
 }
 
-const USAGE: &str =
-    "用法：dblens-server [--listen 地址:端口] [--data-dir 目录] [--web-dir 目录] [--allow-origin 来源]...";
+const USAGE: &str = "用法：dblens-server [--listen 地址:端口] [--data-dir 目录] [--web-dir 目录] [--allow-origin 来源]... \n                     [--update-url 地址] [--no-update-check]";
 
 fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
     let mut out = Args {
@@ -34,7 +41,9 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
         data_dir: None,
         web_dir: None,
         allowed_origins: Vec::new(),
+        update_url: Some(update::DEFAULT_URL.to_string()),
     };
+    let mut no_update_check = false;
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} 后面缺少参数\n{USAGE}"));
@@ -46,9 +55,14 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
             "--data-dir" => out.data_dir = Some(PathBuf::from(value("--data-dir")?)),
             "--web-dir" => out.web_dir = Some(PathBuf::from(value("--web-dir")?)),
             "--allow-origin" => out.allowed_origins.push(value("--allow-origin")?),
+            "--update-url" => out.update_url = Some(value("--update-url")?),
+            "--no-update-check" => no_update_check = true,
             "-h" | "--help" => return Err(USAGE.to_string()),
             other => return Err(format!("未知参数：{other}\n{USAGE}")),
         }
+    }
+    if no_update_check {
+        out.update_url = None;
     }
     Ok(out)
 }
@@ -99,6 +113,15 @@ async fn run(args: Args) -> Result<(), String> {
         Some(_) => println!("在浏览器中打开：http://{addr}/#token={token}"),
         None => tracing::warn!("没有找到前端页面目录（可用 --web-dir 指定），只提供接口"),
     }
+    if let Some(url) = args.update_url {
+        tokio::spawn(async move {
+            match update::check(&url, env!("CARGO_PKG_VERSION")).await {
+                Ok(Some(text)) => tracing::info!("{text}"),
+                Ok(None) => tracing::info!("已是最新版本"),
+                Err(e) => tracing::warn!("检查新版本失败：{e}"),
+            }
+        });
+    }
     let mut app = router(service, ApiConfig { token, allowed_origins: args.allowed_origins });
     if let Some(dir) = web_dir {
         app = with_web(app, dir);
@@ -121,6 +144,12 @@ mod tests {
             (a.listen.to_string(), a.data_dir, a.web_dir, a.allowed_origins.len()),
             ("127.0.0.1:8742".into(), None, None, 0)
         );
+        assert_eq!(a.update_url.as_deref(), Some(update::DEFAULT_URL));
+        assert_eq!(
+            parse(&["--update-url", "http://intranet/latest.json"]).unwrap().update_url.as_deref(),
+            Some("http://intranet/latest.json")
+        );
+        assert_eq!(parse(&["--update-url", "http://x", "--no-update-check"]).unwrap().update_url, None);
         let a = parse(&[
             "--listen",
             "0.0.0.0:9000",

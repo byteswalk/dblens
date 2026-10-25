@@ -18,7 +18,7 @@ fn get_status(addr: &str, path: &str, token: Option<&str>) -> u16 {
 fn prints_address_and_token_and_enforces_it() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_dblens-server"))
-        .args(["--listen", "127.0.0.1:0", "--data-dir"])
+        .args(["--listen", "127.0.0.1:0", "--no-update-check", "--data-dir"])
         .arg(dir.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -46,7 +46,7 @@ fn serves_web_dir_and_prints_open_link() {
     std::fs::create_dir(&web).unwrap();
     std::fs::write(web.join("index.html"), "<html></html>").unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_dblens-server"))
-        .args(["--listen", "127.0.0.1:0", "--data-dir"])
+        .args(["--listen", "127.0.0.1:0", "--no-update-check", "--data-dir"])
         .arg(dir.path().join("data"))
         .arg("--web-dir")
         .arg(&web)
@@ -64,4 +64,48 @@ fn serves_web_dir_and_prints_open_link() {
     assert_eq!(get_status(&addr, "/api/profiles", None), 401, "接口仍然需要令牌");
     child.kill().unwrap();
     let _ = child.wait();
+}
+
+/// 在本机起一个只应答一次的 HTTP 服务，返回 `latest.json`。
+fn serve_latest_json_once(body: &'static str) -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        let (mut s, _) = listener.accept().unwrap();
+        let mut buf = [0u8; 4096];
+        let _ = s.read(&mut buf);
+        write!(
+            s,
+            "HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: {}
+Connection: close
+
+{body}",
+            body.len()
+        )
+        .unwrap();
+    });
+    format!("http://{addr}/latest.json")
+}
+
+#[test]
+fn reports_newer_version_from_update_url() {
+    let url = serve_latest_json_once(r#"{"version":"99.0.0","notes":"新功能","platforms":{}}"#);
+    let dir = tempfile::tempdir().unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_dblens-server"))
+        .args(["--listen", "127.0.0.1:0", "--update-url", &url, "--data-dir"])
+        .arg(dir.path())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let line = BufReader::new(child.stderr.take().unwrap())
+        .lines()
+        .map(Result::unwrap)
+        .find(|l| l.contains("发现新版本") || l.contains("检查新版本失败"))
+        .unwrap();
+    child.kill().unwrap();
+    let _ = child.wait();
+    assert!(line.contains("发现新版本 99.0.0（当前 0.1.0）"), "{line}");
 }

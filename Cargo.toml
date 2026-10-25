@@ -38,8 +38,10 @@ minijinja = "3.0.3"
 mysql_async = { version = "0.37.1", default-features = false, features = ["default-rustls"] }
 oracle = { version = "0.6.3", features = ["chrono"] }
 percent-encoding = "2.3.2"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
 rusqlite = { version = "0.41.0", features = ["bundled"] }
 rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
+semver = "1.0.28"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sqlparser = "0.63.0"
