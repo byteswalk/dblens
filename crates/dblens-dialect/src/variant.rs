@@ -28,6 +28,9 @@ pub enum Variant {
     /// OceanBase 的 MySQL 模式。
     #[serde(rename = "oceanbase")]
     OceanBase,
+    /// 阿里云 PolarDB 的 MySQL 版。版本字符串与 MySQL 相同，靠 `Dialect::refine` 识别。
+    #[serde(rename = "polardb")]
+    PolarDb,
     #[serde(rename = "postgres")]
     Postgres,
     #[serde(rename = "kingbase")]
@@ -47,7 +50,9 @@ pub enum Variant {
 impl Variant {
     pub fn family(self) -> Family {
         match self {
-            Variant::MySql | Variant::MariaDb | Variant::TiDb | Variant::OceanBase => Family::MySql,
+            Variant::MySql | Variant::MariaDb | Variant::TiDb | Variant::OceanBase | Variant::PolarDb => {
+                Family::MySql
+            }
             Variant::Postgres
             | Variant::Kingbase
             | Variant::OpenGauss
@@ -64,6 +69,7 @@ impl Variant {
             Variant::MariaDb => "MariaDB",
             Variant::TiDb => "TiDB",
             Variant::OceanBase => "OceanBase（MySQL 模式）",
+            Variant::PolarDb => "PolarDB（MySQL 版）",
             Variant::Postgres => "PostgreSQL",
             Variant::Kingbase => "人大金仓 KingbaseES",
             Variant::OpenGauss => "openGauss",
@@ -85,7 +91,8 @@ impl Variant {
     }
 
     /// 根据驱动和服务器返回的版本字符串识别具体产品，识别不出时退回基础变体。
-    /// 注意：PolarDB-MySQL、GoldenDB 等的 `VERSION()` 与 MySQL 无法区分，会识别为 MySQL。
+    /// 注意：PolarDB-MySQL、GoldenDB 等的 `VERSION()` 与 MySQL 无法区分，会识别为 MySQL；
+    /// PolarDB 再用 `Dialect::refine` 识别。
     pub fn detect(driver: DriverId, info: &ServerInfo) -> Variant {
         let v = info.version.to_ascii_lowercase();
         match driver {

@@ -6,6 +6,7 @@ pub mod literal;
 mod split;
 pub mod types;
 mod variant;
+mod version;
 
 use dblens_core::{LogicalType, Result, Value};
 use dblens_driver::{DriverId, ServerInfo};
@@ -13,26 +14,38 @@ use dblens_driver::{DriverId, ServerInfo};
 pub use dml::DmlTemplate;
 pub use split::{SqlStatement, split_statements};
 pub use variant::{Family, Variant};
+pub use version::parse_version;
 
-/// 某个具体数据库的方言。只包含变体信息，可以随意复制；所有方法都是纯计算。
+/// 某个具体数据库的方言：变体和服务器版本。可以随意复制；所有方法都是纯计算。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Dialect {
     variant: Variant,
+    /// 编码后的服务器版本（见 `parse_version`），未知时为 None。
+    version: Option<u32>,
 }
 
 impl Dialect {
+    /// 版本未知的方言：元数据模板按最新版本渲染。
     pub fn new(variant: Variant) -> Self {
-        Self { variant }
+        Self { variant, version: None }
     }
 
-    /// 根据驱动和服务器版本识别兼容库。
+    pub fn with_version(self, version: Option<u32>) -> Self {
+        Self { version, ..self }
+    }
+
+    /// 根据驱动和服务器版本识别兼容库和版本号。
     pub fn detect(driver: DriverId, info: &ServerInfo) -> Self {
-        Self::new(Variant::detect(driver, info))
+        Self::new(Variant::detect(driver, info)).with_version(parse_version(&info.version))
     }
 
     /// 还没有服务器信息时使用该驱动的基础方言。
     pub fn for_driver(driver: DriverId) -> Self {
         Self::new(Variant::base(driver))
+    }
+
+    pub fn version(&self) -> Option<u32> {
+        self.version
     }
 
     pub fn variant(&self) -> Variant {
@@ -160,5 +173,16 @@ mod tests {
             }
             assert_single(&d, &format!("SELECT {}", all.join(", ")), "全部");
         }
+    }
+
+    #[test]
+    fn detect_parses_server_version() {
+        use dblens_driver::{DriverId, ServerInfo};
+        let info = ServerInfo { product: "MySQL".into(), version: "8.0.16".into() };
+        let d = Dialect::detect(DriverId::Mysql, &info);
+        assert_eq!((d.variant(), d.version()), (Variant::MySql, Some(80016)));
+        assert_eq!(Dialect::new(Variant::Oracle).version(), None);
+        assert_eq!(Dialect::new(Variant::Oracle).with_version(Some(110200)).version(), Some(110200));
+        assert_eq!(Variant::PolarDb.family(), Family::MySql);
     }
 }
