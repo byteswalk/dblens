@@ -331,3 +331,36 @@ async fn postgres_metadata() {
     assert_eq!(text.matches("CREATE OR REPLACE FUNCTION").count(), 2, "两个重载：{text}");
     assert!(!live.d.has_meta(MetaKey::Synonyms));
 }
+
+#[tokio::test]
+async fn oracle_metadata() {
+    let Some(mut live) = connect("DBLENS_TEST_ORACLE_URL").await else { return };
+    live.run_script(include_str!("fixtures/oracle.sql")).await;
+    let fx = Fx { schema: "DBLENS_TEST", upper: true };
+    let all = check_common(&mut live, fx).await;
+    let s = fx.schema;
+
+    let emp = table(&all, "META_EMP");
+    let col = |n: &str| emp.columns.iter().find(|c| c.name == n).unwrap_or_else(|| panic!("没有列 {n}"));
+    // Oracle 在 LONG 类型的默认值后面存了空白，组装时要去掉
+    assert_eq!(col("NAME").default.as_deref(), Some("'无名'"));
+    assert!(col("SEQ_NO").auto_increment && col("SEQ_NO").default.is_none(), "标识列");
+    assert!(!emp.columns.iter().any(|c| c.name.starts_with("SYS_")), "隐藏的系统列不列出");
+    assert_eq!(logical(emp, "NAME"), LogicalType::VarChar { len: Some(100) });
+    assert!(emp.checks.iter().all(|c| !c.expression.ends_with("IS NOT NULL")), "{:?}", emp.checks);
+    assert!(table(&all, "META_PART_T").partition.as_deref().unwrap().starts_with("RANGE"));
+
+    let seq = meta::sequences(&live.rows(MetaKey::Sequences, &args(s)).await).unwrap();
+    assert!(seq.iter().all(|q| !q.name.starts_with("ISEQ1584")), "标识列自带的序列不列出：{seq:?}");
+    let q = seq.iter().find(|q| q.name == "META_SEQ").unwrap();
+    assert_eq!((q.increment.as_deref(), q.cycle), (Some("5"), true));
+    let syn = meta::synonyms(&live.rows(MetaKey::Synonyms, &args(s)).await).unwrap();
+    assert!(syn.iter().any(|x| x.name == "META_SYN_EMP" && x.target_name == "META_EMP"), "{syn:?}");
+    let routines = meta::routines(&live.rows(MetaKey::Routines, &args(s)).await).unwrap();
+    assert!(routines.iter().any(|r| r.kind == RoutineKind::PackageBody), "{routines:?}");
+    let d = live.d;
+    let columns = live.rows(MetaKey::Columns, &args(s)).await;
+    let mv_rows = live.rows(MetaKey::MaterializedViews, &args(s)).await;
+    let mv = meta::views(&d, MetaKey::MaterializedViews, &mv_rows, &columns).unwrap();
+    assert!(!mv.is_empty());
+}
