@@ -1,9 +1,10 @@
 //! HTTP 接口：REST（连接配置、驱动、密码库、元数据、会话管理）和会话的 WebSocket 执行协议。
-//! 桌面模式和浏览器模式（`dblens-server`）共用。所有请求都要带访问令牌，浏览器请求还要通过 Origin 校验。
+//! 另提供前端页面的静态文件服务（`with_web`）。桌面模式和浏览器模式（`dblens-server`）共用。所有请求都要带访问令牌，浏览器请求还要通过 Origin 校验。
 
 mod auth;
 mod error;
 mod routes;
+mod web;
 mod ws;
 
 use std::sync::Arc;
@@ -15,6 +16,7 @@ use dblens_service::Service;
 use tokio::net::TcpListener;
 
 pub use error::{ApiError, status_of};
+pub use web::with_web;
 pub use ws::{DEFAULT_MAX_ROWS, utf16_offset};
 
 /// 接口的配置。
