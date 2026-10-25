@@ -19,8 +19,6 @@ use tokio::sync::Notify;
 
 pub(crate) type Log = Arc<Mutex<Vec<String>>>;
 
-// 服务入口的测试（下一个任务）才用到它
-#[allow(dead_code)]
 pub(crate) struct FakeDriver {
     pub log: Log,
 }

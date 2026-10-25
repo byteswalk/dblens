@@ -11,9 +11,8 @@ M0-3b 已完成：Dialect 带服务器版本、识别 PolarDB、按真实服务�
 - Oracle 不允许标识符里出现 `"`，即使写成两个 `""` 也不行。目前生成的语句会执行失败，不会出现注入，但应该在生成前就报错。
 - 金仓、openGauss 在 Oracle 兼容模式下，`decode(…,'hex')` 可能和 Oracle 的 `DECODE` 函数重名冲突，需要实测；冲突的话改用 `E'\\x…'::bytea`。
 
-## M0-4 之前
+## M0-4b 之前
 
-- `Error` 缺少表示"数据本身不合法"的变体：字面量生成失败（NaN、含 NUL 的字符串、超长二进制）目前都报 `Internal`。API 层做错误映射时应补一个合适的变体。
 - `SqlStatement` 没有实现 `Serialize`；偏移量是 UTF-8 字节偏移，而 Monaco 用 UTF-16 偏移或行列号，中文脚本的位置会对不上。需要提供转换。
 
 ## M1 之前

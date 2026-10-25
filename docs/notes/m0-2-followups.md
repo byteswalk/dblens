@@ -4,11 +4,13 @@ M0-2（达梦与 Oracle 驱动）在逐任务审查和全分支最终审查中�
 
 ## M0-4 之前
 
-- 达梦登录失败目前统一报告为 `Connect`，没有细分出 `Auth`。原因是不想用错误密码去试探认证错误码，以免锁住测试账号。
-- Oracle 连接串：服务名、SID 和主机名都没有转义；IPv6 地址没有加方括号；Easy Connect 的 `connect_timeout` 需要 19c 以上的客户端；不足 1 秒的超时会变成 0。
-- 原生库路径：配置里的 `dpi_lib_dir` / `oracle_client_lib_dir`，以及环境变量 `ORACLE_HOME` / `DM_HOME`，如果是相对路径，目前也会被接受。应该在加载前用 `std::path::absolute` 转成绝对路径。另外，`LOAD_WITH_ALTERED_SEARCH_PATH` 遇到相对路径时行为未定义。
-- 常见安装位置的扫描（`C:\instantclient*`、`C:\dmdbms\…` 以及 D/E 盘根目录下的目录）可能被其他本地用户预先放置恶意 DLL（CWE-427）。服务层应把找到的路径展示给用户确认，并写入设置，而不是每次都重新扫描。
-- Oracle 客户端进程内只初始化一次。之后如果换了 `oracle_client_lib_dir`，新设置会被悄悄忽略，应该改为报错或给出提示。
+- Oracle Easy Connect 连接串里的 `connect_timeout` 参数需要 19c 以上的客户端。
+
+此外原列在这里的四类问题已在 M0-4a 中处理：
+- 达梦认证错误已细分为 `Auth`；
+- Oracle 连接串现在校验主机名、服务名和 SID 中的字符，支持 IPv6，不足 1 秒的超时按 1 秒处理；
+- 原生库目录只接受绝对路径，并且要由用户确认后才使用（CWE-427）；
+- Oracle 客户端换目录时会报错，不再悄悄沿用原来的目录。
 
 ## M1 之前
 
