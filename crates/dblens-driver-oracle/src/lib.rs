@@ -46,19 +46,43 @@ fn init_client(p: &ConnectParams) -> Result<()> {
 }
 
 /// 生成 Easy Connect 连接串；指定了 `sid` 选项时改用完整描述符。
+/// 主机、服务名、SID 中不允许出现会改变连接描述符结构的字符。
+fn check_part(what: &str, v: &str) -> Result<()> {
+    if v.is_empty()
+        || v.chars()
+            .any(|c| matches!(c, '(' | ')' | '=' | '/' | '?' | '@' | ' ' | '"' | '\'') || c.is_control())
+    {
+        return Err(Error::invalid(format!("Oracle {what}含有不允许的字符：{v}")));
+    }
+    Ok(())
+}
+
 pub(crate) fn connect_string(p: &ConnectParams) -> Result<String> {
-    let timeout = p.connect_timeout.as_secs();
+    // 不足 1 秒的超时按 1 秒处理，避免变成 0（表示不超时）
+    let timeout = p.connect_timeout.as_secs().max(1);
+    let host = p.host.trim_start_matches('[').trim_end_matches(']');
+    if host.contains(':') {
+        // IPv6 地址：只允许十六进制数字、冒号和点
+        if !host.chars().all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.') {
+            return Err(Error::invalid(format!("无效的 IPv6 地址：{host}")));
+        }
+    } else {
+        check_part("主机名", host)?;
+    }
+    let addr_host = if host.contains(':') { format!("[{host}]") } else { host.to_string() };
     if let Some(sid) = p.options.get("sid") {
+        check_part("SID", sid)?;
         return Ok(format!(
-            "(DESCRIPTION=(CONNECT_TIMEOUT={timeout})(ADDRESS=(PROTOCOL=TCP)(HOST={})(PORT={}))(CONNECT_DATA=(SID={sid})))",
-            p.host, p.port
+            "(DESCRIPTION=(CONNECT_TIMEOUT={timeout})(ADDRESS=(PROTOCOL=TCP)(HOST={host})(PORT={}))(CONNECT_DATA=(SID={sid})))",
+            p.port
         ));
     }
     let service = p
         .database
         .as_deref()
         .ok_or_else(|| Error::connect("Oracle 连接需要服务名（URL 路径部分）或 sid 选项"))?;
-    Ok(format!("//{}:{}/{service}?connect_timeout={timeout}", p.host, p.port))
+    check_part("服务名", service)?;
+    Ok(format!("//{addr_host}:{}/{service}?connect_timeout={timeout}", p.port))
 }
 
 #[async_trait]
@@ -119,5 +143,26 @@ mod tests {
         assert!(connect_string(&p).unwrap().contains("(SID=ORCL)"));
         let (_, p) = ConnectParams::from_url("oracle://u:p@db:1521").unwrap();
         assert!(connect_string(&p).is_err());
+    }
+
+    #[test]
+    fn connect_string_rejects_injection_and_handles_ipv6_and_short_timeout() {
+        let (_, mut p) = ConnectParams::from_url("oracle://u:p@db:1521/FREEPDB1").unwrap();
+        p.connect_timeout = std::time::Duration::from_millis(300);
+        assert_eq!(connect_string(&p).unwrap(), "//db:1521/FREEPDB1?connect_timeout=1");
+        p.host = "::1".into();
+        assert_eq!(connect_string(&p).unwrap(), "//[::1]:1521/FREEPDB1?connect_timeout=1");
+        p.host = "[fe80::1]".into();
+        assert!(connect_string(&p).unwrap().starts_with("//[fe80::1]:1521/"));
+        p.host = "fe80::1%eth0".into();
+        assert!(matches!(connect_string(&p), Err(Error::Invalid { .. })));
+        p.host = "db".into();
+        p.options.insert("sid".into(), "ORCL)(HOST=evil".into());
+        assert!(matches!(connect_string(&p), Err(Error::Invalid { .. })));
+        p.options.clear();
+        p.database = Some("svc?x=1".into());
+        assert!(matches!(connect_string(&p), Err(Error::Invalid { .. })));
+        p.database = Some("svc.example.com".into());
+        assert!(connect_string(&p).is_ok());
     }
 }

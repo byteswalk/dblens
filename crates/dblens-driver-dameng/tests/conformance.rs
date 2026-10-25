@@ -171,3 +171,14 @@ async fn database_parameter_sets_current_schema() {
     params.database = Some("dblens_no_such_schema".into());
     assert!(DmDriver.connect(&params).await.is_err(), "模式不存在时连接失败");
 }
+
+/// 用户名或密码错误报告为认证失败。用一个不存在的用户测，不会锁住测试账号。
+#[tokio::test]
+async fn wrong_credentials_are_auth_error() {
+    let Ok(url) = std::env::var("DBLENS_TEST_DM_URL") else { return };
+    let (_, mut params) = ConnectParams::from_url(&url).unwrap();
+    params.user = "DBLENS_NO_SUCH_USER".into();
+    params.password = "WrongPass_999".into();
+    let err = DmDriver.connect(&params).await.err().unwrap();
+    assert!(matches!(err, dblens_core::Error::Auth { .. }), "{err:?}");
+}

@@ -21,6 +21,17 @@ use crate::handles::{Con, Env, Stmt};
 
 pub struct DmDriver;
 
+/// 登录错误：-2501（用户名或密码错误，用户不存在时也是这个码，实测 DM8）报告为认证失败，其余为连接失败。
+fn login_error(e: Error) -> Error {
+    match e {
+        Error::Sql { code, message, .. } if code == "-2501" => {
+            Error::Auth { message: format!("[{code}] {message}") }
+        }
+        Error::Sql { code, message, .. } => Error::connect(format!("[{code}] {message}")),
+        other => other,
+    }
+}
+
 fn connect_blocking(p: &ConnectParams) -> Result<DmConnection> {
     let dpi = load::load(p)?;
     // 每个连接使用自己的环境句柄，不在连接之间共享
@@ -30,11 +41,7 @@ fn connect_blocking(p: &ConnectParams) -> Result<DmConnection> {
     con.set_attr_int(DSQL_ATTR_LOCAL_CODE as i64, PG_UTF8 as i64)?;
     con.set_attr_int(DSQL_ATTR_LOGIN_PORT as i64, i64::from(p.port))?;
     con.set_attr_int(DSQL_ATTR_LOGIN_TIMEOUT as i64, p.connect_timeout.as_secs() as i64)?;
-    // 登录失败统一报告为连接错误（认证失败的错误码尚未细分）
-    con.login(&p.host, &p.user, &p.password).map_err(|e| match e {
-        Error::Sql { code, message, .. } => Error::connect(format!("[{code}] {message}")),
-        other => other,
-    })?;
+    con.login(&p.host, &p.user, &p.password).map_err(login_error)?;
     con.set_autocommit(true)?;
     // 连接参数里的 database 在达梦中表示模式：登录后切换当前模式。名字按原样（区分大小写）加引号
     if let Some(schema) = p.database.as_deref().filter(|s| !s.is_empty()) {
@@ -67,5 +74,18 @@ impl Driver for DmDriver {
             .map_err(|e| Error::internal(format!("连接任务异常退出：{e}")))??;
         let cancel = conn.cancel_handle();
         into_async(conn, cancel, "dblens-dameng")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wrong_password_is_auth_error() {
+        let sql = |code: &str| Error::Sql { code: code.into(), message: "m".into(), position: None };
+        assert!(matches!(login_error(sql("-2501")), Error::Auth { message } if message == "[-2501] m"));
+        assert!(matches!(login_error(sql("-70028")), Error::Connect { .. }));
+        assert_eq!(login_error(Error::Timeout), Error::Timeout);
     }
 }
