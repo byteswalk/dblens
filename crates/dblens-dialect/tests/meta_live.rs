@@ -278,3 +278,56 @@ async fn mariadb_metadata() {
     let seq = meta::sequences(&live.rows(MetaKey::Sequences, &args("dblens_meta")).await).unwrap();
     assert!(seq.iter().any(|q| q.name == "seq_meta"), "{seq:?}");
 }
+
+#[tokio::test]
+async fn postgres_metadata() {
+    let Some(mut live) = connect("DBLENS_TEST_PG_URL").await else { return };
+    live.run_script(include_str!("fixtures/postgres.sql")).await;
+    let fx = Fx { schema: "dblens_meta", upper: false };
+    let all = check_common(&mut live, fx).await;
+    let s = fx.schema;
+
+    assert!(
+        table(&all, "emp").columns.iter().find(|c| c.name == "serial_no").unwrap().auto_increment,
+        "serial 列"
+    );
+    let list = meta::objects(MetaKey::Tables, &live.rows(MetaKey::Tables, &args(s)).await).unwrap();
+    assert!(!list.iter().any(|o| o.name == "part_t_2024"), "分区子表不列出");
+    assert_eq!(table(&all, "part_t").partition.as_deref(), Some("RANGE (created)"));
+    let func = table(&all, "emp").indexes.iter().find(|i| i.name == "idx_emp_upper").unwrap();
+    assert!(func.columns[0].name.contains("lower") && func.columns[1].name == "dept_id");
+
+    let ds = table(&all, "ds_t");
+    assert_eq!(logical(ds, "c_numeric_p"), LogicalType::Decimal { precision: Some(10), scale: Some(2) });
+    assert_eq!(logical(ds, "c_varchar"), LogicalType::VarChar { len: Some(255) });
+    assert_eq!(logical(ds, "c_ts"), LogicalType::Timestamp { tz: false, precision: Some(6) });
+    assert_eq!(logical(ds, "c_tstz3"), LogicalType::Timestamp { tz: true, precision: Some(3) });
+    assert_eq!(logical(ds, "c_jsonb"), LogicalType::Json);
+    assert_eq!(logical(ds, "c_int_arr"), LogicalType::Other);
+
+    let d = live.d;
+    let columns = live.rows(MetaKey::Columns, &args(s)).await;
+    let views =
+        meta::views(&d, MetaKey::Views, &live.rows(MetaKey::Views, &args(s)).await, &columns).unwrap();
+    assert_eq!(views.iter().find(|v| v.name == "v_emp").unwrap().comment.as_deref(), Some("员工视图"));
+    let mv_rows = live.rows(MetaKey::MaterializedViews, &args(s)).await;
+    let mv = meta::views(&d, MetaKey::MaterializedViews, &mv_rows, &columns).unwrap();
+    assert_eq!(mv[0].columns.iter().find(|c| c.name == "cnt").unwrap().comment.as_deref(), Some("员工数"));
+
+    let seq = meta::sequences(&live.rows(MetaKey::Sequences, &args(s)).await).unwrap();
+    assert_eq!(seq.len(), 1, "serial/identity 自带的序列不列出：{seq:?}");
+    let q = &seq[0];
+    assert_eq!(
+        (q.start.as_deref(), q.increment.as_deref(), q.cycle, q.cache),
+        (Some("100"), Some("5"), true, Some(10))
+    );
+
+    let routines = meta::routines(&live.rows(MetaKey::Routines, &args(s)).await).unwrap();
+    assert!(!routines.iter().any(|r| r.name == "sum_meta"), "聚合函数不列出");
+    let src = MetaArgs { name: Some("f_meta".into()), kind: Some("FUNCTION".into()), ..args(s) };
+    let text = meta::source_text(MetaKey::RoutineSource, &live.rows(MetaKey::RoutineSource, &src).await)
+        .unwrap()
+        .unwrap();
+    assert_eq!(text.matches("CREATE OR REPLACE FUNCTION").count(), 2, "两个重载：{text}");
+    assert!(!live.d.has_meta(MetaKey::Synonyms));
+}
