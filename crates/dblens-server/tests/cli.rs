@@ -38,3 +38,30 @@ fn prints_address_and_token_and_enforces_it() {
     child.kill().unwrap();
     let _ = child.wait();
 }
+
+#[test]
+fn serves_web_dir_and_prints_open_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let web = dir.path().join("web");
+    std::fs::create_dir(&web).unwrap();
+    std::fs::write(web.join("index.html"), "<html></html>").unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_dblens-server"))
+        .args(["--listen", "127.0.0.1:0", "--data-dir"])
+        .arg(dir.path().join("data"))
+        .arg("--web-dir")
+        .arg(&web)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let lines: Vec<String> =
+        BufReader::new(child.stdout.take().unwrap()).lines().take(4).map(Result::unwrap).collect();
+    let addr = lines[0].rsplit("http://").next().unwrap().trim().to_string();
+    let token = lines[1].split('：').nth(1).unwrap().trim().to_string();
+    assert_eq!(lines[3], format!("在浏览器中打开：http://{addr}/#token={token}"));
+
+    assert_eq!(get_status(&addr, "/", None), 200, "页面不需要令牌");
+    assert_eq!(get_status(&addr, "/api/profiles", None), 401, "接口仍然需要令牌");
+    child.kill().unwrap();
+    let _ = child.wait();
+}
