@@ -1,0 +1,300 @@
+-- DM8 (达梦) metadata queries.  Tested on a DM 8.1.x instance (DB Version 0x7000d), PAGE=32K, LENGTH_IN_CHAR=0.
+-- Everything is ALL_* based except: schemas (SYSOBJECTS TYPE$='SCH'), sequence START WITH (SYSOBJECTS INFO3)
+-- and the IDENTITY flag (SYSCOLUMNS INFO2 bit 1), for which DM has no ALL_* column.
+-- All aliases are double-quoted lowercase, because COMMENT / PARTITION / POSITION ... are DM keywords.
+-- Booleans come back as 'Y'/'N' strings, except schemas.is_system which is an INT 1/0.
+-- ordinal / position / line are CAST to INT (DM returns NUMBER-like columns as Value::Decimal text); min_value / max_value stay Decimal.
+-- CLOB columns (default_value, generated, definition, text) arrive as Value::String, or Value::Lob once they exceed the driver's preview limit.
+-- No version-dependent blocks: nothing here was found to differ between DM 8.1.x builds; `version` is 0 for DM anyway.
+
+-- [schemas]
+-- DM separates users and schemas (CTISYS is a schema owned by SYS and has no user). SYSOBJECTS TYPE$='SCH' is the
+-- authoritative schema list, ALL_USERS misses CTISYS and any CREATE SCHEMA ... AUTHORIZATION schema.
+SELECT s.NAME AS "name",
+       CASE WHEN s.NAME IN ('SYS', 'SYSDBA', 'SYSAUDITOR', 'SYSSSO', 'CTISYS', 'SYSJOB', 'DMHS') THEN 1 ELSE 0 END AS "is_system"
+FROM SYSOBJECTS s
+WHERE s.TYPE$ = 'SCH'
+ORDER BY s.NAME
+
+-- [tables]
+SELECT t.TABLE_NAME AS "name",
+       tc.COMMENTS AS "comment",
+       (SELECT p.PARTITIONING_TYPE || ' ('
+               || (SELECT LISTAGG(k.COLUMN_NAME, ', ') WITHIN GROUP (ORDER BY k.COLUMN_POSITION)
+                   FROM ALL_PART_KEY_COLUMNS k
+                   WHERE k.OWNER = p.OWNER AND k.NAME = p.TABLE_NAME AND k.OBJECT_TYPE = 'TABLE')
+               || ')'
+        FROM ALL_PART_TABLES p
+        WHERE p.OWNER = t.OWNER AND p.TABLE_NAME = t.TABLE_NAME) AS "partition"
+FROM ALL_TABLES t
+LEFT JOIN ALL_TAB_COMMENTS tc ON tc.OWNER = t.OWNER AND tc.TABLE_NAME = t.TABLE_NAME
+WHERE t.OWNER = {{ bind("schema") }}
+  AND COALESCE(t.TEMPORARY, 'N') <> 'Y'
+  AND t.TABLE_NAME NOT LIKE 'BM$!_%' ESCAPE '!'
+  AND NOT EXISTS (SELECT 1 FROM ALL_MVIEWS m WHERE m.OWNER = t.OWNER AND 'MTAB$_' || m.MVIEW_NAME = t.TABLE_NAME)
+{% if table %}
+  AND t.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+{% if filter %}
+  AND (UPPER(t.TABLE_NAME) LIKE UPPER({{ bind("filter") }}) ESCAPE '!'
+       OR UPPER(tc.COMMENTS) LIKE UPPER({{ bind("filter") }}) ESCAPE '!')
+{% endif %}
+ORDER BY t.TABLE_NAME
+
+-- [views]
+SELECT v.VIEW_NAME AS "name", tc.COMMENTS AS "comment"
+FROM ALL_VIEWS v
+LEFT JOIN ALL_TAB_COMMENTS tc ON tc.OWNER = v.OWNER AND tc.TABLE_NAME = v.VIEW_NAME
+WHERE v.OWNER = {{ bind("schema") }}
+{% if filter %}
+  AND (UPPER(v.VIEW_NAME) LIKE UPPER({{ bind("filter") }}) ESCAPE '!'
+       OR UPPER(tc.COMMENTS) LIKE UPPER({{ bind("filter") }}) ESCAPE '!')
+{% endif %}
+ORDER BY v.VIEW_NAME
+
+-- [materialized_views]
+-- DM has no way to attach a comment to a materialized view (COMMENT ON TABLE says invalid table name), so comment is
+-- normally NULL; ALL_TAB_COMMENTS is still joined in case a later version allows it.
+SELECT m.MVIEW_NAME AS "name", tc.COMMENTS AS "comment"
+FROM ALL_MVIEWS m
+LEFT JOIN ALL_TAB_COMMENTS tc ON tc.OWNER = m.OWNER AND tc.TABLE_NAME = m.MVIEW_NAME
+WHERE m.OWNER = {{ bind("schema") }}
+{% if filter %}
+  AND (UPPER(m.MVIEW_NAME) LIKE UPPER({{ bind("filter") }}) ESCAPE '!'
+       OR UPPER(tc.COMMENTS) LIKE UPPER({{ bind("filter") }}) ESCAPE '!')
+{% endif %}
+ORDER BY m.MVIEW_NAME
+
+-- [sequences]
+-- ALL_SEQUENCES has no START WITH and its LAST_NUMBER is the cache high-water mark, so START WITH / INCREMENT come
+-- from SYSOBJECTS (INFO3 = start, INFO4 = increment; verified to stay constant after NEXTVAL calls).
+SELECT q.SEQUENCE_NAME AS "name",
+       o.INFO3 AS "start_value",
+       q.INCREMENT_BY AS "increment",
+       q.MIN_VALUE AS "min_value",
+       q.MAX_VALUE AS "max_value",
+       q.CYCLE_FLAG AS "cycle",
+       q.CACHE_SIZE AS "cache"
+FROM ALL_SEQUENCES q
+LEFT JOIN SYSOBJECTS sch ON sch.TYPE$ = 'SCH' AND sch.NAME = q.SEQUENCE_OWNER
+LEFT JOIN SYSOBJECTS o ON o.SCHID = sch.ID AND o.TYPE$ = 'SCHOBJ' AND o.SUBTYPE$ = 'SEQ' AND o.NAME = q.SEQUENCE_NAME
+WHERE q.SEQUENCE_OWNER = {{ bind("schema") }}
+{% if filter %}
+  AND UPPER(q.SEQUENCE_NAME) LIKE UPPER({{ bind("filter") }}) ESCAPE '!'
+{% endif %}
+ORDER BY q.SEQUENCE_NAME
+
+-- [routines]
+-- ALL_OBJECTS (not ALL_PROCEDURES, which also lists package members). DM has no comment on routines: comment is NULL.
+SELECT o.OBJECT_NAME AS "name", o.OBJECT_TYPE AS "kind", CAST(NULL AS VARCHAR(10)) AS "comment"
+FROM ALL_OBJECTS o
+WHERE o.OWNER = {{ bind("schema") }}
+  AND o.OBJECT_TYPE IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'PACKAGE BODY')
+  AND COALESCE(o.GENERATED, 'N') = 'N'
+{% if filter %}
+  AND UPPER(o.OBJECT_NAME) LIKE UPPER({{ bind("filter") }}) ESCAPE '!'
+{% endif %}
+ORDER BY o.OBJECT_NAME, o.OBJECT_TYPE
+
+-- [synonyms]
+-- Only synonyms owned by the schema. PUBLIC synonyms (OWNER = 'PUBLIC') are not shown.
+SELECT s.SYNONYM_NAME AS "name", s.TABLE_OWNER AS "target_schema", s.TABLE_NAME AS "target_name", s.DB_LINK AS "db_link"
+FROM ALL_SYNONYMS s
+WHERE s.OWNER = {{ bind("schema") }}
+{% if filter %}
+  AND UPPER(s.SYNONYM_NAME) LIKE UPPER({{ bind("filter") }}) ESCAPE '!'
+{% endif %}
+ORDER BY s.SYNONYM_NAME
+
+-- [columns]
+-- ALL_TAB_COLS (not ALL_TAB_COLUMNS) because only it has VIRTUAL_COLUMN / HIDDEN_COLUMN.
+-- DATA_TYPE keeps the alias the user wrote (INTEGER, DOUBLE PRECISION, DEC vs DECIMAL vs NUMBER...) except:
+--   TIMESTAMP WITH TIME ZONE is reported as 'DATETIME WITH TIME ZONE', JSON as 'JSONB', XMLTYPE as 'TEXT' (DATA_SCALE 8),
+--   LONG as 'CLOB', RAW as 'VARBINARY'.
+-- DATA_SCALE doubles as the fractional-seconds precision for TIME/TIMESTAMP/DATETIME, and for TIMESTAMP WITH LOCAL TIME ZONE
+-- it carries a 4096 flag (4102 = precision 6). INTERVAL types carry the leading precision in DATA_PRECISION.
+SELECT c.TABLE_NAME AS "table_name",
+       c.COLUMN_NAME AS "name",
+       CAST(c.COLUMN_ID AS INT) AS "ordinal",
+       CASE
+         WHEN c.DATA_TYPE IN ('CHAR', 'CHARACTER', 'VARCHAR', 'VARCHAR2') THEN
+              c.DATA_TYPE || '(' || c.CHAR_LENGTH || CASE WHEN c.CHAR_USED = 'C' THEN ' CHAR' ELSE ' BYTE' END || ')'
+         WHEN c.DATA_TYPE IN ('NCHAR', 'NVARCHAR', 'NVARCHAR2') THEN c.DATA_TYPE || '(' || c.CHAR_LENGTH || ')'
+         WHEN c.DATA_TYPE IN ('CHARACTER VARYING', 'BINARY', 'VARBINARY') THEN c.DATA_TYPE || '(' || c.DATA_LENGTH || ')'
+         WHEN c.DATA_TYPE IN ('DEC', 'DECIMAL', 'NUMBER', 'NUMERIC') THEN
+              CASE WHEN c.DATA_PRECISION IS NULL THEN c.DATA_TYPE
+                   ELSE c.DATA_TYPE || '(' || c.DATA_PRECISION || ',' || COALESCE(c.DATA_SCALE, 0) || ')' END
+         WHEN c.DATA_TYPE IN ('TIME', 'TIMESTAMP', 'DATETIME') THEN c.DATA_TYPE || '(' || c.DATA_SCALE || ')'
+         WHEN c.DATA_TYPE = 'TIME WITH TIME ZONE' THEN 'TIME(' || c.DATA_SCALE || ') WITH TIME ZONE'
+         WHEN c.DATA_TYPE = 'DATETIME WITH TIME ZONE' THEN 'TIMESTAMP(' || c.DATA_SCALE || ') WITH TIME ZONE'
+         WHEN c.DATA_TYPE = 'TIMESTAMP WITH LOCAL TIME ZONE' THEN 'TIMESTAMP(' || MOD(c.DATA_SCALE, 4096) || ') WITH LOCAL TIME ZONE'
+         WHEN c.DATA_TYPE IN ('INTERVAL YEAR TO MONTH', 'INTERVAL DAY TO HOUR', 'INTERVAL DAY TO MINUTE', 'INTERVAL HOUR TO MINUTE') THEN
+              SUBSTR(c.DATA_TYPE, 1, INSTR(c.DATA_TYPE, ' ', 10) - 1) || '(' || c.DATA_PRECISION || ')'
+              || SUBSTR(c.DATA_TYPE, INSTR(c.DATA_TYPE, ' ', 10))
+         WHEN c.DATA_TYPE IN ('INTERVAL YEAR', 'INTERVAL MONTH', 'INTERVAL DAY', 'INTERVAL HOUR', 'INTERVAL MINUTE') THEN
+              c.DATA_TYPE || '(' || c.DATA_PRECISION || ')'
+         WHEN c.DATA_TYPE = 'INTERVAL SECOND' THEN 'INTERVAL SECOND(' || c.DATA_PRECISION || ',' || c.DATA_SCALE || ')'
+         WHEN c.DATA_TYPE IN ('INTERVAL DAY TO SECOND', 'INTERVAL HOUR TO SECOND', 'INTERVAL MINUTE TO SECOND') THEN
+              SUBSTR(c.DATA_TYPE, 1, INSTR(c.DATA_TYPE, ' ', 10) - 1) || '(' || c.DATA_PRECISION || ')'
+              || SUBSTR(c.DATA_TYPE, INSTR(c.DATA_TYPE, ' ', 10), LENGTH(c.DATA_TYPE) - INSTR(c.DATA_TYPE, ' ', 10) - 5)
+              || 'SECOND(' || c.DATA_SCALE || ')'
+         WHEN c.DATA_TYPE = 'TEXT' AND c.DATA_SCALE = 8 THEN 'XMLTYPE'
+         ELSE c.DATA_TYPE
+       END AS "type_text",
+       c.NULLABLE AS "nullable",
+       CASE WHEN c.VIRTUAL_COLUMN = 'YES' THEN NULL ELSE c.DATA_DEFAULT END AS "default_value",
+       cc.COMMENTS AS "comment",
+       CASE WHEN BITAND(COALESCE(sc.INFO2, 0), 1) = 1 THEN 'Y' ELSE 'N' END AS "auto_increment",
+       CASE WHEN c.VIRTUAL_COLUMN = 'YES' THEN c.DATA_DEFAULT ELSE NULL END AS "generated"
+FROM ALL_TAB_COLS c
+JOIN ALL_OBJECTS ob ON ob.OWNER = c.OWNER AND ob.OBJECT_NAME = c.TABLE_NAME
+                   AND ob.OBJECT_TYPE IN ('TABLE', 'VIEW', 'MATERIALIZED VIEW')
+LEFT JOIN ALL_COL_COMMENTS cc ON cc.OWNER = c.OWNER AND cc.TABLE_NAME = c.TABLE_NAME AND cc.COLUMN_NAME = c.COLUMN_NAME
+LEFT JOIN SYSOBJECTS sch ON sch.TYPE$ = 'SCH' AND sch.NAME = c.OWNER
+LEFT JOIN SYSOBJECTS so ON so.SCHID = sch.ID AND so.TYPE$ = 'SCHOBJ' AND so.SUBTYPE$ = 'UTAB' AND so.NAME = c.TABLE_NAME
+LEFT JOIN SYSCOLUMNS sc ON sc.ID = so.ID AND sc.NAME = c.COLUMN_NAME
+WHERE c.OWNER = {{ bind("schema") }}
+  AND c.HIDDEN_COLUMN = 'NO'
+  AND COALESCE(ob.TEMPORARY, 'N') <> 'Y'
+  AND c.TABLE_NAME NOT LIKE 'BM$!_%' ESCAPE '!'
+  AND c.TABLE_NAME NOT LIKE 'MTAB$!_%' ESCAPE '!'
+{% if table %}
+  AND c.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+ORDER BY c.TABLE_NAME, c.COLUMN_ID
+
+-- [keys]
+-- DM has no ON UPDATE actions: on_update is always NO ACTION. DELETE_RULE is NULL for the default (NO ACTION).
+SELECT c.TABLE_NAME AS "table_name",
+       c.CONSTRAINT_NAME AS "constraint_name",
+       CASE c.CONSTRAINT_TYPE WHEN 'R' THEN 'F' ELSE c.CONSTRAINT_TYPE END AS "constraint_type",
+       col.COLUMN_NAME AS "column_name",
+       CAST(col.POSITION AS INT) AS "position",
+       rc.OWNER AS "ref_schema",
+       rc.TABLE_NAME AS "ref_table",
+       rcol.COLUMN_NAME AS "ref_column",
+       CASE WHEN c.CONSTRAINT_TYPE = 'R' THEN COALESCE(c.DELETE_RULE, 'NO ACTION') ELSE NULL END AS "on_delete",
+       CASE WHEN c.CONSTRAINT_TYPE = 'R' THEN 'NO ACTION' ELSE NULL END AS "on_update"
+FROM ALL_CONSTRAINTS c
+JOIN ALL_CONS_COLUMNS col ON col.OWNER = c.OWNER AND col.CONSTRAINT_NAME = c.CONSTRAINT_NAME AND col.TABLE_NAME = c.TABLE_NAME
+LEFT JOIN ALL_CONSTRAINTS rc ON c.CONSTRAINT_TYPE = 'R' AND rc.OWNER = c.R_OWNER AND rc.CONSTRAINT_NAME = c.R_CONSTRAINT_NAME
+LEFT JOIN ALL_CONS_COLUMNS rcol ON rcol.OWNER = rc.OWNER AND rcol.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+                               AND rcol.TABLE_NAME = rc.TABLE_NAME AND rcol.POSITION = col.POSITION
+WHERE c.OWNER = {{ bind("schema") }}
+  AND c.CONSTRAINT_TYPE IN ('P', 'U', 'R')
+{% if table %}
+  AND c.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+ORDER BY c.TABLE_NAME, c.CONSTRAINT_NAME, col.POSITION
+
+-- [checks]
+-- DM does not create system NOT NULL check constraints, so nothing has to be excluded.
+SELECT c.TABLE_NAME AS "table_name", c.CONSTRAINT_NAME AS "constraint_name", c.SEARCH_CONDITION AS "expression"
+FROM ALL_CONSTRAINTS c
+WHERE c.OWNER = {{ bind("schema") }}
+  AND c.CONSTRAINT_TYPE = 'C'
+{% if table %}
+  AND c.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+ORDER BY c.TABLE_NAME, c.CONSTRAINT_NAME
+
+-- [indexes]
+-- GENERATED = 'N' keeps only indexes the user created: the clustered rowid index every table has, the indexes behind
+-- PK / UNIQUE / FK constraints, partition-level indexes and CONTEXT (full-text, INDEX_TYPE DOMAIN) indexes all have 'Y'.
+-- The hidden storage table of a BITMAP index (BM$_<id>) is a normal-looking table with a 'N' index, so it is excluded by name.
+-- ALL_IND_COLUMNS lists the plain columns of a function-based index with COLUMN_POSITION = -1 and without the expression;
+-- the expressions (with their real positions) are in ALL_IND_EXPRESSIONS, and a descending expression carries a trailing ' DESC'.
+SELECT i.TABLE_NAME AS "table_name",
+       i.INDEX_NAME AS "index_name",
+       CASE WHEN i.UNIQUENESS = 'UNIQUE' THEN 'Y' ELSE 'N' END AS "is_unique",
+       REPLACE(i.INDEX_TYPE, 'FUNCTION-BASED ', '') AS "method",
+       ic.EXPR AS "column_expr",
+       CAST(ic.POS AS INT) AS "position",
+       ic.DSC AS "descending"
+FROM ALL_INDEXES i
+JOIN (SELECT x.INDEX_OWNER AS OWN, x.INDEX_NAME AS INAME, x.COLUMN_NAME AS EXPR, x.COLUMN_POSITION AS POS,
+             CASE WHEN x.DESCEND = 'DESC' THEN 'Y' ELSE 'N' END AS DSC
+      FROM ALL_IND_COLUMNS x
+      WHERE x.INDEX_OWNER = {{ bind("schema") }} AND x.COLUMN_POSITION > 0
+{% if table %}
+        AND x.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+      UNION ALL
+      SELECT e.INDEX_OWNER, e.INDEX_NAME,
+             CASE WHEN e.COLUMN_EXPRESSION LIKE '% DESC' THEN SUBSTR(e.COLUMN_EXPRESSION, 1, LENGTH(e.COLUMN_EXPRESSION) - 5) ELSE e.COLUMN_EXPRESSION END,
+             e.COLUMN_POSITION,
+             CASE WHEN e.COLUMN_EXPRESSION LIKE '% DESC' THEN 'Y' ELSE 'N' END
+      FROM ALL_IND_EXPRESSIONS e
+      WHERE e.INDEX_OWNER = {{ bind("schema") }}
+{% if table %}
+        AND e.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+     ) ic ON ic.OWN = i.OWNER AND ic.INAME = i.INDEX_NAME
+WHERE i.OWNER = {{ bind("schema") }}
+  AND i.GENERATED = 'N'
+  AND i.TABLE_NAME NOT LIKE 'BM$!_%' ESCAPE '!'
+  AND i.TABLE_NAME NOT LIKE 'MTAB$!_%' ESCAPE '!'
+{% if table %}
+  AND i.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+ORDER BY i.TABLE_NAME, i.INDEX_NAME, ic.POS
+
+-- [triggers]
+-- TRIGGER_BODY holds the complete CREATE [OR REPLACE] TRIGGER statement as the user typed it, so definition is the full DDL.
+-- TRIGGERING_EVENT looks like 'INSERT OR UPDATE' (and 'UPDATE OF' columns are separate); it is rebuilt in INSERT, UPDATE, DELETE order.
+SELECT g.TABLE_NAME AS "table_name",
+       g.TRIGGER_NAME AS "name",
+       CASE WHEN g.TRIGGERING_TYPE LIKE 'INSTEAD OF%' THEN 'INSTEAD OF'
+            WHEN g.TRIGGERING_TYPE LIKE 'BEFORE%' THEN 'BEFORE'
+            ELSE 'AFTER' END AS "timing",
+       RTRIM(CASE WHEN INSTR(g.TRIGGERING_EVENT, 'INSERT') > 0 THEN 'INSERT,' ELSE '' END
+             || CASE WHEN INSTR(g.TRIGGERING_EVENT, 'UPDATE') > 0 THEN 'UPDATE,' ELSE '' END
+             || CASE WHEN INSTR(g.TRIGGERING_EVENT, 'DELETE') > 0 THEN 'DELETE,' ELSE '' END
+             || CASE WHEN INSTR(g.TRIGGERING_EVENT, 'TRUNCATE') > 0 THEN 'TRUNCATE,' ELSE '' END, ',') AS "events",
+       g.TRIGGER_BODY AS "definition"
+FROM ALL_TRIGGERS g
+WHERE g.TABLE_OWNER = {{ bind("schema") }}
+  AND g.BASE_OBJECT_TYPE IN ('TABLE', 'VIEW')
+{% if table %}
+  AND g.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+ORDER BY g.TABLE_NAME, g.TRIGGER_NAME
+
+-- [view_definition]
+-- ALL_VIEWS.TEXT is DM's re-generated, upper-cased SELECT text (leading blank included). The original text with the
+-- CREATE VIEW prefix is available from DBMS_METADATA.GET_DDL('VIEW', name, schema).
+SELECT v.TEXT AS "definition"
+FROM ALL_VIEWS v
+WHERE v.OWNER = {{ bind("schema") }} AND v.VIEW_NAME = {{ bind("name") }}
+UNION ALL
+SELECT m.QUERY
+FROM ALL_MVIEWS m
+WHERE m.OWNER = {{ bind("schema") }} AND m.MVIEW_NAME = {{ bind("name") }}
+
+-- [routine_source]
+-- DM's ALL_SOURCE has ONE row per object (LINE is NULL) whose TEXT is the whole CREATE OR REPLACE statement.
+SELECT CAST(COALESCE(s.LINE, 1) AS INT) AS "line", s.TEXT AS "text"
+FROM ALL_SOURCE s
+WHERE s.OWNER = {{ bind("schema") }} AND s.NAME = {{ bind("name") }} AND s.TYPE = {{ bind("kind") }}
+ORDER BY COALESCE(s.LINE, 1)
+
+-- [reserved_words]
+-- RESERVED = 'Y' is the union of RES_SQL and RES_PL (261 words on this build). Tested: 65 of them still work as
+-- unquoted column names (over-quoting is harmless), but 7 pseudo-columns that fail unquoted are flagged 'N', so they are
+-- added by hand.
+SELECT KEYWORD AS "word" FROM V$RESERVED_WORDS WHERE RESERVED = 'Y'
+UNION
+SELECT 'ROWID' FROM DUAL
+UNION
+SELECT 'TRXID' FROM DUAL
+UNION
+SELECT 'VERSIONS_STARTTIME' FROM DUAL
+UNION
+SELECT 'VERSIONS_ENDTIME' FROM DUAL
+UNION
+SELECT 'VERSIONS_STARTTRXID' FROM DUAL
+UNION
+SELECT 'VERSIONS_ENDTRXID' FROM DUAL
+UNION
+SELECT 'VERSIONS_OPERATION' FROM DUAL
+ORDER BY 1
