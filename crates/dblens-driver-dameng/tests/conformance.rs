@@ -157,3 +157,17 @@ async fn empty_string_and_binary_params() {
         vec![Value::String(String::new()), Value::Bytes(Vec::new()), Value::Int(0), Value::Int(0)]
     );
 }
+
+/// 连接参数中的 database 作为当前模式。
+#[tokio::test]
+async fn database_parameter_sets_current_schema() {
+    let Ok(url) = std::env::var("DBLENS_TEST_DM_URL") else { return };
+    let (_, mut params) = ConnectParams::from_url(&url).unwrap();
+    params.database = Some("SYSDBA".into());
+    let mut conn = DmDriver.connect(&params).await.unwrap();
+    let schema =
+        first_value(&run(&mut conn, "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL", &[]).await);
+    assert_eq!(schema, Value::String("SYSDBA".into()));
+    params.database = Some("dblens_no_such_schema".into());
+    assert!(DmDriver.connect(&params).await.is_err(), "模式不存在时连接失败");
+}

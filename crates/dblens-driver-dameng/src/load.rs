@@ -20,6 +20,7 @@ pub(crate) fn load(params: &ConnectParams) -> Result<Arc<DmDpi>> {
         return Ok(dpi.clone());
     }
     let path = dir.join(NativeLib::DamengDpi.file_name());
+    warm_up_winsock();
     let library = open_library(&path)?;
     let dpi = unsafe { DmDpi::from_library(library) }.map_err(|e| unavailable(&path, e))?;
     // 缺少函数时直接返回、不缓存：用户换一个目录（或升级客户端）后可以重试
@@ -27,6 +28,20 @@ pub(crate) fn load(params: &ConnectParams) -> Result<Arc<DmDpi>> {
     let dpi = Arc::new(dpi);
     loaded.push((dir, dpi.clone()));
     Ok(dpi)
+}
+
+/// dmdpi 在 DLL 初始化例程里（持有 Windows 加载器锁时）调用 getaddrinfo。如果这时另一个线程正在进程内
+/// 第一次创建 socket，ws2_32 会持有自己的目录锁、再去加载协议提供程序 DLL 而等待加载器锁，两边互相等待
+/// （实测：达梦连接与 PostgreSQL 连接同时发起时整个进程卡死）。所以加载前先在本线程把 Winsock 的协议
+/// 目录和名字解析初始化好，让 dmdpi 初始化时不再触发 DLL 加载。其他平台没有这个问题。
+fn warm_up_winsock() {
+    #[cfg(windows)]
+    {
+        use std::net::{ToSocketAddrs, UdpSocket};
+        let _ = UdpSocket::bind("127.0.0.1:0");
+        let _ = UdpSocket::bind("[::1]:0");
+        let _ = "localhost:0".to_socket_addrs();
+    }
 }
 
 /// 本 crate 调用的全部 DPI 函数。bindgen 生成的方法在函数缺失时会 panic，

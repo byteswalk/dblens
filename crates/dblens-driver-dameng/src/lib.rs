@@ -17,7 +17,7 @@ use dblens_driver::{Capabilities, ConnectParams, Connection, Driver, DriverId};
 
 use crate::conn::DmConnection;
 use crate::ffi::*;
-use crate::handles::{Con, Env};
+use crate::handles::{Con, Env, Stmt};
 
 pub struct DmDriver;
 
@@ -36,6 +36,10 @@ fn connect_blocking(p: &ConnectParams) -> Result<DmConnection> {
         other => other,
     })?;
     con.set_autocommit(true)?;
+    // 连接参数里的 database 在达梦中表示模式：登录后切换当前模式。名字按原样（区分大小写）加引号
+    if let Some(schema) = p.database.as_deref().filter(|s| !s.is_empty()) {
+        Stmt::new(&con)?.exec_direct(&format!("SET SCHEMA \"{}\"", schema.replace('"', "\"\"")))?;
+    }
     Ok(DmConnection::new(con))
 }
 
