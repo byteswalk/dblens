@@ -18,6 +18,21 @@ pub enum Error {
     Cancelled,
     #[error("驱动不可用：{hint}")]
     DriverUnavailable { hint: String },
+    /// 输入或数据本身不合法（参数错误、值无法表示为字面量等），由调用方修正后重试。
+    #[error("无效的输入：{message}")]
+    Invalid { message: String },
+    /// 要找的对象（连接配置、会话等）不存在。
+    #[error("找不到{what}")]
+    NotFound { what: String },
+    /// 会话正在执行其他语句。
+    #[error("会话正忙：{message}")]
+    Busy { message: String },
+    /// 本地密码库已加锁，需要先输入主密码。
+    #[error("密码库已锁定，请先输入主密码")]
+    Locked,
+    /// 被执行策略拒绝。
+    #[error("执行被拒绝：{reason}")]
+    Denied { reason: String },
     #[error("内部错误：{message}")]
     Internal { message: String },
 }
@@ -29,6 +44,14 @@ impl Error {
 
     pub fn internal(message: impl Into<String>) -> Self {
         Self::Internal { message: message.into() }
+    }
+
+    pub fn invalid(message: impl Into<String>) -> Self {
+        Self::Invalid { message: message.into() }
+    }
+
+    pub fn not_found(what: impl Into<String>) -> Self {
+        Self::NotFound { what: what.into() }
     }
 }
 
@@ -51,5 +74,11 @@ mod tests {
         let json = serde_json::to_value(&e).unwrap();
         assert_eq!(json, serde_json::json!({"kind":"sql","code":"42P01","message":"x","position":15}));
         assert_eq!(serde_json::to_value(Error::Timeout).unwrap(), serde_json::json!({"kind":"timeout"}));
+        assert_eq!(
+            serde_json::to_value(Error::not_found("连接配置 x")).unwrap(),
+            serde_json::json!({"kind":"not_found","what":"连接配置 x"})
+        );
+        assert_eq!(serde_json::to_value(Error::Locked).unwrap(), serde_json::json!({"kind":"locked"}));
+        assert_eq!(Error::not_found("会话 7").to_string(), "找不到会话 7");
     }
 }

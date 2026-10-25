@@ -1,0 +1,38 @@
+[package]
+name = "dblens-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["mysql", "postgres", "oracle", "dameng"]
+mysql = ["dep:dblens-driver-mysql"]
+postgres = ["dep:dblens-driver-postgres"]
+oracle = ["dep:dblens-driver-oracle"]
+dameng = ["dep:dblens-driver-dameng"]
+
+[dependencies]
+argon2.workspace = true
+async-trait.workspace = true
+chacha20poly1305.workspace = true
+chrono.workspace = true
+dblens-core.workspace = true
+dblens-dialect.workspace = true
+dblens-driver.workspace = true
+dblens-driver-dameng = { workspace = true, optional = true }
+dblens-driver-mysql = { workspace = true, optional = true }
+dblens-driver-oracle = { workspace = true, optional = true }
+dblens-driver-postgres = { workspace = true, optional = true }
+directories.workspace = true
+keyring.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlparser.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

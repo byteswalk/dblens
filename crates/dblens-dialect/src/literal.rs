@@ -41,9 +41,9 @@ pub fn literal(family: Family, v: &Value) -> Result<String> {
             }
         },
         // 错误信息只报类型，不回显值本身（大字段或未知类型的文本可能很长或很敏感）
-        Value::Lob(_) => return Err(Error::internal("LOB 预览值不能生成 SQL 字面量")),
+        Value::Lob(_) => return Err(Error::invalid("LOB 预览值不能生成 SQL 字面量")),
         Value::Other { type_name, .. } => {
-            return Err(Error::internal(format!("该类型（{type_name}）的值不能生成 SQL 字面量")));
+            return Err(Error::invalid(format!("该类型（{type_name}）的值不能生成 SQL 字面量")));
         }
     })
 }
@@ -53,7 +53,7 @@ fn float_literal(family: Family, f: f64) -> Result<String> {
         return match family {
             Family::Postgres => Ok("'NaN'::float8".to_string()),
             Family::Oracle => Ok("BINARY_DOUBLE_NAN".to_string()),
-            Family::MySql | Family::Dameng => Err(Error::internal("该方言不支持 NaN 的 SQL 字面量")),
+            Family::MySql | Family::Dameng => Err(Error::invalid("该方言不支持 NaN 的 SQL 字面量")),
         };
     }
     if f.is_infinite() {
@@ -62,7 +62,7 @@ fn float_literal(family: Family, f: f64) -> Result<String> {
             (Family::Postgres, false) => Ok("'-Infinity'::float8".to_string()),
             (Family::Oracle, true) => Ok("BINARY_DOUBLE_INFINITY".to_string()),
             (Family::Oracle, false) => Ok("-BINARY_DOUBLE_INFINITY".to_string()),
-            (Family::MySql | Family::Dameng, _) => Err(Error::internal("该方言不支持无穷大的 SQL 字面量")),
+            (Family::MySql | Family::Dameng, _) => Err(Error::invalid("该方言不支持无穷大的 SQL 字面量")),
         };
     }
     // 普通区间用十进制写法，避免指数形式在各库之间的解析差异；其余用科学计数法保留精度
@@ -77,7 +77,7 @@ fn decimal_literal(family: Family, s: &str) -> Result<String> {
     if family == Family::Postgres && matches!(s, "NaN" | "Infinity" | "-Infinity") {
         return Ok(format!("'{s}'::numeric"));
     }
-    Err(Error::internal(format!("不是有效的数字文本，无法生成字面量：{s}")))
+    Err(Error::invalid(format!("不是有效的数字文本，无法生成字面量：{s}")))
 }
 
 /// 手写校验 `[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?`，只接受 ASCII 数字。
@@ -109,7 +109,7 @@ const ORACLE_LITERAL_MAX: usize = 4000;
 /// PostgreSQL 含反斜杠时用 E'' 形式；Oracle 超过 4000 字节时拆成 TO_CLOB 拼接；NUL 在非 MySQL 方言中报错。
 fn string_literal(family: Family, s: &str) -> Result<String> {
     if s.contains('\0') && family != Family::MySql {
-        return Err(Error::internal("字符串含 NUL 字符，无法生成该方言的字面量"));
+        return Err(Error::invalid("字符串含 NUL 字符，无法生成该方言的字面量"));
     }
     Ok(match family {
         Family::MySql if s.contains('\\') || s.contains('\0') => {
@@ -171,7 +171,7 @@ fn bytes_literal(family: Family, b: &[u8]) -> Result<String> {
         Family::Postgres => format!("decode('{hex}','hex')"),
         Family::Oracle => {
             if b.len() > ORACLE_RAW_MAX {
-                return Err(Error::internal("超过 Oracle 字面量长度上限（2000 字节），请改用参数绑定"));
+                return Err(Error::invalid("超过 Oracle 字面量长度上限（2000 字节），请改用参数绑定"));
             }
             format!("HEXTORAW('{hex}')")
         }
