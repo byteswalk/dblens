@@ -33,6 +33,7 @@ fn login_error(e: Error) -> Error {
 }
 
 fn connect_blocking(p: &ConnectParams) -> Result<DmConnection> {
+    p.reject_tls("达梦")?;
     let dpi = load::load(p)?;
     // 每个连接使用自己的环境句柄，不在连接之间共享
     let env = Env::new(dpi)?;

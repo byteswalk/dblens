@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use dblens_core::{Error, Result};
@@ -84,6 +85,37 @@ impl ConnectParams {
     }
 }
 
+/// 连接的加密方式，来自连接选项 `tls`：
+/// - `disable`（默认）：不加密；
+/// - `require`：加密，但不校验服务器证书（适合自签名证书的内网库）；
+/// - `verify`：加密并校验证书链和主机名；可用选项 `tls_ca` 指定额外信任的 CA 证书文件（PEM）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TlsMode {
+    Disable,
+    Require,
+    Verify { ca_file: Option<PathBuf> },
+}
+
+impl ConnectParams {
+    pub fn tls_mode(&self) -> Result<TlsMode> {
+        let ca_file = self.options.get("tls_ca").filter(|v| !v.is_empty()).map(PathBuf::from);
+        match self.options.get("tls").map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+            None | Some("" | "disable" | "off" | "false") => Ok(TlsMode::Disable),
+            Some("require") => Ok(TlsMode::Require),
+            Some("verify") => Ok(TlsMode::Verify { ca_file }),
+            Some(other) => Err(Error::invalid(format!("tls 选项只能是 disable、require 或 verify：{other}"))),
+        }
+    }
+
+    /// 不支持 TLS 的驱动调用：要求了加密时报错，而不是悄悄用明文连接。
+    pub fn reject_tls(&self, driver: &str) -> Result<()> {
+        match self.tls_mode()? {
+            TlsMode::Disable => Ok(()),
+            _ => Err(Error::invalid(format!("{driver} 驱动暂不支持 TLS，请去掉连接选项 tls"))),
+        }
+    }
+}
+
 /// 驱动能力，供上层决定界面和行为。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Capabilities {
@@ -108,6 +140,24 @@ pub struct ServerInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_tls_option() {
+        let tls = |url: &str| ConnectParams::from_url(url).unwrap().1.tls_mode();
+        assert_eq!(tls("postgres://u@h/db").unwrap(), TlsMode::Disable);
+        assert_eq!(tls("postgres://u@h/db?tls=disable").unwrap(), TlsMode::Disable);
+        assert_eq!(tls("postgres://u@h/db?tls=REQUIRE").unwrap(), TlsMode::Require);
+        assert_eq!(tls("postgres://u@h/db?tls=verify").unwrap(), TlsMode::Verify { ca_file: None });
+        assert_eq!(
+            tls("postgres://u@h/db?tls=verify&tls_ca=%2Fetc%2Fca.pem").unwrap(),
+            TlsMode::Verify { ca_file: Some(PathBuf::from("/etc/ca.pem")) }
+        );
+        assert!(matches!(tls("postgres://u@h/db?tls=maybe"), Err(Error::Invalid { .. })));
+        let (_, p) = ConnectParams::from_url("oracle://u@h/svc?tls=require").unwrap();
+        assert!(matches!(p.reject_tls("Oracle"), Err(Error::Invalid { .. })));
+        let (_, p) = ConnectParams::from_url("oracle://u@h/svc").unwrap();
+        assert!(p.reject_tls("Oracle").is_ok());
+    }
 
     #[test]
     fn parses_mysql_url_with_encoded_password() {

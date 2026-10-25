@@ -12,5 +12,5 @@ pub mod conformance;
 
 pub use cancel::CancelHandle;
 pub use exec::{ColumnMeta, ExecEvent, ExecStream, collect_all};
-pub use params::{Capabilities, ConnectParams, DriverId, ServerInfo};
+pub use params::{Capabilities, ConnectParams, DriverId, ServerInfo, TlsMode};
 pub use traits::{Connection, Driver};

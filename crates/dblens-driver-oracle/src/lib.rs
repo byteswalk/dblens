@@ -103,6 +103,7 @@ impl Driver for OracleDriver {
     }
 
     async fn connect(&self, p: &ConnectParams) -> Result<Box<dyn Connection>> {
+        p.reject_tls("Oracle")?;
         let p = p.clone();
         let conn = tokio::task::spawn_blocking(move || -> Result<oracle::Connection> {
             init_client(&p)?;
