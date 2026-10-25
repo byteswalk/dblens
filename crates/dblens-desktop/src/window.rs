@@ -14,14 +14,17 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{
+    CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, Submenu, SubmenuBuilder,
+};
 use tauri::{
     App, AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent,
+    WindowEvent, Wry,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState};
 
 use crate::geometry::{self, MIN_SIZE, Rect};
+use crate::update;
 use crate::window_state::{self, WindowState};
 
 const MAIN: &str = "main";
@@ -141,6 +144,9 @@ pub fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
 }
 
 fn on_menu(app: &AppHandle, id: &str) -> tauri::Result<()> {
+    if update::on_menu(app, id) {
+        return Ok(());
+    }
     let Some(win) = app.get_webview_window(MAIN) else { return Ok(()) };
     match id {
         // 点击时菜单项已自动切换了勾选状态
@@ -171,8 +177,14 @@ fn focus_changed(app: &AppHandle, focused: bool) {
     }
 }
 
-/// 创建主窗口：恢复保存的状态，注入令牌，挂上菜单和窗口事件。
-pub fn create_main(app: &App, base: &str, token: &str, state_path: PathBuf) -> tauri::Result<()> {
+/// 创建主窗口：恢复保存的状态，注入令牌，挂上菜单（"窗口"和 `help`）和窗口事件。
+pub fn create_main(
+    app: &App,
+    base: &str,
+    token: &str,
+    state_path: PathBuf,
+    help: &Submenu<Wry>,
+) -> tauri::Result<()> {
     let saved = window_state::load(&state_path);
     let on_top = CheckMenuItemBuilder::with_id(MENU_ON_TOP, "窗口置顶")
         .checked(saved.always_on_top)
@@ -184,7 +196,7 @@ pub fn create_main(app: &App, base: &str, token: &str, state_path: PathBuf) -> t
         .separator()
         .item(&MenuItemBuilder::with_id(MENU_QUIT, "退出").build(app)?)
         .build()?;
-    let menu = MenuBuilder::new(app).item(&window_menu).build()?;
+    let menu = MenuBuilder::new(app).item(&window_menu).item(help).build()?;
 
     let allowed = base.to_string();
     let win = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(base.parse().expect("接口地址")))

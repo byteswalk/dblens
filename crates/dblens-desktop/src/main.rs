@@ -8,6 +8,7 @@
 mod geometry;
 mod json_file;
 mod logging;
+mod update;
 mod window;
 mod window_state;
 
@@ -45,6 +46,8 @@ fn run(data_dir: PathBuf) -> Result<(), String> {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().with_handler(window::on_shortcut).build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             let mut api = router(service, ApiConfig { token: token.clone(), allowed_origins: Vec::new() });
             match web_dir(app.path().resource_dir().ok()) {
@@ -63,7 +66,8 @@ fn run(data_dir: PathBuf) -> Result<(), String> {
                     tracing::error!("接口服务异常退出：{e}");
                 }
             });
-            window::create_main(app, &base, &token, data_dir.join("window.json"))?;
+            let help = update::init(app, data_dir.join("update.json"))?;
+            window::create_main(app, &base, &token, data_dir.join("window.json"), &help)?;
             Ok(())
         })
         .run(tauri::generate_context!())
