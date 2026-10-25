@@ -1,0 +1,136 @@
+name: release
+
+# 推送 v* 标签时构建各平台安装包，生成带 latest.json 的草稿 Release。流程见 docs/notes/m0-4d-release.md。
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare:
+    name: 检查版本号与发布说明
+    runs-on: ubuntu-latest
+    outputs:
+      notes: ${{ steps.notes.outputs.body }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 标签必须与 Cargo.toml 中的版本一致
+        run: |
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "标签 $GITHUB_REF_NAME 与 Cargo.toml 中的版本 $version 不一致"; exit 1
+          fi
+      - id: notes
+        name: 读取发布说明（同时写入 latest.json，客户端提示更新时显示）
+        run: |
+          f="docs/releases/$GITHUB_REF_NAME.md"
+          test -f "$f" || { echo "缺少发布说明 $f"; exit 1; }
+          { echo 'body<<EOF'; cat "$f"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: 桌面安装包（${{ matrix.name }}）
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            args: ""
+          - name: macOS 通用
+            os: macos-latest
+            args: --target universal-apple-darwin
+          - name: Linux x64
+            os: ubuntu-22.04
+            args: ""
+          - name: Linux ARM64（信创）
+            os: ubuntu-22.04-arm
+            args: --bundles deb
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 Tauri 的系统依赖（Linux）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+      - name: 安装工具链（读取 rust-toolchain.toml）
+        run: rustup show
+      - name: macOS 通用包需要两个目标
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: DBLens ${{ github.ref_name }}
+          releaseBody: ${{ needs.prepare.outputs.notes }}
+          releaseDraft: true
+          includeUpdaterJson: true
+          tauriScript: pnpm --dir web tauri
+          args: --config crates/dblens-desktop/tauri.bundle.json ${{ matrix.args }}
+
+  server:
+    name: dblens-server（${{ matrix.target }}）
+    needs: desktop
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show && rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: 构建前端页面
+        working-directory: web
+        run: pnpm install --frozen-lockfile && pnpm build
+      - run: cargo build --release -p dblens-server --target ${{ matrix.target }}
+      - name: 打包（可执行文件 + web/ 前端页面）并上传到草稿 Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          name="dblens-server-$GITHUB_REF_NAME-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          exe=dblens-server; [ "$RUNNER_OS" = Windows ] && exe=dblens-server.exe
+          cp "target/${{ matrix.target }}/release/$exe" "dist/$name/"
+          cp -r web/dist "dist/$name/web"
+          cd dist
+          if [ "$RUNNER_OS" = Windows ]; then 7z a "$name.zip" "$name" >/dev/null; file="$name.zip"
+          else tar czf "$name.tar.gz" "$name"; file="$name.tar.gz"; fi
+          gh release upload "$GITHUB_REF_NAME" "$file" --clobber
