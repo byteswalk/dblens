@@ -11,10 +11,6 @@ M0-3b 已完成：Dialect 带服务器版本、识别 PolarDB、按真实服务�
 - Oracle 不允许标识符里出现 `"`，即使写成两个 `""` 也不行。目前生成的语句会执行失败，不会出现注入，但应该在生成前就报错。
 - 金仓、openGauss 在 Oracle 兼容模式下，`decode(…,'hex')` 可能和 Oracle 的 `DECODE` 函数重名冲突，需要实测；冲突的话改用 `E'\\x…'::bytea`。
 
-## M0-4b 之前
-
-- `SqlStatement` 没有实现 `Serialize`；偏移量是 UTF-8 字节偏移，而 Monaco 用 UTF-16 偏移或行列号，中文脚本的位置会对不上。需要提供转换。
-
 ## M1 之前
 
 - `paginate` 只用于工具自己生成的浏览表数据的查询。它把分页子句追加在末尾，原查询已带 `LIMIT` / `FETCH` / `FOR UPDATE` 时会语法报错。编辑器里用户写的 SQL 靠执行流分批取数，不能交给 `paginate` 改写。
