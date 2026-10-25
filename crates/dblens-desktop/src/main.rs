@@ -6,6 +6,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod geometry;
+mod json_file;
 mod logging;
 mod window;
 mod window_state;

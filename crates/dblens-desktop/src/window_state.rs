@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::Rect;
+use crate::json_file;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -15,24 +16,13 @@ pub struct WindowState {
     pub always_on_top: bool,
 }
 
-/// 读取保存的状态。文件不存在或内容损坏时用默认状态（损坏时记一条警告），不影响启动。
-/// 允许开头有 UTF-8 BOM（用记事本等工具改过的文件）。
+/// 读取保存的状态。文件不存在或内容损坏时用默认状态，见 `json_file::load`。
 pub fn load(path: &Path) -> WindowState {
-    match std::fs::read(path) {
-        Ok(bytes) => serde_json::from_slice(bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes))
-            .unwrap_or_else(|e| {
-                tracing::warn!("窗口状态文件 {} 无法解析，改用默认状态：{e}", path.display());
-                WindowState::default()
-            }),
-        Err(_) => WindowState::default(),
-    }
+    json_file::load(path)
 }
 
-/// 先写临时文件再改名，避免写到一半退出时留下损坏的文件。
 pub fn save(path: &Path, state: &WindowState) -> std::io::Result<()> {
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(state)?)?;
-    std::fs::rename(&tmp, path)
+    json_file::save(path, state)
 }
 
 #[cfg(test)]
