@@ -58,3 +58,35 @@ describe('errorText', () => {
     expect(errorText({ kind: 'weird', x: 1 } as never)).toBe('{"kind":"weird","x":1}')
   })
 })
+
+describe('元数据与设置', () => {
+  it('路径中的名字要编码，空过滤条件不带参数', async () => {
+    const { fn, calls } = fakeFetch(200, [])
+    const api = createApi('tok', fn)
+    await api.schemas('p/1')
+    await api.objects('p1', 'my schema', 'views', 'ord')
+    await api.objects('p1', 'public', 'tables', '')
+    await api.routines('p1', 'HR')
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/profiles/p%2F1/schemas',
+      '/api/profiles/p1/schemas/my%20schema/objects?kind=views&filter=ord',
+      '/api/profiles/p1/schemas/public/objects?kind=tables',
+      '/api/profiles/p1/schemas/HR/routines',
+    ])
+  })
+
+  it('table 取单表明细，表不存在时返回 null', async () => {
+    const { fn, calls } = fakeFetch(200, [{ name: 'orders', comment: null, columns: [], primary_key: null }])
+    expect((await createApi('tok', fn).table('p1', 'public', 'orders'))?.name).toBe('orders')
+    expect(calls[0].url).toBe('/api/profiles/p1/schemas/public/tables?table=orders')
+    expect(await createApi('tok', fakeFetch(200, []).fn).table('p1', 'public', 'x')).toBeNull()
+  })
+
+  it('设置的读写', async () => {
+    const { fn, calls } = fakeFetch(204, null)
+    await createApi('tok', fn).putSetting('ui.theme', 'dark')
+    expect(calls[0].url).toBe('/api/settings/ui.theme')
+    expect(calls[0].init?.method).toBe('PUT')
+    expect(JSON.parse(calls[0].init?.body as string)).toEqual({ value: 'dark' })
+  })
+})

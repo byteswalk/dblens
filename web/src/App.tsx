@@ -4,7 +4,7 @@ import { App as AntApp, ConfigProvider, Layout, Result, Tabs, Typography, theme 
 import zhCN from 'antd/locale/zh_CN'
 import { useMemo } from 'react'
 
-import { createApi } from './api'
+import { createApi } from './shared/api'
 import ConnectionPage from './pages/ConnectionPage'
 import DriversPage from './pages/DriversPage'
 import QueryPage from './pages/QueryPage'

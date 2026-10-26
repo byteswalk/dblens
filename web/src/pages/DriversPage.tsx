@@ -1,7 +1,7 @@
 import { App, Button, Input, Space, Table, Tag } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 
-import type { Api, DriverStatus } from '../api'
+import type { Api, DriverStatus } from '../shared/api'
 
 /** 驱动状态；Oracle、达梦要先确认原生客户端库目录才能连接。 */
 export default function DriversPage({ api }: { api: Api }) {

@@ -1,7 +1,7 @@
 import { App, Button, Descriptions, Form, Input, InputNumber, Popconfirm, Select, Space, Table } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 
-import type { Api, DriverId, Profile, ProfileInput, ServerSummary } from '../api'
+import type { Api, DriverId, Profile, ProfileInput, ServerSummary } from '../shared/api'
 
 const DEFAULT_PORTS: Record<DriverId, number> = { mysql: 3306, postgres: 5432, oracle: 1521, dameng: 5236 }
 

@@ -1,8 +1,8 @@
 import { Alert, App, Button, Input, Select, Space, Table, Typography } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 
-import { type Api, type Profile, type SessionInfo, errorText } from '../api'
-import { DEFAULT_MAX_ROWS, ExecSocket, type ExecState, cellText, initialExec, reduceExec } from '../exec'
+import { type Api, type Profile, type SessionInfo, errorText } from '../shared/api'
+import { DEFAULT_MAX_ROWS, ExecSocket, type ExecState, cellText, initialExec, reduceExec } from '../shared/exec'
 
 /** 打开会话，经 WebSocket 执行 SQL，验证执行协议（分批、取消、确认）。 */
 export default function QueryPage({ api }: { api: Api }) {
