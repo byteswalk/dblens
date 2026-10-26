@@ -67,14 +67,15 @@
 web/src/features/sql/
   worker.ts          SQL 语言 worker：按方言懒加载解析器，提供 validate / suggest
   parsers.ts         方言 → 解析器的加载与适配（worker 内使用；Node 测试直接调用）
-  client.ts          主线程封装：worker 懒创建，请求带序号，过时的结果丢弃
+  client.ts          主线程封装：所有方言共用一个 worker，懒创建；请求带序号，超时的结果丢弃
   dialects.ts        驱动 / 变体 → 解析器与档位（第 3 节的表）
   completion.ts      worker 的补全需求 + 元数据 → Monaco 补全项（纯逻辑）
   metadata.ts        元数据：复用 react-query 缓存，按需取 schema 对象和表的列
   diagnostics.ts     语法错误 → Monaco 标记（档位、开关、提示文字）
   functions/<方言>.ts  精简的内置函数表（mysql、postgres、oracle）
-  plsql/             Oracle / 达梦解析器的生成产物与适配（验证通过后才有）
-scripts/gen-plsql-parser.*   生成 PL/SQL 解析器的脚本（验证通过后才有）
+  plsql/             Oracle / 达梦解析器的适配；gen/ 为生成产物（不提交）
+web/grammars/plsql/          上游 PL/SQL 语法
+web/scripts/gen-plsql.mjs    打补丁并生成 PL/SQL 解析器
 ```
 
 worker 的接口：
@@ -93,7 +94,7 @@ interface Suggest {
 ```
 
 - 语法检查：编辑后防抖 400 ms，整份脚本发给 worker；解析器按 `;` 分句，每句单独报错。脚本超过 1 MB 时不检查。
-- 补全：Monaco 请求补全时，只发光标所在的语句（用 M1b1 已有的语句定位）和光标位置。主线程按 `want` 和 `qualifier` 查元数据：
+- 补全：Monaco 请求补全时，把整个脚本和光标位置发给 worker，由解析器找到光标所在的语句，只解析这一句（前端没有现成的语句定位，dt-sql-parser 自带，PL/SQL 按后端 split.rs 的规则分句）。主线程按 `want` 和 `qualifier` 查元数据：
   - `qualifier` 是别名或表名：补该表的列；
   - `qualifier` 是 schema：补该 schema 的表和视图；
   - 需要列且无限定：补语句中各表的列，列名后注明所属表；
@@ -112,7 +113,7 @@ interface Suggest {
 - 兼容档：黄色波浪线，`MarkerSeverity.Warning`，文字后加"（按 MySQL / PostgreSQL / Oracle 语法检查，<变体名> 的扩展语法可能被误报）"。
 - 错误文字跟随界面语言：`dt-sql-parser` 用 `zh_CN` / `en_US`；补充文字走前端词条。
 - 与 M1b1 执行出错的标红相互独立，使用不同的标记来源（owner），不互相覆盖或清除。
-- 设置 `editor.syntaxCheck`（默认开）：关闭后不做语法检查，也不为检查加载解析器；补全照常可用。
+- 设置 `ui.editor.syntax-check`（默认开，值为 `off` 时关闭；设置名只允许小写字母、数字和 `._-`）：关闭后不做语法检查，也不为检查加载解析器；补全照常可用。
 - 不阻止执行。状态栏显示当前脚本的语法问题数，点击跳到第一处。
 
 ## 6. Oracle / 达梦技术验证（计划的第一个任务）
@@ -126,7 +127,7 @@ interface Suggest {
 4. 达梦：用测试库中的真实 DDL 和查询统计误报，结果记入说明；误报多不影响结论（达梦属兼容档）。
 
 结果：
-- 达标：生成脚本和生成的代码提交进仓库（平时构建不重新生成）；Oracle、达梦走完整流程。
+- 达标：生成脚本提交进仓库；生成的代码不提交，构建前自动生成（`antlr-ng` 不需要 Java，约 5 秒，输入不变时跳过）。Oracle、达梦走完整流程。
 - 不达标：验证代码不保留；Oracle、达梦用轻量补全——解析器关键字表之外，以简单词法识别 `FROM` / `JOIN` 后的表和别名，补全对象与列；不做语法检查。结论与测量数据写进 `docs/notes`。
 
 ## 7. 错误处理
@@ -148,3 +149,13 @@ interface Suggest {
 
 - `docs/notes/m1b2-completion.md`：结构、方言对应、Oracle 验证的数据与结论、已知误报。
 - M1 设计文档中的进度改为 "M1b2 已完成"。
+
+## 10. 写计划时的调整（2026-10-26）
+
+技术验证在写计划时完成，全部达标（数据见 `docs/notes/m1b2-completion.md`）。据此和实现中的发现，调整如下（上文已同步修改）：
+- 生成的 PL/SQL 解析器不提交（生成工具是纯 TypeScript，生成快）。
+- PL/SQL 先分句再逐句解析：ANTLR 遇到第一处错误后不再检查后面的语句，分句后每句单独报错，补全也只解析一句。
+- 达梦语法补丁 11 处（`DROP … IF EXISTS`、`IDENTITY(m, n)`、`BIGINT` 等类型等），测试夹具中的达梦误报从 25/51 降到 2/51。
+- 所有方言共用一个 worker；vite 的 worker 输出改为 ES 模块，解析器才能各自成块。
+- 元数据补全最多等 1.5 秒；执行成功的 DDL 后补全元数据失效（连同后端元数据缓存）。
+- 设置项名为 `ui.editor.syntax-check`。
