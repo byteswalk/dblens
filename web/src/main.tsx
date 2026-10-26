@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import App from './App'
+import App from './app/App'
 import { TOKEN_IN_HASH, bootstrapToken } from './shared/token'
 
 const token = bootstrapToken(window as unknown as Parameters<typeof bootstrapToken>[0])

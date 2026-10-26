@@ -1,0 +1,40 @@
+// 设置：主题（跟随系统 / 亮色 / 暗色），桌面版另有"启动时自动检查更新"。macOS 上没有页面菜单，主题只能在这里改。
+
+import { Form, Modal, Radio, Switch } from 'antd'
+
+import { useSetting, useSettings } from '../shared/settings'
+import { desktop } from '../shared/shell'
+import { THEME_KEY, parseThemePref } from '../shared/theme'
+import { useUi } from './ui'
+import { useShellInfo } from './useShellInfo'
+
+export default function SettingsDialog() {
+  const { settingsOpen, setSettingsOpen } = useUi()
+  const theme = parseThemePref(useSetting(THEME_KEY))
+  const info = useShellInfo()
+  return (
+    <Modal title="设置" open={settingsOpen} onCancel={() => setSettingsOpen(false)} footer={null} width={480}>
+      <Form layout="horizontal" labelCol={{ span: 8 }} style={{ marginTop: 16 }}>
+        <Form.Item label="主题">
+          <Radio.Group
+            value={theme}
+            onChange={(e) => useSettings.getState().set(THEME_KEY, e.target.value)}
+            options={[
+              { value: 'system', label: '跟随系统' },
+              { value: 'light', label: '亮色' },
+              { value: 'dark', label: '暗色' },
+            ]}
+          />
+        </Form.Item>
+        {desktop && (
+          <Form.Item label="启动时自动检查更新">
+            <Switch
+              checked={info?.auto_check_update ?? true}
+              onChange={(on) => desktop?.setAutoCheckUpdate(on).catch(console.warn)}
+            />
+          </Form.Item>
+        )}
+      </Form>
+    </Modal>
+  )
+}

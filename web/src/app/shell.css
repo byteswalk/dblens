@@ -1,0 +1,250 @@
+/* 外壳的颜色和尺寸，取自设计稿 docs/design/m1-workbench.html。<html data-theme> 由 App 按主题设置。 */
+:root {
+  --bg: #f3f3f4;
+  --panel: #ffffff;
+  --panel-2: #f7f7f8;
+  --hover: #ececee;
+  --sel: #dbe8fb;
+  --border: #dcdce0;
+  --border-strong: #c4c4ca;
+  --text: #1f1f23;
+  --text-2: #5c5c66;
+  --muted: #9a9aa3;
+  --accent: #2f6fd6;
+  --ok: #2e8b4a;
+  --ok-bg: #e4f3e8;
+  --warn: #a96c00;
+  --warn-bg: #fdf1d8;
+  --danger: #c93a3a;
+  --danger-bg: #fbe6e6;
+  --env-dev: #2e8b4a;
+  --env-test: #d29a12;
+  --env-prod: #d33b3b;
+  --env-none: #b4b4bb;
+  --mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Noto Sans Mono CJK SC', monospace;
+  --sans: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+}
+:root[data-theme='dark'] {
+  --bg: #18181b;
+  --panel: #1f1f23;
+  --panel-2: #26262b;
+  --hover: #2e2e34;
+  --sel: #23395e;
+  --border: #33333a;
+  --border-strong: #46464f;
+  --text: #e6e6ea;
+  --text-2: #a8a8b3;
+  --muted: #6f6f7a;
+  --accent: #5b9bf3;
+  --ok: #5cc27b;
+  --ok-bg: #1b3324;
+  --warn: #e2b04a;
+  --warn-bg: #3a2f14;
+  --danger: #f07070;
+  --danger-bg: #3d1f1f;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--panel);
+  color: var(--text);
+  font: 12px/1.5 var(--sans);
+  overflow: hidden;
+  user-select: none;
+}
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.row {
+  display: flex;
+  align-items: center;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.muted {
+  color: var(--muted);
+}
+
+/* 标题栏 */
+.titlebar {
+  height: 32px;
+  flex: none;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.titlebar .logo {
+  color: var(--accent);
+  margin: 0 6px 0 10px;
+}
+.titlebar .menu-btn {
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: default;
+}
+.titlebar .menu-btn:hover,
+.titlebar .menu-btn.ant-dropdown-open {
+  background: var(--hover);
+}
+.titlebar .title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--text-2);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.titlebar .tb-btn {
+  width: 46px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+}
+.titlebar .tb-btn:hover {
+  background: var(--hover);
+}
+.titlebar .tb-btn.on {
+  color: var(--accent);
+}
+.titlebar .tb-btn.close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+/* 活动栏、侧栏 */
+.activity {
+  width: 44px;
+  flex: none;
+  background: var(--panel-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 4px;
+}
+.activity .a {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-2);
+  position: relative;
+  cursor: pointer;
+}
+.activity .a:hover {
+  background: var(--hover);
+}
+.activity .a.on {
+  color: var(--accent);
+}
+.activity .a.on::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.side {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+}
+.side-h {
+  height: 32px;
+  flex: none;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.side-body {
+  flex: 1;
+  overflow: auto;
+}
+.splitter {
+  width: 4px;
+  background: transparent;
+}
+.splitter:hover,
+.splitter[data-separator-state='drag'] {
+  background: var(--accent);
+}
+
+/* 对象树：节点标题一行显示，过长时省略 */
+.tree .ant-tree-node-content-wrapper {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree .env {
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+  line-height: 16px;
+}
+.tree .env.dev {
+  color: var(--env-dev);
+  background: var(--ok-bg);
+}
+.tree .env.test {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+.tree .env.prod {
+  color: var(--danger);
+  background: var(--danger-bg);
+  font-weight: 600;
+}
+.tree .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: 0 4px 0 2px;
+  vertical-align: 0;
+}
+.tree .cm {
+  color: var(--muted);
+  margin-left: 8px;
+}
+.tree .err {
+  color: var(--danger);
+}
+
+/* 工作区、状态栏 */
+.welcome {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-2);
+}
+.statusbar {
+  height: 24px;
+  flex: none;
+  background: var(--panel-2);
+  border-top: 1px solid var(--border);
+  padding: 0 10px;
+  gap: 16px;
+  color: var(--text-2);
+}
