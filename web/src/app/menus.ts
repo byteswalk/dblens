@@ -52,6 +52,8 @@ export function buildMenus(s: MenuState): MenuGroup[] {
     'divider',
     { key: 'sql:format', label: t('app.menu.sql.format'), shortcut: 'Shift+Alt+F' },
     { key: 'sql:explain', label: t('app.menu.sql.explain') },
+    'divider',
+    { key: 'sql:favorite', label: t('app.menu.sql.favorite'), shortcut: 'Ctrl+D' },
   ]
 
   const groups: MenuGroup[] = [

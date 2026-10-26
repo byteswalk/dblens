@@ -42,9 +42,22 @@ export interface Suggest {
   tables: TableRef[]
 }
 
+/** 一条语句在全文中的范围：[start, end) 为 UTF-16 偏移，不含结束符。 */
+export interface StatementRange {
+  start: number
+  end: number
+}
+
 /** 语言服务：每种 Dialect 一个实现，在 worker 里运行（测试中直接调用）。 */
 export interface SqlParser {
   validate(sql: string, locale: ParserLocale): ParseIssue[]
   /** offset：光标在 sql 中的 UTF-16 偏移。 */
   suggest(sql: string, offset: number): Suggest
+  /** 光标所在的语句（规则同后端 `statement_at`：取开始位置不在光标之后的最后一条，光标在第一条之前时取第一条）；没有语句时为 null。 */
+  statementAt(sql: string, offset: number): StatementRange | null
+}
+
+/** 从按位置排好的语句中选出光标所在的一条（规则见 `SqlParser.statementAt`）。 */
+export function pickStatement(ranges: StatementRange[], offset: number): StatementRange | null {
+  return [...ranges].reverse().find((r) => r.start <= offset) ?? ranges[0] ?? null
 }

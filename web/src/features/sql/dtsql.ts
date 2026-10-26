@@ -3,7 +3,7 @@
 
 import type { EntityContext, MySQL, PostgreSQL, Suggestions } from 'dt-sql-parser'
 
-import type { SqlParser, Suggest, TableRef, Want } from './types'
+import { type SqlParser, type Suggest, type TableRef, type Want, pickStatement } from './types'
 
 type DtParser = MySQL | PostgreSQL
 
@@ -88,6 +88,14 @@ export function adapt(p: DtParser): SqlParser {
         qualifier: qualifierOf(words),
         tables: tablesOf(quiet(() => p.getAllEntities(sql, caret))),
       }
+    },
+    statementAt(sql, offset) {
+      const slices = quiet(() => p.splitSQLByStatement(sql)) ?? []
+      return pickStatement(
+        // dt-sql-parser 的语句含结束符 `;`，去掉
+        slices.map((s) => ({ start: s.startIndex, end: s.startIndex + s.text.replace(/\s*;?\s*$/, '').length })),
+        offset,
+      )
     },
   }
 }

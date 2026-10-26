@@ -20,7 +20,7 @@ export type MonacoEditor = Parameters<OnMount>[0]
 registerSqlProviders()
 
 const { KeyMod, KeyCode } = monaco
-type CommandLabel = `editor.command.${'runCurrent' | 'runAll' | 'stop' | 'format' | 'explain'}`
+type CommandLabel = `editor.command.${'runCurrent' | 'runAll' | 'stop' | 'format' | 'explain' | 'favorite'}`
 // label 是词条键，注册动作时按当前界面语言翻译
 const ACTIONS: { id: EditorCommand; label: CommandLabel; keys: number[] }[] = [
   { id: 'run-current', label: 'editor.command.runCurrent', keys: [KeyMod.CtrlCmd | KeyCode.Enter] },
@@ -28,6 +28,8 @@ const ACTIONS: { id: EditorCommand; label: CommandLabel; keys: number[] }[] = [
   { id: 'cancel', label: 'editor.command.stop', keys: [KeyMod.CtrlCmd | KeyCode.PauseBreak, KeyMod.CtrlCmd | KeyCode.Period] },
   { id: 'format', label: 'editor.command.format', keys: [KeyMod.Shift | KeyMod.Alt | KeyCode.KeyF] },
   { id: 'explain', label: 'editor.command.explain', keys: [] },
+  // 覆盖 Monaco 默认的 Ctrl+D（选中下一个相同的词）
+  { id: 'favorite', label: 'editor.command.favorite', keys: [KeyMod.CtrlCmd | KeyCode.KeyD] },
 ]
 
 export interface SqlEditorProps {

@@ -77,7 +77,8 @@
       "runAll": "执行全部",
       "cancel": "停止",
       "format": "格式化",
-      "explain": "执行计划"
+      "explain": "执行计划",
+      "favorite": "收藏当前 SQL"
     },
     "window": {
       "title": "窗口",
@@ -108,6 +109,29 @@
     "retry": "重试",
     "openInTab": "在新标签中打开",
     "copy": "复制 SQL",
-    "delete": "删除"
+    "delete": "删除",
+    "addFavorite": "加入收藏"
+  },
+  "favorites": {
+    "hint": "双击插入，拖动整理",
+    "newFolder": "新建文件夹",
+    "newSubfolder": "新建子文件夹",
+    "empty": "还没有收藏。在编辑器中按 Ctrl+D 收藏当前 SQL",
+    "root": "收藏（根）",
+    "name": "名称",
+    "nameRequired": "请填写名称",
+    "folder": "文件夹",
+    "note": "说明",
+    "sqlRequired": "请填写 SQL",
+    "addTitle": "收藏 SQL",
+    "editTitle": "编辑收藏",
+    "renameTitle": "编辑文件夹",
+    "newFolderTitle": "新建文件夹",
+    "saved": "已收藏：{{name}}",
+    "nothing": "没有可收藏的 SQL",
+    "openInTab": "在新标签中打开",
+    "edit": "编辑",
+    "delete": "删除",
+    "deleteFolderConfirm": "删除文件夹“{{name}}”及其中的全部内容？"
   }
 }

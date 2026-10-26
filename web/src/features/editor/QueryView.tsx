@@ -11,7 +11,10 @@ import { useApi } from '../../app/context'
 import { type Profile, errorText } from '../../shared/api'
 import { layoutStorage } from '../../shared/settings'
 import ResultsPanel from '../results/ResultsPanel'
+import { useFavoriteDialog } from '../favorites/dialog'
+import { sqlDialect } from '../sql/dialects'
 import { defaultSchema, metaKey, metaReader } from '../sql/metadata'
+import { sqlClient } from '../sql/service'
 import { useSyntax } from '../sql/syntax'
 import ConfirmDialog from './ConfirmDialog'
 import Toolbar from './Toolbar'
@@ -52,6 +55,7 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
             ? { sql: model.getValueInRange(selected), base: model.getOffsetAt(selected.getStartPosition()) }
             : null
         const cursor = model.getOffsetAt(ed.getPosition() ?? { lineNumber: 1, column: 1 })
+        const variant = rt.session?.variant ?? profile?.variant ?? null
         switch (cmd) {
           case 'run-current':
           case 'explain': {
@@ -69,6 +73,24 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
           case 'cancel':
             runner.cancel()
             break
+          case 'favorite': {
+            // 收藏选中的部分，没有选中时收藏光标所在的语句（解析器不可用时收藏全文）
+            const text = selected ? model.getValueInRange(selected) : null
+            void (async () => {
+              let sql = text
+              if (!sql) {
+                const all = model.getValue()
+                const r = profile
+                  ? await sqlClient.statementAt(sqlDialect(profile.driver, variant).dialect, all, cursor)
+                  : null
+                sql = r?.ok && r.value ? all.slice(r.value.start, r.value.end) : all
+              }
+              sql = sql.trim()
+              if (!sql) message.info(t('app.favorites.nothing'))
+              else useFavoriteDialog.getState().open({ mode: 'create', kind: 'item', sql, driver: profile?.driver, variant })
+            })()
+            break
+          }
           case 'first-problem': {
             const first = useSyntax.getState().tabs[tab.id]?.first
             if (first) {

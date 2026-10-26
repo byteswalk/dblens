@@ -15,7 +15,7 @@ import {
   Token,
 } from 'antlr4ng'
 
-import type { ParseIssue, SqlParser, Suggest, TableRef, Want } from '../types'
+import { type ParseIssue, type SqlParser, type Suggest, type TableRef, type Want, pickStatement } from '../types'
 import { PlSqlLexer } from './gen/PlSqlLexer'
 import { PlSqlParser, type Sql_scriptContext } from './gen/PlSqlParser'
 
@@ -304,5 +304,11 @@ export const plsql: SqlParser = {
     const code = tokens.filter(isCode)
     const pos = code.findIndex((t) => t.tokenIndex >= idx)
     return { keywords, want: [...want], qualifier: qualifierBefore(code, pos < 0 ? code.length : pos), tables: scanTables(code) }
+  },
+
+  statementAt(sql, offset) {
+    // 句末的空白不算在语句里
+    const ranges = split(lex(sql)).map((p) => ({ start: p.start, end: p.start + sql.slice(p.start, p.end).trimEnd().length }))
+    return pickStatement(ranges, offset)
   },
 }

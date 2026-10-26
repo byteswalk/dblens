@@ -1,5 +1,5 @@
 // 编辑器工具栏（设计稿第 2 部分）：执行当前语句、执行全部、停止、出错停止 / 继续；连接和 schema；
-// 事务模式、提交、回滚；格式化、执行计划。会话级操作出错时用全局提示显示。
+// 事务模式、提交、回滚；收藏、格式化、执行计划。会话级操作出错时用全局提示显示。
 
 import { App, Button, Select, Tooltip } from 'antd'
 import {
@@ -10,6 +10,7 @@ import {
   IconPlayerPlay,
   IconPlayerStop,
   IconPlayerTrackNext,
+  IconStar,
   IconWand,
 } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
@@ -152,6 +153,9 @@ export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
         </span>
       )}
       <span className="grow" />
+      <IconBtn title={t('editor.toolbar.favorite')} onClick={() => sendCommand('favorite')}>
+        <IconStar size={16} />
+      </IconBtn>
       <IconBtn title={t('editor.toolbar.format')} onClick={() => sendCommand('format')}>
         <IconWand size={16} />
       </IconBtn>

@@ -248,6 +248,44 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 收藏侧栏（M1c1） */
+.fav {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.fav-bar {
+  flex: none;
+  gap: 4px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.fav-tree {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0;
+  background: transparent;
+}
+.fav-tree .ant-tree-node-content-wrapper {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.fav-tree .ant-tree-title {
+  flex: 1;
+  min-width: 0;
+}
+.fav-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mono {
+  font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+}
 .hist-preview {
   margin: 0;
   max-height: 320px;

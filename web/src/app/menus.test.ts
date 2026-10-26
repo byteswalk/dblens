@@ -11,7 +11,7 @@ describe('标题栏菜单', () => {
     const m = buildMenus(base)
     expect(m.map((g) => g.label)).toEqual(['文件', '查看', 'SQL', '窗口', '帮助'])
     expect(keys(m[0].items)).toEqual(['new-connection', 'new-query', 'close-tab', '-', 'settings', '-', 'quit'])
-    expect(keys(m[2].items)).toEqual(['sql:run-current', 'sql:run-all', 'sql:cancel', '-', 'sql:format', 'sql:explain'])
+    expect(keys(m[2].items)).toEqual(['sql:run-current', 'sql:run-all', 'sql:cancel', '-', 'sql:format', 'sql:explain', '-', 'sql:favorite'])
     expect(keys(m[4].items)).toEqual(['help:check-update', 'help:auto-check', '-', 'help:about'])
   })
 

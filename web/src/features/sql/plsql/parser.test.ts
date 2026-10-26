@@ -75,6 +75,20 @@ SELECT 1 FROM dual`
   })
 })
 
+describe('PL/SQL 光标所在的语句', () => {
+  it('PL/SQL 块整体算一条，不含结束符', () => {
+    const sql = 'SELECT 1 FROM dual;\nBEGIN\n  NULL;\nEND;\n/\nSELECT 2 FROM dual  '
+    const at = (o: number) => {
+      const r = plsql.statementAt(sql, o)
+      return r && sql.slice(r.start, r.end)
+    }
+    expect(at(3)).toBe('SELECT 1 FROM dual')
+    expect(at(sql.indexOf('NULL'))).toBe('BEGIN\n  NULL;\nEND;')
+    expect(at(sql.length)).toBe('SELECT 2 FROM dual')
+    expect(plsql.statementAt('', 0)).toBeNull()
+  })
+})
+
 describe('PL/SQL 补全分析', () => {
   it.each([
     ['SELECT * FROM |', ['table', 'view']],

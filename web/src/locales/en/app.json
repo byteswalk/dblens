@@ -78,7 +78,8 @@
       "runAll": "Run All",
       "cancel": "Stop",
       "format": "Format",
-      "explain": "Explain Plan"
+      "explain": "Explain Plan",
+      "favorite": "Add Current SQL to Favorites"
     },
     "window": {
       "title": "Window",
@@ -110,6 +111,29 @@
     "retry": "Retry",
     "openInTab": "Open in New Tab",
     "copy": "Copy SQL",
-    "delete": "Delete"
+    "delete": "Delete",
+    "addFavorite": "Add to Favorites"
+  },
+  "favorites": {
+    "hint": "Double-click to insert, drag to organize",
+    "newFolder": "New Folder",
+    "newSubfolder": "New Subfolder",
+    "empty": "No favorites yet. Press Ctrl+D in the editor to save the current SQL",
+    "root": "Favorites (root)",
+    "name": "Name",
+    "nameRequired": "Enter a name",
+    "folder": "Folder",
+    "note": "Note",
+    "sqlRequired": "Enter the SQL",
+    "addTitle": "Add to Favorites",
+    "editTitle": "Edit Favorite",
+    "renameTitle": "Edit Folder",
+    "newFolderTitle": "New Folder",
+    "saved": "Saved to favorites: {{name}}",
+    "nothing": "There is no SQL to save",
+    "openInTab": "Open in New Tab",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteFolderConfirm": "Delete the folder \"{{name}}\" and everything in it?"
   }
 }

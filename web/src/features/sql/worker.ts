@@ -15,6 +15,8 @@ async function handle(r: Request): Promise<Response> {
         return { id: r.id, ok: true, result: p.validate(r.sql, r.locale) }
       case 'suggest':
         return { id: r.id, ok: true, result: p.suggest(r.sql, r.offset) }
+      case 'statement':
+        return { id: r.id, ok: true, result: p.statementAt(r.sql, r.offset) }
     }
   } catch (e) {
     return { id: r.id, ok: false, error: e instanceof Error ? e.message : String(e) }

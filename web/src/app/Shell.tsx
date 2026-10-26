@@ -11,6 +11,8 @@ import { Group, Panel, type PanelImperativeHandle, Separator, useDefaultLayout }
 import { useQueryActions } from '../features/editor/actions'
 import { type EditorCommand, sendCommand } from '../features/editor/commands'
 import { useTabs } from '../features/editor/tabs'
+import FavoriteDialog from '../features/favorites/FavoriteDialog'
+import FavoritesPanel from '../features/favorites/FavoritesPanel'
 import HistoryPanel from '../features/history/HistoryPanel'
 import ObjectTree from '../features/tree/ObjectTree'
 import { layoutStorage } from '../shared/settings'
@@ -37,6 +39,7 @@ function SideContent({ side }: { side: SideKey }) {
   const { t } = useTranslation()
   if (side === 'db') return <ObjectTree />
   if (side === 'history') return <HistoryPanel />
+  if (side === 'favorites') return <FavoritesPanel />
   return <Empty style={{ marginTop: 48 }} description={t('app.side.comingSoon')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
 
@@ -72,6 +75,7 @@ function shortcut(e: KeyboardEvent): EditorCommand | 'new-connection' | 'new-que
   if (!ctrl && !e.altKey && key === 'f5') return 'run-all'
   if ((ctrl && key === 'pause') || (e.metaKey && key === '.')) return 'cancel'
   if (e.shiftKey && e.altKey && key === 'f') return 'format'
+  if (ctrl && !e.shiftKey && !e.altKey && key === 'd') return 'favorite'
   return null
 }
 
@@ -150,6 +154,7 @@ export default function Shell() {
         </Group>
       </div>
       <StatusBar />
+      <FavoriteDialog />
     </div>
   )
 }

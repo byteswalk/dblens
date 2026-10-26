@@ -59,6 +59,18 @@ describe('dt-sql-parser 适配', () => {
     expect(s.want).toContain('column')
   })
 
+  it('光标所在的语句', () => {
+    const sql = 'SELECT 1;\nSELECT 2 FROM t;\n\nUPDATE t SET a = 1'
+    const at = (o: number) => {
+      const r = mysql.statementAt(sql, o)
+      return r && sql.slice(r.start, r.end)
+    }
+    expect(at(0)).toBe('SELECT 1')
+    expect(at(12)).toBe('SELECT 2 FROM t')
+    expect(at(sql.length)).toBe('UPDATE t SET a = 1')
+    expect(postgres.statementAt('  ', 0)).toBeNull()
+  })
+
   it('反引号名称去掉引号', () => {
     expect(at(mysql, 'SELECT t.| FROM `my db`.`t 1` t').tables).toEqual([{ schema: 'my db', name: 't 1', alias: 't' }])
   })

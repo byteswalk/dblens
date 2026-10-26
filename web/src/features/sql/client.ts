@@ -4,7 +4,7 @@
 // - worker 出错或某个方言加载失败后，该方言在本次运行中不再使用解析器（调用方退回轻量补全、不检查语法）。
 
 import type { Request, RequestBody, Response } from './protocol'
-import type { Dialect, ParseIssue, ParserLocale, Suggest } from './types'
+import type { Dialect, ParseIssue, ParserLocale, StatementRange, Suggest } from './types'
 
 export const TIMEOUT_MS = 2000
 /** 加载解析器（下载 + 预热）最多等这么久。 */
@@ -42,6 +42,10 @@ export class SqlClient {
 
   suggest(dialect: Dialect, sql: string, offset: number): Promise<Outcome<Suggest>> {
     return this.call(dialect, { op: 'suggest', dialect, sql, offset })
+  }
+
+  statementAt(dialect: Dialect, sql: string, offset: number): Promise<Outcome<StatementRange | null>> {
+    return this.call(dialect, { op: 'statement', dialect, sql, offset })
   }
 
   private async call<T>(dialect: Dialect, req: RequestBody): Promise<Outcome<T>> {

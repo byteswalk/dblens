@@ -1,5 +1,5 @@
 // 历史侧栏（M1c1 设计文档第 6 节）：搜索、按连接和失败过滤、按日期分组、滚动加载。
-// 双击插入到当前编辑器；右键在新标签中打开、复制、删除。历史由服务端在执行时写入，执行结束后自动刷新。
+// 双击插入到当前编辑器；右键在新标签中打开、复制、加入收藏、删除。历史由服务端在执行时写入，执行结束后自动刷新。
 
 import { App, Button, Dropdown, Input, Select, Switch, Tooltip } from 'antd'
 import { IconSearch } from '@tabler/icons-react'
@@ -11,6 +11,7 @@ import { useApi } from '../../app/context'
 import DbIcon from '../../shared/DbIcon'
 import type { HistoryItem } from '../../shared/api'
 import { useQueryActions } from '../editor/actions'
+import { useFavoriteDialog } from '../favorites/dialog'
 import { PAGE, detail, firstLine, groupByDay } from './history'
 
 const ENV_COLORS: Record<string, string> = {
@@ -65,12 +66,16 @@ export default function HistoryPanel() {
     items: [
       { key: 'open', label: t('app.history.openInTab') },
       { key: 'copy', label: t('app.history.copy') },
+      { key: 'favorite', label: t('app.history.addFavorite') },
       { type: 'divider' as const },
       { key: 'delete', label: t('app.history.delete'), danger: true },
     ],
     onClick: ({ key }: { key: string }) => {
       if (key === 'open') openSql(item.sql, item.profile_id)
       else if (key === 'copy') void navigator.clipboard.writeText(item.sql)
+      else if (key === 'favorite') {
+        useFavoriteDialog.getState().open({ mode: 'create', kind: 'item', sql: item.sql, driver: item.driver, variant: item.variant })
+      }
       else if (key === 'delete') void remove(item)
     },
   })

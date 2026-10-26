@@ -4,7 +4,8 @@
     "runAll": "Run All",
     "stop": "Stop",
     "format": "Format",
-    "explain": "Explain Plan"
+    "explain": "Explain Plan",
+    "favorite": "Add to Favorites"
   },
   "toolbar": {
     "runCurrent": "Run Current Statement (Ctrl+Enter)",
@@ -18,7 +19,8 @@
     "rollback": "Rollback",
     "inTransaction": "Uncommitted transaction",
     "format": "Format (Shift+Alt+F)",
-    "explain": "Explain Plan"
+    "explain": "Explain Plan",
+    "favorite": "Add to Favorites (Ctrl+D)"
   },
   "switchProfile": {
     "title": "Switch Connection",
