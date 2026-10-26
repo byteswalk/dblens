@@ -1,5 +1,6 @@
 //! REST 接口。路径都在 `/api` 下，请求和响应都是 JSON；出错时的响应体见 `error.rs`。
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use axum::Json;
@@ -37,6 +38,49 @@ pub async fn set_lib_dir(
 ) -> ApiResult<Json<DriverStatus>> {
     s.service.registry.set_lib_dir(driver, body.path.as_deref())?;
     Ok(Json(s.service.registry.status(driver)?))
+}
+
+// ---- 设置 ----
+
+/// 单个设置项的值上限。设置是界面状态（主题、面板大小、打开的标签页等），不应很大。
+const MAX_SETTING_BYTES: usize = 64 * 1024;
+
+/// 这个接口只读写界面设置（`ui.` 开头）。同一张表里还有服务层自己的设置（如已确认的原生库目录 `native.*`），
+/// 它们有各自的接口和校验，不能经这里绕过。
+const UI_PREFIX: &str = "ui.";
+
+/// 设置项名称：`ui.` 开头，共 1–64 个小写字母、数字或 `.`、`_`、`-`，如 `ui.theme`。
+fn valid_setting_key(key: &str) -> bool {
+    key.starts_with(UI_PREFIX)
+        && key.len() <= 64
+        && key.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._-".contains(&b))
+}
+
+pub async fn settings(State(s): State<AppState>) -> ApiResult<Json<BTreeMap<String, String>>> {
+    let mut all = s.service.store.settings()?;
+    all.retain(|k, _| k.starts_with(UI_PREFIX));
+    Ok(Json(all))
+}
+
+#[derive(Deserialize)]
+pub struct SettingBody {
+    /// null 表示删除这一项。
+    pub value: Option<String>,
+}
+
+pub async fn set_setting(
+    State(s): State<AppState>,
+    Path(key): Path<String>,
+    Json(b): Json<SettingBody>,
+) -> ApiResult<StatusCode> {
+    if !valid_setting_key(&key) {
+        return Err(Error::invalid(format!("设置项名称不合法：{key}")).into());
+    }
+    if b.value.as_ref().is_some_and(|v| v.len() > MAX_SETTING_BYTES) {
+        return Err(Error::invalid(format!("设置项 {key} 的值超过 64 KiB")).into());
+    }
+    s.service.store.set_setting(&key, b.value.as_deref())?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---- 密码库 ----

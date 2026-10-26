@@ -45,6 +45,8 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
     let api = Router::new()
         .route("/drivers", get(routes::drivers))
         .route("/drivers/{driver}/lib-dir", put(routes::set_lib_dir))
+        .route("/settings", get(routes::settings))
+        .route("/settings/{key}", put(routes::set_setting))
         .route("/secrets", get(routes::secret_status))
         .route("/secrets/init", post(routes::init_vault))
         .route("/secrets/unlock", post(routes::unlock))

@@ -1,6 +1,7 @@
 //! 本地数据：用户数据目录下的一个 SQLite 文件（设计文档 4.3 节）。表结构用 `PRAGMA user_version` 记录版本，
 //! 启动时依次执行尚未执行的迁移。
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -102,6 +103,15 @@ impl Store {
         })
     }
 
+    /// 全部设置，按键排序。
+    pub fn settings(&self) -> Result<BTreeMap<String, String>> {
+        self.with(|c| {
+            let mut stmt = c.prepare("SELECT key, value FROM settings ORDER BY key")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect()
+        })
+    }
+
     /// 写入设置；`None` 删除该项。
     pub fn set_setting(&self, key: &str, value: Option<&str>) -> Result<()> {
         self.with(|c| {
@@ -129,6 +139,9 @@ mod tests {
         s.set_setting("a", Some("1")).unwrap();
         s.set_setting("a", Some("2")).unwrap();
         assert_eq!(s.setting("a").unwrap().as_deref(), Some("2"));
+        s.set_setting("b", Some("x")).unwrap();
+        let all = s.settings().unwrap();
+        assert_eq!(all.into_iter().collect::<Vec<_>>(), [("a".into(), "2".into()), ("b".into(), "x".into())]);
         s.set_setting("a", None).unwrap();
         assert_eq!(s.setting("a").unwrap(), None);
     }
