@@ -1,5 +1,6 @@
 // SQL 编辑器：Monaco。每个标签页一个模型（以标签 id 为路径），切换标签时保留各自的撤销历史和光标。
 // 快捷键（M1 设计文档 1.3 节）注册为编辑器动作，焦点在编辑器里时由 Monaco 处理；错误标记来自执行结果。
+// 补全（M1b2）：模型绑定所在标签页的连接上下文，由 features/sql/provider.ts 提供补全项。
 
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { useEffect, useRef } from 'react'
@@ -7,12 +8,15 @@ import { useTranslation } from 'react-i18next'
 
 import { useSetting } from '../../shared/settings'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../../shared/theme'
+import { type EditorSqlContext, bindModel, registerSqlProviders } from '../sql/provider'
 import { type EditorCommand, sendCommand } from './commands'
 import { useCursor } from './cursor'
 import type { ErrorMark } from './markers'
 import { monaco } from './monaco'
 
 export type MonacoEditor = Parameters<OnMount>[0]
+
+registerSqlProviders()
 
 const { KeyMod, KeyCode } = monaco
 type CommandLabel = `editor.command.${'runCurrent' | 'runAll' | 'stop' | 'format' | 'explain'}`
@@ -30,15 +34,20 @@ export interface SqlEditorProps {
   language: string
   defaultValue: string
   marks: ErrorMark[]
+  /** 补全用的上下文；连接已删除时为 null。 */
+  sql: EditorSqlContext | null
   onChange(value: string): void
   onReady(editor: MonacoEditor | null): void
 }
 
-export default function SqlEditor({ path, language, defaultValue, marks, onChange, onReady }: SqlEditorProps) {
+export default function SqlEditor({ path, language, defaultValue, marks, sql, onChange, onReady }: SqlEditorProps) {
   const { t } = useTranslation()
   const systemDark = useSystemDark()
   const theme = resolveTheme(parseThemePref(useSetting(THEME_KEY)), systemDark)
   const editorRef = useRef<MonacoEditor | null>(null)
+  const sqlRef = useRef(sql)
+  sqlRef.current = sql
+  useEffect(() => bindModel(path, () => sqlRef.current), [path])
 
   const onMount: OnMount = (editor) => {
     editorRef.current = editor
@@ -103,6 +112,8 @@ export default function SqlEditor({ path, language, defaultValue, marks, onChang
         tabSize: 2,
         fixedOverflowWidgets: true,
         renderLineHighlight: 'line',
+        // 只用 SQL 补全，不补文中出现过的词
+        wordBasedSuggestions: 'off',
       }}
     />
   )

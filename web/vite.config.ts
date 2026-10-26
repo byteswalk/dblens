@@ -18,6 +18,8 @@ export default defineConfig({
     outDir: 'dist',
     chunkSizeWarningLimit: 2048,
   },
+  // SQL 语言 worker 按方言懒加载解析器：需要 ES 模块格式才能拆块（默认的 iife 会把所有解析器打进一个文件）
+  worker: { format: 'es' },
   test: {
     setupFiles: ['./src/test-setup.ts'],
   },

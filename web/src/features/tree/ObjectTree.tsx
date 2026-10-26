@@ -28,6 +28,7 @@ import DbIcon from '../../shared/DbIcon'
 import { driverLabel } from '../connections/form'
 import { variantName } from '../editor/dialect'
 import { withVault } from '../connections/vault'
+import { metaKey } from '../sql/metadata'
 import {
   type CategoryKind,
   type NodeKey,
@@ -171,6 +172,8 @@ export default function ObjectTree() {
     const k: NodeKey = node.type === 'g' ? { type: 'c', profileId: node.profileId } : node
     const key = encodeKey(k)
     await api.refresh(k.profileId, 'schema' in k ? k.schema : null).catch(() => {})
+    // 补全用的元数据一并失效
+    void qc.invalidateQueries({ queryKey: metaKey(k.profileId, 'schema' in k ? k.schema : undefined) })
     const under = (x: string) => isWithin(decodeKey(x), k)
     setLoaded((m) => Object.fromEntries(Object.entries(m).filter(([x]) => x !== key && !under(x))))
     setExpanded((e) => e.filter((x) => !under(String(x))))

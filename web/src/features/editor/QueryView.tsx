@@ -1,6 +1,7 @@
 // 一个查询标签页的内容：工具栏、提示条、编辑器和结果面板（可拖动分隔线，位置存进设置）、确认框。
 // 处理编辑器命令：执行当前语句（有选中时执行选中部分）、执行全部、停止、格式化、执行计划。
 
+import { useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button } from 'antd'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,6 +11,7 @@ import { useApi } from '../../app/context'
 import { type Profile, errorText } from '../../shared/api'
 import { layoutStorage } from '../../shared/settings'
 import ResultsPanel from '../results/ResultsPanel'
+import { defaultSchema, metaKey, metaReader } from '../sql/metadata'
 import ConfirmDialog from './ConfirmDialog'
 import Toolbar from './Toolbar'
 import { onCommand } from './commands'
@@ -19,8 +21,12 @@ import { runnerFor, useTabRuntime } from './runner'
 import SqlEditor, { type MonacoEditor } from './SqlEditor'
 import { type QueryTab, useTabs } from './tabs'
 
+/** 会改变对象结构的语句（按首个关键字）。 */
+const DDL = new Set(['CREATE', 'ALTER', 'DROP', 'RENAME', 'TRUNCATE', 'COMMENT'])
+
 export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: Profile[] }) {
   const api = useApi()
+  const qc = useQueryClient()
   const { t } = useTranslation()
   const { message } = App.useApp()
   const runner = runnerFor(api, tab.id)
@@ -85,6 +91,31 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
   }, [protocolError, message])
 
   const marks = useMemo(() => errorMarks(rt.exec, rt.source), [rt.exec, rt.source])
+
+  // 执行成功的语句中有 DDL：补全用的元数据（连同后端的元数据缓存）失效，新建的表马上能补全
+  const refreshed = useRef<unknown>(null)
+  useEffect(() => {
+    if (rt.running || !profile || refreshed.current === rt.exec) return
+    refreshed.current = rt.exec
+    if (!rt.exec.statements.some((s) => !s.error && DDL.has(s.keyword))) return
+    void api
+      .refresh(profile.id, null)
+      .catch(() => {})
+      .then(() => qc.invalidateQueries({ queryKey: metaKey(profile.id) }))
+  }, [rt.running, rt.exec, profile, api, qc])
+  const meta = useMemo(() => (profile ? metaReader(qc, api, profile.id, profile.driver) : null), [qc, api, profile?.id, profile?.driver])
+  const sql = useMemo(
+    () =>
+      profile && meta
+        ? {
+            driver: profile.driver,
+            variant: rt.session?.variant ?? profile.variant,
+            schema: rt.session?.schema ?? defaultSchema(profile.driver, profile.user, profile.database),
+            meta,
+          }
+        : null,
+    [profile, meta, rt.session?.variant, rt.session?.schema],
+  )
   const confirm = !rt.running && !rt.declined ? rt.exec.confirm : null
   const sub = rt.submission
 
@@ -111,6 +142,7 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
             language={profile ? editorLanguage(profile.driver) : 'sql'}
             defaultValue={tab.sql}
             marks={marks}
+            sql={sql}
             onChange={(v) => useTabs.getState().setSql(tab.id, v)}
             onReady={onReady}
           />

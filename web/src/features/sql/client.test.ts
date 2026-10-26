@@ -7,7 +7,7 @@ import type { Request, Response } from './protocol'
 class FakeWorker implements WorkerLike {
   sent: Request[] = []
   onmessage: ((e: MessageEvent<Response>) => void) | null = null
-  onerror: ((e: unknown) => void) | null = null
+  onerror: ((e: ErrorEvent) => void) | null = null
   postMessage(msg: Request) {
     this.sent.push(msg)
     if (msg.op === 'load') this.reply({ id: msg.id, ok: true, result: null })
@@ -66,7 +66,7 @@ describe('SqlClient', () => {
   it('worker 出错后全部不可用，等待中的请求立即结束', async () => {
     const p = client.validate('mysql', 'SELECT', 'zh_CN')
     await vi.waitFor(() => expect(w.sent).toHaveLength(2))
-    w.onerror?.(new Error('boom'))
+    w.onerror?.({ message: 'boom' } as ErrorEvent)
     await expect(p).resolves.toEqual({ ok: false, reason: 'unavailable' })
     expect(client.unavailable('postgres')).toBe(true)
   })

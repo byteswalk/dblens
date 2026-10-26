@@ -14,7 +14,7 @@ const LOAD_TIMEOUT_MS = 60_000
 export interface WorkerLike {
   postMessage(msg: Request): void
   onmessage: ((e: MessageEvent<Response>) => void) | null
-  onerror: ((e: unknown) => void) | null
+  onerror: ((e: ErrorEvent) => void) | null
 }
 
 /** 加载失败的标记。 */
