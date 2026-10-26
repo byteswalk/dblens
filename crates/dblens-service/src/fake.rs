@@ -1,7 +1,8 @@
 //! 测试用的假驱动：按 SQL 文本给出预设的结果，并记录收到的调用。
 //!
 //! - `ROWS n`：返回一个结果集，n 行，每行一个整数；
-//! - `FAIL`：SQL 错误；`DISCONNECT`：连接错误；
+//! - `FAIL`：SQL 错误；`FAILAT n`：带出错位置 n 的 SQL 错误；`DISCONNECT`：连接错误；
+//! - `SELECT current_schema()`：当前 schema（初始为 public），`SET search_path TO "x"` 切换它；
 //! - `SLEEP`：一直等到被取消，然后返回 `Cancelled`；
 //! - 其他：影响 1 行。
 
@@ -51,13 +52,19 @@ impl Driver for FakeDriver {
 
 pub struct FakeConn {
     log: Log,
+    schema: String,
     cancelled: Arc<AtomicBool>,
     wake: Arc<Notify>,
 }
 
 impl FakeConn {
     pub fn new(log: Log) -> Self {
-        Self { log, cancelled: Arc::new(AtomicBool::new(false)), wake: Arc::new(Notify::new()) }
+        Self {
+            log,
+            schema: "public".into(),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            wake: Arc::new(Notify::new()),
+        }
     }
 }
 
@@ -108,6 +115,24 @@ impl Connection for FakeConn {
                 });
             }
             "DISCONNECT" => return Err(Error::connect("连接中断")),
+            "SELECT current_schema()" => {
+                stream
+                    .events
+                    .push_back(ExecEvent::ResultStart { columns: vec![ColumnMeta::new("s", "text")] });
+                stream.events.push_back(ExecEvent::Rows(vec![vec![Value::String(self.schema.clone())]]));
+                stream.events.push_back(ExecEvent::ResultEnd);
+            }
+            _ if sql.starts_with("FAILAT ") => {
+                return Err(Error::Sql {
+                    code: "42601".into(),
+                    message: "语法错误".into(),
+                    position: sql[7..].parse().ok(),
+                });
+            }
+            _ if sql.starts_with("SET search_path TO ") => {
+                self.schema = sql[19..].trim_matches('"').to_string();
+                stream.events.push_back(ExecEvent::Affected(0));
+            }
             "SLEEP" => stream.sleep = Some((self.cancelled.clone(), self.wake.clone())),
             _ => match sql.strip_prefix("ROWS ").and_then(|n| n.parse::<i64>().ok()) {
                 Some(n) => {

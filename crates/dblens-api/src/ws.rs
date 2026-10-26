@@ -58,14 +58,21 @@ pub fn utf16_offset(text: &str, byte: usize) -> usize {
 /// 把事件中的字节偏移换成 UTF-16 偏移后序列化。
 fn encode(event: SessionEvent, sql: &str) -> String {
     let event = match event {
-        SessionEvent::StatementStart { index, start, end, info } => SessionEvent::StatementStart {
+        SessionEvent::StatementStart { index, total, start, end, info } => SessionEvent::StatementStart {
             index,
+            total,
             start: utf16_offset(sql, start),
             end: utf16_offset(sql, end),
             info,
         },
-        SessionEvent::ConfirmRequired { index, start, reason } => {
-            SessionEvent::ConfirmRequired { index, start: utf16_offset(sql, start), reason }
+        SessionEvent::ConfirmRequired { index, start, end, reason } => SessionEvent::ConfirmRequired {
+            index,
+            start: utf16_offset(sql, start),
+            end: utf16_offset(sql, end),
+            reason,
+        },
+        SessionEvent::Failed { index, error, offset } => {
+            SessionEvent::Failed { index, error, offset: offset.map(|o| utf16_offset(sql, o)) }
         }
         other => other,
     };

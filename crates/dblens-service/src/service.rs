@@ -104,6 +104,8 @@ impl Service {
         let password = self.secrets.get(profile_id)?.unwrap_or_default();
         let (conn, dialect) = self.registry.connect(&p, password).await?;
         let id = self.sessions.open(profile_id, p.input.environment, conn, dialect)?;
+        // 读不到当前 schema 不影响使用，工具栏显示为未选择
+        let _ = self.sessions.refresh_schema(id).await;
         self.sessions.info(id)
     }
 

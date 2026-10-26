@@ -2,7 +2,7 @@
 //! DBLENS_TEST_MYSQL_URL、DBLENS_TEST_MARIADB_URL、DBLENS_TEST_PG_URL、DBLENS_TEST_ORACLE_URL、DBLENS_TEST_DM_URL。
 //!
 //! 走一遍完整流程：保存连接配置（密码放本地密码库）→ 测试连接 → 打开会话执行 → 浏览元数据 →
-//! 会话中执行 DDL 后元数据缓存失效 → 取消长查询。
+//! 会话中执行 DDL 后元数据缓存失效 → 取消长查询；查询工作台用到的执行计划、出错位置、切换 schema。
 
 use std::path::Path;
 use std::sync::Arc;
@@ -12,8 +12,8 @@ use dblens_core::{Error, Value};
 use dblens_dialect::meta::MetaKey;
 use dblens_driver::{ConnectParams, DriverId};
 use dblens_service::{
-    DefaultPolicy, DriverRegistry, Environment, ProfileInput, SecretBackend, Secrets, Service, SessionEvent,
-    SessionId, Store,
+    DefaultPolicy, DriverRegistry, Environment, ExecRequest, ProfileInput, SecretBackend, Secrets, Service,
+    SessionEvent, SessionId, Store,
 };
 
 struct Live {
@@ -75,14 +75,21 @@ impl Live {
         }
     }
 
-    /// 执行并取完全部事件。
-    async fn run(&self, id: SessionId, sql: &str) -> Vec<SessionEvent> {
-        self.service.sessions.execute(id, sql, false).await.unwrap();
+    /// 提交请求并取完全部事件，不检查失败。
+    async fn submit(&self, id: SessionId, req: ExecRequest) -> Vec<SessionEvent> {
+        let sql = req.sql.clone();
+        self.service.sessions.submit(id, req).await.unwrap();
         let mut events = Vec::new();
         while let Some(ev) = self.service.sessions.next(id, 500).await.unwrap() {
             events.push(ev);
         }
         assert_eq!(events.last(), Some(&SessionEvent::Done), "{sql}");
+        events
+    }
+
+    /// 执行并取完全部事件。
+    async fn run(&self, id: SessionId, sql: &str) -> Vec<SessionEvent> {
+        let events = self.submit(id, ExecRequest::new(sql)).await;
         if let Some(SessionEvent::Failed { error, .. }) =
             events.iter().find(|e| matches!(e, SessionEvent::Failed { .. }))
         {
@@ -145,6 +152,81 @@ async fn full_flow(env: &str) {
     live.run(id, &drop).await;
     s.sessions.close(id, false).await.unwrap();
     s.delete_profile(&live.profile_id).await.unwrap();
+}
+
+/// 查询工作台（M1b）：当前 schema、执行计划、出错位置。
+async fn workbench_flow(env: &str) {
+    let Some(live) = setup(env).await else { return };
+    let s = &live.service;
+    let info = s.open_session(&live.profile_id).await.unwrap();
+    let id = info.id;
+    let schema = info.schema.expect("应读到当前 schema");
+    assert!(schema.eq_ignore_ascii_case(&live.schema), "{schema}");
+
+    // 切换 schema 再切回
+    let other = match live.driver {
+        DriverId::Mysql => "information_schema",
+        DriverId::Postgres => "pg_catalog",
+        DriverId::Oracle | DriverId::Dameng => "SYS",
+    };
+    s.sessions.set_schema(id, other).await.unwrap();
+    assert_eq!(s.sessions.info(id).unwrap().schema.as_deref(), Some(other));
+    s.sessions.set_schema(id, &schema).await.unwrap();
+    assert_eq!(s.sessions.info(id).unwrap().schema, Some(schema.clone()));
+
+    // 执行计划：最后有结果集，不报错
+    let sql = format!(
+        "{};
+{}",
+        live.dual("1"),
+        live.dual("2")
+    );
+    let cursor = Some(sql.rfind("SELECT").unwrap());
+    let events =
+        live.submit(id, ExecRequest { explain: true, cursor, ..ExecRequest::new(sql.clone()) }).await;
+    assert!(!events.iter().any(|e| matches!(e, SessionEvent::Failed { .. })), "{events:?}");
+    let rows: usize =
+        events.iter().map(|e| if let SessionEvent::Rows { rows } = e { rows.len() } else { 0 }).sum();
+    assert!(rows > 0, "执行计划没有返回行：{events:?}");
+    eprintln!("{env} 执行计划：{events:?}");
+
+    // 出错位置：中文之后的语法错误，换算后指向 FROM（PG 直接给位置；Oracle 按字节给；MySQL 系、达梦从错误信息中找）
+    let bad = "SELECT '数洞', FROM t";
+    let events = live.submit(id, ExecRequest::new(bad)).await;
+    let Some(SessionEvent::Failed { error, offset, .. }) =
+        events.iter().find(|e| matches!(e, SessionEvent::Failed { .. }))
+    else {
+        panic!("{events:?}")
+    };
+    eprintln!("{env} 出错位置：{offset:?} {error}");
+    let o = offset.expect("应有出错位置");
+    assert!(bad[o..].starts_with("FROM"), "位置 {o} 指向 {:?}", &bad[o..]);
+    s.sessions.close(id, false).await.unwrap();
+}
+
+#[tokio::test]
+async fn mysql_workbench() {
+    workbench_flow("DBLENS_TEST_MYSQL_URL").await;
+}
+
+#[tokio::test]
+async fn mariadb_workbench() {
+    workbench_flow("DBLENS_TEST_MARIADB_URL").await;
+}
+
+#[tokio::test]
+async fn postgres_workbench() {
+    workbench_flow("DBLENS_TEST_PG_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_workbench() {
+    workbench_flow("DBLENS_TEST_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_workbench() {
+    workbench_flow("DBLENS_TEST_DM_URL").await;
 }
 
 /// 会话忙碌时取消长查询，会话之后照常可用。
