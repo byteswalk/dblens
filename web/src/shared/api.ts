@@ -165,6 +165,70 @@ export interface SynonymInfo {
   db_link: string | null
 }
 
+/** 一条执行历史（M1c1）。 */
+export interface HistoryItem {
+  id: number
+  /** 执行开始时间，Unix 毫秒。 */
+  at: number
+  profile_id: string
+  /** 执行时的连接名（连接删除后仍能显示）。 */
+  profile_name: string
+  driver: DriverId
+  variant: string | null
+  schema: string | null
+  sql: string
+  elapsed_ms: number | null
+  /** 查询取回的行数，或增删改影响的行数。 */
+  rows: number | null
+  /** 失败、被拒绝或被取消时的错误文字；成功时为 null。 */
+  error: string | null
+}
+
+export interface HistoryParams {
+  q?: string
+  profile?: string
+  failed?: boolean
+  /** 上一页最后一条的 id。 */
+  before?: number
+  limit?: number
+}
+
+export type FavoriteKind = 'folder' | 'item'
+
+/** 收藏的文件夹或 SQL（M1c1）。 */
+export interface Favorite {
+  id: string
+  parent_id: string | null
+  kind: FavoriteKind
+  name: string
+  sql: string | null
+  note: string | null
+  driver: DriverId | null
+  variant: string | null
+  /** 同一文件夹内的次序。 */
+  position: number
+  created_at: number
+  updated_at: number
+}
+
+export interface NewFavorite {
+  parent_id: string | null
+  kind: FavoriteKind
+  name: string
+  sql?: string
+  note?: string
+  driver?: DriverId
+  variant?: string | null
+}
+
+export interface FavoritePatch {
+  name?: string
+  sql?: string
+  /** 空字符串清除说明。 */
+  note?: string
+  move?: { parent_id: string | null; position: number }
+}
+
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
 export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o)) {
@@ -221,6 +285,24 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     synonyms: (id: string, schema: string) => request<SynonymInfo[]>('GET', `${s(id, schema)}/synonyms`),
     /** 清掉后端的元数据缓存；不给 schema 时清整个连接的。 */
     refresh: (id: string, schema: string | null) => request<null>('POST', `${p(id)}/refresh`, { schema }),
+    history: (p: HistoryParams = {}) =>
+      request<HistoryItem[]>(
+        'GET',
+        `/history${q({
+          q: p.q,
+          profile: p.profile,
+          failed: p.failed ? 'true' : undefined,
+          before: p.before === undefined ? undefined : String(p.before),
+          limit: p.limit === undefined ? undefined : String(p.limit),
+        })}`,
+      ),
+    deleteHistory: (id: number) => request<null>('DELETE', `/history/${id}`),
+    clearHistory: () => request<null>('DELETE', '/history'),
+    favorites: () => request<Favorite[]>('GET', '/favorites'),
+    createFavorite: (f: NewFavorite) => request<Favorite>('POST', '/favorites', f),
+    updateFavorite: (id: string, patch: FavoritePatch) =>
+      request<Favorite>('PUT', `/favorites/${encodeURIComponent(id)}`, patch),
+    deleteFavorite: (id: string) => request<null>('DELETE', `/favorites/${encodeURIComponent(id)}`),
     openSession: (profileId: string) => request<SessionInfo>('POST', '/sessions', { profile_id: profileId }),
     session: (id: number) => request<SessionInfo>('GET', `/sessions/${id}`),
     /** 关闭会话；有未提交的修改时按 commit 提交或回滚。 */

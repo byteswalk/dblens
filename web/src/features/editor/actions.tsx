@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
+import { sendInsert } from './commands'
 import { disposeRunner, useRuntime } from './runner'
 import { useTabs } from './tabs'
 
@@ -25,6 +26,25 @@ export function useQueryActions() {
       profiles?.[0]?.id
     if (id) useTabs.getState().open(id)
     else useUi.getState().openConnection(null)
+  }
+
+  /** 用给定的 SQL 新开标签：连接已删除或没给时，依次用对象树中选中的、当前标签的、第一个连接。 */
+  const openSql = (sql: string, profileId?: string) => {
+    const { tabs, active } = useTabs.getState()
+    const exists = (id?: string | null) => (id && profiles?.some((p) => p.id === id) ? id : undefined)
+    const id =
+      exists(profileId) ??
+      exists(useUi.getState().selectedProfile) ??
+      exists(tabs.find((x) => x.id === active)?.profileId) ??
+      profiles?.[0]?.id
+    if (id) useTabs.getState().open(id, sql)
+    else useUi.getState().openConnection(null)
+  }
+
+  /** 插入到当前编辑器的光标处；没有打开的标签时新开一个。 */
+  const insertSql = (sql: string, profileId?: string) => {
+    if (useTabs.getState().active) sendInsert(sql)
+    else openSql(sql, profileId)
   }
 
   /** 关闭标签页：有未提交的事务时先问提交还是回滚。 */
@@ -68,5 +88,5 @@ export function useQueryActions() {
     if (active) closeQuery(active)
   }
 
-  return { newQuery, closeQuery, closeActive }
+  return { newQuery, openSql, insertSql, closeQuery, closeActive }
 }

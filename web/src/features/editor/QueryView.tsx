@@ -15,7 +15,7 @@ import { defaultSchema, metaKey, metaReader } from '../sql/metadata'
 import { useSyntax } from '../sql/syntax'
 import ConfirmDialog from './ConfirmDialog'
 import Toolbar from './Toolbar'
-import { onCommand } from './commands'
+import { onCommand, onInsert } from './commands'
 import { editorLanguage, formatSql } from './dialect'
 import { errorMarks } from './markers'
 import { runnerFor, useTabRuntime } from './runner'
@@ -103,11 +103,30 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
 
   const marks = useMemo(() => errorMarks(rt.exec, rt.source), [rt.exec, rt.source])
 
-  // 执行成功的语句中有 DDL：补全用的元数据（连同后端的元数据缓存）失效，新建的表马上能补全
+  // 历史、收藏侧栏插入 SQL
+  useEffect(
+    () =>
+      onInsert((sql) => {
+        const ed = editor.current
+        const sel = ed?.getSelection()
+        const model = ed?.getModel()
+        if (!ed || !sel || !model) return
+        // 光标前已有内容时另起一行，不和原有的 SQL 连在一起
+        const before = model.getLineContent(sel.startLineNumber).slice(0, sel.startColumn - 1)
+        const text = before.trim() ? `\n${sql}` : sql
+        ed.executeEdits('insert', [{ range: sel, text, forceMoveMarkers: true }])
+        ed.focus()
+      }),
+    [],
+  )
+
+  // 执行结束：刷新历史侧栏（服务端在后台写入历史，稍等片刻）；
+  // 执行成功的语句中有 DDL 时，补全用的元数据（连同后端的元数据缓存）失效，新建的表马上能补全
   const refreshed = useRef<unknown>(null)
   useEffect(() => {
     if (rt.running || !profile || refreshed.current === rt.exec) return
     refreshed.current = rt.exec
+    if (rt.exec.statements.length) setTimeout(() => void qc.invalidateQueries({ queryKey: ['history'] }), 300)
     if (!rt.exec.statements.some((s) => !s.error && DDL.has(s.keyword))) return
     void api
       .refresh(profile.id, null)

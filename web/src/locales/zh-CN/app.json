@@ -13,7 +13,12 @@
     "rowCapHint": "一个结果集读到这么多行后停止读取",
     "autoCheckUpdate": "启动时自动检查更新",
     "syntaxCheck": "语法检查",
-    "syntaxCheckHint": "编辑时标出语法问题；兼容 MySQL / PostgreSQL / Oracle 的国产库只标黄色提示。不影响执行"
+    "syntaxCheckHint": "编辑时标出语法问题；兼容 MySQL / PostgreSQL / Oracle 的国产库只标黄色提示。不影响执行",
+    "history": "执行历史",
+    "historyHint": "记录每条执行过的语句，只保存在本机；超过条数时删除最旧的",
+    "historyLimitUnit": "条",
+    "clearHistory": "清空历史",
+    "clearHistoryConfirm": "清空全部执行历史？此操作不能撤销。"
   },
   "theme": {
     "system": "跟随系统",
@@ -90,5 +95,19 @@
     "socketFailed": "WebSocket 连接失败",
     "lobTruncated": "{{preview}}…（共 {{total}}）",
     "lobTruncatedBinary": "(二进制) {{preview}}…（共 {{total}}）"
+  },
+  "history": {
+    "search": "搜索 SQL",
+    "allConnections": "全部连接",
+    "failedOnly": "只看失败",
+    "today": "今天",
+    "yesterday": "昨天",
+    "elapsed": "{{ms}} ms",
+    "rows": "{{count}} 行",
+    "empty": "还没有执行历史",
+    "retry": "重试",
+    "openInTab": "在新标签中打开",
+    "copy": "复制 SQL",
+    "delete": "删除"
   }
 }

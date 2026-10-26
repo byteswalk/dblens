@@ -11,6 +11,7 @@ import { Group, Panel, type PanelImperativeHandle, Separator, useDefaultLayout }
 import { useQueryActions } from '../features/editor/actions'
 import { type EditorCommand, sendCommand } from '../features/editor/commands'
 import { useTabs } from '../features/editor/tabs'
+import HistoryPanel from '../features/history/HistoryPanel'
 import ObjectTree from '../features/tree/ObjectTree'
 import { layoutStorage } from '../shared/settings'
 import StatusBar from './StatusBar'
@@ -35,6 +36,7 @@ const SIDES: { key: SideKey; icon: typeof IconDatabase }[] = [
 function SideContent({ side }: { side: SideKey }) {
   const { t } = useTranslation()
   if (side === 'db') return <ObjectTree />
+  if (side === 'history') return <HistoryPanel />
   return <Empty style={{ marginTop: 48 }} description={t('app.side.comingSoon')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
 

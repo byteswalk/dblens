@@ -110,6 +110,17 @@ describe('元数据与设置', () => {
     expect(await createApi('tok', fakeFetch(200, []).fn).table('p1', 'public', 'x')).toBeNull()
   })
 
+  it('历史的查询参数；收藏的增删改', async () => {
+    const { fn, calls } = fakeFetch(200, [])
+    const api = createApi('tok', fn)
+    await api.history({ q: 'a b', failed: true, before: 5, limit: 100 })
+    await api.history()
+    expect(calls.map((c) => c.url)).toEqual(['/api/history?q=a+b&failed=true&before=5&limit=100', '/api/history'])
+    await api.updateFavorite('x/y', { move: { parent_id: null, position: 0 } })
+    expect(calls[2].url).toBe('/api/favorites/x%2Fy')
+    expect(JSON.parse(calls[2].init?.body as string)).toEqual({ move: { parent_id: null, position: 0 } })
+  })
+
   it('设置的读写', async () => {
     const { fn, calls } = fakeFetch(204, null)
     await createApi('tok', fn).putSetting('ui.theme', 'dark')

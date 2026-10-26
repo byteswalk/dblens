@@ -13,7 +13,12 @@
     "rowCapHint": "Stop reading a result set after this many rows",
     "autoCheckUpdate": "Check for updates at startup",
     "syntaxCheck": "Syntax check",
-    "syntaxCheckHint": "Mark syntax problems while editing; databases compatible with MySQL / PostgreSQL / Oracle get yellow hints only. Does not affect execution"
+    "syntaxCheckHint": "Mark syntax problems while editing; databases compatible with MySQL / PostgreSQL / Oracle get yellow hints only. Does not affect execution",
+    "history": "Query history",
+    "historyHint": "Records every executed statement on this computer only; the oldest are removed beyond the limit",
+    "historyLimitUnit": "entries",
+    "clearHistory": "Clear History",
+    "clearHistoryConfirm": "Clear all query history? This cannot be undone."
   },
   "theme": {
     "system": "System",
@@ -91,5 +96,20 @@
     "socketFailed": "WebSocket connection failed",
     "lobTruncated": "{{preview}}… ({{total}} total)",
     "lobTruncatedBinary": "(binary) {{preview}}… ({{total}} total)"
+  },
+  "history": {
+    "search": "Search SQL",
+    "allConnections": "All connections",
+    "failedOnly": "Failed only",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "elapsed": "{{ms}} ms",
+    "rows_one": "{{count}} row",
+    "rows_other": "{{count}} rows",
+    "empty": "No query history yet",
+    "retry": "Retry",
+    "openInTab": "Open in New Tab",
+    "copy": "Copy SQL",
+    "delete": "Delete"
   }
 }
