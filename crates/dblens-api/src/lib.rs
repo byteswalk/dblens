@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::middleware;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use dblens_service::Service;
 use tokio::net::TcpListener;
 
@@ -48,6 +48,10 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/drivers/{driver}/lib-dir", put(routes::set_lib_dir))
         .route("/settings", get(routes::settings))
         .route("/settings/{key}", put(routes::set_setting))
+        .route("/history", get(routes::history).delete(routes::clear_history))
+        .route("/history/{id}", delete(routes::delete_history))
+        .route("/favorites", get(routes::favorites).post(routes::create_favorite))
+        .route("/favorites/{id}", put(routes::update_favorite).delete(routes::delete_favorite))
         .route("/secrets", get(routes::secret_status))
         .route("/secrets/init", post(routes::init_vault))
         .route("/secrets/unlock", post(routes::unlock))

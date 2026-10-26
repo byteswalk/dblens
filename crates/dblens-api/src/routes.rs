@@ -11,7 +11,8 @@ use dblens_core::{Error, msg};
 use dblens_dialect::meta::{MetaKey, ObjectInfo, SchemaInfo};
 use dblens_driver::DriverId;
 use dblens_service::{
-    DriverStatus, Profile, ProfileInput, SecretStatus, ServerSummary, SessionId, SessionInfo,
+    DriverStatus, Favorite, FavoritePatch, HistoryItem, HistoryQuery, NewFavorite, Profile, ProfileInput,
+    SecretStatus, ServerSummary, SessionId, SessionInfo,
 };
 use serde::Deserialize;
 
@@ -83,6 +84,51 @@ pub async fn set_setting(
     if key == dblens_service::LANG_SETTING {
         s.service.apply_lang_setting()?;
     }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---- 历史 ----
+
+pub async fn history(
+    State(s): State<AppState>,
+    Query(q): Query<HistoryQuery>,
+) -> ApiResult<Json<Vec<HistoryItem>>> {
+    Ok(Json(s.service.store.history(&q)?))
+}
+
+pub async fn delete_history(State(s): State<AppState>, Path(id): Path<i64>) -> ApiResult<StatusCode> {
+    s.service.store.delete_history(id)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn clear_history(State(s): State<AppState>) -> ApiResult<StatusCode> {
+    s.service.store.clear_history()?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---- 收藏 ----
+
+pub async fn favorites(State(s): State<AppState>) -> ApiResult<Json<Vec<Favorite>>> {
+    Ok(Json(s.service.store.favorites()?))
+}
+
+pub async fn create_favorite(
+    State(s): State<AppState>,
+    Json(b): Json<NewFavorite>,
+) -> ApiResult<(StatusCode, Json<Favorite>)> {
+    Ok((StatusCode::CREATED, Json(s.service.store.create_favorite(b)?)))
+}
+
+pub async fn update_favorite(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(b): Json<FavoritePatch>,
+) -> ApiResult<Json<Favorite>> {
+    Ok(Json(s.service.store.update_favorite(&id, b)?))
+}
+
+pub async fn delete_favorite(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<StatusCode> {
+    s.service.store.delete_favorite(&id)?;
     Ok(StatusCode::NO_CONTENT)
 }
 

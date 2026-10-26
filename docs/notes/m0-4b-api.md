@@ -111,6 +111,29 @@
 | POST | `/sessions/{id}/cancel` | 取消正在执行的语句 |
 | POST | `/sessions/{id}/schema` | 切换当前 schema，`{"schema": "…"}`（M1b1 加入） |
 
+### 历史（M1c1 加入）
+
+每条执行过的语句由服务端在执行时写入（执行计划和等待确认而没有执行的语句不记），保留条数和开关见设置 `ui.history.limit`（默认 10000）、`ui.history.enabled`（`off` 为关闭）。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/history?q=&profile=&failed=true&before=&limit=` | 按时间倒序分页：`before` 为上一页最后一条的 `id`，`limit` 默认 100、最大 500；`q` 在 SQL 中做不区分大小写的包含匹配；`failed=true` 只返回有错误的 |
+| DELETE | `/history/{id}` | 删除一条，返回 204 |
+| DELETE | `/history` | 清空，返回 204 |
+
+每条：`{id, at, profile_id, profile_name, driver, variant, schema, sql, elapsed_ms, rows, error}`。`at` 为 Unix 毫秒；`rows` 为查询取回的行数或增删改影响的行数；`error` 为失败、被拒绝或被取消时的错误文字（写入时按默认语言），成功时为 null。
+
+### 收藏（M1c1 加入）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/favorites` | 全部文件夹和收藏，平铺，按上级和次序排列 |
+| POST | `/favorites` | 新建，`{parent_id, kind: "folder" \| "item", name, sql?, note?, driver?, variant?}`，放在上级的末尾，返回 201 |
+| PUT | `/favorites/{id}` | 修改，`{name?, sql?, note?, move?: {parent_id, position}}`；`note` 为空字符串时清除；移动时插入到 `position`，同一文件夹中的其余项依次后移 |
+| DELETE | `/favorites/{id}` | 删除，文件夹连同其下内容；返回 204 |
+
+每条：`{id, parent_id, kind, name, sql, note, driver, variant, position, created_at, updated_at}`。收藏必须有 SQL，文件夹没有；上级必须是文件夹；不能把文件夹移到它自己或它的下级中（都返回 `invalid`）。
+
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 
 `lang` 可选，决定事件中文字的语言（见"语言"一节）。
