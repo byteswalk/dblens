@@ -90,19 +90,25 @@
 |---|---|---|
 | POST | `/sessions` | 打开会话，`{"profile_id": "…"}`，返回 201 和会话信息 |
 | GET | `/sessions` | 全部会话 |
-| GET | `/sessions/{id}` | `{id, profile_id, variant, autocommit, in_transaction, busy, broken}` |
+| GET | `/sessions/{id}` | `{id, profile_id, variant, autocommit, in_transaction, busy, broken, schema}`；`schema` 是当前 schema（M1b1 加入） |
 | DELETE | `/sessions/{id}?commit=false` | 关闭；有未提交的修改时按 `commit` 提交或回滚 |
 | POST | `/sessions/{id}/autocommit` | 切换自动提交，`{"on": bool}` |
 | POST | `/sessions/{id}/commit` | 提交 |
 | POST | `/sessions/{id}/rollback` | 回滚 |
 | POST | `/sessions/{id}/reconnect` | 连接断开后重新连接（`broken` 为 true 时，由用户确认后调用） |
 | POST | `/sessions/{id}/cancel` | 取消正在执行的语句 |
+| POST | `/sessions/{id}/schema` | 切换当前 schema，`{"schema": "…"}`（M1b1 加入） |
 
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…`
 
 ### 客户端发送
 
 - `{"type":"exec","sql":"…","confirmed":false,"max_rows":500}`：执行一段 SQL，可以有多条语句。
+  - `confirmed` 只对第一条语句有效：确认后从那条重新提交，后面需要确认的语句仍会停下。
+  - 可选字段（M1b1 加入，见 `docs/notes/m1b1-editor.md`）：
+    - `continue_on_error`：失败后继续执行；
+    - `cursor`：只执行这个 UTF-16 偏移所在的语句；
+    - `explain`：只生成执行计划。
 - `{"type":"fetch_more","max_rows":500}`：取下一批行。
 - `{"type":"cancel"}`：取消。
 
@@ -110,15 +116,15 @@
 
 | type | 字段 | 说明 |
 |---|---|---|
-| `statement_start` | `index, start, end, info` | 开始执行第 `index` 条语句。`start`/`end` 是它在提交的 SQL 中的 UTF-16 偏移（可直接用于 Monaco）。`info` 是语句分析结果 |
+| `statement_start` | `index, total, start, end, info` | 开始执行第 `index` 条语句，这次提交共 `total` 条。`start`/`end` 是它在提交的 SQL 中的 UTF-16 偏移（可直接用于 Monaco）。`info` 是语句分析结果 |
 | `result_start` | `columns` | 结果集的列 |
 | `rows` | `rows` | 一批行，每个值形如 `{"t": 类型, "v": 值}` |
 | `result_end` | — | 结果集结束 |
 | `affected` | `count` | 影响的行数 |
 | `message` | `text` | 服务器消息（PG notice、DBMS_OUTPUT） |
 | `statement_end` | `index, elapsed_ms` | 这条语句结束 |
-| `confirm_required` | `index, start, reason` | 这条语句需要确认，脚本停在这里。确认后从 `start`（UTF-16 偏移）处截取剩余 SQL，带 `confirmed: true` 重新发送 |
-| `failed` | `index, error` | 这条语句失败、被拒绝或被取消，脚本停在这里 |
+| `confirm_required` | `index, start, end, reason` | 这条语句需要确认，脚本停在这里。确认后从 `start`（UTF-16 偏移）处截取剩余 SQL，带 `confirmed: true` 重新发送 |
+| `failed` | `index, error, offset?` | 这条语句失败、被拒绝或被取消，脚本停在这里（请求了 `continue_on_error` 时继续）。`offset` 是出错位置的 UTF-16 偏移，数据库没报告时省略 |
 | `done` | — | 整段 SQL 结束 |
 | `error` | `error` | 协议层面的错误，如消息无法解析、上一段还没执行完 |
 

@@ -144,7 +144,13 @@ M1 拆成三份子计划，按顺序执行，每份都能单独测试和使用�
 | **M1b SQL 编辑与执行** | Monaco（按方言高亮，自写 PL/SQL 的 Monarch 规则）；补全（关键字、对象、别名）；格式化（`sql-formatter`）；执行当前语句 / 选中部分 / 全部，出错停止或继续，取消，事务；错误标红；生产确认框；结果表格（首批 500 行，滚动续取，行数上限默认 10 万，单元格查看）；消息；执行计划表格 | 写 SQL、执行、看结果 |
 | **M1c 周边功能** | 历史；收藏；运维查询；生成 SQL（SELECT 每列附注释）、生成关联查询；查看 DDL；"查看数据"标签；导出 | M1 全部功能 |
 
-进度：M1a 已完成（详细计划 `docs/superpowers/plans/2026-10-25-m1a-shell.md`，说明 `docs/notes/m1a-shell.md`）。
+M1b 在写计划时（2026-10-25，用户确认）再拆成两份：
+- M1b1：编辑与执行，即上表 M1b 中除补全以外的部分；
+- M1b2：补全与语法检查，包括 2.1 节中 dt-sql-parser 和 Oracle / 达梦 ANTLR 语法的技术验证。
+
+进度：
+- M1a 已完成（详细计划 `docs/superpowers/plans/2026-10-25-m1a-shell.md`，说明 `docs/notes/m1a-shell.md`）。
+- M1b1 已完成（详细计划 `docs/superpowers/plans/2026-10-25-m1b1-editor.md`，说明 `docs/notes/m1b1-editor.md`）。
 
 右键菜单中的"查看 DDL"和"生成 SQL"依赖 M1c 的后端，M1a 先不显示这两项。
 
