@@ -79,8 +79,8 @@ CREATE INDEX favorites_parent ON favorites(parent_id, position);
   - 不阻塞执行：会话把记录发到服务中的写入任务（有界通道，满了丢弃并记日志），由写入任务批量写库。
   - 每次写入后，删除超出上限的最旧记录。
 - **设置**（存放在 settings 表，由后端读取）：
-  - `history.enabled`：值为 `off` 时关闭，此时不写入；已有记录保留。
-  - `history.limit`：保留条数，默认 10000，允许 100 到 1000000；改小时下次写入就会删掉超出的部分。
+  - `ui.history.enabled`：值为 `off` 时关闭，此时不写入；已有记录保留。
+  - `ui.history.limit`：保留条数，默认 10000，允许 100 到 1000000；改小时下次写入就会删掉超出的部分。
 
 ## 5. 接口
 
@@ -124,7 +124,7 @@ CREATE INDEX favorites_parent ON favorites(parent_id, position);
 **收藏动作**
 - Ctrl+D 或工具栏星标：收藏当前选中的 SQL，没有选中时收藏光标所在的语句。
 - 弹出对话框：
-  - 名称：默认取 SQL 第一行，去掉多余空白，最长 60 个字符；
+  - 名称：默认取 SQL 开头，换行和多余空白合成一个空格，最长 60 个字符；
   - 文件夹：树形选择，默认是上次用过的；
   - 说明：可选。
 
@@ -166,3 +166,12 @@ CREATE INDEX favorites_parent ON favorites(parent_id, position);
 - `docs/notes/m1c1-history-favorites.md` 说明文档；
 - 接口说明 `docs/notes/m0-4b-api.md` 补充历史和收藏两节；
 - M1 设计文档的进度中加入 M1c 的拆分和"M1c1 已完成"。
+
+## 11. 写计划时的调整（2026-10-26）
+
+计划的代码已在临时副本中实现并实测，据此调整如下（上文已同步修改）：
+- 历史的两个设置改名为 `ui.history.enabled`、`ui.history.limit`：设置接口只允许 `ui.` 开头的键（`ui.lang` 也是由服务端读取的）。
+- 收藏的默认名称取 SQL 开头（换行合成空格），不只取第一行：实测中第一行常常只有 `SELECT`。
+- 编辑收藏或文件夹时也可以换文件夹（移到末尾）。拖动整理照常保留；这条路径便于键盘操作，也能被自动化测试验证。
+- 从侧栏插入 SQL 时，如果光标前已有内容，先换行再插入。
+- 历史的连接筛选列出全部连接，不只是"全部 / 当前标签的连接"。
