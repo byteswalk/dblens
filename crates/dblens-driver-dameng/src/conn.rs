@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use dblens_core::{Error, Result, Row, Value};
+use dblens_core::{Error, Result, Row, Value, msg};
 use dblens_driver::blocking::{BlockingConnection, BlockingExec};
 use dblens_driver::{CancelHandle, ColumnMeta, ExecEvent, ServerInfo};
 
@@ -60,7 +60,9 @@ impl DmConnection {
             let (dpi, current, cancelled) = (dpi.clone(), current.clone(), cancelled.clone());
             async move {
                 tokio::task::spawn_blocking(move || -> Result<()> {
-                    let guard = current.lock().map_err(|_| Error::internal("取消锁已损坏"))?;
+                    let guard = current
+                        .lock()
+                        .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "dm_cancel")))?;
                     if let Some(ptr) = *guard {
                         cancelled.store(true, Ordering::SeqCst);
                         // SAFETY: ptr 来自 `current`，持锁期间工作线程不会释放该语句句柄；
@@ -70,13 +72,13 @@ impl DmConnection {
                             // 取消没有发出：清除标志，免得这次执行之后的真实错误被误报为"已取消"。
                             // 不在这里读语句句柄的诊断信息：工作线程可能正在并发使用该句柄
                             cancelled.store(false, Ordering::SeqCst);
-                            return Err(Error::internal(format!("dpi_cancel 失败，返回码 {rt}")));
+                            return Err(Error::internal(msg!("dm.cancel_failed", code = rt)));
                         }
                     }
                     Ok(())
                 })
                 .await
-                .map_err(|e| Error::internal(format!("取消任务异常退出：{e}")))?
+                .map_err(|e| Error::internal(msg!("internal.task_failed", task = "cancel", error = e)))?
             }
         })
     }
@@ -91,7 +93,7 @@ impl DmConnection {
         let stmt = Stmt::new(&self.con)?;
         stmt.exec_direct(sql)?;
         if !stmt.fetch()? {
-            return Err(Error::internal(format!("{sql} 没有返回结果")));
+            return Err(Error::internal(msg!("driver.no_result", sql = sql)));
         }
         let (bytes, _) = stmt.get_data(1, false, usize::MAX)?.unwrap_or_default();
         Ok(String::from_utf8_lossy(&bytes).into_owned())

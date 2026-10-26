@@ -6,7 +6,7 @@ mod exec;
 mod value;
 
 use async_trait::async_trait;
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Result, msg};
 use dblens_driver::TlsMode;
 use dblens_driver::{Capabilities, ConnectParams, Connection, Driver, DriverId};
 
@@ -72,7 +72,9 @@ impl Driver for MySqlDriver {
             .into();
         let conn = tokio::time::timeout(p.connect_timeout, Conn::new(opts.clone()))
             .await
-            .map_err(|_| Error::connect(format!("连接超时（{} 秒）", p.connect_timeout.as_secs())))?
+            .map_err(|_| {
+                Error::connect(msg!("driver.connect_timeout", seconds = p.connect_timeout.as_secs()))
+            })?
             .map_err(map_err)?;
         Ok(Box::new(MySqlConnection { conn, opts }))
     }

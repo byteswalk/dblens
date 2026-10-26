@@ -1,5 +1,6 @@
 //! 由表模型生成 SELECT/INSERT/UPDATE/DELETE（"生成 SQL"菜单）。参数一律用占位符。
 
+use dblens_core::msg;
 use dblens_core::schema::{Column, Table};
 use serde::Serialize;
 
@@ -53,9 +54,11 @@ impl Dialect {
                 (Family::Oracle, Some(first)) => {
                     format!("INSERT INTO {target} ({}) VALUES (DEFAULT)", self.ident(&first.name))
                 }
-                // 带引号的表名里可能有换行，写进行注释前必须压成一行，否则换行后的内容会被执行
+                // 带引号的表名里可能有换行，写进行注释前必须压成一行，否则换行后的内容会被执行。
+                // 注释按当前语言（接口层按请求设定）生成
                 (Family::Oracle, None) => {
-                    format!("-- 没有可插入的列：{}", target.split_whitespace().collect::<Vec<_>>().join(" "))
+                    let table = target.split_whitespace().collect::<Vec<_>>().join(" ");
+                    format!("-- {}", msg!("dml.no_insertable_columns", table = table).current())
                 }
             }
         } else {
@@ -133,7 +136,7 @@ fn primary_key(table: &Table) -> Option<Vec<&Column>> {
 #[cfg(test)]
 mod tests {
     use dblens_core::schema::{Column, PrimaryKey, Table};
-    use dblens_core::{ColumnType, LogicalType};
+    use dblens_core::{ColumnType, Lang, LogicalType, with_lang};
     use dblens_driver::{DriverId, ServerInfo};
 
     use super::DmlTemplate;
@@ -263,7 +266,14 @@ mod tests {
         let only_gen = table("t", vec![gen_col], &[]);
         let none = table("t", vec![], &[]);
         // 只有生成列：Oracle 找不到能写 DEFAULT 的列；达梦照样用 DEFAULT VALUES
-        assert_eq!(Dialect::new(Variant::Oracle).insert_sql(None, &only_gen).sql, "-- 没有可插入的列：\"t\"");
+        assert_eq!(
+            with_lang(Lang::ZhCn, || Dialect::new(Variant::Oracle).insert_sql(None, &only_gen).sql),
+            "-- 没有可插入的列：\"t\""
+        );
+        assert_eq!(
+            with_lang(Lang::En, || Dialect::new(Variant::Oracle).insert_sql(None, &only_gen).sql),
+            "-- No insertable columns: \"t\""
+        );
         assert_eq!(
             Dialect::new(Variant::Dameng).insert_sql(None, &only_gen).sql,
             "INSERT INTO \"t\" DEFAULT VALUES"
@@ -292,7 +302,7 @@ mod tests {
         assert_eq!(sql(Variant::MySql, &none).sql, "INSERT INTO t () VALUES ()");
         assert_eq!(sql(Variant::Postgres, &none).sql, "INSERT INTO t DEFAULT VALUES");
         let none_upper = Table { name: "T".into(), ..Default::default() };
-        let out = Dialect::new(Variant::Oracle).insert_sql(Some("HR"), &none_upper);
+        let out = with_lang(Lang::ZhCn, || Dialect::new(Variant::Oracle).insert_sql(Some("HR"), &none_upper));
         assert_eq!(out.sql, "-- 没有可插入的列：HR.T");
         assert!(out.params.is_empty());
         assert_eq!(

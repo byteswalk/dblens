@@ -4,7 +4,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Msg, Result, msg};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeLib {
@@ -37,21 +37,17 @@ impl NativeLib {
         }
     }
 
-    fn display_name(self) -> &'static str {
+    fn display_name(self) -> Msg {
         match self {
-            NativeLib::OracleClient => "Oracle 客户端库",
-            NativeLib::DamengDpi => "达梦 DPI 库",
+            NativeLib::OracleClient => msg!("native.oracle_client"),
+            NativeLib::DamengDpi => msg!("native.dameng_dpi"),
         }
     }
 
-    fn install_hint(self) -> &'static str {
+    fn install_hint(self) -> Msg {
         match self {
-            NativeLib::OracleClient => {
-                "请安装 Oracle Instant Client（Basic 或 Basic Light），然后在连接设置中指定其目录，或设置 ORACLE_HOME / PATH"
-            }
-            NativeLib::DamengDpi => {
-                "请安装达梦客户端（含 DPI 驱动），然后在连接设置中指定 dmdpi 所在目录，或设置 DM_HOME"
-            }
+            NativeLib::OracleClient => msg!("native.install.oracle_client"),
+            NativeLib::DamengDpi => msg!("native.install.dameng_dpi"),
         }
     }
 
@@ -124,7 +120,7 @@ pub fn locate_with(
     // 相对路径会按当前工作目录解析，存在从工作目录加载库的风险，一律拒绝
     if let Some(dir) = configured.filter(|d| !d.is_absolute()) {
         return Err(Error::DriverUnavailable {
-            hint: format!("{}目录必须是绝对路径：{}", lib.display_name(), dir.display()),
+            hint: msg!("native.dir_not_absolute", lib = lib.display_name(), dir = dir.display()),
         });
     }
     let candidates: Vec<PathBuf> = match configured {
@@ -151,12 +147,12 @@ pub fn locate_with(
     candidates.iter().find(|d| d.join(lib.file_name()).is_file()).cloned().ok_or_else(|| {
         let tried: Vec<String> = candidates.iter().map(|p| p.display().to_string()).collect();
         Error::DriverUnavailable {
-            hint: format!(
-                "未找到{}（{}）。{}。已查找：{}",
-                lib.display_name(),
-                lib.file_name(),
-                lib.install_hint(),
-                tried.join("；")
+            hint: msg!(
+                "native.not_found",
+                lib = lib.display_name(),
+                file = lib.file_name(),
+                install = lib.install_hint(),
+                tried = tried.join("; ")
             ),
         }
     })
@@ -196,6 +192,7 @@ pub fn expand_common(patterns: &[&str]) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dblens_core::Lang;
     use std::fs;
 
     fn temp(name: &str) -> PathBuf {
@@ -235,7 +232,10 @@ mod tests {
         put_lib(&root, NativeLib::DamengDpi);
         let err =
             locate_with(NativeLib::DamengDpi, Some(Path::new("drivers/dpi")), &no_env, &[]).unwrap_err();
-        assert!(matches!(&err, Error::DriverUnavailable { hint } if hint.contains("绝对路径")), "{err:?}");
+        assert!(
+            matches!(&err, Error::DriverUnavailable { hint } if hint.render(Lang::ZhCn).contains("绝对路径")),
+            "{err:?}"
+        );
         // 相对路径的 DM_HOME 被忽略，继续查找常见目录
         let env = |k: &str| (k == "DM_HOME").then(|| OsString::from("dmdbms"));
         assert_eq!(locate_with(NativeLib::DamengDpi, None, &env, std::slice::from_ref(&root)).unwrap(), root);
@@ -279,6 +279,7 @@ mod tests {
         let env = move |k: &str| (k == search_path_var()).then(|| joined.clone());
         let err = locate_with(NativeLib::OracleClient, None, &env, &[]).unwrap_err();
         let Error::DriverUnavailable { hint } = err else { panic!("应为 DriverUnavailable") };
+        let hint = hint.render(Lang::ZhCn);
         assert!(hint.ends_with("已查找："), "{hint}");
 
         // 空项与绝对路径混合：绝对路径仍然有效
@@ -325,6 +326,7 @@ mod tests {
         let root = temp("missing");
         let err = locate_with(NativeLib::DamengDpi, None, &no_env, std::slice::from_ref(&root)).unwrap_err();
         let Error::DriverUnavailable { hint } = err else { panic!("应为 DriverUnavailable") };
+        let hint = hint.render(Lang::En);
         assert!(hint.contains(NativeLib::DamengDpi.file_name()), "{hint}");
         assert!(hint.contains(&root.display().to_string()), "{hint}");
     }

@@ -4,7 +4,7 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
-use dblens_core::{DEFAULT_LOB_PREVIEW_BYTES, Error, LobPreview, Result, Value};
+use dblens_core::{DEFAULT_LOB_PREVIEW_BYTES, Error, LobPreview, Result, Value, msg};
 
 use crate::ffi::*;
 
@@ -235,7 +235,7 @@ pub(crate) fn param_data(v: &Value) -> Result<ParamData> {
         Value::Json(j) => text(j.to_string()),
         Value::Uuid(u) => text(u.to_string()),
         Value::Lob(_) | Value::Other { .. } => {
-            Err(Error::internal(format!("该类型的值不能作为参数绑定：{v:?}")))
+            Err(Error::internal(msg!("driver.unbindable_value", value = format!("{v:?}"))))
         }
     }
 }

@@ -4,7 +4,7 @@
 use std::ffi::CString;
 use std::sync::Arc;
 
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Result, msg};
 
 use crate::ffi::*;
 
@@ -21,7 +21,7 @@ fn is(rt: DPIRETURN, code: i64) -> bool {
 }
 
 fn cstring(s: &str) -> Result<CString> {
-    CString::new(s).map_err(|_| Error::internal("字符串中不能包含 \\0 字符"))
+    CString::new(s).map_err(|_| Error::internal(msg!("dm.nul_in_string")))
 }
 
 /// 读取句柄上的第一条诊断记录，转换为错误。
@@ -41,7 +41,7 @@ pub(crate) fn diag(dpi: &DmDpi, handle_type: i64, handle: dhandle) -> Error {
         )
     };
     if !succeeded(rt) {
-        return Error::internal("调用 DPI 失败，且无法读取错误信息");
+        return Error::internal(msg!("dm.no_diagnostics"));
     }
     msg.truncate((len.max(0) as usize).min(msg.len()));
     let message = String::from_utf8_lossy(&msg).trim_end_matches('\0').trim().to_string();
@@ -58,7 +58,7 @@ impl Env {
         let mut h: dhenv = std::ptr::null_mut();
         let rt = unsafe { dpi.dpi_alloc_env(&mut h) };
         if !succeeded(rt) {
-            return Err(Error::internal("dpi_alloc_env 失败"));
+            return Err(Error::internal(msg!("dm.alloc_env_failed")));
         }
         Ok(Env { dpi, h })
     }

@@ -3,7 +3,7 @@
 use std::io::Read;
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
-use dblens_core::{DEFAULT_LOB_PREVIEW_BYTES, Error, Result, Value};
+use dblens_core::{DEFAULT_LOB_PREVIEW_BYTES, Error, Result, Value, msg};
 use dblens_driver::ColumnMeta;
 use oracle::sql_type::{Blob, Clob, Lob, Nclob, OracleType, ToSql};
 use oracle::{ColumnInfo, SqlValue};
@@ -71,7 +71,8 @@ fn read_lob(mut lob: impl Read + Lob, binary: bool) -> Result<Value> {
     let mut chunk = vec![0u8; LOB_READ_CHUNK];
     // 读到超过预览长度或读完为止；每次都是整块读取，字符 LOB 由 crate 保证只返回完整字符
     while bytes.len() <= DEFAULT_LOB_PREVIEW_BYTES {
-        let n = lob.read(&mut chunk).map_err(|e| Error::internal(format!("读取 LOB 失败：{e}")))?;
+        let n =
+            lob.read(&mut chunk).map_err(|e| Error::internal(msg!("driver.lob_read_failed", error = e)))?;
         if n == 0 {
             break;
         }
@@ -144,7 +145,7 @@ pub(crate) fn to_binds(params: &[Value]) -> Result<Vec<Box<dyn ToSql>>> {
                 Value::Json(j) => Box::new(j.to_string()),
                 Value::Uuid(u) => Box::new(u.to_string()),
                 Value::Lob(_) | Value::Other { .. } => {
-                    return Err(Error::internal(format!("该类型的值不能作为参数绑定：{v:?}")));
+                    return Err(Error::internal(msg!("driver.unbindable_value", value = format!("{v:?}"))));
                 }
             })
         })

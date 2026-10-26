@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Result, msg};
 use dblens_driver::TlsMode;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::WebPkiSupportedAlgorithms;
@@ -51,7 +51,7 @@ impl ServerCertVerifier for AcceptAnyCert {
 }
 
 fn tls_err(e: impl std::fmt::Display) -> Error {
-    Error::connect(format!("TLS 配置错误：{e}"))
+    Error::connect(msg!("tls.config_error", error = e))
 }
 
 /// 按 TLS 方式生成连接器；`disable` 时返回 None。
@@ -72,11 +72,12 @@ pub(crate) fn connector(mode: &TlsMode) -> Result<Option<MakeRustlsConnect>> {
             let mut roots = RootCertStore::empty();
             roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
             if let Some(path) = ca_file {
-                let certs = CertificateDer::pem_file_iter(path)
-                    .map_err(|e| Error::invalid(format!("无法读取 CA 证书文件 {}：{e}", path.display())))?;
+                let certs = CertificateDer::pem_file_iter(path).map_err(|e| {
+                    Error::invalid(msg!("tls.ca_unreadable", path = path.display(), error = e))
+                })?;
                 for cert in certs {
                     let cert = cert.map_err(|e| {
-                        Error::invalid(format!("CA 证书文件 {} 格式错误：{e}", path.display()))
+                        Error::invalid(msg!("tls.ca_malformed", path = path.display(), error = e))
                     })?;
                     roots.add(cert).map_err(tls_err)?;
                 }

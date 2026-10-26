@@ -1,5 +1,5 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use dblens_core::{Error, Result, Value};
+use dblens_core::{Error, Result, Value, msg};
 use dblens_driver::ColumnMeta;
 use mysql_async::consts::{ColumnFlags, ColumnType};
 use mysql_async::{Column, Value as MyValue};
@@ -196,7 +196,7 @@ pub(crate) fn to_mysql_param(v: &Value) -> Result<MyValue> {
         Value::Json(j) => MyValue::Bytes(j.to_string().into_bytes()),
         Value::Uuid(u) => MyValue::Bytes(u.hyphenated().to_string().into_bytes()),
         Value::Lob(_) | Value::Other { .. } => {
-            return Err(Error::internal(format!("该类型的值不能作为参数绑定：{v:?}")));
+            return Err(Error::internal(msg!("driver.unbindable_value", value = format!("{v:?}"))));
         }
     })
 }

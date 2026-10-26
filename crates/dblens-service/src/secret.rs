@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use argon2::Argon2;
 use chacha20poly1305::aead::{Aead, Generate, Key, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Nonce};
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Msg, Result, msg};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
@@ -45,13 +45,13 @@ pub struct Secrets {
     key: Mutex<Option<Key<ChaCha20Poly1305>>>,
 }
 
-fn crypto_err(what: &str) -> Error {
-    Error::internal(format!("密码{what}失败"))
+fn crypto_err(what: Msg) -> Error {
+    Error::internal(msg!("secret.crypto_failed", what = what))
 }
 
 fn keyring_entry(profile_id: &str) -> Result<keyring::Entry> {
     keyring::Entry::new(KEYRING_SERVICE, &format!("profile:{profile_id}"))
-        .map_err(|e| Error::internal(format!("系统钥匙串不可用：{e}")))
+        .map_err(|e| Error::internal(msg!("secret.keyring_unavailable", error = e)))
 }
 
 /// 写入、读回、删除一条探测记录，确认系统钥匙串真的可用（Linux 无图形会话时常常不可用）。
@@ -66,13 +66,15 @@ fn derive_key(master: &str, salt: &[u8]) -> Result<Key<ChaCha20Poly1305>> {
     let mut key = Key::<ChaCha20Poly1305>::default();
     Argon2::default()
         .hash_password_into(master.as_bytes(), salt, &mut key)
-        .map_err(|_| crypto_err("派生密钥"))?;
+        .map_err(|_| crypto_err(msg!("secret.op.derive")))?;
     Ok(key)
 }
 
 fn seal(key: &Key<ChaCha20Poly1305>, plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>)> {
     let nonce = Nonce::generate();
-    let cipher = ChaCha20Poly1305::new(key).encrypt(&nonce, plaintext).map_err(|_| crypto_err("加密"))?;
+    let cipher = ChaCha20Poly1305::new(key)
+        .encrypt(&nonce, plaintext)
+        .map_err(|_| crypto_err(msg!("secret.op.encrypt")))?;
     Ok((nonce.to_vec(), cipher))
 }
 
@@ -102,11 +104,18 @@ impl Secrets {
     }
 
     fn key(&self) -> Result<Key<ChaCha20Poly1305>> {
-        self.key.lock().map_err(|_| Error::internal("密码库锁已损坏"))?.ok_or(Error::Locked)
+        self.key
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "vault")))?
+            .ok_or(Error::Locked)
     }
 
     pub fn status(&self) -> Result<SecretStatus> {
-        let unlocked = self.key.lock().map_err(|_| Error::internal("密码库锁已损坏"))?.is_some();
+        let unlocked = self
+            .key
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "vault")))?
+            .is_some();
         Ok(match self.backend {
             SecretBackend::Keyring => {
                 SecretStatus { backend: self.backend, vault_initialized: false, unlocked: true }
@@ -122,10 +131,10 @@ impl Secrets {
     /// 首次设置主密码。已经设置过时报错（修改主密码暂不支持）。
     pub fn init_vault(&self, master: &str) -> Result<()> {
         if master.is_empty() {
-            return Err(Error::invalid("主密码不能为空"));
+            return Err(Error::invalid(msg!("secret.master_empty")));
         }
         if self.vault_row()?.is_some() {
-            return Err(Error::invalid("主密码已经设置过"));
+            return Err(Error::invalid(msg!("secret.master_exists")));
         }
         let salt = Key::<ChaCha20Poly1305>::generate();
         let key = derive_key(master, &salt)?;
@@ -136,23 +145,26 @@ impl Secrets {
                 params![salt.to_vec(), nonce, cipher],
             )
         })?;
-        *self.key.lock().map_err(|_| Error::internal("密码库锁已损坏"))? = Some(key);
+        *self.key.lock().map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "vault")))? =
+            Some(key);
         Ok(())
     }
 
     /// 输入主密码解锁本地密码库。主密码错误时返回 `Error::Auth`。
     pub fn unlock(&self, master: &str) -> Result<()> {
-        let (salt, nonce, cipher) = self.vault_row()?.ok_or_else(|| Error::invalid("尚未设置主密码"))?;
+        let (salt, nonce, cipher) =
+            self.vault_row()?.ok_or_else(|| Error::invalid(msg!("secret.master_missing")))?;
         let key = derive_key(master, &salt)?;
         if open(&key, &nonce, &cipher).as_deref() != Some(CHECK_PLAINTEXT) {
-            return Err(Error::Auth { message: "主密码错误".into() });
+            return Err(Error::Auth { message: msg!("secret.master_wrong") });
         }
-        *self.key.lock().map_err(|_| Error::internal("密码库锁已损坏"))? = Some(key);
+        *self.key.lock().map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "vault")))? =
+            Some(key);
         Ok(())
     }
 
     pub fn lock(&self) -> Result<()> {
-        *self.key.lock().map_err(|_| Error::internal("密码库锁已损坏"))? = None;
+        *self.key.lock().map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "vault")))? = None;
         Ok(())
     }
 
@@ -162,7 +174,7 @@ impl Secrets {
             SecretBackend::Keyring => match keyring_entry(profile_id)?.get_password() {
                 Ok(p) => Ok(Some(p)),
                 Err(keyring::Error::NoEntry) => Ok(None),
-                Err(e) => Err(Error::internal(format!("读取系统钥匙串失败：{e}"))),
+                Err(e) => Err(Error::internal(msg!("secret.keyring_read_failed", error = e))),
             },
             SecretBackend::Vault => {
                 let key = self.key()?;
@@ -177,8 +189,9 @@ impl Secrets {
                 match row {
                     None => Ok(None),
                     Some((nonce, cipher)) => {
-                        let plain = open(&key, &nonce, &cipher).ok_or_else(|| crypto_err("解密"))?;
-                        String::from_utf8(plain).map(Some).map_err(|_| crypto_err("解密"))
+                        let plain = open(&key, &nonce, &cipher)
+                            .ok_or_else(|| crypto_err(msg!("secret.op.decrypt")))?;
+                        String::from_utf8(plain).map(Some).map_err(|_| crypto_err(msg!("secret.op.decrypt")))
                     }
                 }
             }
@@ -189,7 +202,7 @@ impl Secrets {
         match self.backend {
             SecretBackend::Keyring => keyring_entry(profile_id)?
                 .set_password(password)
-                .map_err(|e| Error::internal(format!("写入系统钥匙串失败：{e}"))),
+                .map_err(|e| Error::internal(msg!("secret.keyring_write_failed", error = e))),
             SecretBackend::Vault => {
                 let (nonce, cipher) = seal(&self.key()?, password.as_bytes())?;
                 self.store.with(|c| {
@@ -209,7 +222,7 @@ impl Secrets {
         match self.backend {
             SecretBackend::Keyring => match keyring_entry(profile_id)?.delete_credential() {
                 Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-                Err(e) => Err(Error::internal(format!("删除系统钥匙串中的密码失败：{e}"))),
+                Err(e) => Err(Error::internal(msg!("secret.keyring_delete_failed", error = e))),
             },
             SecretBackend::Vault => {
                 self.store

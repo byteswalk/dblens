@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Msg, Result, msg};
 use dblens_dialect::meta::{MetaArgs, MetaKey, MetaRows};
 use dblens_dialect::{Dialect, Variant};
 use dblens_driver::native::{self, NativeLib};
@@ -20,7 +20,7 @@ use crate::store::Store;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DriverStatus {
     pub id: DriverId,
-    pub name: String,
+    pub name: Msg,
     /// 是否编译进了本程序。
     pub compiled: bool,
     /// 能否直接连接：编译进来了，并且（需要原生库时）用户已确认库目录且目录中确实有库文件。
@@ -32,7 +32,7 @@ pub struct DriverStatus {
     /// 尚未确认时，自动查找到的建议目录。
     pub suggested_lib_dir: Option<PathBuf>,
     /// 不可用时的原因和安装指引。
-    pub hint: Option<String>,
+    pub hint: Option<Msg>,
 }
 
 /// 连接上的数据库：版本信息和识别出的方言。
@@ -41,7 +41,7 @@ pub struct ServerSummary {
     pub product: String,
     pub version: String,
     pub variant: Variant,
-    pub variant_name: String,
+    pub variant_name: Msg,
     /// 编码后的版本号（见 `dblens_dialect::parse_version`）。
     pub version_code: Option<u32>,
 }
@@ -58,12 +58,12 @@ fn setting_key(option: &str) -> String {
     format!("native.{option}")
 }
 
-fn display_name(id: DriverId) -> &'static str {
+fn display_name(id: DriverId) -> Msg {
     match id {
-        DriverId::Mysql => "MySQL / MariaDB",
-        DriverId::Postgres => "PostgreSQL",
-        DriverId::Oracle => "Oracle",
-        DriverId::Dameng => "达梦 DM",
+        DriverId::Mysql => Msg::raw("MySQL / MariaDB"),
+        DriverId::Postgres => Msg::raw("PostgreSQL"),
+        DriverId::Oracle => Msg::raw("Oracle"),
+        DriverId::Dameng => msg!("variant.dameng"),
     }
 }
 
@@ -95,7 +95,7 @@ impl DriverRegistry {
 
     pub fn driver(&self, id: DriverId) -> Result<&dyn Driver> {
         self.drivers.iter().find(|d| d.id() == id).map(|d| d.as_ref()).ok_or_else(|| {
-            Error::DriverUnavailable { hint: format!("本程序没有编译 {} 驱动", display_name(id)) }
+            Error::DriverUnavailable { hint: msg!("registry.not_compiled", driver = display_name(id)) }
         })
     }
 
@@ -108,13 +108,17 @@ impl DriverRegistry {
     /// 确认（或用 None 清除）原生库目录。只接受绝对路径，目录中必须有对应的库文件。
     pub fn set_lib_dir(&self, id: DriverId, dir: Option<&Path>) -> Result<()> {
         let (lib, option) = native_lib(id)
-            .ok_or_else(|| Error::invalid(format!("{} 驱动不需要原生客户端库", display_name(id))))?;
+            .ok_or_else(|| Error::invalid(msg!("registry.no_native_lib", driver = display_name(id))))?;
         if let Some(dir) = dir {
             if !dir.is_absolute() {
-                return Err(Error::invalid(format!("客户端库目录必须是绝对路径：{}", dir.display())));
+                return Err(Error::invalid(msg!("registry.dir_not_absolute", dir = dir.display())));
             }
             if !dir.join(lib.file_name()).is_file() {
-                return Err(Error::invalid(format!("目录 {} 中没有 {}", dir.display(), lib.file_name())));
+                return Err(Error::invalid(msg!(
+                    "registry.lib_missing",
+                    dir = dir.display(),
+                    file = lib.file_name()
+                )));
             }
         }
         let value = dir.map(|d| d.to_string_lossy().into_owned());
@@ -132,34 +136,30 @@ impl DriverRegistry {
         let compiled = self.drivers.iter().any(|d| d.id() == id);
         let mut s = DriverStatus {
             id,
-            name: display_name(id).to_string(),
+            name: display_name(id),
             compiled,
             available: compiled,
             needs_native_lib: native_lib(id).is_some(),
             lib_dir: None,
             suggested_lib_dir: None,
-            hint: (!compiled).then(|| format!("本程序没有编译 {} 驱动", display_name(id))),
+            hint: (!compiled).then(|| msg!("registry.not_compiled", driver = display_name(id))),
         };
         if let (true, Some((lib, _))) = (compiled, native_lib(id)) {
             match self.lib_dir(id)? {
                 Some(dir) if dir.join(lib.file_name()).is_file() => s.lib_dir = Some(dir),
                 Some(dir) => {
                     s.available = false;
-                    s.hint = Some(format!(
-                        "已确认的目录 {} 中找不到 {}，请重新选择",
-                        dir.display(),
-                        lib.file_name()
-                    ));
+                    s.hint = Some(msg!("registry.lib_gone", dir = dir.display(), file = lib.file_name()));
                     s.lib_dir = Some(dir);
                 }
                 None => {
                     s.available = false;
                     match native::locate(lib, None) {
                         Ok(found) => {
-                            s.hint = Some(format!("找到客户端库目录 {}，确认后即可使用", found.display()));
+                            s.hint = Some(msg!("registry.lib_found", dir = found.display()));
                             s.suggested_lib_dir = Some(found);
                         }
-                        Err(e) => s.hint = Some(e.to_string()),
+                        Err(e) => s.hint = Some(e.to_msg()),
                     }
                 }
             }
@@ -179,7 +179,7 @@ impl DriverRegistry {
                 }
                 _ => {
                     return Err(Error::DriverUnavailable {
-                        hint: status.hint.unwrap_or_else(|| "请先确认客户端库目录".to_string()),
+                        hint: status.hint.unwrap_or_else(|| msg!("registry.confirm_dir")),
                     });
                 }
             }
@@ -216,7 +216,7 @@ impl DriverRegistry {
             product: info.product,
             version: info.version,
             variant: dialect.variant(),
-            variant_name: dialect.variant().display_name().to_string(),
+            variant_name: dialect.variant().display_name(),
             version_code: dialect.version(),
         })
     }
@@ -266,7 +266,7 @@ mod tests {
         // 库文件被删掉后：不可用，并提示重新选择
         std::fs::remove_file(dir.path().join(NativeLib::DamengDpi.file_name())).unwrap();
         let s = r.status(DriverId::Dameng).unwrap();
-        assert!(!s.available && s.hint.unwrap().contains("重新选择"));
+        assert!(!s.available && s.hint.unwrap().render(dblens_core::Lang::ZhCn).contains("重新选择"));
 
         r.set_lib_dir(DriverId::Dameng, None).unwrap();
         assert_eq!(r.lib_dir(DriverId::Dameng).unwrap(), None);

@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use async_trait::async_trait;
-use dblens_core::{Error, Result, Value};
+use dblens_core::{Error, Result, Value, msg};
 use tokio::sync::oneshot;
 
 use crate::{CancelHandle, Connection, ExecEvent, ExecStream, ServerInfo};
@@ -65,7 +65,7 @@ enum Cmd {
 impl Cmd {
     /// 执行流尚未结束时收到其他命令：回复错误。正常使用下异步侧的借用规则会阻止这种情况。
     fn reject(self) {
-        let busy = || Error::internal("上一条语句的结果尚未读完");
+        let busy = || Error::internal(msg!("driver.result_unread"));
         match self {
             Cmd::Execute { reply, .. }
             | Cmd::SetAutocommit { reply, .. }
@@ -151,12 +151,12 @@ pub fn into_async<C: BlockingConnection>(
     thread::Builder::new()
         .name(thread_name.to_string())
         .spawn(move || run_worker(conn, rx))
-        .map_err(|e| Error::internal(format!("无法创建连接工作线程：{e}")))?;
+        .map_err(|e| Error::internal(msg!("driver.worker_spawn_failed", error = e)))?;
     Ok(Box::new(AsyncConnection { tx, cancel }))
 }
 
 fn worker_gone() -> Error {
-    Error::connect("连接工作线程已退出")
+    Error::connect(msg!("driver.worker_gone"))
 }
 
 async fn call<T: Send>(tx: &mpsc::Sender<Cmd>, make: impl FnOnce(Reply<T>) -> Cmd) -> Result<T> {

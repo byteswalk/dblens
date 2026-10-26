@@ -2,6 +2,7 @@
 //! 对不带 WHERE 的 UPDATE/DELETE、DROP、TRUNCATE 要求确认；团队版以后用同一接口实现授权、审计等。
 
 use async_trait::async_trait;
+use dblens_core::{Msg, msg};
 use dblens_dialect::{Dialect, Family};
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ObjectName, Statement};
@@ -61,10 +62,10 @@ pub enum Decision {
     Allow,
     /// 需要用户确认后才能执行。
     Confirm {
-        reason: String,
+        reason: Msg,
     },
     Deny {
-        reason: String,
+        reason: Msg,
     },
 }
 
@@ -94,10 +95,9 @@ impl Policy for DefaultPolicy {
         let reason = match stmt.keyword.as_str() {
             // 无法判断是否带 WHERE 时也要确认，宁可多问
             "UPDATE" | "DELETE" if stmt.has_where != Some(true) => {
-                format!("生产环境：{} 语句没有 WHERE 条件", stmt.keyword)
+                msg!("policy.prod_no_where", keyword = stmt.keyword)
             }
-            "DROP" => "生产环境：DROP 语句".to_string(),
-            "TRUNCATE" => "生产环境：TRUNCATE 语句".to_string(),
+            "DROP" | "TRUNCATE" => msg!("policy.prod_statement", keyword = stmt.keyword),
             _ => return Decision::Allow,
         };
         Decision::Confirm { reason }

@@ -1,6 +1,6 @@
 //! 元数据查询的结果行，以及按列名取值的宽松转换（各驱动对同一列可能返回不同的 `Value` 变体）。
 
-use dblens_core::{Error, Result, Row, Value};
+use dblens_core::{Error, Result, Row, Value, msg};
 use dblens_driver::ExecEvent;
 
 /// 一个结果集：列名（已转小写）和行。
@@ -29,7 +29,7 @@ impl MetaRows {
                 _ => {}
             }
         }
-        let columns = columns.ok_or_else(|| Error::internal("元数据查询没有返回结果集"))?;
+        let columns = columns.ok_or_else(|| Error::internal(msg!("meta.no_result_set")))?;
         Ok(Self::new(columns, rows))
     }
 
@@ -44,7 +44,7 @@ impl MetaRows {
     /// 检查结果里有这些列（模板写错列别名时尽早报错）。
     pub fn require(&self, key: &str, columns: &[&str]) -> Result<()> {
         match columns.iter().find(|c| !self.columns.iter().any(|have| have == *c)) {
-            Some(missing) => Err(Error::internal(format!("元数据查询 {key} 的结果缺少列 {missing}"))),
+            Some(missing) => Err(Error::internal(msg!("meta.missing_column", key = key, column = missing))),
             None => Ok(()),
         }
     }

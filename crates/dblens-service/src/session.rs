@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use dblens_core::{Error, Result, Row, Value};
+use dblens_core::{Error, Msg, Result, Row, Value, msg};
 use dblens_dialect::{Dialect, SqlStatement, Variant, may_change_schema};
 use dblens_driver::{CancelHandle, ColumnMeta, Connection, ExecEvent};
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,7 @@ pub enum SessionEvent {
         index: usize,
         start: usize,
         end: usize,
-        reason: String,
+        reason: Msg,
     },
     /// 这条语句失败（或被拒绝、被取消）。除非请求了 `continue_on_error`，脚本停在这里。
     /// `offset` 是数据库报告的出错位置换算成的、在提交的 SQL 中的字节偏移；没有位置时省略。
@@ -127,7 +127,7 @@ fn plan(dialect: &Dialect, req: &ExecRequest) -> Result<Vec<Step>> {
     }
     if req.explain {
         let [st] = statements.as_slice() else {
-            return Err(Error::invalid("执行计划只能针对一条语句"));
+            return Err(Error::invalid(msg!("session.explain_single")));
         };
         return Ok(vec![Step { index: 0, start: st.start, end: st.end, texts: dialect.explain(&st.text) }]);
     }
@@ -222,7 +222,7 @@ pub struct SessionManager {
 }
 
 fn gone() -> Error {
-    Error::internal("会话任务已退出")
+    Error::internal(msg!("session.task_gone"))
 }
 
 impl SessionManager {
@@ -231,8 +231,11 @@ impl SessionManager {
     }
 
     fn handle<T>(&self, id: SessionId, f: impl FnOnce(&Handle) -> T) -> Result<T> {
-        let sessions = self.sessions.lock().map_err(|_| Error::internal("会话表锁已损坏"))?;
-        sessions.get(&id).map(f).ok_or_else(|| Error::not_found(format!("会话 {id}")))
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "sessions")))?;
+        sessions.get(&id).map(f).ok_or_else(|| Error::not_found(msg!("noun.session", id = id)))
     }
 
     /// 用一个已建立的连接创建会话（连接由调用方通过 `DriverRegistry::connect` 建立）。
@@ -268,7 +271,7 @@ impl SessionManager {
         tokio::spawn(actor.run());
         self.sessions
             .lock()
-            .map_err(|_| Error::internal("会话表锁已损坏"))?
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "sessions")))?
             .insert(id, Handle { tx, cancel, info });
         Ok(id)
     }
@@ -286,12 +289,18 @@ impl SessionManager {
 
     pub fn info(&self, id: SessionId) -> Result<SessionInfo> {
         self.handle(id, |h| {
-            h.info.lock().map(|i| i.clone()).map_err(|_| Error::internal("会话状态锁已损坏"))
+            h.info
+                .lock()
+                .map(|i| i.clone())
+                .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "session_info")))
         })?
     }
 
     pub fn list(&self) -> Result<Vec<SessionInfo>> {
-        let sessions = self.sessions.lock().map_err(|_| Error::internal("会话表锁已损坏"))?;
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "sessions")))?;
         let mut out: Vec<SessionInfo> =
             sessions.values().filter_map(|h| h.info.lock().ok().map(|i| i.clone())).collect();
         out.sort_by_key(|i| i.id);
@@ -327,7 +336,10 @@ impl SessionManager {
     /// 取消正在执行的语句。可以在会话忙碌时调用；没有在执行时什么也不做。
     pub async fn cancel(&self, id: SessionId) -> Result<()> {
         let cancel = self.handle(id, |h| h.cancel.clone())?;
-        let handle = cancel.lock().map_err(|_| Error::internal("取消句柄锁已损坏"))?.clone();
+        let handle = cancel
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "cancel_handle")))?
+            .clone();
         handle.cancel().await
     }
 
@@ -356,7 +368,10 @@ impl SessionManager {
     /// 关闭会话。有未提交的修改时按 `commit` 提交或回滚。
     pub async fn close(&self, id: SessionId, commit: bool) -> Result<()> {
         let result = self.call(id, |reply| Command::Close { commit, reply }).await;
-        self.sessions.lock().map_err(|_| Error::internal("会话表锁已损坏"))?.remove(&id);
+        self.sessions
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "sessions")))?
+            .remove(&id);
         result
     }
 }
@@ -406,7 +421,7 @@ impl Actor {
             match cmd {
                 Command::Execute { req, reply: tx } => {
                     if self.snapshot().broken || self.conn.is_none() {
-                        reply(tx, Err(Error::connect("连接已断开，请先重新连接")));
+                        reply(tx, Err(Error::connect(msg!("session.broken_reconnect"))));
                         continue;
                     }
                     let steps = match plan(&self.ctx.dialect, &req) {
@@ -434,7 +449,7 @@ impl Actor {
                 Command::SetAutocommit { on, reply: tx } => {
                     let r = match self.conn.as_mut() {
                         Some(c) => c.set_autocommit(on).await,
-                        None => Err(Error::connect("连接已断开")),
+                        None => Err(Error::connect(msg!("session.disconnected"))),
                     };
                     if r.is_ok() {
                         // 切回自动提交时驱动会提交未提交的修改
@@ -451,7 +466,7 @@ impl Actor {
                 Command::Commit { reply: tx } => {
                     let r = match self.conn.as_mut() {
                         Some(c) => c.commit().await,
-                        None => Err(Error::connect("连接已断开")),
+                        None => Err(Error::connect(msg!("session.disconnected"))),
                     };
                     if r.is_ok() {
                         self.update(|i| i.in_transaction = false);
@@ -462,7 +477,7 @@ impl Actor {
                 Command::Rollback { reply: tx } => {
                     let r = match self.conn.as_mut() {
                         Some(c) => c.rollback().await,
-                        None => Err(Error::connect("连接已断开")),
+                        None => Err(Error::connect(msg!("session.disconnected"))),
                     };
                     if r.is_ok() {
                         self.update(|i| i.in_transaction = false);
@@ -501,7 +516,7 @@ impl Actor {
 
     /// 切换（`set` 为 Some 时）并重新读取当前 schema。
     async fn schema(&mut self, set: Option<&str>) -> Result<()> {
-        let Some(conn) = self.conn.as_mut() else { return Err(Error::connect("连接已断开")) };
+        let Some(conn) = self.conn.as_mut() else { return Err(Error::connect(msg!("session.disconnected"))) };
         if let Some(name) = set {
             run_quiet(conn, &self.ctx.dialect.set_schema_sql(name)).await?;
         }
@@ -530,7 +545,7 @@ enum Req {
 }
 
 fn busy() -> Error {
-    Error::Busy { message: "正在执行，请等待完成或先取消".into() }
+    Error::Busy { message: msg!("session.busy") }
 }
 
 /// 执行期间处理命令：`Next` 时队列里有事件就直接交出，队列空了才把请求交给执行循环去取数据；
@@ -881,7 +896,7 @@ mod tests {
         let events = drain(&m, id).await;
         assert_eq!(kinds(&events), ["start0", "affected1", "done0", "confirm1", "DONE"]);
         let SessionEvent::ConfirmRequired { start, reason, .. } = &events[3] else { panic!() };
-        assert!(reason.contains("WHERE"), "{reason}");
+        assert!(reason.render(dblens_core::Lang::En).contains("WHERE"), "{reason:?}");
         assert!(!log.lock().unwrap().iter().any(|l| l.contains("DELETE")));
         // 确认后从这条重新提交
         m.execute(id, &sql[*start..], true).await.unwrap();

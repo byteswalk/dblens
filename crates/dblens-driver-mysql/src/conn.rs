@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use dblens_core::{Error, Result, Value};
+use dblens_core::{Error, Result, Value, msg};
 use dblens_driver::{CancelHandle, Connection, ExecStream, ServerInfo};
 use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Opts};
@@ -68,7 +68,8 @@ impl Connection for MySqlConnection {
         let version: Option<String> = self.conn.query_first("SELECT VERSION()").await.map_err(map_err)?;
         Ok(ServerInfo {
             product: "MySQL".into(),
-            version: version.ok_or_else(|| Error::internal("SELECT VERSION() 没有返回结果"))?,
+            version: version
+                .ok_or_else(|| Error::internal(msg!("driver.no_result", sql = "SELECT VERSION()")))?,
         })
     }
 

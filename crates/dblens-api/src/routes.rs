@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use dblens_core::Error;
 use dblens_core::schema::{Routine, Sequence, Synonym, Table, View};
+use dblens_core::{Error, msg};
 use dblens_dialect::meta::{MetaKey, ObjectInfo, SchemaInfo};
 use dblens_driver::DriverId;
 use dblens_service::{
@@ -74,10 +74,10 @@ pub async fn set_setting(
     Json(b): Json<SettingBody>,
 ) -> ApiResult<StatusCode> {
     if !valid_setting_key(&key) {
-        return Err(Error::invalid(format!("设置项名称不合法：{key}")).into());
+        return Err(Error::invalid(msg!("api.bad_setting_key", key = key)).into());
     }
     if b.value.as_ref().is_some_and(|v| v.len() > MAX_SETTING_BYTES) {
-        return Err(Error::invalid(format!("设置项 {key} 的值超过 64 KiB")).into());
+        return Err(Error::invalid(msg!("api.setting_too_large", key = key)).into());
     }
     s.service.store.set_setting(&key, b.value.as_deref())?;
     Ok(StatusCode::NO_CONTENT)
@@ -241,7 +241,7 @@ pub async fn views(
     let p = s.service.profile(&id)?;
     let kind = q.kind.unwrap_or(MetaKey::Views);
     if !matches!(kind, MetaKey::Views | MetaKey::MaterializedViews) {
-        return Err(Error::invalid("kind 只能是 views 或 materialized_views").into());
+        return Err(Error::invalid(msg!("api.bad_view_kind")).into());
     }
     Ok(Json(s.service.metadata.views(&p, &schema, kind).await?))
 }

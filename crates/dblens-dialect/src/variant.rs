@@ -1,5 +1,6 @@
 //! 方言家族与具体产品变体的识别。
 
+use dblens_core::{Msg, msg};
 use dblens_driver::{DriverId, ServerInfo};
 use serde::{Deserialize, Serialize};
 
@@ -63,20 +64,21 @@ impl Variant {
         }
     }
 
-    pub fn display_name(self) -> &'static str {
+    /// 给用户看的名称；国产库的中文名随界面语言变化。
+    pub fn display_name(self) -> Msg {
         match self {
-            Variant::MySql => "MySQL",
-            Variant::MariaDb => "MariaDB",
-            Variant::TiDb => "TiDB",
-            Variant::OceanBase => "OceanBase（MySQL 模式）",
-            Variant::PolarDb => "PolarDB（MySQL 版）",
-            Variant::Postgres => "PostgreSQL",
-            Variant::Kingbase => "人大金仓 KingbaseES",
-            Variant::OpenGauss => "openGauss",
-            Variant::GaussDb => "GaussDB",
-            Variant::HighGo => "瀚高 HighGo",
-            Variant::Oracle => "Oracle",
-            Variant::Dameng => "达梦 DM",
+            Variant::MySql => Msg::raw("MySQL"),
+            Variant::MariaDb => Msg::raw("MariaDB"),
+            Variant::TiDb => Msg::raw("TiDB"),
+            Variant::OceanBase => msg!("variant.oceanbase"),
+            Variant::PolarDb => msg!("variant.polardb"),
+            Variant::Postgres => Msg::raw("PostgreSQL"),
+            Variant::Kingbase => msg!("variant.kingbase"),
+            Variant::OpenGauss => Msg::raw("openGauss"),
+            Variant::GaussDb => Msg::raw("GaussDB"),
+            Variant::HighGo => msg!("variant.highgo"),
+            Variant::Oracle => Msg::raw("Oracle"),
+            Variant::Dameng => msg!("variant.dameng"),
         }
     }
 
@@ -156,7 +158,8 @@ mod tests {
         assert_eq!(Variant::Kingbase.family(), Family::Postgres);
         assert_eq!(Variant::Dameng.family(), Family::Dameng);
         assert_eq!(Variant::base(DriverId::Postgres), Variant::Postgres);
-        assert_eq!(Variant::Kingbase.display_name(), "人大金仓 KingbaseES");
+        assert_eq!(Variant::Kingbase.display_name().render(dblens_core::Lang::ZhCn), "人大金仓 KingbaseES");
+        assert_eq!(Variant::Kingbase.display_name().render(dblens_core::Lang::En), "KingbaseES");
     }
 
     #[test]

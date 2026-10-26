@@ -1,41 +1,84 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
+use crate::Msg;
+
 /// DBLens 统一错误类型。各层都用它向上传递错误，不允许吞掉。
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
+/// 给用户看的文字字段都是 `Msg`，序列化时按当前语言渲染（M1i 设计文档第 5 节）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Error {
-    #[error("连接失败：{message}")]
-    Connect { message: String },
-    #[error("认证失败：{message}")]
-    Auth { message: String },
+    Connect {
+        message: Msg,
+    },
+    Auth {
+        message: Msg,
+    },
     /// 数据库返回的 SQL 错误。`code` 是数据库原生错误码（如 `1146`、`42P01`、`ORA-00942`），
+    /// `message` 是数据库原文（不翻译），
     /// `position` 是出错位置在 SQL 文本中的字符偏移（从 1 开始），数据库没给时为 None。
-    #[error("SQL 错误 [{code}]：{message}")]
-    Sql { code: String, message: String, position: Option<u32> },
-    #[error("执行超时")]
+    Sql {
+        code: String,
+        message: String,
+        position: Option<u32>,
+    },
     Timeout,
-    #[error("执行已取消")]
     Cancelled,
-    #[error("驱动不可用：{hint}")]
-    DriverUnavailable { hint: String },
+    DriverUnavailable {
+        hint: Msg,
+    },
     /// 输入或数据本身不合法（参数错误、值无法表示为字面量等），由调用方修正后重试。
-    #[error("无效的输入：{message}")]
-    Invalid { message: String },
-    /// 要找的对象（连接配置、会话等）不存在。
-    #[error("找不到{what}")]
-    NotFound { what: String },
+    Invalid {
+        message: Msg,
+    },
+    /// 要找的对象（连接配置、会话等）不存在。`what` 是对象的名词短语，如"会话 7"。
+    NotFound {
+        what: Msg,
+    },
     /// 会话正在执行其他语句。
-    #[error("会话正忙：{message}")]
-    Busy { message: String },
+    Busy {
+        message: Msg,
+    },
     /// 本地密码库已加锁，需要先输入主密码。
-    #[error("密码库已锁定，请先输入主密码")]
     Locked,
     /// 被执行策略拒绝。
-    #[error("执行被拒绝：{reason}")]
-    Denied { reason: String },
-    #[error("内部错误：{message}")]
-    Internal { message: String },
+    Denied {
+        reason: Msg,
+    },
+    Internal {
+        message: Msg,
+    },
 }
+
+impl Error {
+    /// 整条错误文字：类别前缀加细节，如"连接失败：…"。
+    pub fn to_msg(&self) -> Msg {
+        match self {
+            Error::Connect { message } => crate::msg!("error.kind.connect", message = message),
+            Error::Auth { message } => crate::msg!("error.kind.auth", message = message),
+            Error::Sql { code, message, .. } => crate::msg!("error.kind.sql", code = code, message = message),
+            Error::Timeout => crate::msg!("error.kind.timeout"),
+            Error::Cancelled => crate::msg!("error.kind.cancelled"),
+            Error::DriverUnavailable { hint } => crate::msg!("error.kind.driver_unavailable", hint = hint),
+            Error::Invalid { message } => crate::msg!("error.kind.invalid", message = message),
+            Error::NotFound { what } => crate::msg!("error.kind.not_found", what = what),
+            Error::Busy { message } => crate::msg!("error.kind.busy", message = message),
+            Error::Locked => crate::msg!("error.kind.locked"),
+            Error::Denied { reason } => crate::msg!("error.kind.denied", reason = reason),
+            Error::Internal { message } => crate::msg!("error.kind.internal", message = message),
+        }
+    }
+}
+
+/// 按当前语言显示（日志、命令行）。
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_msg().current())
+    }
+}
+
+impl std::error::Error for Error {}
 
 /// `sql` 中的字节偏移（从 0 开始）换算成 `Error::Sql::position` 用的字符偏移（从 1 开始）。
 /// 偏移落在字符中间时按该字符算，超出末尾时取末尾之后的位置。
@@ -60,19 +103,19 @@ impl Error {
         }
     }
 
-    pub fn connect(message: impl Into<String>) -> Self {
+    pub fn connect(message: impl Into<Msg>) -> Self {
         Self::Connect { message: message.into() }
     }
 
-    pub fn internal(message: impl Into<String>) -> Self {
+    pub fn internal(message: impl Into<Msg>) -> Self {
         Self::Internal { message: message.into() }
     }
 
-    pub fn invalid(message: impl Into<String>) -> Self {
+    pub fn invalid(message: impl Into<Msg>) -> Self {
         Self::Invalid { message: message.into() }
     }
 
-    pub fn not_found(what: impl Into<String>) -> Self {
+    pub fn not_found(what: impl Into<Msg>) -> Self {
         Self::NotFound { what: what.into() }
     }
 }
@@ -82,12 +125,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Lang, with_lang};
 
     #[test]
-    fn display_is_chinese_and_contains_code() {
+    fn display_follows_language_and_contains_code() {
         let e = Error::Sql { code: "1146".into(), message: "表不存在".into(), position: None };
-        assert_eq!(e.to_string(), "SQL 错误 [1146]：表不存在");
-        assert_eq!(Error::Cancelled.to_string(), "执行已取消");
+        assert_eq!(with_lang(Lang::ZhCn, || e.to_string()), "SQL 错误 [1146]：表不存在");
+        assert_eq!(with_lang(Lang::En, || e.to_string()), "SQL error [1146]: 表不存在");
+        assert_eq!(with_lang(Lang::ZhCn, || Error::Cancelled.to_string()), "执行已取消");
+        assert_eq!(with_lang(Lang::En, || Error::Cancelled.to_string()), "Execution cancelled");
+        let nf = Error::not_found(crate::msg!("noun.session", id = 7));
+        assert_eq!(with_lang(Lang::ZhCn, || nf.to_string()), "找不到会话 7");
+        assert_eq!(with_lang(Lang::En, || nf.to_string()), "Not found: session 7");
     }
 
     #[test]
@@ -96,12 +145,16 @@ mod tests {
         let json = serde_json::to_value(&e).unwrap();
         assert_eq!(json, serde_json::json!({"kind":"sql","code":"42P01","message":"x","position":15}));
         assert_eq!(serde_json::to_value(Error::Timeout).unwrap(), serde_json::json!({"kind":"timeout"}));
+        let nf = Error::not_found(crate::msg!("noun.profile", id = "x"));
         assert_eq!(
-            serde_json::to_value(Error::not_found("连接配置 x")).unwrap(),
+            with_lang(Lang::ZhCn, || serde_json::to_value(&nf).unwrap()),
             serde_json::json!({"kind":"not_found","what":"连接配置 x"})
         );
+        assert_eq!(
+            with_lang(Lang::En, || serde_json::to_value(&nf).unwrap()),
+            serde_json::json!({"kind":"not_found","what":"connection profile x"})
+        );
         assert_eq!(serde_json::to_value(Error::Locked).unwrap(), serde_json::json!({"kind":"locked"}));
-        assert_eq!(Error::not_found("会话 7").to_string(), "找不到会话 7");
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Result, ToMsg, msg};
 use dblens_driver::ConnectParams;
 use dblens_driver::native::{self, NativeLib};
 
@@ -15,7 +15,8 @@ static LOADED: Mutex<Vec<(PathBuf, Arc<DmDpi>)>> = Mutex::new(Vec::new());
 pub(crate) fn load(params: &ConnectParams) -> Result<Arc<DmDpi>> {
     let configured = params.options.get("dpi_lib_dir").map(PathBuf::from);
     let dir = native::locate(NativeLib::DamengDpi, configured.as_deref())?;
-    let mut loaded = LOADED.lock().map_err(|_| Error::internal("DPI 加载锁已损坏"))?;
+    let mut loaded =
+        LOADED.lock().map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "dm_load")))?;
     if let Some((_, dpi)) = loaded.iter().find(|(d, _)| *d == dir) {
         return Ok(dpi.clone());
     }
@@ -90,11 +91,11 @@ fn verify_functions(dpi: &DmDpi, path: &Path) -> Result<()> {
     if missing.is_empty() {
         return Ok(());
     }
-    Err(unavailable(path, format!("缺少 DPI 函数 {}，达梦客户端版本可能过旧", missing.join("、"))))
+    Err(unavailable(path, msg!("dm.missing_functions", functions = missing.join(", "))))
 }
 
-fn unavailable(path: &Path, e: impl std::fmt::Display) -> Error {
-    Error::DriverUnavailable { hint: format!("加载 {} 失败：{e}", path.display()) }
+fn unavailable(path: &Path, e: impl ToMsg) -> Error {
+    Error::DriverUnavailable { hint: msg!("dm.load_failed", path = path.display(), error = e.to_msg()) }
 }
 
 #[cfg(windows)]
@@ -136,6 +137,7 @@ mod tests {
         let path = Path::new(r"C:\fake\dmdpi.dll");
         match verify_functions(&dpi, path) {
             Err(Error::DriverUnavailable { hint }) => {
+                let hint = hint.render(dblens_core::Lang::En);
                 assert!(hint.contains(r"C:\fake\dmdpi.dll"), "{hint}");
                 assert!(hint.contains("dpi_cancel") && hint.contains("dpi_alloc_env"), "{hint}");
             }

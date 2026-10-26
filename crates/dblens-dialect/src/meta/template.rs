@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use dblens_core::{Error, Result, Value};
+use dblens_core::{Error, Result, Value, msg};
 use minijinja::syntax::SyntaxConfig;
 use minijinja::{Environment, UndefinedBehavior, context};
 
@@ -121,7 +121,7 @@ pub(crate) fn render(
         .trim_blocks(true)
         .lstrip_blocks(true)
         .build()
-        .map_err(|e| Error::internal(format!("模板语法配置错误：{e}")))?;
+        .map_err(|e| Error::internal(msg!("meta.syntax_config", error = e)))?;
     env.set_syntax(syntax);
     let recorded = names.clone();
     env.add_function("bind", move |name: String| -> String {
@@ -132,7 +132,7 @@ pub(crate) fn render(
     let k = key.as_str();
     let tmpl = env
         .template_from_str(template)
-        .map_err(|e| Error::internal(format!("元数据模板 {k} 解析失败：{e}")))?;
+        .map_err(|e| Error::internal(msg!("meta.template_parse", key = k, error = e)))?;
     let sql = tmpl
         .render(context! {
             table => args.table.is_some(),
@@ -141,7 +141,7 @@ pub(crate) fn render(
             filter => args.filter.is_some(),
             version => version,
         })
-        .map_err(|e| Error::internal(format!("元数据模板 {k} 渲染失败：{e}")))?;
+        .map_err(|e| Error::internal(msg!("meta.template_render", key = k, error = e)))?;
     let params = names
         .lock()
         .unwrap()
@@ -153,7 +153,7 @@ pub(crate) fn render(
                 "name" => args.name.clone(),
                 "kind" => args.kind.clone(),
                 "filter" => args.filter.as_deref().map(like_pattern),
-                other => return Err(Error::internal(format!("元数据模板 {k} 绑定了未知参数 {other}"))),
+                other => return Err(Error::internal(msg!("meta.unknown_param", key = k, param = other))),
             };
             Ok(v.map_or(Value::Null, Value::String))
         })

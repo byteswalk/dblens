@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Msg, Result, msg};
 use dblens_driver::blocking::into_async;
 use dblens_driver::native::{self, NativeLib};
 use dblens_driver::{CancelHandle, Capabilities, ConnectParams, Connection, Driver, DriverId};
@@ -22,15 +22,17 @@ pub struct OracleDriver;
 static CLIENT_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 fn init_client(p: &ConnectParams) -> Result<()> {
-    let mut guard = CLIENT_DIR.lock().map_err(|_| Error::internal("Oracle 客户端初始化锁已损坏"))?;
+    let mut guard = CLIENT_DIR
+        .lock()
+        .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "oracle_client_init")))?;
     let configured = p.options.get("oracle_client_lib_dir").map(PathBuf::from);
     if let Some(loaded) = guard.as_ref() {
         // 进程内无法换用另一个目录的客户端库：明确报错，而不是悄悄沿用已加载的那个
         return match configured {
-            Some(dir) if dir != *loaded => Err(Error::invalid(format!(
-                "Oracle 客户端已从 {} 加载，换用 {} 需要重启程序",
-                loaded.display(),
-                dir.display()
+            Some(dir) if dir != *loaded => Err(Error::invalid(msg!(
+                "oracle.client_already_loaded",
+                loaded = loaded.display(),
+                dir = dir.display()
             ))),
             _ => Ok(()),
         };
@@ -47,12 +49,12 @@ fn init_client(p: &ConnectParams) -> Result<()> {
 
 /// 生成 Easy Connect 连接串；指定了 `sid` 选项时改用完整描述符。
 /// 主机、服务名、SID 中不允许出现会改变连接描述符结构的字符。
-fn check_part(what: &str, v: &str) -> Result<()> {
+fn check_part(what: Msg, v: &str) -> Result<()> {
     if v.is_empty()
         || v.chars()
             .any(|c| matches!(c, '(' | ')' | '=' | '/' | '?' | '@' | ' ' | '"' | '\'') || c.is_control())
     {
-        return Err(Error::invalid(format!("Oracle {what}含有不允许的字符：{v}")));
+        return Err(Error::invalid(msg!("oracle.bad_chars", what = what, value = v)));
     }
     Ok(())
 }
@@ -64,24 +66,21 @@ pub(crate) fn connect_string(p: &ConnectParams) -> Result<String> {
     if host.contains(':') {
         // IPv6 地址：只允许十六进制数字、冒号和点
         if !host.chars().all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.') {
-            return Err(Error::invalid(format!("无效的 IPv6 地址：{host}")));
+            return Err(Error::invalid(msg!("oracle.bad_ipv6", host = host)));
         }
     } else {
-        check_part("主机名", host)?;
+        check_part(msg!("oracle.part.host"), host)?;
     }
     let addr_host = if host.contains(':') { format!("[{host}]") } else { host.to_string() };
     if let Some(sid) = p.options.get("sid") {
-        check_part("SID", sid)?;
+        check_part(Msg::raw("SID"), sid)?;
         return Ok(format!(
             "(DESCRIPTION=(CONNECT_TIMEOUT={timeout})(ADDRESS=(PROTOCOL=TCP)(HOST={host})(PORT={}))(CONNECT_DATA=(SID={sid})))",
             p.port
         ));
     }
-    let service = p
-        .database
-        .as_deref()
-        .ok_or_else(|| Error::connect("Oracle 连接需要服务名（URL 路径部分）或 sid 选项"))?;
-    check_part("服务名", service)?;
+    let service = p.database.as_deref().ok_or_else(|| Error::connect(msg!("oracle.service_required")))?;
+    check_part(msg!("oracle.part.service"), service)?;
     Ok(format!("//{addr_host}:{}/{service}?connect_timeout={timeout}", p.port))
 }
 
@@ -114,7 +113,7 @@ impl Driver for OracleDriver {
             Ok(conn)
         })
         .await
-        .map_err(|e| Error::internal(format!("连接任务异常退出：{e}")))??;
+        .map_err(|e| Error::internal(msg!("internal.task_failed", task = "connect", error = e)))??;
         let conn = Arc::new(conn);
         let cancel = {
             let conn = conn.clone();
@@ -123,7 +122,9 @@ impl Driver for OracleDriver {
                 async move {
                     tokio::task::spawn_blocking(move || conn.break_execution())
                         .await
-                        .map_err(|e| Error::internal(format!("取消任务异常退出：{e}")))?
+                        .map_err(|e| {
+                            Error::internal(msg!("internal.task_failed", task = "cancel", error = e))
+                        })?
                         .map_err(map_err)
                 }
             })

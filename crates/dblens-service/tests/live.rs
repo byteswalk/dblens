@@ -62,7 +62,7 @@ async fn setup(env: &str) -> Option<Live> {
         connect_timeout_secs: 10,
     };
     let summary = service.test_connection(input.clone(), &params.password).await.unwrap();
-    eprintln!("{env}：{} {:?} {:?}", summary.variant_name, summary.version_code, summary.version);
+    eprintln!("{env}：{} {:?} {:?}", summary.variant_name.current(), summary.version_code, summary.version);
     let profile = service.create_profile(input, Some(&params.password)).unwrap();
     Some(Live { _dir: dir, service, profile_id: profile.id, driver, schema })
 }

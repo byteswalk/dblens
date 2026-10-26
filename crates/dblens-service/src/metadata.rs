@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use dblens_core::schema::{Routine, Sequence, Synonym, Table, View};
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Result, msg};
 use dblens_dialect::Dialect;
 use dblens_dialect::meta::{self, MetaArgs, MetaKey, MetaRows, ObjectInfo, SchemaInfo, TableRows};
 use dblens_driver::{Connection, collect_all};
@@ -102,7 +102,8 @@ impl MetadataService {
     }
 
     fn pool(&self, profile_id: &str) -> Result<Arc<Pool>> {
-        let mut pools = self.pools.lock().map_err(|_| Error::internal("连接池表锁已损坏"))?;
+        let mut pools =
+            self.pools.lock().map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pools")))?;
         Ok(pools
             .entry(profile_id.to_string())
             .or_insert_with(|| {
@@ -113,7 +114,11 @@ impl MetadataService {
 
     /// 关闭某个连接配置的元数据连接并清掉缓存（连接配置被修改或删除时调用）。
     pub async fn forget(&self, profile_id: &str) -> Result<()> {
-        let pool = self.pools.lock().map_err(|_| Error::internal("连接池表锁已损坏"))?.remove(profile_id);
+        let pool = self
+            .pools
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pools")))?
+            .remove(profile_id);
         if let Some(pool) = pool {
             let idle: Vec<_> = pool.idle.lock().map(|mut v| v.drain(..).collect()).unwrap_or_default();
             for (conn, _) in idle {
@@ -136,8 +141,13 @@ impl MetadataService {
             return Ok(Some(rows));
         }
         let pool = self.pool(&profile.id)?;
-        let _permit = pool.permits.acquire().await.map_err(|_| Error::internal("连接池已关闭"))?;
-        let idle = pool.idle.lock().map_err(|_| Error::internal("连接池锁已损坏"))?.pop();
+        let _permit =
+            pool.permits.acquire().await.map_err(|_| Error::internal(msg!("metadata.pool_closed")))?;
+        let idle = pool
+            .idle
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pool")))?
+            .pop();
         let (mut conn, dialect) = match idle {
             Some(c) => c,
             None => {
@@ -146,7 +156,10 @@ impl MetadataService {
             }
         };
         let Some(q) = dialect.meta_query(key, args)? else {
-            pool.idle.lock().map_err(|_| Error::internal("连接池锁已损坏"))?.push((conn, dialect));
+            pool.idle
+                .lock()
+                .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pool")))?
+                .push((conn, dialect));
             return Ok(None);
         };
         let result = match conn.execute(&q.sql, &q.params).await {
@@ -158,7 +171,10 @@ impl MetadataService {
         };
         match result {
             Ok(rows) => {
-                pool.idle.lock().map_err(|_| Error::internal("连接池锁已损坏"))?.push((conn, dialect));
+                pool.idle
+                    .lock()
+                    .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pool")))?
+                    .push((conn, dialect));
                 let rows = Arc::new(rows);
                 self.cache.put(cache_key, rows.clone());
                 Ok(Some(rows))
@@ -168,7 +184,10 @@ impl MetadataService {
                 if matches!(e, Error::Connect { .. }) {
                     let _ = conn.close().await;
                 } else {
-                    pool.idle.lock().map_err(|_| Error::internal("连接池锁已损坏"))?.push((conn, dialect));
+                    pool.idle
+                        .lock()
+                        .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pool")))?
+                        .push((conn, dialect));
                 }
                 Err(e)
             }
@@ -182,13 +201,22 @@ impl MetadataService {
     /// 连接的方言（取一次连接上的识别结果）。
     pub async fn dialect(&self, profile: &Profile) -> Result<Dialect> {
         let pool = self.pool(&profile.id)?;
-        if let Some((_, d)) = pool.idle.lock().map_err(|_| Error::internal("连接池锁已损坏"))?.last() {
+        if let Some((_, d)) = pool
+            .idle
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pool")))?
+            .last()
+        {
             return Ok(*d);
         }
-        let _permit = pool.permits.acquire().await.map_err(|_| Error::internal("连接池已关闭"))?;
+        let _permit =
+            pool.permits.acquire().await.map_err(|_| Error::internal(msg!("metadata.pool_closed")))?;
         let password = self.secrets.get(&profile.id)?.unwrap_or_default();
         let (conn, dialect) = self.registry.connect(profile, password).await?;
-        pool.idle.lock().map_err(|_| Error::internal("连接池锁已损坏"))?.push((conn, dialect));
+        pool.idle
+            .lock()
+            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pool")))?
+            .push((conn, dialect));
         Ok(dialect)
     }
 
@@ -206,7 +234,7 @@ impl MetadataService {
         filter: Option<&str>,
     ) -> Result<Vec<ObjectInfo>> {
         if !matches!(key, MetaKey::Tables | MetaKey::Views | MetaKey::MaterializedViews) {
-            return Err(Error::invalid(format!("{key:?} 不是对象列表查询")));
+            return Err(Error::invalid(msg!("metadata.not_object_list", key = format!("{key:?}"))));
         }
         let args =
             MetaArgs { schema: Some(schema.into()), filter: filter.map(Into::into), ..Default::default() };
@@ -222,7 +250,7 @@ impl MetadataService {
             rows.push(self.rows_or_empty(profile, key, &args).await?);
         }
         let [tables, columns, keys, checks, indexes, triggers]: [Arc<MetaRows>; 6] =
-            rows.try_into().map_err(|_| Error::internal("表明细查询数量不对"))?;
+            rows.try_into().map_err(|_| Error::internal(msg!("metadata.table_detail_count")))?;
         let rows = TableRows {
             tables: (*tables).clone(),
             columns: (*columns).clone(),
@@ -269,7 +297,7 @@ impl MetadataService {
         kind: Option<&str>,
     ) -> Result<Option<String>> {
         if !matches!(key, MetaKey::ViewDefinition | MetaKey::RoutineSource) {
-            return Err(Error::invalid(format!("{key:?} 不是源码查询")));
+            return Err(Error::invalid(msg!("metadata.not_source", key = format!("{key:?}"))));
         }
         let args = MetaArgs {
             schema: Some(schema.into()),

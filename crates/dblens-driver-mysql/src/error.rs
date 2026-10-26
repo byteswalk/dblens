@@ -1,4 +1,4 @@
-use dblens_core::{Error, char_position};
+use dblens_core::{Error, Msg, char_position};
 
 /// MySQL 错误码：查询被 KILL QUERY 中断。
 const ER_QUERY_INTERRUPTED: u16 = 1317;
@@ -8,7 +8,7 @@ pub(crate) fn map_err(e: mysql_async::Error) -> Error {
         mysql_async::Error::Server(ref se) => match se.code {
             ER_QUERY_INTERRUPTED => Error::Cancelled,
             // 1044 无库权限，1045 密码错误，1698 用户被拒绝
-            1044 | 1045 | 1698 => Error::Auth { message: se.message.clone() },
+            1044 | 1045 | 1698 => Error::Auth { message: Msg::raw(&se.message) },
             code => Error::Sql { code: code.to_string(), message: se.message.clone(), position: None },
         },
         mysql_async::Error::Io(_) | mysql_async::Error::Driver(_) | mysql_async::Error::Url(_) => {

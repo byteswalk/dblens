@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Result, msg};
 use dblens_driver::{ConnectParams, DriverId};
 use rusqlite::{OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
@@ -114,16 +114,16 @@ fn parse_driver(s: &str) -> rusqlite::Result<DriverId> {
 
 fn validate(p: &ProfileInput) -> Result<()> {
     if p.name.trim().is_empty() {
-        return Err(Error::invalid("连接名称不能为空"));
+        return Err(Error::invalid(msg!("profile.name_required")));
     }
     if p.host.trim().is_empty() {
-        return Err(Error::invalid("主机不能为空"));
+        return Err(Error::invalid(msg!("profile.host_required")));
     }
     if p.port == 0 {
-        return Err(Error::invalid("端口不能为 0"));
+        return Err(Error::invalid(msg!("profile.port_zero")));
     }
     if p.connect_timeout_secs == 0 || p.connect_timeout_secs > 3600 {
-        return Err(Error::invalid("连接超时应在 1 到 3600 秒之间"));
+        return Err(Error::invalid(msg!("profile.timeout_range")));
     }
     Ok(())
 }
@@ -168,7 +168,7 @@ impl Store {
             c.query_row(&format!("SELECT {COLUMNS} FROM profiles WHERE id = ?1"), params![id], from_row)
                 .optional()
         })?
-        .ok_or_else(|| Error::not_found(format!("连接配置 {id}")))
+        .ok_or_else(|| Error::not_found(msg!("noun.profile", id = id)))
     }
 
     pub fn create_profile(&self, input: ProfileInput) -> Result<Profile> {
@@ -228,7 +228,7 @@ impl Store {
             )
         })?;
         if n == 0 {
-            return Err(Error::not_found(format!("连接配置 {id}")));
+            return Err(Error::not_found(msg!("noun.profile", id = id)));
         }
         Ok(Profile { id: id.to_string(), input })
     }
@@ -237,7 +237,7 @@ impl Store {
     pub fn delete_profile(&self, id: &str) -> Result<()> {
         let n = self.with(|c| c.execute("DELETE FROM profiles WHERE id = ?1", params![id]))?;
         if n == 0 {
-            return Err(Error::not_found(format!("连接配置 {id}")));
+            return Err(Error::not_found(msg!("noun.profile", id = id)));
         }
         Ok(())
     }

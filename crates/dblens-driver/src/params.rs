@@ -3,7 +3,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Result, msg};
 use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 
@@ -51,22 +51,22 @@ impl ConnectParams {
     /// 支持的 scheme：mysql、mariadb、postgres、postgresql、oracle、dm、dameng。
     /// 选项 `connect_timeout` 的单位为秒。
     pub fn from_url(s: &str) -> Result<(DriverId, ConnectParams)> {
-        let u = url::Url::parse(s).map_err(|e| Error::connect(format!("无效的连接 URL：{e}")))?;
+        let u = url::Url::parse(s).map_err(|e| Error::connect(msg!("params.invalid_url", error = e)))?;
         let (id, default_port) = match u.scheme() {
             "mysql" | "mariadb" => (DriverId::Mysql, 3306),
             "postgres" | "postgresql" => (DriverId::Postgres, 5432),
             "oracle" => (DriverId::Oracle, 1521),
             "dm" | "dameng" => (DriverId::Dameng, 5236),
-            other => return Err(Error::connect(format!("不支持的连接协议：{other}"))),
+            other => return Err(Error::connect(msg!("params.unsupported_scheme", scheme = other))),
         };
         let decode = |v: &str| percent_decode_str(v).decode_utf8_lossy().into_owned();
-        let host = u.host_str().ok_or_else(|| Error::connect("连接 URL 缺少主机名"))?.to_string();
+        let host = u.host_str().ok_or_else(|| Error::connect(msg!("params.missing_host")))?.to_string();
         let database = Some(decode(u.path().trim_start_matches('/'))).filter(|d| !d.is_empty());
         let options: BTreeMap<String, String> =
             u.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
         let connect_timeout = match options.get("connect_timeout") {
             Some(v) => Duration::from_secs(
-                v.parse().map_err(|_| Error::connect(format!("connect_timeout 不是有效的秒数：{v}")))?,
+                v.parse().map_err(|_| Error::connect(msg!("params.invalid_timeout", value = v)))?,
             ),
             None => Self::DEFAULT_CONNECT_TIMEOUT,
         };
@@ -103,7 +103,7 @@ impl ConnectParams {
             None | Some("" | "disable" | "off" | "false") => Ok(TlsMode::Disable),
             Some("require") => Ok(TlsMode::Require),
             Some("verify") => Ok(TlsMode::Verify { ca_file }),
-            Some(other) => Err(Error::invalid(format!("tls 选项只能是 disable、require 或 verify：{other}"))),
+            Some(other) => Err(Error::invalid(msg!("params.invalid_tls", value = other))),
         }
     }
 
@@ -111,7 +111,7 @@ impl ConnectParams {
     pub fn reject_tls(&self, driver: &str) -> Result<()> {
         match self.tls_mode()? {
             TlsMode::Disable => Ok(()),
-            _ => Err(Error::invalid(format!("{driver} 驱动暂不支持 TLS，请去掉连接选项 tls"))),
+            _ => Err(Error::invalid(msg!("params.tls_unsupported", driver = driver))),
         }
     }
 }

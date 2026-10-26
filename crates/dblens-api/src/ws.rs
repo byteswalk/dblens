@@ -21,7 +21,7 @@ use std::sync::Arc;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::response::Response;
-use dblens_core::Error;
+use dblens_core::{Error, msg};
 use dblens_service::{ExecRequest, Service, SessionEvent, SessionId};
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
@@ -180,14 +180,14 @@ async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId) {
         let msg: ClientMsg = match serde_json::from_str(&text) {
             Ok(m) => m,
             Err(e) => {
-                let _ = out.send(error_message(&Error::invalid(format!("无法解析的消息：{e}")))).await;
+                let _ = out.send(error_message(&Error::invalid(msg!("api.bad_message", error = e)))).await;
                 continue;
             }
         };
         match msg {
             ClientMsg::Exec { sql, confirmed, max_rows, continue_on_error, cursor, explain } => {
                 if running.as_ref().is_some_and(|h| !h.is_finished()) {
-                    let busy = Error::Busy { message: "上一段 SQL 还没有执行完".into() };
+                    let busy = Error::Busy { message: msg!("api.still_running") };
                     let _ = out.send(error_message(&busy)).await;
                     continue;
                 }

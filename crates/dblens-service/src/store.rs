@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Result, msg};
 use rusqlite::{Connection, OptionalExtension, params};
 
 /// 第 N 个元素把表结构从版本 N 升到 N+1。只能追加，不能修改已发布的迁移。
@@ -44,7 +44,7 @@ const MIGRATIONS: &[&str] = &[
 ];
 
 pub(crate) fn db_err(e: rusqlite::Error) -> Error {
-    Error::internal(format!("本地数据库错误：{e}"))
+    Error::internal(msg!("store.db_error", error = e))
 }
 
 /// 默认的数据目录：Windows 为 `%APPDATA%\DBLens`，macOS 为 `~/Library/Application Support/DBLens`，
@@ -52,7 +52,7 @@ pub(crate) fn db_err(e: rusqlite::Error) -> Error {
 pub fn default_data_dir() -> Result<PathBuf> {
     directories::BaseDirs::new()
         .map(|d| d.data_dir().join("DBLens"))
-        .ok_or_else(|| Error::internal("无法确定用户数据目录"))
+        .ok_or_else(|| Error::internal(msg!("store.no_data_dir")))
 }
 
 pub struct Store {
@@ -62,8 +62,9 @@ pub struct Store {
 impl Store {
     /// 打开（必要时创建）数据目录下的 `dblens.db`，并执行迁移。
     pub fn open(data_dir: &Path) -> Result<Self> {
-        std::fs::create_dir_all(data_dir)
-            .map_err(|e| Error::internal(format!("无法创建数据目录 {}：{e}", data_dir.display())))?;
+        std::fs::create_dir_all(data_dir).map_err(|e| {
+            Error::internal(msg!("store.create_dir_failed", dir = data_dir.display(), error = e))
+        })?;
         Self::init(Connection::open(data_dir.join("dblens.db")).map_err(db_err)?)
     }
 
@@ -77,9 +78,10 @@ impl Store {
         let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).map_err(db_err)?;
         let version = usize::try_from(version).unwrap_or(usize::MAX);
         if version > MIGRATIONS.len() {
-            return Err(Error::internal(format!(
-                "本地数据库版本 {version} 比程序支持的 {} 更新，请升级 DBLens",
-                MIGRATIONS.len()
+            return Err(Error::internal(msg!(
+                "store.too_new",
+                version = version,
+                supported = MIGRATIONS.len()
             )));
         }
         for (i, sql) in MIGRATIONS.iter().enumerate().skip(version) {
@@ -93,7 +95,8 @@ impl Store {
 
     /// 在数据库连接上执行一段操作。操作都很快，直接持锁执行。
     pub(crate) fn with<T>(&self, f: impl FnOnce(&mut Connection) -> rusqlite::Result<T>) -> Result<T> {
-        let mut conn = self.conn.lock().map_err(|_| Error::internal("本地数据库锁已损坏"))?;
+        let mut conn =
+            self.conn.lock().map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "store")))?;
         f(&mut conn).map_err(db_err)
     }
 
@@ -166,7 +169,7 @@ mod tests {
             let c = Connection::open(dir.path().join("dblens.db")).unwrap();
             c.pragma_update(None, "user_version", 99).unwrap();
         }
-        let err = Store::open(dir.path()).err().unwrap().to_string();
+        let err = Store::open(dir.path()).err().unwrap().to_msg().render(dblens_core::Lang::ZhCn);
         assert!(err.contains("升级"), "{err}");
     }
 

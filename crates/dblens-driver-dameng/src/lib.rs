@@ -12,7 +12,7 @@ mod types;
 mod spike;
 
 use async_trait::async_trait;
-use dblens_core::{Error, Result};
+use dblens_core::{Error, Msg, Result};
 use dblens_driver::blocking::into_async;
 use dblens_driver::{Capabilities, ConnectParams, Connection, Driver, DriverId};
 
@@ -26,7 +26,7 @@ pub struct DmDriver;
 fn login_error(e: Error) -> Error {
     match e {
         Error::Sql { code, message, .. } if code == "-2501" => {
-            Error::Auth { message: format!("[{code}] {message}") }
+            Error::Auth { message: Msg::raw(format!("[{code}] {message}")) }
         }
         Error::Sql { code, message, .. } => Error::connect(format!("[{code}] {message}")),
         other => other,
@@ -86,7 +86,9 @@ mod tests {
     #[test]
     fn wrong_password_is_auth_error() {
         let sql = |code: &str| Error::Sql { code: code.into(), message: "m".into(), position: None };
-        assert!(matches!(login_error(sql("-2501")), Error::Auth { message } if message == "[-2501] m"));
+        assert!(
+            matches!(login_error(sql("-2501")), Error::Auth { message } if message == Msg::raw("[-2501] m"))
+        );
         assert!(matches!(login_error(sql("-70028")), Error::Connect { .. }));
         assert_eq!(login_error(Error::Timeout), Error::Timeout);
     }

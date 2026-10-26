@@ -9,7 +9,7 @@ use axum::extract::{Request, State};
 use axum::http::{HeaderMap, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use dblens_core::Error;
+use dblens_core::{Error, msg};
 
 use crate::AppState;
 use crate::error::ApiError;
@@ -42,15 +42,14 @@ fn origin_allowed(headers: &HeaderMap, allowed: &[String]) -> bool {
 pub async fn guard(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let headers = request.headers();
     if !origin_allowed(headers, &state.config.allowed_origins) {
-        return ApiError(Error::Denied { reason: "不允许的来源（Origin）".into() }).into_response();
+        return ApiError(Error::Denied { reason: msg!("api.origin_denied") }).into_response();
     }
     match token_from(headers, request.uri().query()) {
         Some(t) if same_token(&t, &state.config.token) => next.run(request).await,
-        _ => (
-            axum::http::StatusCode::UNAUTHORIZED,
-            axum::Json(Error::Auth { message: "缺少或错误的访问令牌".into() }),
-        )
-            .into_response(),
+        _ => {
+            (axum::http::StatusCode::UNAUTHORIZED, axum::Json(Error::Auth { message: msg!("api.bad_token") }))
+                .into_response()
+        }
     }
 }
 

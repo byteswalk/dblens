@@ -1,6 +1,6 @@
 use bytes::BytesMut;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use dblens_core::{Error, Result, Value};
+use dblens_core::{Error, Msg, Result, Value, msg};
 use tokio_postgres::Row;
 use tokio_postgres::types::{FromSql, IsNull, ToSql, Type, to_sql_checked};
 
@@ -10,7 +10,7 @@ type BoxError = Box<dyn std::error::Error + Sync + Send>;
 /// 格式：ndigits(i16) weight(i16) sign(u16) dscale(u16)，后跟 ndigits 个以 10000 为基的 i16。
 pub(crate) fn decode_numeric(raw: &[u8]) -> std::result::Result<String, BoxError> {
     if raw.len() < 8 {
-        return Err("numeric 数据长度不足".into());
+        return Err(Error::internal(msg!("pg.bad_numeric")).into());
     }
     let i16_at = |i: usize| i16::from_be_bytes([raw[i], raw[i + 1]]);
     let ndigits = usize::try_from(i16_at(0))?;
@@ -24,7 +24,7 @@ pub(crate) fn decode_numeric(raw: &[u8]) -> std::result::Result<String, BoxError
         _ => {}
     }
     if raw.len() < 8 + ndigits * 2 {
-        return Err("numeric 数据长度与位数不符".into());
+        return Err(Error::internal(msg!("pg.bad_numeric")).into());
     }
     let digits: Vec<i16> = (0..ndigits).map(|i| i16_at(8 + i * 2)).collect();
     let digit = |idx: i32| if idx >= 0 { digits.get(idx as usize).copied().unwrap_or(0) } else { 0 };
@@ -94,7 +94,7 @@ pub(crate) struct PgInterval(pub String);
 impl<'a> FromSql<'a> for PgInterval {
     fn from_sql(_: &Type, raw: &'a [u8]) -> std::result::Result<Self, BoxError> {
         if raw.len() != 16 {
-            return Err("interval 数据长度应为 16 字节".into());
+            return Err(Error::internal(msg!("pg.bad_interval")).into());
         }
         let micros = i64::from_be_bytes(raw[0..8].try_into()?);
         let days = i32::from_be_bytes(raw[8..12].try_into()?);
@@ -122,7 +122,8 @@ impl<'a> FromSql<'a> for RawValue<'a> {
 pub(crate) fn pg_value(row: &Row, idx: usize) -> Result<Value> {
     let ty = row.columns()[idx].type_().clone();
     let fail = |e: tokio_postgres::Error| {
-        Error::internal(format!("读取第 {} 列（{}）失败：{e}", idx + 1, ty.name()))
+        let cause = crate::error::ours(&e).map_or_else(|| Msg::raw(e.to_string()), |inner| inner.to_msg());
+        Error::internal(msg!("pg.read_column_failed", column = idx + 1, ty = ty.name(), error = cause))
     };
     macro_rules! get {
         ($t:ty, $f:expr) => {
@@ -176,16 +177,16 @@ impl ToSql for PgParam<'_> {
                 Type::INT4 => i32::try_from(*i)?.to_sql(ty, out),
                 Type::FLOAT4 => (*i as f32).to_sql(ty, out),
                 Type::FLOAT8 => (*i as f64).to_sql(ty, out),
-                Type::NUMERIC => Err(NUMERIC_PARAM_HINT.into()),
+                Type::NUMERIC => Err(numeric_param_hint()),
                 _ => i.to_sql(ty, out),
             },
             Value::UInt(u) => PgParam(&Value::Int(i64::try_from(*u)?)).to_sql(ty, out),
             Value::Float(f) => match *ty {
                 Type::FLOAT4 => (*f as f32).to_sql(ty, out),
-                Type::NUMERIC => Err(NUMERIC_PARAM_HINT.into()),
+                Type::NUMERIC => Err(numeric_param_hint()),
                 _ => f.to_sql(ty, out),
             },
-            Value::Decimal(_) if *ty == Type::NUMERIC => Err(NUMERIC_PARAM_HINT.into()),
+            Value::Decimal(_) if *ty == Type::NUMERIC => Err(numeric_param_hint()),
             Value::String(s) | Value::Decimal(s) | Value::Interval(s) => s.as_str().to_sql(ty, out),
             Value::Bytes(b) => b.as_slice().to_sql(ty, out),
             Value::Date(d) => d.to_sql(ty, out),
@@ -195,7 +196,7 @@ impl ToSql for PgParam<'_> {
             Value::Json(j) => j.to_sql(ty, out),
             Value::Uuid(u) => u.to_sql(ty, out),
             Value::Lob(_) | Value::Other { .. } => {
-                Err(format!("该类型的值不能作为参数绑定：{:?}", self.0).into())
+                Err(Error::internal(msg!("driver.unbindable_value", value = format!("{:?}", self.0))).into())
             }
         }
     }
@@ -207,7 +208,9 @@ impl ToSql for PgParam<'_> {
     to_sql_checked!();
 }
 
-const NUMERIC_PARAM_HINT: &str = "暂不支持直接绑定 NUMERIC 参数，请在 SQL 中写成 $1::text::numeric";
+fn numeric_param_hint() -> BoxError {
+    Error::invalid(msg!("pg.numeric_param")).into()
+}
 
 #[cfg(test)]
 mod tests {
