@@ -3,6 +3,7 @@
 
 import { errorText } from '../../shared/api'
 import type { ExecState, StatementState } from '../../shared/exec'
+import { t } from '../../shared/i18n'
 
 export type ResultTab =
   | { key: string; kind: 'result'; label: string; stmt: number; result: number; rows: number; capped: boolean }
@@ -23,7 +24,7 @@ export function resultTabs(exec: ExecState, explain: boolean, capped: number | n
       tabs.push({
         key: `r${i}.${j}`,
         kind: 'result',
-        label: explain ? '执行计划' : `结果 ${n}`,
+        label: explain ? t('results.tab.explain') : t('results.tab.result', { n }),
         stmt: i,
         result: j,
         rows: r.rows.length,
@@ -31,11 +32,11 @@ export function resultTabs(exec: ExecState, explain: boolean, capped: number | n
       })
     })
     if (failed(s, i, capped)) {
-      const label = s.error?.kind === 'cancelled' ? `语句 ${i + 1} 已取消` : `语句 ${i + 1} 失败`
+      const label = t(s.error?.kind === 'cancelled' ? 'results.tab.cancelled' : 'results.tab.failed', { n: i + 1 })
       tabs.push({ key: `e${i}`, kind: 'error', label, stmt: i })
     }
   })
-  tabs.push({ key: 'messages', kind: 'messages', label: '消息' })
+  tabs.push({ key: 'messages', kind: 'messages', label: t('results.tab.messages') })
   return tabs
 }
 
@@ -44,35 +45,43 @@ export interface MessageLine {
   text: string
 }
 
-const ms = (v: number | null) => (v === null ? '' : `，${v} ms`)
-
 /** "消息"标签的内容：每条语句的结果摘要、服务器消息、错误，以及确认（`declined`：用户取消了）和协议错误。 */
 export function messageLines(exec: ExecState, capped: number | null, declined = false): MessageLine[] {
   const out: MessageLine[] = []
   exec.statements.forEach((s, i) => {
-    const tag = `[语句 ${i + 1}]`
-    for (const text of s.messages) out.push({ level: 'info', text: `${tag} ${text}` })
-    s.results.forEach((r) => out.push({ level: 'info', text: `${tag} ${r.rows.length} 行${ms(s.elapsedMs)}` }))
+    const n = i + 1
+    const ms = s.elapsedMs
+    for (const text of s.messages) out.push({ level: 'info', text: t('results.message.server', { n, text }) })
+    s.results.forEach((r) => {
+      const count = r.rows.length
+      const text =
+        ms === null ? t('results.message.rows', { n, count }) : t('results.message.rowsElapsed', { n, count, ms })
+      out.push({ level: 'info', text })
+    })
     if (i === capped) {
-      const rows = s.results.at(-1)?.rows.length ?? 0
-      const rest = s.last ? '' : '，后面的语句没有执行'
-      out.push({ level: 'warn', text: `${tag} 已读取 ${rows} 行，达到行数上限，停止读取${rest}` })
+      const count = s.results.at(-1)?.rows.length ?? 0
+      out.push({ level: 'warn', text: t(s.last ? 'results.message.capped' : 'results.message.cappedMore', { n, count }) })
     } else if (s.error) {
-      out.push({ level: 'error', text: `${tag} ${errorText(s.error)}` })
+      out.push({ level: 'error', text: t('results.message.error', { n, error: errorText(s.error) }) })
     } else if (s.affected !== null && s.results.length === 0) {
       // 有结果集的语句（如 Oracle 的执行计划先写计划表）不再报影响行数
-      out.push({ level: 'info', text: `${tag} 影响 ${s.affected} 行${ms(s.elapsedMs)}` })
-    } else if (s.results.length === 0 && s.elapsedMs !== null) {
-      out.push({ level: 'info', text: `${tag} 执行成功${ms(s.elapsedMs)}` })
+      const count = s.affected
+      const text =
+        ms === null
+          ? t('results.message.affected', { n, count })
+          : t('results.message.affectedElapsed', { n, count, ms })
+      out.push({ level: 'info', text })
+    } else if (s.results.length === 0 && ms !== null) {
+      out.push({ level: 'info', text: t('results.message.succeededElapsed', { n, ms }) })
     }
   })
   if (exec.confirm) {
-    const tag = `[语句 ${exec.statements.length + 1}]`
-    out.push(
-      declined
-        ? { level: 'warn', text: `${tag} 已取消执行（${exec.confirm.reason}），后面的语句也没有执行` }
-        : { level: 'warn', text: `${tag} 需要确认：${exec.confirm.reason}` },
-    )
+    const n = exec.statements.length + 1
+    const reason = exec.confirm.reason
+    out.push({
+      level: 'warn',
+      text: t(declined ? 'results.message.declined' : 'results.message.confirmRequired', { n, reason }),
+    })
   }
   if (exec.protocolError) out.push({ level: 'error', text: errorText(exec.protocolError) })
   return out
@@ -83,8 +92,8 @@ export function lastSummary(exec: ExecState): string | null {
   const s = exec.statements.at(-1)
   if (!s || s.elapsedMs === null) return null
   const r = s.results.at(-1)
-  if (r) return `${r.rows.length} 行 · ${s.elapsedMs} ms`
-  if (s.affected !== null) return `影响 ${s.affected} 行 · ${s.elapsedMs} ms`
+  if (r) return t('results.summary.rows', { count: r.rows.length, ms: s.elapsedMs })
+  if (s.affected !== null) return t('results.summary.affected', { count: s.affected, ms: s.elapsedMs })
   return `${s.elapsedMs} ms`
 }
 

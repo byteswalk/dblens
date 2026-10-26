@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import i18n from '../../shared/i18n'
 import {
   type NodeKey,
   categoriesFor,
+  categoryLabel,
   decodeKey,
   encodeKey,
   isWithin,
@@ -64,5 +66,24 @@ describe('对象树节点', () => {
     expect(isWithin(o, { ...k, kind: 'views' })).toBe(false)
     expect(isWithin({ ...l, table: 'users' }, o)).toBe(false)
     expect(isWithin(s, { type: 'g', profileId: 'p' })).toBe(true)
+  })
+
+  it('分类和程序类型的名称按调用时的界面语言翻译', async () => {
+    try {
+      await i18n.changeLanguage('en')
+      expect(categoriesFor('postgres').map((c) => c.label)).toEqual([
+        'Tables',
+        'Views',
+        'Materialized Views',
+        'Routines',
+        'Sequences',
+      ])
+      expect(categoryLabel('synonyms')).toBe('Synonyms')
+      expect(routineKindLabel('package_body')).toBe('package body')
+      expect(() => decodeKey('x\u0001y')).toThrow('Unrecognized node key')
+    } finally {
+      await i18n.changeLanguage('zh-CN')
+    }
+    expect(routineKindLabel('procedure')).toBe('过程')
   })
 })

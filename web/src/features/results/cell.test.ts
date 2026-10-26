@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import i18n from '../../shared/i18n'
 import { cellBytes, cellFullText, formatBytes, hexDump, isNumeric, lobNote, prettyJson } from './cell'
 
 const lob = { t: 'lob', v: { preview: '客户反馈', total_len: 2355, truncated: true, binary: false } }
@@ -29,6 +30,18 @@ describe('单元格查看', () => {
     expect(dump.split('\n')[0]).toBe('00000000  48 65 6c 6c 6f 2c 20 44 42 4c 65 6e 73 20 e6 95  |Hello, DBLens ..|')
     expect(dump.split('\n')).toHaveLength(2)
     expect(hexDump(new Uint8Array(40), 16).split('\n').at(-1)).toBe('…（共 40 字节，只显示前 16 字节）')
+  })
+
+  it('英文界面：说明文字按当前语言', async () => {
+    await i18n.changeLanguage('en')
+    try {
+      expect(lobNote(lob)).toBe('2.3 KB · preview truncated')
+      expect(hexDump(new Uint8Array(40), 16).split('\n').at(-1)).toBe(
+        '… (40 bytes in total, showing the first 16 bytes)',
+      )
+    } finally {
+      await i18n.changeLanguage('zh-CN')
+    }
   })
 
   it('数值右对齐', () => {

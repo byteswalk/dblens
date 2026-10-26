@@ -5,6 +5,7 @@ import enUS from 'antd/locale/en_US'
 import zhCN from 'antd/locale/zh_CN'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import ConnectionDialog from '../features/connections/ConnectionDialog'
 import { TABS_KEY, persistTabs, useTabs } from '../features/editor/tabs'
@@ -42,6 +43,7 @@ function Themed() {
 
 /** 读取设置后再显示界面，避免主题和布局先按默认值闪一下。 */
 function Boot({ api }: { api: Api }) {
+  const { t } = useTranslation()
   const [state, setState] = useState<'loading' | 'ready' | Error>('loading')
   useEffect(() => {
     api.settings().then(
@@ -58,19 +60,20 @@ function Boot({ api }: { api: Api }) {
     )
   }, [api])
   if (state === 'loading') return <Spin fullscreen />
-  if (state instanceof Error) return <Result status="error" title="无法连接 DBLens 服务" subTitle={state.message} />
+  if (state instanceof Error) return <Result status="error" title={t('app.boot.serverUnreachable')} subTitle={state.message} />
   return <Themed />
 }
 
 export default function App({ token }: { token: string | null }) {
+  const { t } = useTranslation()
   const api = useMemo(() => (token ? createApi(token) : null), [token])
   const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), [])
   if (!api) {
     return (
       <Result
         status="warning"
-        title="缺少访问令牌"
-        subTitle="请使用 dblens-server 启动时打印的链接打开本页（链接末尾带 #token=…）。"
+        title={t('app.boot.missingToken')}
+        subTitle={t('app.boot.missingTokenHint')}
       />
     )
   }

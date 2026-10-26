@@ -1,6 +1,7 @@
 // 连接对话框的表单（M1 设计稿第 2 部分）：表单值与后端的连接配置（ProfileInput）互相转换，以及校验。纯逻辑，单独测试。
 
 import type { DriverId, Environment, Profile, ProfileInput, ServerSummary } from '../../shared/api'
+import { t } from '../../shared/i18n'
 
 export type TlsMode = 'disable' | 'require' | 'verify'
 
@@ -26,21 +27,24 @@ export interface ConnectionForm {
   extra: string
 }
 
-export const DRIVERS: { id: DriverId; label: string; note: string }[] = [
-  { id: 'mysql', label: 'MySQL 系', note: '含 MariaDB、TiDB、OceanBase-MySQL、PolarDB-MySQL，连接后自动识别' },
-  { id: 'postgres', label: 'PostgreSQL 系', note: '含人大金仓、openGauss/GaussDB、瀚高，连接后自动识别' },
-  { id: 'oracle', label: 'Oracle', note: '需要 Oracle Instant Client' },
-  { id: 'dameng', label: '达梦 DM', note: '需要达梦 DPI 客户端库' },
-]
+/** 新建连接时可选的驱动，按界面上的顺序。 */
+export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng']
+
+/** 驱动的显示名称（如「MySQL 系」）。 */
+export function driverLabel(driver: DriverId): string {
+  return t(`connections.driver.${driver}.label`)
+}
+
+/** 驱动的说明（包含哪些兼容库、需要什么客户端库）。 */
+export function driverNote(driver: DriverId): string {
+  return t(`connections.driver.${driver}.note`)
+}
 
 export const DEFAULT_PORTS: Record<DriverId, number> = { mysql: 3306, postgres: 5432, oracle: 1521, dameng: 5236 }
 
 /** 「数据库」一栏在各驱动下的含义。 */
-export const DATABASE_LABEL: Record<DriverId, string> = {
-  mysql: '数据库',
-  postgres: '数据库',
-  oracle: '服务名',
-  dameng: '模式',
+export function databaseLabel(driver: DriverId): string {
+  return t(`connections.databaseLabel.${driver}`)
 }
 
 /** 只有 MySQL 系、PG 系支持 TLS 选项（M0-4b）。 */
@@ -130,15 +134,19 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
 /** 校验，返回 字段 → 错误说明；没有错误时为空对象。 */
 export function validate(f: ConnectionForm): Partial<Record<keyof ConnectionForm, string>> {
   const e: Partial<Record<keyof ConnectionForm, string>> = {}
-  if (!f.name.trim()) e.name = '填写连接名称'
-  if (!f.host.trim()) e.host = '填写主机地址'
-  if (!Number.isInteger(f.port) || f.port < 1 || f.port > 65535) e.port = '端口在 1–65535 之间'
-  if (!f.user.trim()) e.user = '填写用户名'
-  if (f.driver === 'oracle' && !f.database.trim() && !f.oracleSid.trim()) e.database = '填写服务名或 SID'
-  if (!Number.isInteger(f.timeoutSecs) || f.timeoutSecs < 1 || f.timeoutSecs > 600) e.timeoutSecs = '超时在 1–600 秒之间'
+  if (!f.name.trim()) e.name = t('connections.validate.nameRequired')
+  if (!f.host.trim()) e.host = t('connections.validate.hostRequired')
+  if (!Number.isInteger(f.port) || f.port < 1 || f.port > 65535) e.port = t('connections.validate.portRange')
+  if (!f.user.trim()) e.user = t('connections.validate.userRequired')
+  if (f.driver === 'oracle' && !f.database.trim() && !f.oracleSid.trim()) {
+    e.database = t('connections.validate.serviceOrSidRequired')
+  }
+  if (!Number.isInteger(f.timeoutSecs) || f.timeoutSecs < 1 || f.timeoutSecs > 600) {
+    e.timeoutSecs = t('connections.validate.timeoutRange')
+  }
   for (const line of f.extra.split('\n')) {
     if (line.trim() && line.indexOf('=') <= 0) {
-      e.extra = `无法识别的一行：${line.trim()}（格式为 键=值）`
+      e.extra = t('connections.validate.extraBadLine', { line: line.trim() })
       break
     }
   }

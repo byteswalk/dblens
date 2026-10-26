@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import i18n from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
 import { TABS_KEY, parseTabs, persistTabs, useTabs } from './tabs'
 
@@ -17,6 +18,16 @@ describe('标签页', () => {
     ])
     expect(s.active).toBe(b)
     expect(a).not.toBe(b)
+  })
+
+  it('新标签的默认标题按当前界面语言生成', async () => {
+    await i18n.changeLanguage('en')
+    try {
+      useTabs.getState().open('p')
+      expect(useTabs.getState().tabs[0].title).toBe('Query 1')
+    } finally {
+      await i18n.changeLanguage('zh-CN')
+    }
   })
 
   it('关闭当前标签时切到右边的，没有就左边的', () => {

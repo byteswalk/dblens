@@ -3,10 +3,11 @@
 
 import { IconPlugConnected } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 
-import { DRIVERS } from '../features/connections/form'
+import { driverLabel } from '../features/connections/form'
 import { useCursor } from '../features/editor/cursor'
-import { VARIANT_NAMES } from '../features/editor/dialect'
+import { variantName } from '../features/editor/dialect'
 import { useTabRuntime } from '../features/editor/runner'
 import { useTabs } from '../features/editor/tabs'
 import { lastSummary } from '../features/results/results'
@@ -15,28 +16,31 @@ import { useApi } from './context'
 import { useUi } from './ui'
 
 function TabStatus({ tabId, profile }: { tabId: string; profile: Profile | undefined }) {
+  const { t } = useTranslation()
   const rt = useTabRuntime(tabId)
   const cursor = useCursor()
   const s = rt.session
-  const dialect = VARIANT_NAMES[s?.variant ?? ''] ?? DRIVERS.find((d) => d.id === profile?.driver)?.label
+  const dialect = variantName(s?.variant) ?? (profile && driverLabel(profile.driver))
   const summary = lastSummary(rt.exec)
   return (
     <>
       <span className="row" style={{ gap: 4 }}>
         <IconPlugConnected size={14} />
-        {profile?.name ?? '连接已删除'}
+        {profile?.name ?? t('app.status.connectionDeleted')}
         {s?.schema && <span className="muted">· {s.schema}</span>}
       </span>
       {s && (
         <span style={{ color: s.in_transaction ? 'var(--warn)' : undefined }}>
-          {s.autocommit ? '自动提交' : s.in_transaction ? '手动提交 · 事务中' : '手动提交'}
+          {s.autocommit
+            ? t('app.status.autocommit')
+            : s.in_transaction
+              ? t('app.status.inTransaction')
+              : t('app.status.manualCommit')}
         </span>
       )}
-      {rt.running ? <span>执行中…</span> : summary && <span>{summary}</span>}
+      {rt.running ? <span>{t('app.status.running')}</span> : summary && <span>{summary}</span>}
       <span className="grow" />
-      <span>
-        行 {cursor.line}，列 {cursor.column}
-      </span>
+      <span>{t('app.status.cursor', { line: cursor.line, column: cursor.column })}</span>
       {dialect && <span>{dialect}</span>}
       <span>UTF-8</span>
     </>
@@ -44,6 +48,7 @@ function TabStatus({ tabId, profile }: { tabId: string; profile: Profile | undef
 }
 
 export default function StatusBar() {
+  const { t } = useTranslation()
   const api = useApi()
   const selected = useUi((s) => s.selectedProfile)
   const active = useTabs((s) => s.tabs.find((t) => t.id === s.active))
@@ -61,10 +66,10 @@ export default function StatusBar() {
       {p ? (
         <span className="row" style={{ gap: 4 }}>
           <IconPlugConnected size={14} />
-          {p.name} · {DRIVERS.find((d) => d.id === p.driver)?.label} · {p.user}@{p.host}:{p.port}
+          {p.name} · {driverLabel(p.driver)} · {p.user}@{p.host}:{p.port}
         </span>
       ) : (
-        <span className="muted">未选择连接</span>
+        <span className="muted">{t('app.status.noConnection')}</span>
       )}
       <span className="grow" />
     </div>

@@ -20,7 +20,7 @@ export default function SettingsDialog() {
   useSetting(ROW_CAP_KEY)
   const info = useShellInfo()
   return (
-    <Modal title="设置" open={settingsOpen} onCancel={() => setSettingsOpen(false)} footer={null} width={480}>
+    <Modal title={t('app.settings.title')} open={settingsOpen} onCancel={() => setSettingsOpen(false)} footer={null} width={480}>
       <Form layout="horizontal" labelCol={{ span: 8 }} style={{ marginTop: 16 }}>
         <Form.Item label={t('app.settings.language')} extra={t('app.settings.languageHint')}>
           <Radio.Group
@@ -33,18 +33,18 @@ export default function SettingsDialog() {
             ]}
           />
         </Form.Item>
-        <Form.Item label="主题">
+        <Form.Item label={t('app.settings.theme')}>
           <Radio.Group
             value={theme}
             onChange={(e) => useSettings.getState().set(THEME_KEY, e.target.value)}
             options={[
-              { value: 'system', label: '跟随系统' },
-              { value: 'light', label: '亮色' },
-              { value: 'dark', label: '暗色' },
+              { value: 'system', label: t('app.theme.system') },
+              { value: 'light', label: t('app.theme.light') },
+              { value: 'dark', label: t('app.theme.dark') },
             ]}
           />
         </Form.Item>
-        <Form.Item label="结果行数上限" extra="一个结果集读到这么多行后停止读取">
+        <Form.Item label={t('app.settings.rowCap')} extra={t('app.settings.rowCapHint')}>
           <InputNumber
             min={500}
             step={10000}
@@ -55,7 +55,7 @@ export default function SettingsDialog() {
           />
         </Form.Item>
         {desktop && (
-          <Form.Item label="启动时自动检查更新">
+          <Form.Item label={t('app.settings.autoCheckUpdate')}>
             <Switch
               checked={info?.auto_check_update ?? true}
               onChange={(on) => desktop?.setAutoCheckUpdate(on).catch(console.warn)}

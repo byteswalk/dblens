@@ -4,6 +4,7 @@
 import { IconFileCode, IconPlus, IconX } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import QueryView from './QueryView'
@@ -18,6 +19,7 @@ function TabTitle({ tab, active, envClass, profileName }: {
   envClass: string
   profileName: string
 }) {
+  const { t } = useTranslation()
   const rt = useTabRuntime(tab.id)
   const { closeQuery } = useQueryActions()
   return (
@@ -35,7 +37,7 @@ function TabTitle({ tab, active, envClass, profileName }: {
     >
       <IconFileCode size={14} />
       <span className="tab-title">{tab.title}</span>
-      {envClass === 'prod' ? <span>· 生产</span> : <span className="muted">{profileName}</span>}
+      {envClass === 'prod' ? <span>· {t('editor.tab.prod')}</span> : <span className="muted">{profileName}</span>}
       {rt.running && <span className="running-dot" />}
       <span
         className="x"
@@ -52,6 +54,7 @@ function TabTitle({ tab, active, envClass, profileName }: {
 
 export default function Workspace() {
   const api = useApi()
+  const { t } = useTranslation()
   const { tabs, active } = useTabs()
   const { newQuery } = useQueryActions()
   const { data: profiles = [] } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
@@ -59,28 +62,28 @@ export default function Workspace() {
   // 关闭的标签页：删除它的编辑器模型
   const known = useRef(new Set<string>())
   useEffect(() => {
-    const now = new Set(tabs.map((t) => t.id))
+    const now = new Set(tabs.map((x) => x.id))
     for (const id of known.current) if (!now.has(id)) disposeModel(id)
     known.current = now
   }, [tabs])
 
-  const tab = tabs.find((t) => t.id === active)
+  const tab = tabs.find((x) => x.id === active)
   return (
     <div className="workspace">
       <div className="row tabs">
-        {tabs.map((t) => {
-          const p = profiles.find((x) => x.id === t.profileId)
+        {tabs.map((tb) => {
+          const p = profiles.find((x) => x.id === tb.profileId)
           return (
             <TabTitle
-              key={t.id}
-              tab={t}
-              active={t.id === active}
+              key={tb.id}
+              tab={tb}
+              active={tb.id === active}
               envClass={p?.environment && p.environment !== 'none' ? p.environment : ''}
-              profileName={p?.name ?? '连接已删除'}
+              profileName={p?.name ?? t('editor.tab.profileDeleted')}
             />
           )
         })}
-        <div className="tab add" title="新建查询（Ctrl+T）" onClick={() => newQuery()}>
+        <div className="tab add" title={t('editor.tab.newQuery')} onClick={() => newQuery()}>
           <IconPlus size={14} />
         </div>
       </div>

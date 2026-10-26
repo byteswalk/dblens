@@ -2,6 +2,7 @@
 // 把服务端事件归并成界面要显示的状态。归并是纯函数，单独测试；ExecSocket 只负责收发。
 
 import type { ErrorBody } from './api'
+import { t } from './i18n'
 
 /** 单元格值：{"t": 类型, "v": 值}，Null 没有 v。 */
 export interface CellValue {
@@ -158,7 +159,7 @@ export class ExecSocket {
     this.ws = new WebSocket(url)
     this.ready = new Promise((resolve, reject) => {
       this.ws.addEventListener('open', () => resolve(), { once: true })
-      this.ws.addEventListener('error', () => reject(new Error('WebSocket 连接失败')), { once: true })
+      this.ws.addEventListener('error', () => reject(new Error(t('app.exec.socketFailed'))), { once: true })
     })
     this.ws.addEventListener('message', (m) => onEvent(JSON.parse(m.data as string) as ServerEvent))
     this.ws.addEventListener('close', onClose)
@@ -199,7 +200,9 @@ export function cellText(c: CellValue): string {
   if (c.t === 'null') return 'NULL'
   if (c.t === 'lob') {
     const lob = c.v as { preview: string; total_len: number; truncated: boolean; binary: boolean }
-    return lob.truncated ? `${lob.binary ? '(二进制) ' : ''}${lob.preview}…（共 ${lob.total_len}）` : lob.preview
+    if (!lob.truncated) return lob.preview
+    const v = { preview: lob.preview, total: lob.total_len }
+    return lob.binary ? t('app.exec.lobTruncatedBinary', v) : t('app.exec.lobTruncated', v)
   }
   if (c.t === 'other') return (c.v as { text: string }).text
   if (typeof c.v === 'object') return JSON.stringify(c.v)

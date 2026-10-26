@@ -2,6 +2,7 @@
 // 懒加载：展开时才向后端取下一层。这里只放纯逻辑，单独测试。
 
 import type { DriverId, ObjectKind, RoutineInfo } from '../../shared/api'
+import { t } from '../../shared/i18n'
 
 export type CategoryKind = ObjectKind | 'routines' | 'sequences' | 'synonyms'
 
@@ -10,13 +11,19 @@ export interface Category {
   label: string
 }
 
-const ALL: Record<CategoryKind, string> = {
-  tables: '表',
-  views: '视图',
-  materialized_views: '物化视图',
-  routines: '函数和过程',
-  sequences: '序列',
-  synonyms: '同义词',
+/** 分类在词条中的键名。 */
+const CATEGORY_KEY = {
+  tables: 'tables',
+  views: 'views',
+  materialized_views: 'materializedViews',
+  routines: 'routines',
+  sequences: 'sequences',
+  synonyms: 'synonyms',
+} as const satisfies Record<CategoryKind, string>
+
+/** 分类的显示名称，按当前界面语言。 */
+export function categoryLabel(kind: CategoryKind): string {
+  return t(`tree.category.${CATEGORY_KEY[kind]}`)
 }
 
 /** 各类数据库在对象树中显示的分类，与 dblens-dialect 中各方言的元数据模板对应。 */
@@ -27,7 +34,7 @@ export function categoriesFor(driver: DriverId): Category[] {
       : driver === 'postgres'
         ? ['tables', 'views', 'materialized_views', 'routines', 'sequences']
         : ['tables', 'views', 'materialized_views', 'routines', 'sequences', 'synonyms']
-  return kinds.map((kind) => ({ kind, label: ALL[kind] }))
+  return kinds.map((kind) => ({ kind, label: categoryLabel(kind) }))
 }
 
 /**
@@ -81,7 +88,7 @@ export function decodeKey(s: string): NodeKey {
     case 'l':
       return { type, profileId, schema: a, table: b, column: c }
     default:
-      throw new Error(`无法识别的节点键：${s}`)
+      throw new Error(t('tree.error.badKey', { key: s }))
   }
 }
 
@@ -92,15 +99,16 @@ export function matches(filter: string, name: string, comment?: string | null): 
   return name.toLowerCase().includes(f) || (comment ?? '').toLowerCase().includes(f)
 }
 
-const ROUTINE_KIND: Record<RoutineInfo['kind'], string> = {
-  procedure: '过程',
-  function: '函数',
-  package: '包',
-  package_body: '包体',
-}
+const ROUTINE_KEY = {
+  procedure: 'procedure',
+  function: 'function',
+  package: 'package',
+  package_body: 'packageBody',
+} as const satisfies Record<RoutineInfo['kind'], string>
 
 export function routineKindLabel(kind: RoutineInfo['kind']): string {
-  return ROUTINE_KIND[kind] ?? kind
+  const key = ROUTINE_KEY[kind] as (typeof ROUTINE_KEY)[RoutineInfo['kind']] | undefined
+  return key ? t(`tree.routineKind.${key}`) : kind
 }
 
 /** 复制名称时用的限定名：schema.对象，列为 表.列。名字原样输出，不加引号。 */

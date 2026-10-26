@@ -4,6 +4,7 @@
 import { type FormatOptionsWithLanguage, format } from 'sql-formatter'
 
 import type { DriverId } from '../../shared/api'
+import { t } from '../../shared/i18n'
 
 /** Monaco 的语言：MySQL 系、PG 系用 Monaco 自带的规则，Oracle 和达梦用 plsql（monaco.ts 注册）。 */
 export function editorLanguage(driver: DriverId): 'mysql' | 'pgsql' | 'plsql' {
@@ -49,8 +50,7 @@ export function formatSql(sql: string, driver: DriverId, variant?: string | null
   })
 }
 
-/** 状态栏显示的方言名称。 */
-export const VARIANT_NAMES: Record<string, string> = {
+const VARIANT_NAMES: Record<string, string> = {
   mysql: 'MySQL',
   mariadb: 'MariaDB',
   tidb: 'TiDB',
@@ -62,5 +62,10 @@ export const VARIANT_NAMES: Record<string, string> = {
   gaussdb: 'GaussDB',
   highgo: 'HighGo',
   oracle: 'Oracle',
-  dameng: '达梦',
+}
+
+/** 变体的简短名称（状态栏、对象树用）；达梦的名称随界面语言。不认识的变体返回 undefined。 */
+export function variantName(variant: string | null | undefined): string | undefined {
+  if (variant === 'dameng') return t('editor.dialect.dameng')
+  return variant ? VARIANT_NAMES[variant] : undefined
 }

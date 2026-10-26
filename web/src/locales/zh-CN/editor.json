@@ -1,1 +1,58 @@
-{}
+{
+  "command": {
+    "runCurrent": "执行当前语句",
+    "runAll": "执行全部",
+    "stop": "停止",
+    "format": "格式化",
+    "explain": "执行计划"
+  },
+  "toolbar": {
+    "runCurrent": "执行当前语句（Ctrl+Enter）",
+    "runAll": "执行全部（F5）",
+    "stop": "停止（Ctrl+Break）",
+    "stopOnError": "出错停止",
+    "continueOnError": "出错继续",
+    "autoCommit": "自动提交",
+    "manualCommit": "手动提交",
+    "commit": "提交",
+    "rollback": "回滚",
+    "inTransaction": "有未提交的事务",
+    "format": "格式化（Shift+Alt+F）",
+    "explain": "执行计划"
+  },
+  "switchProfile": {
+    "title": "切换连接",
+    "content": "当前会话有未提交的事务，切换连接会回滚这些修改。"
+  },
+  "closeTab": {
+    "title": "{{title}} 有未提交的事务",
+    "content": "关闭前提交还是回滚这些修改？",
+    "commit": "提交并关闭",
+    "rollback": "回滚并关闭",
+    "cancel": "取消"
+  },
+  "confirm": {
+    "title": "确认执行",
+    "ok": "仍然执行",
+    "cancel": "取消"
+  },
+  "query": {
+    "profileDeleted": "这个标签页的连接已被删除，请在工具栏中换一个连接",
+    "disconnected": "与数据库的连接已断开，未提交的修改已丢失",
+    "reconnect": "重新连接",
+    "formatFailed": "无法格式化：{{message}}"
+  },
+  "tab": {
+    "untitled": "查询{{n}}",
+    "prod": "生产",
+    "profileDeleted": "连接已删除",
+    "newQuery": "新建查询（Ctrl+T）"
+  },
+  "runner": {
+    "tabClosed": "标签页已关闭",
+    "serviceDisconnected": "与 DBLens 服务的连接已断开"
+  },
+  "dialect": {
+    "dameng": "达梦"
+  }
+}

@@ -1,1 +1,40 @@
-{}
+{
+  "tab": {
+    "result": "结果 {{n}}",
+    "explain": "执行计划",
+    "failed": "语句 {{n}} 失败",
+    "cancelled": "语句 {{n}} 已取消",
+    "messages": "消息",
+    "rows": "· {{count}} 行",
+    "rowsCapped": "· {{count}} 行（已达上限）"
+  },
+  "message": {
+    "server": "[语句 {{n}}] {{text}}",
+    "rows": "[语句 {{n}}] {{count}} 行",
+    "rowsElapsed": "[语句 {{n}}] {{count}} 行，{{ms}} ms",
+    "capped": "[语句 {{n}}] 已读取 {{count}} 行，达到行数上限，停止读取",
+    "cappedMore": "[语句 {{n}}] 已读取 {{count}} 行，达到行数上限，停止读取，后面的语句没有执行",
+    "error": "[语句 {{n}}] {{error}}",
+    "affected": "[语句 {{n}}] 影响 {{count}} 行",
+    "affectedElapsed": "[语句 {{n}}] 影响 {{count}} 行，{{ms}} ms",
+    "succeededElapsed": "[语句 {{n}}] 执行成功，{{ms}} ms",
+    "declined": "[语句 {{n}}] 已取消执行（{{reason}}），后面的语句也没有执行",
+    "confirmRequired": "[语句 {{n}}] 需要确认：{{reason}}"
+  },
+  "summary": {
+    "rows": "{{count}} 行 · {{ms}} ms",
+    "affected": "影响 {{count}} 行 · {{ms}} ms"
+  },
+  "cell": {
+    "truncated": "{{size}} · 已截断预览",
+    "hexMore": "…（共 {{total}} 字节，只显示前 {{max}} 字节）"
+  },
+  "viewer": {
+    "title": "{{column}} · 第 {{row}} 行",
+    "copy": "复制",
+    "copied": "已复制",
+    "copyFailed": "复制失败",
+    "text": "文本",
+    "hex": "十六进制"
+  }
+}

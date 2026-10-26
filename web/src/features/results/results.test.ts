@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { type ExecState, type ServerEvent, initialExec, reduceExec } from '../../shared/exec'
+import i18n from '../../shared/i18n'
 import { lastSummary, messageLines, resultTabs, shouldFetchMore } from './results'
 
 function run(events: ServerEvent[]): ExecState {
@@ -79,6 +80,19 @@ describe('结果面板', () => {
     expect(lastSummary(script)).toBe('影响 3 行 · 5 ms')
     expect(lastSummary(run([start(0), { type: 'result_start', columns: [col] }]))).toBeNull()
     expect(lastSummary(initialExec)).toBeNull()
+  })
+
+  it('英文界面：调用时按当前语言生成文字', async () => {
+    await i18n.changeLanguage('en')
+    try {
+      expect(resultTabs(script, false, null).map((t) => t.label)).toEqual(['Result 1', 'Statement 2 Failed', 'Messages'])
+      expect(messageLines(script, null)[0]).toEqual({ level: 'info', text: '[Statement 1] 2 rows, 38 ms' })
+      expect(lastSummary(script)).toBe('3 rows affected · 5 ms')
+      // 英文分单复数，中文不分
+      expect(i18n.t('results.summary.affected', { count: 1, ms: 5 })).toBe('1 row affected · 5 ms')
+    } finally {
+      await i18n.changeLanguage('zh-CN')
+    }
   })
 
   it('滚动到接近末尾且服务端在等时续取', () => {

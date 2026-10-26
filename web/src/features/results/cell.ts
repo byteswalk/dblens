@@ -1,6 +1,7 @@
 // 单元格查看（设计稿第 3 部分）：文本、JSON、十六进制三种显示。纯函数，单独测试。
 
 import { type CellValue, cellText } from '../../shared/exec'
+import { t } from '../../shared/i18n'
 
 interface LobPreview {
   preview: string
@@ -20,7 +21,8 @@ export function cellFullText(c: CellValue): string {
 export function lobNote(c: CellValue): string | null {
   if (c.t !== 'lob') return null
   const v = c.v as LobPreview
-  return `${formatBytes(v.total_len)}${v.truncated ? ' · 已截断预览' : ''}`
+  const size = formatBytes(v.total_len)
+  return v.truncated ? t('results.cell.truncated', { size }) : size
 }
 
 export function formatBytes(n: number): string {
@@ -57,7 +59,7 @@ export function hexDump(bytes: Uint8Array, max = 64 * 1024): string {
     const ascii = chunk.map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.')).join('')
     lines.push(`${off.toString(16).padStart(8, '0')}  ${hex.padEnd(47)}  |${ascii}|`)
   }
-  if (bytes.length > max) lines.push(`…（共 ${bytes.length} 字节，只显示前 ${max} 字节）`)
+  if (bytes.length > max) lines.push(t('results.cell.hexMore', { total: bytes.length, max }))
   return lines.join('\n')
 }
 

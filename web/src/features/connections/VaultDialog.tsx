@@ -2,11 +2,13 @@
 
 import { Alert, Form, Input, Modal } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useVault } from './vault'
 
 export default function VaultDialog() {
+  const { t } = useTranslation()
   const api = useApi()
   const { pending, finish } = useVault()
   const [master, setMaster] = useState('')
@@ -24,8 +26,8 @@ export default function VaultDialog() {
   const init = pending.mode === 'init'
 
   const submit = async () => {
-    if (!master) return setError('输入主密码')
-    if (init && master !== again) return setError('两次输入的主密码不一致')
+    if (!master) return setError(t('connections.vault.masterRequired'))
+    if (init && master !== again) return setError(t('connections.vault.mismatch'))
     setBusy(true)
     try {
       await (init ? api.initVault(master) : api.unlockVault(master))
@@ -40,24 +42,22 @@ export default function VaultDialog() {
   return (
     <Modal
       open
-      title={init ? '设置主密码' : '解锁密码库'}
-      okText={init ? '设置' : '解锁'}
+      title={init ? t('connections.vault.titleInit') : t('connections.vault.titleUnlock')}
+      okText={init ? t('connections.vault.okInit') : t('connections.vault.okUnlock')}
       confirmLoading={busy}
       onOk={submit}
       onCancel={() => finish(false)}
       width={420}
     >
       <p style={{ color: 'var(--text-2)' }}>
-        {init
-          ? '这台电脑没有可用的系统钥匙串，连接密码会用主密码加密后保存在本地。主密码遗忘后无法找回，只能重新输入各连接的密码。'
-          : '连接密码保存在本地的加密密码库中，输入主密码解锁后才能使用。'}
+        {init ? t('connections.vault.introInit') : t('connections.vault.introUnlock')}
       </p>
       <Form layout="vertical" onFinish={submit}>
-        <Form.Item label="主密码">
+        <Form.Item label={t('connections.vault.master')}>
           <Input.Password autoFocus value={master} onChange={(e) => setMaster(e.target.value)} onPressEnter={submit} />
         </Form.Item>
         {init && (
-          <Form.Item label="再输入一次">
+          <Form.Item label={t('connections.vault.again')}>
             <Input.Password value={again} onChange={(e) => setAgain(e.target.value)} onPressEnter={submit} />
           </Form.Item>
         )}

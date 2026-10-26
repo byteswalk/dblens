@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Profile } from '../../shared/api'
-import { emptyForm, fromProfile, serverText, switchDriver, toProfileInput, validate } from './form'
+import i18n from '../../shared/i18n'
+import {
+  DRIVER_IDS,
+  databaseLabel,
+  driverLabel,
+  emptyForm,
+  fromProfile,
+  serverText,
+  switchDriver,
+  toProfileInput,
+  validate,
+} from './form'
 
 describe('连接表单', () => {
   it('换驱动时跟着换默认端口，手改过的端口保留；不支持 TLS 的驱动关掉 TLS', () => {
@@ -77,5 +88,18 @@ describe('连接表单', () => {
     const s = (product: string, version: string) => ({ product, version, variant: 'x', variant_name: 'x', version_code: null })
     expect(serverText(s('PostgreSQL', 'PostgreSQL 18.6 on x86_64'))).toBe('PostgreSQL 18.6 on x86_64')
     expect(serverText(s('MySQL', '9.7.4'))).toBe('MySQL 9.7.4')
+  })
+
+  it('驱动名称、字段名、校验信息按调用时的界面语言翻译', async () => {
+    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM'])
+    try {
+      await i18n.changeLanguage('en')
+      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)'])
+      expect(databaseLabel('oracle')).toBe('Service Name')
+      expect(validate(emptyForm()).name).toBe('Enter a connection name')
+      expect(validate({ ...emptyForm(), extra: 'bad' }).extra).toBe('Unrecognized line: bad (expected key=value)')
+    } finally {
+      await i18n.changeLanguage('zh-CN')
+    }
   })
 })

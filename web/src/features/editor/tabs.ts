@@ -3,13 +3,14 @@
 
 import { create } from 'zustand'
 
+import { t } from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
 
 export const TABS_KEY = 'ui.tabs'
 
 export interface QueryTab {
   id: string
-  /** 「查询1」这样的标题。 */
+  /** 「查询1」这样的标题：新建时按界面语言生成，之后是数据，不随语言变化。 */
   title: string
   profileId: string
   sql: string
@@ -61,7 +62,7 @@ export const useTabs = create<TabsState>()((set, get) => ({
   seq: 1,
   open: (profileId, sql = '') => {
     const { tabs, seq } = get()
-    const tab = { id: newId(), title: `查询${seq}`, profileId, sql }
+    const tab = { id: newId(), title: t('editor.tab.untitled', { n: seq }), profileId, sql }
     set({ tabs: [...tabs, tab], active: tab.id, seq: seq + 1 })
     return tab.id
   },

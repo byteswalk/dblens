@@ -3,6 +3,7 @@
 
 import { Alert, App, Button } from 'antd'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
 
 import { useApi } from '../../app/context'
@@ -20,6 +21,7 @@ import { type QueryTab, useTabs } from './tabs'
 
 export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: Profile[] }) {
   const api = useApi()
+  const { t } = useTranslation()
   const { message } = App.useApp()
   const runner = runnerFor(api, tab.id)
   const rt = useTabRuntime(tab.id)
@@ -67,13 +69,13 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
               const text = formatSql(model.getValueInRange(range), profile.driver, rt.session?.variant)
               ed.executeEdits('format', [{ range, text }])
             } catch (e) {
-              message.error(`无法格式化：${e instanceof Error ? e.message : String(e)}`)
+              message.error(t('editor.query.formatFailed', { message: e instanceof Error ? e.message : String(e) }))
             }
             break
           }
         }
       }),
-    [runner, profile, rt.session?.variant, message],
+    [runner, profile, rt.session?.variant, message, t],
   )
 
   // 协议层面的错误（如上一段还没执行完）用全局提示（M1 设计文档第 5 节），同时记在"消息"里
@@ -89,15 +91,15 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
   return (
     <div className="query">
       <Toolbar tab={tab} rt={rt} runner={runner} profiles={profiles} />
-      {!profile && <Alert type="error" banner message="这个标签页的连接已被删除，请在工具栏中换一个连接" />}
+      {!profile && <Alert type="error" banner message={t('editor.query.profileDeleted')} />}
       {rt.session?.broken && (
         <Alert
           type="warning"
           banner
-          message="与数据库的连接已断开，未提交的修改已丢失"
+          message={t('editor.query.disconnected')}
           action={
             <Button size="small" onClick={() => runner.reconnect().catch((e: Error) => message.error(e.message))}>
-              重新连接
+              {t('editor.query.reconnect')}
             </Button>
           }
         />

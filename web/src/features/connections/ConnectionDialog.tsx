@@ -5,14 +5,17 @@ import { Alert, App, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, S
 import { IconCircleCheck, IconPlug } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import type { DriverId, Environment, ServerSummary } from '../../shared/api'
 import {
   type ConnectionForm,
-  DATABASE_LABEL,
-  DRIVERS,
+  DRIVER_IDS,
+  databaseLabel,
+  driverLabel,
+  driverNote,
   emptyForm,
   fromProfile,
   serverText,
@@ -33,17 +36,13 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   )
 }
 
-const ENVS: { value: Environment; label: string }[] = [
-  { value: 'none', label: '无' },
-  { value: 'dev', label: '开发' },
-  { value: 'test', label: '测试' },
-  { value: 'prod', label: '生产' },
-]
+const ENVS: Environment[] = ['none', 'dev', 'test', 'prod']
 
 /** Oracle、达梦需要原生客户端库：未确认目录时提示，并可直接确认建议目录或填写其他目录。 */
 function NativeLibNotice({ driver }: { driver: DriverId }) {
   const api = useApi()
   const qc = useQueryClient()
+  const { t } = useTranslation()
   const { message } = App.useApp()
   const { data: drivers } = useQuery({ queryKey: ['drivers'], queryFn: () => api.drivers() })
   const status = drivers?.find((d) => d.id === driver)
@@ -62,18 +61,18 @@ function NativeLibNotice({ driver }: { driver: DriverId }) {
       type="warning"
       showIcon
       style={{ marginBottom: 12 }}
-      message={status.hint ?? `需要 ${status.name} 客户端库`}
+      message={status.hint ?? t('connections.nativeLib.needed', { name: status.name })}
       description={
         <Space direction="vertical" style={{ width: '100%' }}>
           {status.suggested_lib_dir && (
             <Button size="small" onClick={() => confirm(status.suggested_lib_dir!)}>
-              使用 {status.suggested_lib_dir}
+              {t('connections.nativeLib.useSuggested', { dir: status.suggested_lib_dir })}
             </Button>
           )}
           <Space.Compact style={{ width: '100%' }}>
-            <Input size="small" placeholder="其他目录（绝对路径）" value={dir} onChange={(e) => setDir(e.target.value)} />
+            <Input size="small" placeholder={t('connections.nativeLib.otherDirPlaceholder')} value={dir} onChange={(e) => setDir(e.target.value)} />
             <Button size="small" disabled={!dir.trim()} onClick={() => confirm(dir.trim())}>
-              使用这个目录
+              {t('connections.nativeLib.useThisDir')}
             </Button>
           </Space.Compact>
         </Space>
@@ -85,6 +84,7 @@ function NativeLibNotice({ driver }: { driver: DriverId }) {
 export default function ConnectionDialog() {
   const api = useApi()
   const qc = useQueryClient()
+  const { t } = useTranslation()
   const { message } = App.useApp()
   const { connectionDialog, closeConnection } = useUi()
   const editingId = connectionDialog?.profileId ?? null
@@ -142,7 +142,7 @@ export default function ConnectionDialog() {
         else if (form.password) await withVault(api, () => api.setPassword(editingId, form.password))
       }
       await qc.invalidateQueries({ queryKey: ['profiles'] })
-      message.success(editingId === null ? '连接已创建' : '连接已保存')
+      message.success(editingId === null ? t('connections.dialog.created') : t('connections.dialog.saved'))
       closeConnection()
     } catch (e) {
       message.error((e as Error).message)
@@ -154,48 +154,50 @@ export default function ConnectionDialog() {
   const general = (
     <>
       <NativeLibNotice driver={form.driver} />
-      <Field label="名称" error={errors.name}>
+      <Field label={t('connections.general.name')} error={errors.name}>
         <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="prod-mysql" />
       </Field>
-      <Field label="主机 / 端口" error={errors.host ?? errors.port}>
+      <Field label={t('connections.general.hostPort')} error={errors.host ?? errors.port}>
         <Space.Compact style={{ width: '100%' }}>
           <Input value={form.host} onChange={(e) => set('host', e.target.value)} />
           <InputNumber style={{ width: 110 }} min={1} max={65535} value={form.port} onChange={(v) => set('port', v ?? 0)} />
         </Space.Compact>
       </Field>
-      <Field label="用户" error={errors.user}>
+      <Field label={t('connections.general.user')} error={errors.user}>
         <Input value={form.user} onChange={(e) => set('user', e.target.value)} autoComplete="off" />
       </Field>
-      <Field label="密码">
+      <Field label={t('connections.general.password')}>
         <Space.Compact style={{ width: '100%' }}>
           <Input.Password
             value={form.password}
             onChange={(e) => set('password', e.target.value)}
             autoComplete="new-password"
-            placeholder={editingId ? '留空则沿用已保存的密码（测试连接时需要重新输入）' : undefined}
+            placeholder={editingId ? t('connections.general.passwordKeepPlaceholder') : undefined}
           />
         </Space.Compact>
         <Checkbox checked={form.savePassword} onChange={(e) => set('savePassword', e.target.checked)} style={{ marginTop: 4 }}>
-          保存密码
+          {t('connections.general.savePassword')}
         </Checkbox>
       </Field>
-      <Field label={DATABASE_LABEL[form.driver]} error={errors.database}>
+      <Field label={databaseLabel(form.driver)} error={errors.database}>
         <Input
           value={form.database}
           onChange={(e) => set('database', e.target.value)}
-          placeholder={form.driver === 'oracle' ? 'FREEPDB1；用 SID 连接时在「高级」中填写' : '可选'}
+          placeholder={
+            form.driver === 'oracle' ? t('connections.general.oracleServicePlaceholder') : t('connections.general.optional')
+          }
         />
       </Field>
-      <Field label="环境">
+      <Field label={t('connections.general.environment')}>
         <Radio.Group
           optionType="button"
           value={form.environment}
           onChange={(e) => set('environment', e.target.value)}
-          options={ENVS}
+          options={ENVS.map((value) => ({ value, label: t(`connections.env.${value}`) }))}
         />
         {form.environment === 'prod' && (
           <div className="muted" style={{ marginTop: 4 }}>
-            生产连接：标签页标红；不带 WHERE 的 UPDATE/DELETE、DROP、TRUNCATE 执行前要确认
+            {t('connections.general.prodHint')}
           </div>
         )}
       </Field>
@@ -204,42 +206,42 @@ export default function ConnectionDialog() {
 
   const tls = supportsTls(form.driver) ? (
     <>
-      <Field label="模式">
+      <Field label={t('connections.tls.mode')}>
         <Radio.Group
           value={form.tls}
           onChange={(e) => set('tls', e.target.value)}
           options={[
-            { value: 'disable', label: '关闭' },
-            { value: 'require', label: '加密（不校验证书）' },
-            { value: 'verify', label: '校验证书' },
+            { value: 'disable', label: t('connections.tls.disable') },
+            { value: 'require', label: t('connections.tls.require') },
+            { value: 'verify', label: t('connections.tls.verify') },
           ]}
         />
       </Field>
       {form.tls === 'verify' && (
-        <Field label="CA 证书">
-          <Input value={form.tlsCa} onChange={(e) => set('tlsCa', e.target.value)} placeholder="可选：额外信任的 CA 证书文件（绝对路径）" />
+        <Field label={t('connections.tls.ca')}>
+          <Input value={form.tlsCa} onChange={(e) => set('tlsCa', e.target.value)} placeholder={t('connections.tls.caPlaceholder')} />
         </Field>
       )}
     </>
   ) : (
-    <Alert type="info" showIcon message={`${DRIVERS.find((d) => d.id === form.driver)?.label} 暂不支持在这里配置 TLS`} />
+    <Alert type="info" showIcon message={t('connections.tls.unsupported', { driver: driverLabel(form.driver) })} />
   )
 
   const advanced = (
     <>
-      <Field label="连接超时（秒）" error={errors.timeoutSecs}>
+      <Field label={t('connections.advanced.timeout')} error={errors.timeoutSecs}>
         <InputNumber min={1} max={600} value={form.timeoutSecs} onChange={(v) => set('timeoutSecs', v ?? 0)} />
       </Field>
       {form.driver === 'oracle' && (
         <Field label="SID">
-          <Input value={form.oracleSid} onChange={(e) => set('oracleSid', e.target.value)} placeholder="填写后用 SID 连接，忽略服务名" />
+          <Input value={form.oracleSid} onChange={(e) => set('oracleSid', e.target.value)} placeholder={t('connections.advanced.sidPlaceholder')} />
         </Field>
       )}
-      <Field label="颜色">
-        <Input value={form.color} onChange={(e) => set('color', e.target.value)} placeholder="可选，覆盖环境的默认颜色，如 #d4380d" />
+      <Field label={t('connections.advanced.color')}>
+        <Input value={form.color} onChange={(e) => set('color', e.target.value)} placeholder={t('connections.advanced.colorPlaceholder')} />
       </Field>
-      <Field label="其他参数" error={errors.extra}>
-        <Input.TextArea rows={3} value={form.extra} onChange={(e) => set('extra', e.target.value)} placeholder="一行一个，键=值" />
+      <Field label={t('connections.advanced.extra')} error={errors.extra}>
+        <Input.TextArea rows={3} value={form.extra} onChange={(e) => set('extra', e.target.value)} placeholder={t('connections.advanced.extraPlaceholder')} />
       </Field>
     </>
   )
@@ -247,19 +249,19 @@ export default function ConnectionDialog() {
   return (
     <Modal
       open={connectionDialog !== null}
-      title={editingId ? '编辑连接' : '新建连接'}
+      title={editingId ? t('connections.dialog.titleEdit') : t('connections.dialog.titleNew')}
       width={760}
       onCancel={closeConnection}
       destroyOnHidden
       footer={
         <div className="row" style={{ gap: 8 }}>
           <Button icon={<IconPlug size={14} />} loading={busy === 'test'} onClick={test}>
-            测试连接
+            {t('connections.dialog.test')}
           </Button>
           <span className="grow" />
-          <Button onClick={closeConnection}>取消</Button>
+          <Button onClick={closeConnection}>{t('connections.dialog.cancel')}</Button>
           <Button type="primary" loading={busy === 'save'} onClick={save}>
-            保存
+            {t('connections.dialog.save')}
           </Button>
         </div>
       }
@@ -267,33 +269,33 @@ export default function ConnectionDialog() {
       <div className="row" style={{ alignItems: 'stretch', minHeight: 430 }}>
         <div style={{ width: 170, borderRight: '1px solid var(--border)', paddingRight: 8, marginRight: 16 }}>
           <div className="muted" style={{ marginBottom: 6 }}>
-            数据库类型
+            {t('connections.dialog.driverType')}
           </div>
-          {DRIVERS.map((d) => (
+          {DRIVER_IDS.map((id) => (
             <div
-              key={d.id}
-              onClick={() => setForm((f) => switchDriver(f, d.id))}
+              key={id}
+              onClick={() => setForm((f) => switchDriver(f, id))}
               style={{
                 padding: '6px 10px',
                 borderRadius: 4,
                 cursor: 'pointer',
-                background: form.driver === d.id ? 'var(--sel)' : undefined,
+                background: form.driver === id ? 'var(--sel)' : undefined,
               }}
             >
-              {d.label}
+              {driverLabel(id)}
             </div>
           ))}
           <div className="muted" style={{ marginTop: 12, lineHeight: 1.5 }}>
-            {DRIVERS.find((d) => d.id === form.driver)?.note}
+            {driverNote(form.driver)}
           </div>
         </div>
         <Form className="grow" layout="horizontal" labelCol={{ flex: '100px' }} labelAlign="left">
           <Tabs
             size="small"
             items={[
-              { key: 'general', label: '常规', children: general },
+              { key: 'general', label: t('connections.dialog.tabGeneral'), children: general },
               { key: 'tls', label: 'SSL/TLS', children: tls },
-              { key: 'advanced', label: '高级', children: advanced },
+              { key: 'advanced', label: t('connections.dialog.tabAdvanced'), children: advanced },
             ]}
           />
           {result &&
@@ -302,7 +304,7 @@ export default function ConnectionDialog() {
                 type="success"
                 showIcon
                 icon={<IconCircleCheck size={16} />}
-                message={`连接成功：${serverText(result.ok)}，识别为 ${result.ok.variant_name}`}
+                message={t('connections.dialog.testOk', { server: serverText(result.ok), variant: result.ok.variant_name })}
               />
             ) : (
               <Alert type="error" showIcon message={result.error} />

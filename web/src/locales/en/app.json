@@ -1,6 +1,89 @@
 {
+  "boot": {
+    "serverUnreachable": "Cannot connect to the DBLens service",
+    "missingToken": "Missing access token",
+    "missingTokenHint": "Open this page with the link that dblens-server prints at startup (it ends with #token=…)."
+  },
   "settings": {
+    "title": "Settings",
     "language": "Language",
-    "languageHint": "The editor's own menus and find box switch language at the next start"
+    "languageHint": "The editor's own menus and find box switch language at the next start",
+    "theme": "Theme",
+    "rowCap": "Max result rows",
+    "rowCapHint": "Stop reading a result set after this many rows",
+    "autoCheckUpdate": "Check for updates at startup"
+  },
+  "theme": {
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "side": {
+    "db": "Database",
+    "history": "History",
+    "favorites": "Favorites",
+    "ops": "Ops Queries",
+    "comingSoon": "Coming soon"
+  },
+  "welcome": {
+    "newConnection": "New Connection",
+    "newQuery": "New Query",
+    "hint": "Expand a connection in the database tree on the left to browse its schema; right-click a connection to open a new query (Ctrl+T)"
+  },
+  "status": {
+    "connectionDeleted": "Connection deleted",
+    "autocommit": "Auto-commit",
+    "manualCommit": "Manual commit",
+    "inTransaction": "Manual commit · In transaction",
+    "running": "Running…",
+    "cursor": "Ln {{line}}, Col {{column}}",
+    "noConnection": "No connection selected"
+  },
+  "titleBar": {
+    "windowTitle": "{{tab}} · {{connection}} — {{app}}",
+    "pin": "Always on Top (Ctrl+Shift+T)",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
+  "menu": {
+    "file": {
+      "title": "File",
+      "newConnection": "New Connection…",
+      "newQuery": "New Query",
+      "closeTab": "Close Tab",
+      "settings": "Settings…",
+      "quit": "Exit"
+    },
+    "view": {
+      "title": "View",
+      "themeSystem": "System Theme",
+      "themeLight": "Light Theme",
+      "themeDark": "Dark Theme"
+    },
+    "sql": {
+      "runCurrent": "Run Current Statement",
+      "runAll": "Run All",
+      "cancel": "Stop",
+      "format": "Format",
+      "explain": "Explain Plan"
+    },
+    "window": {
+      "title": "Window",
+      "onTop": "Always on Top",
+      "reset": "Reset Window Position and Size"
+    },
+    "help": {
+      "title": "Help",
+      "checkUpdate": "Check for Updates…",
+      "autoCheck": "Check for Updates at Startup",
+      "about": "About DBLens"
+    }
+  },
+  "exec": {
+    "socketFailed": "WebSocket connection failed",
+    "lobTruncated": "{{preview}}… ({{total}} total)",
+    "lobTruncatedBinary": "(binary) {{preview}}… ({{total}} total)"
   }
 }

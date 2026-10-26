@@ -16,6 +16,7 @@ import {
   initialExec,
   reduceExec,
 } from '../../shared/exec'
+import { t } from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
 import { withVault } from '../connections/vault'
 import { useTabs } from './tabs'
@@ -140,8 +141,8 @@ export class Runner {
       })
     }
     if (!session) {
-      const tab = useTabs.getState().tabs.find((t) => t.id === this.tabId)
-      if (!tab) throw new Error('标签页已关闭')
+      const tab = useTabs.getState().tabs.find((x) => x.id === this.tabId)
+      if (!tab) throw new Error(t('editor.runner.tabClosed'))
       session = await withVault(this.api, () => this.api.openSession(tab.profileId))
     }
     this.patch({ session, error: null })
@@ -220,7 +221,7 @@ export class Runner {
 
   private onClose() {
     this.socket = null
-    if (this.rt().running) this.patch({ running: false, error: '与 DBLens 服务的连接已断开' })
+    if (this.rt().running) this.patch({ running: false, error: t('editor.runner.serviceDisconnected') })
   }
 
   /** 表格滚动到底部时取下一批。 */

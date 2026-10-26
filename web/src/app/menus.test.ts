@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import i18n from '../shared/i18n'
 import { type MenuEntry, buildMenus } from './menus'
 
 const base = { desktop: true, alwaysOnTop: false, autoCheckUpdate: true, theme: 'system' as const, side: 'db' as const }
@@ -25,5 +26,20 @@ describe('标题栏菜单', () => {
     const m = buildMenus({ ...base, alwaysOnTop: true, theme: 'dark', side: 'history', autoCheckUpdate: false })
     const checked = m.flatMap((g) => g.items).filter((i) => i !== 'divider' && i.checked)
     expect(checked.map((i) => (i as { key: string }).key)).toEqual(['side:history', 'theme:dark', 'window:on-top'])
+  })
+
+  it('文字按调用时的界面语言生成', async () => {
+    await i18n.changeLanguage('en')
+    try {
+      const m = buildMenus(base)
+      expect(m.map((g) => g.label)).toEqual(['File', 'View', 'SQL', 'Window', 'Help'])
+      const labels = m.flatMap((g) => g.items).map((i) => (i === 'divider' ? '-' : i.label))
+      expect(labels).toContain('Run Current Statement')
+      expect(labels).toContain('Always on Top')
+      expect(labels).toContain('Database')
+    } finally {
+      await i18n.changeLanguage('zh-CN')
+    }
+    expect(buildMenus(base)[0].label).toBe('文件')
   })
 })

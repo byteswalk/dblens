@@ -1,1 +1,101 @@
-{}
+{
+  "driver": {
+    "mysql": {
+      "label": "MySQL family",
+      "note": "Includes MariaDB, TiDB, OceanBase-MySQL and PolarDB-MySQL, detected automatically on connect"
+    },
+    "postgres": {
+      "label": "PostgreSQL family",
+      "note": "Includes KingbaseES, openGauss/GaussDB and HighGo, detected automatically on connect"
+    },
+    "oracle": {
+      "label": "Oracle",
+      "note": "Requires Oracle Instant Client"
+    },
+    "dameng": {
+      "label": "DM (Dameng)",
+      "note": "Requires the DM DPI client library"
+    }
+  },
+  "databaseLabel": {
+    "mysql": "Database",
+    "postgres": "Database",
+    "oracle": "Service Name",
+    "dameng": "Schema"
+  },
+  "validate": {
+    "nameRequired": "Enter a connection name",
+    "hostRequired": "Enter a host",
+    "portRange": "Port must be between 1 and 65535",
+    "userRequired": "Enter a user name",
+    "serviceOrSidRequired": "Enter a service name or SID",
+    "timeoutRange": "Timeout must be between 1 and 600 seconds",
+    "extraBadLine": "Unrecognized line: {{line}} (expected key=value)"
+  },
+  "env": {
+    "none": "None",
+    "dev": "Dev",
+    "test": "Test",
+    "prod": "Prod"
+  },
+  "nativeLib": {
+    "needed": "{{name}} client library required",
+    "useSuggested": "Use {{dir}}",
+    "otherDirPlaceholder": "Other directory (absolute path)",
+    "useThisDir": "Use This Directory"
+  },
+  "dialog": {
+    "titleNew": "New Connection",
+    "titleEdit": "Edit Connection",
+    "test": "Test Connection",
+    "cancel": "Cancel",
+    "save": "Save",
+    "driverType": "Database Type",
+    "created": "Connection created",
+    "saved": "Connection saved",
+    "testOk": "Connected: {{server}}, detected as {{variant}}",
+    "tabGeneral": "General",
+    "tabAdvanced": "Advanced"
+  },
+  "general": {
+    "name": "Name",
+    "hostPort": "Host / Port",
+    "user": "User",
+    "password": "Password",
+    "passwordKeepPlaceholder": "Leave blank to keep the saved password (re-enter it to test the connection)",
+    "savePassword": "Save password",
+    "oracleServicePlaceholder": "FREEPDB1; to connect by SID, set it under Advanced",
+    "optional": "Optional",
+    "environment": "Environment",
+    "prodHint": "Production connection: tabs are marked red; UPDATE/DELETE without WHERE, DROP and TRUNCATE require confirmation"
+  },
+  "tls": {
+    "mode": "Mode",
+    "disable": "Disabled",
+    "require": "Encrypt (no certificate check)",
+    "verify": "Verify Certificate",
+    "ca": "CA Certificate",
+    "caPlaceholder": "Optional: additional trusted CA certificate file (absolute path)",
+    "unsupported": "TLS cannot be configured here for {{driver}} yet"
+  },
+  "advanced": {
+    "timeout": "Connect Timeout (s)",
+    "sidPlaceholder": "If set, connect by SID and ignore the service name",
+    "color": "Color",
+    "colorPlaceholder": "Optional, overrides the environment color, e.g. #d4380d",
+    "extra": "Other Parameters",
+    "extraPlaceholder": "One per line, key=value"
+  },
+  "vault": {
+    "titleInit": "Set Master Password",
+    "titleUnlock": "Unlock Password Vault",
+    "okInit": "Set",
+    "okUnlock": "Unlock",
+    "introInit": "No system keychain is available on this computer, so connection passwords are encrypted with a master password and stored locally. A forgotten master password cannot be recovered; you would have to re-enter each connection's password.",
+    "introUnlock": "Connection passwords are stored in a local encrypted vault. Enter the master password to unlock it.",
+    "master": "Master Password",
+    "again": "Confirm Password",
+    "masterRequired": "Enter the master password",
+    "mismatch": "The passwords do not match"
+  }
+}

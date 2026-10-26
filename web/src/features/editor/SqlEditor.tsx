@@ -3,6 +3,7 @@
 
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { useSetting } from '../../shared/settings'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../../shared/theme'
@@ -14,12 +15,14 @@ import { monaco } from './monaco'
 export type MonacoEditor = Parameters<OnMount>[0]
 
 const { KeyMod, KeyCode } = monaco
-const ACTIONS: { id: EditorCommand; label: string; keys: number[] }[] = [
-  { id: 'run-current', label: '执行当前语句', keys: [KeyMod.CtrlCmd | KeyCode.Enter] },
-  { id: 'run-all', label: '执行全部', keys: [KeyCode.F5] },
-  { id: 'cancel', label: '停止', keys: [KeyMod.CtrlCmd | KeyCode.PauseBreak, KeyMod.CtrlCmd | KeyCode.Period] },
-  { id: 'format', label: '格式化', keys: [KeyMod.Shift | KeyMod.Alt | KeyCode.KeyF] },
-  { id: 'explain', label: '执行计划', keys: [] },
+type CommandLabel = `editor.command.${'runCurrent' | 'runAll' | 'stop' | 'format' | 'explain'}`
+// label 是词条键，注册动作时按当前界面语言翻译
+const ACTIONS: { id: EditorCommand; label: CommandLabel; keys: number[] }[] = [
+  { id: 'run-current', label: 'editor.command.runCurrent', keys: [KeyMod.CtrlCmd | KeyCode.Enter] },
+  { id: 'run-all', label: 'editor.command.runAll', keys: [KeyCode.F5] },
+  { id: 'cancel', label: 'editor.command.stop', keys: [KeyMod.CtrlCmd | KeyCode.PauseBreak, KeyMod.CtrlCmd | KeyCode.Period] },
+  { id: 'format', label: 'editor.command.format', keys: [KeyMod.Shift | KeyMod.Alt | KeyCode.KeyF] },
+  { id: 'explain', label: 'editor.command.explain', keys: [] },
 ]
 
 export interface SqlEditorProps {
@@ -32,6 +35,7 @@ export interface SqlEditorProps {
 }
 
 export default function SqlEditor({ path, language, defaultValue, marks, onChange, onReady }: SqlEditorProps) {
+  const { t } = useTranslation()
   const systemDark = useSystemDark()
   const theme = resolveTheme(parseThemePref(useSetting(THEME_KEY)), systemDark)
   const editorRef = useRef<MonacoEditor | null>(null)
@@ -41,7 +45,7 @@ export default function SqlEditor({ path, language, defaultValue, marks, onChang
     for (const a of ACTIONS) {
       editor.addAction({
         id: `dblens.${a.id}`,
-        label: a.label,
+        label: t(a.label),
         keybindings: a.keys,
         contextMenuGroupId: a.id === 'cancel' ? undefined : '0_dblens',
         run: () => sendCommand(a.id),

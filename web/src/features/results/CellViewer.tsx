@@ -3,6 +3,7 @@
 import { App, Button, Modal, Tabs } from 'antd'
 import { IconCopy } from '@tabler/icons-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { CellValue } from '../../shared/exec'
 import { cellBytes, cellFullText, hexDump, lobNote, prettyJson } from './cell'
@@ -15,6 +16,7 @@ export interface ViewedCell {
 }
 
 export default function CellViewer({ cell, onClose }: { cell: ViewedCell | null; onClose(): void }) {
+  const { t } = useTranslation()
   const { message } = App.useApp()
   const [tab, setTab] = useState('text')
   if (!cell) return null
@@ -24,18 +26,18 @@ export default function CellViewer({ cell, onClose }: { cell: ViewedCell | null;
   const current = views[tab] ?? views.text
   const copy = () =>
     navigator.clipboard.writeText(current).then(
-      () => message.success('已复制'),
-      () => message.error('复制失败'),
+      () => message.success(t('results.viewer.copied')),
+      () => message.error(t('results.viewer.copyFailed')),
     )
   return (
     <Modal
       open
-      title={`${cell.column} · 第 ${cell.row} 行`}
+      title={t('results.viewer.title', { column: cell.column, row: cell.row })}
       onCancel={onClose}
       width={640}
       footer={
         <Button icon={<IconCopy size={14} />} onClick={copy}>
-          复制
+          {t('results.viewer.copy')}
         </Button>
       }
     >
@@ -45,9 +47,9 @@ export default function CellViewer({ cell, onClose }: { cell: ViewedCell | null;
         onChange={setTab}
         tabBarExtraContent={<span className="muted">{lobNote(cell.value)}</span>}
         items={[
-          { key: 'text', label: '文本' },
+          { key: 'text', label: t('results.viewer.text') },
           { key: 'json', label: 'JSON', disabled: json === null },
-          { key: 'hex', label: '十六进制' },
+          { key: 'hex', label: t('results.viewer.hex') },
         ]}
       />
       <pre className="cell-view">{current}</pre>

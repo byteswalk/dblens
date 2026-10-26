@@ -1,1 +1,46 @@
-{}
+{
+  "category": {
+    "tables": "表",
+    "views": "视图",
+    "materializedViews": "物化视图",
+    "routines": "函数和过程",
+    "sequences": "序列",
+    "synonyms": "同义词"
+  },
+  "routineKind": {
+    "procedure": "过程",
+    "function": "函数",
+    "package": "包",
+    "packageBody": "包体"
+  },
+  "node": {
+    "system": "系统"
+  },
+  "env": {
+    "dev": "开发",
+    "test": "测试",
+    "prod": "生产"
+  },
+  "filterPlaceholder": "按名称或注释过滤",
+  "menu": {
+    "newQuery": "新建查询",
+    "editConnection": "编辑连接…",
+    "duplicateConnection": "复制连接",
+    "deleteConnection": "删除连接",
+    "copyName": "复制名称",
+    "refresh": "刷新"
+  },
+  "duplicate": {
+    "name": "{{name}} 副本",
+    "done": "已复制连接（密码未复制）"
+  },
+  "delete": {
+    "title": "删除连接「{{name}}」？",
+    "content": "同时删除保存的密码。数据库中的数据不受影响。",
+    "ok": "删除"
+  },
+  "copied": "已复制",
+  "error": {
+    "badKey": "无法识别的节点键：{{key}}"
+  }
+}

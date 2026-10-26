@@ -1,6 +1,89 @@
 {
+  "boot": {
+    "serverUnreachable": "无法连接 DBLens 服务",
+    "missingToken": "缺少访问令牌",
+    "missingTokenHint": "请使用 dblens-server 启动时打印的链接打开本页（链接末尾带 #token=…）。"
+  },
   "settings": {
+    "title": "设置",
     "language": "语言",
-    "languageHint": "编辑器自带的菜单和查找框在下次启动时换成新语言"
+    "languageHint": "编辑器自带的菜单和查找框在下次启动时换成新语言",
+    "theme": "主题",
+    "rowCap": "结果行数上限",
+    "rowCapHint": "一个结果集读到这么多行后停止读取",
+    "autoCheckUpdate": "启动时自动检查更新"
+  },
+  "theme": {
+    "system": "跟随系统",
+    "light": "亮色",
+    "dark": "暗色"
+  },
+  "side": {
+    "db": "数据库",
+    "history": "历史",
+    "favorites": "收藏",
+    "ops": "运维查询",
+    "comingSoon": "即将推出"
+  },
+  "welcome": {
+    "newConnection": "新建连接",
+    "newQuery": "新建查询",
+    "hint": "在左侧的数据库树中展开连接浏览库表结构，右键连接可新建查询（Ctrl+T）"
+  },
+  "status": {
+    "connectionDeleted": "连接已删除",
+    "autocommit": "自动提交",
+    "manualCommit": "手动提交",
+    "inTransaction": "手动提交 · 事务中",
+    "running": "执行中…",
+    "cursor": "行 {{line}}，列 {{column}}",
+    "noConnection": "未选择连接"
+  },
+  "titleBar": {
+    "windowTitle": "{{tab}} · {{connection}} — {{app}}",
+    "pin": "窗口置顶（Ctrl+Shift+T）",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭"
+  },
+  "menu": {
+    "file": {
+      "title": "文件",
+      "newConnection": "新建连接…",
+      "newQuery": "新建查询",
+      "closeTab": "关闭标签",
+      "settings": "设置…",
+      "quit": "退出"
+    },
+    "view": {
+      "title": "查看",
+      "themeSystem": "主题跟随系统",
+      "themeLight": "亮色主题",
+      "themeDark": "暗色主题"
+    },
+    "sql": {
+      "runCurrent": "执行当前语句",
+      "runAll": "执行全部",
+      "cancel": "停止",
+      "format": "格式化",
+      "explain": "执行计划"
+    },
+    "window": {
+      "title": "窗口",
+      "onTop": "窗口置顶",
+      "reset": "恢复默认窗口位置和大小"
+    },
+    "help": {
+      "title": "帮助",
+      "checkUpdate": "检查更新…",
+      "autoCheck": "启动时自动检查更新",
+      "about": "关于 DBLens"
+    }
+  },
+  "exec": {
+    "socketFailed": "WebSocket 连接失败",
+    "lobTruncated": "{{preview}}…（共 {{total}}）",
+    "lobTruncatedBinary": "(二进制) {{preview}}…（共 {{total}}）"
   }
 }

@@ -1,1 +1,101 @@
-{}
+{
+  "driver": {
+    "mysql": {
+      "label": "MySQL 系",
+      "note": "含 MariaDB、TiDB、OceanBase-MySQL、PolarDB-MySQL，连接后自动识别"
+    },
+    "postgres": {
+      "label": "PostgreSQL 系",
+      "note": "含人大金仓、openGauss/GaussDB、瀚高，连接后自动识别"
+    },
+    "oracle": {
+      "label": "Oracle",
+      "note": "需要 Oracle Instant Client"
+    },
+    "dameng": {
+      "label": "达梦 DM",
+      "note": "需要达梦 DPI 客户端库"
+    }
+  },
+  "databaseLabel": {
+    "mysql": "数据库",
+    "postgres": "数据库",
+    "oracle": "服务名",
+    "dameng": "模式"
+  },
+  "validate": {
+    "nameRequired": "填写连接名称",
+    "hostRequired": "填写主机地址",
+    "portRange": "端口在 1–65535 之间",
+    "userRequired": "填写用户名",
+    "serviceOrSidRequired": "填写服务名或 SID",
+    "timeoutRange": "超时在 1–600 秒之间",
+    "extraBadLine": "无法识别的一行：{{line}}（格式为 键=值）"
+  },
+  "env": {
+    "none": "无",
+    "dev": "开发",
+    "test": "测试",
+    "prod": "生产"
+  },
+  "nativeLib": {
+    "needed": "需要 {{name}} 客户端库",
+    "useSuggested": "使用 {{dir}}",
+    "otherDirPlaceholder": "其他目录（绝对路径）",
+    "useThisDir": "使用这个目录"
+  },
+  "dialog": {
+    "titleNew": "新建连接",
+    "titleEdit": "编辑连接",
+    "test": "测试连接",
+    "cancel": "取消",
+    "save": "保存",
+    "driverType": "数据库类型",
+    "created": "连接已创建",
+    "saved": "连接已保存",
+    "testOk": "连接成功：{{server}}，识别为 {{variant}}",
+    "tabGeneral": "常规",
+    "tabAdvanced": "高级"
+  },
+  "general": {
+    "name": "名称",
+    "hostPort": "主机 / 端口",
+    "user": "用户",
+    "password": "密码",
+    "passwordKeepPlaceholder": "留空则沿用已保存的密码（测试连接时需要重新输入）",
+    "savePassword": "保存密码",
+    "oracleServicePlaceholder": "FREEPDB1；用 SID 连接时在「高级」中填写",
+    "optional": "可选",
+    "environment": "环境",
+    "prodHint": "生产连接：标签页标红；不带 WHERE 的 UPDATE/DELETE、DROP、TRUNCATE 执行前要确认"
+  },
+  "tls": {
+    "mode": "模式",
+    "disable": "关闭",
+    "require": "加密（不校验证书）",
+    "verify": "校验证书",
+    "ca": "CA 证书",
+    "caPlaceholder": "可选：额外信任的 CA 证书文件（绝对路径）",
+    "unsupported": "{{driver}} 暂不支持在这里配置 TLS"
+  },
+  "advanced": {
+    "timeout": "连接超时（秒）",
+    "sidPlaceholder": "填写后用 SID 连接，忽略服务名",
+    "color": "颜色",
+    "colorPlaceholder": "可选，覆盖环境的默认颜色，如 #d4380d",
+    "extra": "其他参数",
+    "extraPlaceholder": "一行一个，键=值"
+  },
+  "vault": {
+    "titleInit": "设置主密码",
+    "titleUnlock": "解锁密码库",
+    "okInit": "设置",
+    "okUnlock": "解锁",
+    "introInit": "这台电脑没有可用的系统钥匙串，连接密码会用主密码加密后保存在本地。主密码遗忘后无法找回，只能重新输入各连接的密码。",
+    "introUnlock": "连接密码保存在本地的加密密码库中，输入主密码解锁后才能使用。",
+    "master": "主密码",
+    "again": "再输入一次",
+    "masterRequired": "输入主密码",
+    "mismatch": "两次输入的主密码不一致"
+  }
+}

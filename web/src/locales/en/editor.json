@@ -1,1 +1,58 @@
-{}
+{
+  "command": {
+    "runCurrent": "Run Current Statement",
+    "runAll": "Run All",
+    "stop": "Stop",
+    "format": "Format",
+    "explain": "Explain Plan"
+  },
+  "toolbar": {
+    "runCurrent": "Run Current Statement (Ctrl+Enter)",
+    "runAll": "Run All (F5)",
+    "stop": "Stop (Ctrl+Break)",
+    "stopOnError": "Stop on Error",
+    "continueOnError": "Continue on Error",
+    "autoCommit": "Auto-commit",
+    "manualCommit": "Manual Commit",
+    "commit": "Commit",
+    "rollback": "Rollback",
+    "inTransaction": "Uncommitted transaction",
+    "format": "Format (Shift+Alt+F)",
+    "explain": "Explain Plan"
+  },
+  "switchProfile": {
+    "title": "Switch Connection",
+    "content": "The current session has an uncommitted transaction. Switching the connection will roll back these changes."
+  },
+  "closeTab": {
+    "title": "{{title}} has an uncommitted transaction",
+    "content": "Commit or roll back these changes before closing?",
+    "commit": "Commit and Close",
+    "rollback": "Roll Back and Close",
+    "cancel": "Cancel"
+  },
+  "confirm": {
+    "title": "Confirm Execution",
+    "ok": "Run Anyway",
+    "cancel": "Cancel"
+  },
+  "query": {
+    "profileDeleted": "The connection of this tab has been deleted. Choose another connection in the toolbar.",
+    "disconnected": "The connection to the database was lost; uncommitted changes have been lost",
+    "reconnect": "Reconnect",
+    "formatFailed": "Cannot format: {{message}}"
+  },
+  "tab": {
+    "untitled": "Query {{n}}",
+    "prod": "Production",
+    "profileDeleted": "Connection deleted",
+    "newQuery": "New Query (Ctrl+T)"
+  },
+  "runner": {
+    "tabClosed": "The tab has been closed",
+    "serviceDisconnected": "The connection to the DBLens service was lost"
+  },
+  "dialect": {
+    "dameng": "DM"
+  }
+}

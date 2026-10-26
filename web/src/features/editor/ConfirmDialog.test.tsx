@@ -5,6 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import i18n from '../../shared/i18n'
 import ConfirmDialog from './ConfirmDialog'
 
 beforeAll(() => {
@@ -42,5 +43,16 @@ describe('生产确认框', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
     await userEvent.click(screen.getByRole('button', { name: '仍然执行' }))
     expect(onConfirm).toHaveBeenCalledTimes(1)
+  })
+
+  it('英文界面显示英文按钮', async () => {
+    await i18n.changeLanguage('en')
+    try {
+      render(<ConfirmDialog open sql="DELETE FROM orders" reason="x" onConfirm={vi.fn()} onCancel={vi.fn()} />)
+      expect(screen.getByText('Confirm Execution')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Run Anyway' })).toBeTruthy()
+    } finally {
+      await i18n.changeLanguage('zh-CN')
+    }
   })
 })

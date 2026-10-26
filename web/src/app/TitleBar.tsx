@@ -6,6 +6,7 @@ import { App, Dropdown, type MenuProps } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { IconCheck, IconCopy, IconDatabase, IconMinus, IconPin, IconSquare, IconX } from '@tabler/icons-react'
 import { type MouseEvent, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { useQueryActions } from '../features/editor/actions'
 import { type EditorCommand, sendCommand } from '../features/editor/commands'
@@ -38,6 +39,7 @@ function toAntItems(g: MenuGroup): MenuProps['items'] {
 }
 
 export default function TitleBar() {
+  const { t } = useTranslation()
   const info = useShellInfo()
   const { modal } = App.useApp()
   const ui = useUi()
@@ -49,7 +51,14 @@ export default function TitleBar() {
   const tab = useTabs((s) => s.tabs.find((t) => t.id === s.active))
   const profile = profiles?.find((p) => p.id === tab?.profileId)
   // 标题："当前标签 · 连接 — DBLens 数洞"
-  const title = tab ? `${tab.title} · ${profile?.name ?? '连接已删除'} — DBLens 数洞` : 'DBLens 数洞'
+  const appName = t('common.appName')
+  const title = tab
+    ? t('app.titleBar.windowTitle', {
+        tab: tab.title,
+        connection: profile?.name ?? t('app.status.connectionDeleted'),
+        app: appName,
+      })
+    : appName
   useEffect(() => {
     document.title = title
   }, [title])
@@ -70,7 +79,7 @@ export default function TitleBar() {
     else if (key === 'help:auto-check') desktop?.setAutoCheckUpdate(!info?.auto_check_update).catch(console.warn)
     else if (key === 'help:about') {
       if (desktop) act('about')
-      else modal.info({ title: 'DBLens 数洞', content: <a href={RELEASES}>{RELEASES}</a> })
+      else modal.info({ title: appName, content: <a href={RELEASES}>{RELEASES}</a> })
     }
   }
 
@@ -107,20 +116,20 @@ export default function TitleBar() {
         <div className="row" data-no-drag>
           <span
             className={`tb-btn${info?.always_on_top ? ' on' : ''}`}
-            title="窗口置顶（Ctrl+Shift+T）"
+            title={t('app.titleBar.pin')}
             onClick={() => act('toggle_always_on_top')}
           >
             <IconPin size={16} />
           </span>
           {!mac && (
             <>
-              <span className="tb-btn" title="最小化" onClick={() => act('minimize')}>
+              <span className="tb-btn" title={t('app.titleBar.minimize')} onClick={() => act('minimize')}>
                 <IconMinus size={16} />
               </span>
-              <span className="tb-btn" title={info?.maximized ? '还原' : '最大化'} onClick={() => act('toggle_maximize')}>
+              <span className="tb-btn" title={info?.maximized ? t('app.titleBar.restore') : t('app.titleBar.maximize')} onClick={() => act('toggle_maximize')}>
                 {info?.maximized ? <IconCopy size={14} /> : <IconSquare size={14} />}
               </span>
-              <span className="tb-btn close" title="关闭" onClick={() => act('close')}>
+              <span className="tb-btn close" title={t('app.titleBar.close')} onClick={() => act('close')}>
                 <IconX size={16} />
               </span>
             </>

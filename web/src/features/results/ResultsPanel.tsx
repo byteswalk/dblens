@@ -4,6 +4,7 @@
 import { IconAlertCircle, IconBinaryTree, IconMessage, IconTable } from '@tabler/icons-react'
 import { Spin } from 'antd'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { errorText } from '../../shared/api'
 import type { TabRuntime } from '../editor/runner'
@@ -15,36 +16,37 @@ export interface ResultsPanelProps {
   onFetchMore(): void
 }
 
-function TabIcon({ t, explain }: { t: ResultTab; explain: boolean }) {
-  if (t.kind === 'error') return <IconAlertCircle size={14} />
-  if (t.kind === 'messages') return <IconMessage size={14} />
+function TabIcon({ tab, explain }: { tab: ResultTab; explain: boolean }) {
+  if (tab.kind === 'error') return <IconAlertCircle size={14} />
+  if (tab.kind === 'messages') return <IconMessage size={14} />
   return explain ? <IconBinaryTree size={14} /> : <IconTable size={14} />
 }
 
 export default function ResultsPanel({ rt, onFetchMore }: ResultsPanelProps) {
+  const { t } = useTranslation()
   const { exec, explain, capped, running } = rt
   const tabs = resultTabs(exec, explain, capped)
   // null 表示自动：跟着执行进度选中第一个结果；用户点过标签后保持用户的选择，直到下一次执行
   const [selected, setSelected] = useState<string | null>(null)
   useEffect(() => setSelected(null), [rt.submission])
-  const first = tabs.find((t) => t.kind === 'result') ?? tabs.find((t) => t.kind === 'error') ?? tabs.at(-1)!
-  const current = tabs.find((t) => t.key === selected) ?? first
+  const first = tabs.find((x) => x.kind === 'result') ?? tabs.find((x) => x.kind === 'error') ?? tabs.at(-1)!
+  const current = tabs.find((x) => x.key === selected) ?? first
 
   const lastStmt = exec.statements.length - 1
   return (
     <div className="results">
       <div className="row rtabs">
-        {tabs.map((t) => (
+        {tabs.map((tab) => (
           <span
-            key={t.key}
-            className={`rtab${t.key === current.key ? ' on' : ''}${t.kind === 'error' ? ' bad' : ''}`}
-            onClick={() => setSelected(t.key)}
+            key={tab.key}
+            className={`rtab${tab.key === current.key ? ' on' : ''}${tab.kind === 'error' ? ' bad' : ''}`}
+            onClick={() => setSelected(tab.key)}
           >
-            <TabIcon t={t} explain={explain} />
-            {t.label}
-            {t.kind === 'result' && (
+            <TabIcon tab={tab} explain={explain} />
+            {tab.label}
+            {tab.kind === 'result' && (
               <span className="muted">
-                · {t.rows} 行{t.capped ? '（已达上限）' : ''}
+                {t(tab.capped ? 'results.tab.rowsCapped' : 'results.tab.rows', { count: tab.rows })}
               </span>
             )}
           </span>

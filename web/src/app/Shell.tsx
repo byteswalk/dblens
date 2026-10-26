@@ -5,6 +5,7 @@
 import { Button, Empty, Spin } from 'antd'
 import { IconDatabase, IconFileCode, IconHistory, IconPlus, IconSettings, IconStar, IconTool } from '@tabler/icons-react'
 import { Suspense, lazy, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Group, Panel, type PanelImperativeHandle, Separator, useDefaultLayout } from 'react-resizable-panels'
 
 import { useQueryActions } from '../features/editor/actions'
@@ -23,34 +24,37 @@ const Workspace = lazy(async () => {
   return import('../features/editor/Workspace')
 })
 
-const SIDES: { key: SideKey; title: string; icon: typeof IconDatabase }[] = [
-  { key: 'db', title: '数据库', icon: IconDatabase },
-  { key: 'history', title: '历史', icon: IconHistory },
-  { key: 'favorites', title: '收藏', icon: IconStar },
-  { key: 'ops', title: '运维查询', icon: IconTool },
+// 侧栏名称在渲染时按 app.side.<key> 取
+const SIDES: { key: SideKey; icon: typeof IconDatabase }[] = [
+  { key: 'db', icon: IconDatabase },
+  { key: 'history', icon: IconHistory },
+  { key: 'favorites', icon: IconStar },
+  { key: 'ops', icon: IconTool },
 ]
 
 function SideContent({ side }: { side: SideKey }) {
+  const { t } = useTranslation()
   if (side === 'db') return <ObjectTree />
-  return <Empty style={{ marginTop: 48 }} description="即将推出" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  return <Empty style={{ marginTop: 48 }} description={t('app.side.comingSoon')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
 
 function Welcome() {
+  const { t } = useTranslation()
   const openConnection = useUi((s) => s.openConnection)
   const { newQuery } = useQueryActions()
   return (
     <div className="welcome">
       <IconDatabase size={48} stroke={1.2} />
-      <div style={{ fontSize: 16, color: 'var(--text)' }}>DBLens 数洞</div>
+      <div style={{ fontSize: 16, color: 'var(--text)' }}>{t('common.appName')}</div>
       <div className="row" style={{ gap: 8 }}>
         <Button type="primary" icon={<IconPlus size={14} />} onClick={() => openConnection(null)}>
-          新建连接
+          {t('app.welcome.newConnection')}
         </Button>
         <Button icon={<IconFileCode size={14} />} onClick={() => newQuery()}>
-          新建查询
+          {t('app.welcome.newQuery')}
         </Button>
       </div>
-      <div className="muted">在左侧的数据库树中展开连接浏览库表结构，右键连接可新建查询（Ctrl+T）</div>
+      <div className="muted">{t('app.welcome.hint')}</div>
     </div>
   )
 }
@@ -70,6 +74,7 @@ function shortcut(e: KeyboardEvent): EditorCommand | 'new-connection' | 'new-que
 }
 
 export default function Shell() {
+  const { t } = useTranslation()
   const { side, toggleSide, setSettingsOpen, openConnection } = useUi()
   const { newQuery, closeActive } = useQueryActions()
   const hasTabs = useTabs((s) => s.tabs.length > 0)
@@ -104,13 +109,18 @@ export default function Shell() {
       <TitleBar />
       <div className="row grow" style={{ alignItems: 'stretch', minHeight: 0 }}>
         <div className="activity">
-          {SIDES.map(({ key, title, icon: Icon }) => (
-            <span key={key} className={`a${side === key ? ' on' : ''}`} title={title} onClick={() => toggleSide(key)}>
+          {SIDES.map(({ key, icon: Icon }) => (
+            <span
+              key={key}
+              className={`a${side === key ? ' on' : ''}`}
+              title={t(`app.side.${key}` as const)}
+              onClick={() => toggleSide(key)}
+            >
               <Icon size={20} />
             </span>
           ))}
           <span className="grow" />
-          <span className="a" title="设置" onClick={() => setSettingsOpen(true)}>
+          <span className="a" title={t('app.settings.title')} onClick={() => setSettingsOpen(true)}>
             <IconSettings size={20} />
           </span>
         </div>
@@ -118,7 +128,7 @@ export default function Shell() {
           <Panel id="side" panelRef={sidePanel} defaultSize={270} minSize={200} maxSize={600} collapsible>
             {current && (
               <div className="side">
-                <div className="row side-h">{current.title}</div>
+                <div className="row side-h">{t(`app.side.${current.key}` as const)}</div>
                 <div className="side-body">
                   <SideContent side={current.key} />
                 </div>

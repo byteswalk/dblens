@@ -18,17 +18,19 @@ import {
 } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type Key, type ReactNode, useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import { useQueryActions } from '../editor/actions'
-import type { Api, Environment, Profile } from '../../shared/api'
-import { DRIVERS } from '../connections/form'
+import type { Api, Environment, Profile, RoutineInfo } from '../../shared/api'
+import { driverLabel } from '../connections/form'
 import { withVault } from '../connections/vault'
 import {
   type CategoryKind,
   type NodeKey,
   categoriesFor,
+  categoryLabel,
   decodeKey,
   encodeKey,
   isWithin,
@@ -37,13 +39,23 @@ import {
   routineKindLabel,
 } from './nodes'
 
-/** 已加载的一层子节点。`items` 中的 key 为编码后的节点键。 */
+/**
+ * 已加载的一层子节点。`items` 中的 key 为编码后的节点键。
+ * 分类、系统分组的名称和程序类型在显示时按当前界面语言翻译，切换语言后不必重新加载。
+ */
 interface Loaded {
-  items: { key: string; label: string; comment?: string | null; extra?: string; leaf: boolean; pk?: boolean }[]
+  items: {
+    key: string
+    label: string
+    comment?: string | null
+    extra?: string
+    routineKind?: RoutineInfo['kind']
+    leaf: boolean
+    pk?: boolean
+  }[]
   error?: string
 }
 
-const ENV_LABEL: Record<Environment, string> = { none: '', dev: '开发', test: '测试', prod: '生产' }
 const ENV_COLOR: Record<Environment, string> = {
   none: 'var(--env-none)',
   dev: 'var(--env-dev)',
@@ -73,7 +85,7 @@ async function loadChildren(api: Api, profiles: Profile[], k: NodeKey): Promise<
         leaf: false,
       }))
       if (k.type === 'c' && schemas.some((s) => s.is_system)) {
-        items.push({ key: encodeKey({ type: 'g', profileId: k.profileId }), label: '系统', leaf: false })
+        items.push({ key: encodeKey({ type: 'g', profileId: k.profileId }), label: '', leaf: false })
       }
       return items
     }
@@ -86,18 +98,19 @@ async function loadChildren(api: Api, profiles: Profile[], k: NodeKey): Promise<
       }))
     }
     case 'k': {
-      const obj = (name: string, comment: string | null, extra?: string) => ({
+      const obj = (name: string, comment: string | null, extra?: string, routineKind?: RoutineInfo['kind']) => ({
         key: encodeKey({ type: 'o', profileId: k.profileId, schema: k.schema, kind: k.kind, name }),
         label: name,
         comment,
         extra,
+        routineKind,
         leaf: k.kind !== 'tables',
       })
       if (k.kind === 'tables' || k.kind === 'views' || k.kind === 'materialized_views') {
         return (await api.objects(k.profileId, k.schema, k.kind)).map((o) => obj(o.name, o.comment))
       }
       if (k.kind === 'routines') {
-        return (await api.routines(k.profileId, k.schema)).map((r) => obj(r.name, null, routineKindLabel(r.kind)))
+        return (await api.routines(k.profileId, k.schema)).map((r) => obj(r.name, null, undefined, r.kind))
       }
       if (k.kind === 'sequences') return (await api.sequences(k.profileId, k.schema)).map((s) => obj(s.name, null))
       return (await api.synonyms(k.profileId, k.schema)).map((s) =>
@@ -124,6 +137,7 @@ async function loadChildren(api: Api, profiles: Profile[], k: NodeKey): Promise<
 export default function ObjectTree() {
   const api = useApi()
   const qc = useQueryClient()
+  const { t } = useTranslation()
   const { message, modal } = App.useApp()
   const { openConnection, selectProfile } = useUi()
   const { newQuery } = useQueryActions()
@@ -135,8 +149,9 @@ export default function ObjectTree() {
 
   const load = useCallback(
     async (key: string) => {
+      const k = decodeKey(key)
       try {
-        const items = await withVault(api, () => loadChildren(api, profiles, decodeKey(key)))
+        const items = await withVault(api, () => loadChildren(api, profiles, k))
         setLoaded((m) => ({ ...m, [key]: { items } }))
       } catch (e) {
         setLoaded((m) => ({ ...m, [key]: { items: [], error: (e as Error).message } }))
@@ -165,13 +180,15 @@ export default function ObjectTree() {
         return [{ key: `${parent}\u0002err`, isLeaf: true, selectable: false, title: <span className="err">{l.error}</span> }]
       }
       const items = l.items.filter((i) => {
-        const t = decodeKey(i.key).type
-        return (t !== 'o' && t !== 'l') || matches(filter, i.label, i.comment)
+        const type = decodeKey(i.key).type
+        return (type !== 'o' && type !== 'l') || matches(filter, i.label, i.comment)
       })
       return items.map((i) => {
         const k = decodeKey(i.key)
         const icon =
           k.type === 's' ? <IconSchema size={14} /> : k.type === 'g' || k.type === 'k' ? <IconFolder size={14} /> : k.type === 'o' ? CATEGORY_ICON[k.kind] : i.pk ? <IconKey size={14} color="var(--warn)" /> : <IconColumns size={14} />
+        const label = k.type === 'k' ? categoryLabel(k.kind) : k.type === 'g' ? t('tree.node.system') : i.label
+        const extra = i.routineKind ? routineKindLabel(i.routineKind) : i.extra
         const count = k.type === 'k' && loaded[i.key] && !loaded[i.key].error ? loaded[i.key].items.length : null
         return {
           key: i.key,
@@ -179,9 +196,9 @@ export default function ObjectTree() {
           icon,
           title: (
             <span>
-              {i.label}
+              {label}
               {count !== null && <span className="cm">{count}</span>}
-              {i.extra && <span className="cm">{i.extra}</span>}
+              {extra && <span className="cm">{extra}</span>}
               {i.comment && <span className="cm">{i.comment}</span>}
             </span>
           ),
@@ -199,30 +216,30 @@ export default function ObjectTree() {
           <span>
             <span className="dot" style={{ background: p.color || ENV_COLOR[env] }} />
             <b style={env === 'prod' ? { color: 'var(--danger)' } : undefined}>{p.name}</b>
-            {env !== 'none' && <span className={`env ${env}`}>{ENV_LABEL[env]}</span>}
-            <span className="cm">{DRIVERS.find((d) => d.id === p.driver)?.label}</span>
+            {env !== 'none' && <span className={`env ${env}`}>{t(`tree.env.${env}`)}</span>}
+            <span className="cm">{driverLabel(p.driver)}</span>
           </span>
         ),
         children: build(key, 1),
       }
     })
-  }, [profiles, loaded, filter])
+  }, [profiles, loaded, filter, t])
 
   const menuItems: MenuProps['items'] =
     menuNode?.type === 'c'
       ? [
-          { key: 'new-query', label: '新建查询', extra: 'Ctrl+T' },
+          { key: 'new-query', label: t('tree.menu.newQuery'), extra: 'Ctrl+T' },
           { type: 'divider' },
-          { key: 'edit', label: '编辑连接…' },
-          { key: 'duplicate', label: '复制连接' },
-          { key: 'delete', label: '删除连接', danger: true },
+          { key: 'edit', label: t('tree.menu.editConnection') },
+          { key: 'duplicate', label: t('tree.menu.duplicateConnection') },
+          { key: 'delete', label: t('tree.menu.deleteConnection'), danger: true },
           { type: 'divider' },
-          { key: 'refresh', label: '刷新' },
+          { key: 'refresh', label: t('tree.menu.refresh') },
         ]
       : menuNode
         ? [
-            ...(qualifiedName(menuNode) ? [{ key: 'copy', label: '复制名称' }] : []),
-            { key: 'refresh', label: '刷新' },
+            ...(qualifiedName(menuNode) ? [{ key: 'copy', label: t('tree.menu.copyName') }] : []),
+            { key: 'refresh', label: t('tree.menu.refresh') },
           ]
         : []
 
@@ -235,16 +252,16 @@ export default function ObjectTree() {
       else if (key === 'duplicate' && k.type === 'c') {
         const p = await api.profile(k.profileId)
         const { id: _, ...input } = p
-        await api.createProfile({ ...input, name: `${p.name} 副本` }, null)
+        await api.createProfile({ ...input, name: t('tree.duplicate.name', { name: p.name }) }, null)
         await qc.invalidateQueries({ queryKey: ['profiles'] })
-        message.success('已复制连接（密码未复制）')
+        message.success(t('tree.duplicate.done'))
       } else if (key === 'delete' && k.type === 'c') {
         const p = profiles.find((x) => x.id === k.profileId)
         modal.confirm({
-          title: `删除连接「${p?.name}」？`,
-          content: '同时删除保存的密码。数据库中的数据不受影响。',
+          title: t('tree.delete.title', { name: p?.name }),
+          content: t('tree.delete.content'),
           okType: 'danger',
-          okText: '删除',
+          okText: t('tree.delete.ok'),
           onOk: async () => {
             await api.deleteProfile(k.profileId)
             await qc.invalidateQueries({ queryKey: ['profiles'] })
@@ -252,7 +269,7 @@ export default function ObjectTree() {
         })
       } else if (key === 'copy') {
         await navigator.clipboard.writeText(qualifiedName(k))
-        message.success('已复制')
+        message.success(t('tree.copied'))
       } else if (key === 'refresh') {
         // 列节点刷新其所在的表
         const target: NodeKey =
@@ -271,7 +288,7 @@ export default function ObjectTree() {
           size="small"
           allowClear
           prefix={<IconSearch size={14} className="muted" />}
-          placeholder="按名称或注释过滤"
+          placeholder={t('tree.filterPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />

@@ -13,6 +13,7 @@ import {
   IconWand,
 } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import type { Profile } from '../../shared/api'
@@ -52,6 +53,7 @@ export interface ToolbarProps {
 
 export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
   const api = useApi()
+  const { t } = useTranslation()
   const { message, modal } = App.useApp()
   const { data: schemas } = useQuery({
     queryKey: ['schema-list', tab.profileId],
@@ -63,19 +65,19 @@ export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
   const switchProfile = (profileId: string) => {
     const go = () => disposeRunner(tab.id).then(() => useTabs.getState().setProfile(tab.id, profileId))
     if (s?.in_transaction) {
-      modal.confirm({ title: '切换连接', content: '当前会话有未提交的事务，切换连接会回滚这些修改。', onOk: go })
+      modal.confirm({ title: t('editor.switchProfile.title'), content: t('editor.switchProfile.content'), onOk: go })
     } else void go()
   }
 
   return (
     <div className="row toolbar">
-      <IconBtn title="执行当前语句（Ctrl+Enter）" color="var(--ok)" disabled={rt.running} onClick={() => sendCommand('run-current')}>
+      <IconBtn title={t('editor.toolbar.runCurrent')} color="var(--ok)" disabled={rt.running} onClick={() => sendCommand('run-current')}>
         <IconPlayerPlay size={16} />
       </IconBtn>
-      <IconBtn title="执行全部（F5）" disabled={rt.running} onClick={() => sendCommand('run-all')}>
+      <IconBtn title={t('editor.toolbar.runAll')} disabled={rt.running} onClick={() => sendCommand('run-all')}>
         <IconPlayerTrackNext size={16} />
       </IconBtn>
-      <IconBtn title="停止（Ctrl+Break）" color="var(--danger)" disabled={!rt.running} onClick={() => runner.cancel()}>
+      <IconBtn title={t('editor.toolbar.stop')} color="var(--danger)" disabled={!rt.running} onClick={() => runner.cancel()}>
         <IconPlayerStop size={16} />
       </IconBtn>
       <Select
@@ -84,8 +86,8 @@ export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
         value={rt.continueOnError ? 'continue' : 'stop'}
         onChange={(v) => runner.setContinueOnError(v === 'continue')}
         options={[
-          { value: 'stop', label: '出错停止' },
-          { value: 'continue', label: '出错继续' },
+          { value: 'stop', label: t('editor.toolbar.stopOnError') },
+          { value: 'continue', label: t('editor.toolbar.continueOnError') },
         ]}
         style={{ width: 92 }}
       />
@@ -128,32 +130,32 @@ export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
         onChange={(v) => guard(runner.setAutocommit(v === 'auto'))}
         disabled={rt.running}
         options={[
-          { value: 'auto', label: '自动提交' },
-          { value: 'manual', label: '手动提交' },
+          { value: 'auto', label: t('editor.toolbar.autoCommit') },
+          { value: 'manual', label: t('editor.toolbar.manualCommit') },
         ]}
         style={{ width: 92 }}
       />
       {s?.autocommit === false && (
         <>
           <Button size="small" icon={<IconCheck size={14} />} disabled={rt.running} onClick={() => guard(runner.commit())}>
-            提交
+            {t('editor.toolbar.commit')}
           </Button>
           <Button size="small" icon={<IconArrowBackUp size={14} />} disabled={rt.running} onClick={() => guard(runner.rollback())}>
-            回滚
+            {t('editor.toolbar.rollback')}
           </Button>
         </>
       )}
       {s?.in_transaction && (
         <span className="row" style={{ color: 'var(--warn)', gap: 4 }}>
           <IconAlertTriangle size={14} />
-          有未提交的事务
+          {t('editor.toolbar.inTransaction')}
         </span>
       )}
       <span className="grow" />
-      <IconBtn title="格式化（Shift+Alt+F）" onClick={() => sendCommand('format')}>
+      <IconBtn title={t('editor.toolbar.format')} onClick={() => sendCommand('format')}>
         <IconWand size={16} />
       </IconBtn>
-      <IconBtn title="执行计划" disabled={rt.running} onClick={() => sendCommand('explain')}>
+      <IconBtn title={t('editor.toolbar.explain')} disabled={rt.running} onClick={() => sendCommand('explain')}>
         <IconBinaryTree size={16} />
       </IconBtn>
     </div>

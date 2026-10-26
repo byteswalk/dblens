@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { type ExecState, ExecSocket, type ServerEvent, cellText, initialExec, reduceExec } from './exec'
+import i18n from './i18n'
 
 function run(events: ServerEvent[], maxRows = 2): ExecState {
   return events.reduce((s, e) => reduceExec(s, e, maxRows), initialExec)
@@ -77,6 +78,17 @@ describe('cellText', () => {
     expect(cellText({ t: 'lob', v: { binary: false, preview: 'abc', total_len: 100, truncated: true } })).toBe(
       'abc…（共 100）',
     )
+  })
+
+  it('截断的 LOB 提示随界面语言', async () => {
+    const lob = { binary: true, preview: 'AQID', total_len: 100, truncated: true }
+    expect(cellText({ t: 'lob', v: lob })).toBe('(二进制) AQID…（共 100）')
+    await i18n.changeLanguage('en')
+    try {
+      expect(cellText({ t: 'lob', v: lob })).toBe('(binary) AQID… (100 total)')
+    } finally {
+      await i18n.changeLanguage('zh-CN')
+    }
   })
 })
 

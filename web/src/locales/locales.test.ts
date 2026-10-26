@@ -15,19 +15,25 @@ function flatten(obj: object, prefix = ''): Record<string, string> {
 
 const vars = (s: string) => [...s.matchAll(/\{\{\s*(\w+)/g)].map((m) => m[1]).sort()
 
+/** 英文的单复数用 i18next 的 `_one` / `_other` 后缀，中文没有单复数：比较时去掉后缀。 */
+const PLURAL = /_(zero|one|two|few|many|other)$/
+const base = (key: string) => key.replace(PLURAL, '')
+
 describe('词条', () => {
   const zh = flatten(zhCN)
   const e = flatten(en)
 
-  it('中英文的键完全一致', () => {
-    expect(Object.keys(e).sort()).toEqual(Object.keys(zh).sort())
+  it('中英文的键完全一致（不计单复数后缀）', () => {
+    expect([...new Set(Object.keys(e).map(base))].sort()).toEqual(Object.keys(zh).sort())
   })
 
-  it('每个词条的插值变量一致，且都不为空', () => {
-    for (const [key, text] of Object.entries(zh)) {
+  it('每个词条的插值变量一致，且都不为空；有单复数的词条带 count', () => {
+    for (const [key, text] of Object.entries(e)) {
+      const zhText = zh[base(key)]
       expect(text, key).not.toBe('')
-      expect(e[key], key).not.toBe('')
-      expect(vars(e[key] ?? ''), key).toEqual(vars(text))
+      expect(zhText, key).not.toBe('')
+      expect(vars(text), key).toEqual(vars(zhText ?? ''))
+      if (PLURAL.test(key)) expect(vars(text), key).toContain('count')
     }
   })
 })

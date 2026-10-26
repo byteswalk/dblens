@@ -2,6 +2,7 @@
 
 import { App, Button } from 'antd'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
@@ -10,6 +11,7 @@ import { useTabs } from './tabs'
 
 export function useQueryActions() {
   const api = useApi()
+  const { t } = useTranslation()
   const { modal } = App.useApp()
   const { data: profiles } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
 
@@ -19,7 +21,7 @@ export function useQueryActions() {
     const id =
       profileId ??
       useUi.getState().selectedProfile ??
-      tabs.find((t) => t.id === active)?.profileId ??
+      tabs.find((x) => x.id === active)?.profileId ??
       profiles?.[0]?.id
     if (id) useTabs.getState().open(id)
     else useUi.getState().openConnection(null)
@@ -27,7 +29,7 @@ export function useQueryActions() {
 
   /** 关闭标签页：有未提交的事务时先问提交还是回滚。 */
   const closeQuery = (tabId: string) => {
-    const tab = useTabs.getState().tabs.find((t) => t.id === tabId)
+    const tab = useTabs.getState().tabs.find((x) => x.id === tabId)
     if (!tab) return
     const finish = async (commit: boolean) => {
       await disposeRunner(tabId, commit)
@@ -38,10 +40,10 @@ export function useQueryActions() {
       return
     }
     const m = modal.confirm({
-      title: `${tab.title} 有未提交的事务`,
-      content: '关闭前提交还是回滚这些修改？',
-      okText: '提交并关闭',
-      cancelText: '取消',
+      title: t('editor.closeTab.title', { title: tab.title }),
+      content: t('editor.closeTab.content'),
+      okText: t('editor.closeTab.commit'),
+      cancelText: t('editor.closeTab.cancel'),
       onOk: () => finish(true),
       footer: (_, { OkBtn, CancelBtn }) => (
         <>
@@ -53,7 +55,7 @@ export function useQueryActions() {
               void finish(false)
             }}
           >
-            回滚并关闭
+            {t('editor.closeTab.rollback')}
           </Button>
           <OkBtn />
         </>

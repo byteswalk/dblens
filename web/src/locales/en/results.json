@@ -1,1 +1,50 @@
-{}
+{
+  "tab": {
+    "result": "Result {{n}}",
+    "explain": "Explain Plan",
+    "failed": "Statement {{n}} Failed",
+    "cancelled": "Statement {{n}} Cancelled",
+    "messages": "Messages",
+    "rows_one": "· {{count}} row",
+    "rows_other": "· {{count}} rows",
+    "rowsCapped_one": "· {{count}} row (limit reached)",
+    "rowsCapped_other": "· {{count}} rows (limit reached)"
+  },
+  "message": {
+    "server": "[Statement {{n}}] {{text}}",
+    "rows_one": "[Statement {{n}}] {{count}} row",
+    "rows_other": "[Statement {{n}}] {{count}} rows",
+    "rowsElapsed_one": "[Statement {{n}}] {{count}} row, {{ms}} ms",
+    "rowsElapsed_other": "[Statement {{n}}] {{count}} rows, {{ms}} ms",
+    "capped_one": "[Statement {{n}}] Read {{count}} row; row limit reached, stopped fetching",
+    "capped_other": "[Statement {{n}}] Read {{count}} rows; row limit reached, stopped fetching",
+    "cappedMore_one": "[Statement {{n}}] Read {{count}} row; row limit reached, stopped fetching; the following statements were not run",
+    "cappedMore_other": "[Statement {{n}}] Read {{count}} rows; row limit reached, stopped fetching; the following statements were not run",
+    "error": "[Statement {{n}}] {{error}}",
+    "affected_one": "[Statement {{n}}] {{count}} row affected",
+    "affected_other": "[Statement {{n}}] {{count}} rows affected",
+    "affectedElapsed_one": "[Statement {{n}}] {{count}} row affected, {{ms}} ms",
+    "affectedElapsed_other": "[Statement {{n}}] {{count}} rows affected, {{ms}} ms",
+    "succeededElapsed": "[Statement {{n}}] Executed successfully, {{ms}} ms",
+    "declined": "[Statement {{n}}] Execution cancelled ({{reason}}); the following statements were not run",
+    "confirmRequired": "[Statement {{n}}] Confirmation required: {{reason}}"
+  },
+  "summary": {
+    "rows_one": "{{count}} row · {{ms}} ms",
+    "rows_other": "{{count}} rows · {{ms}} ms",
+    "affected_one": "{{count}} row affected · {{ms}} ms",
+    "affected_other": "{{count}} rows affected · {{ms}} ms"
+  },
+  "cell": {
+    "truncated": "{{size}} · preview truncated",
+    "hexMore": "… ({{total}} bytes in total, showing the first {{max}} bytes)"
+  },
+  "viewer": {
+    "title": "{{column}} · Row {{row}}",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed",
+    "text": "Text",
+    "hex": "Hex"
+  }
+}
