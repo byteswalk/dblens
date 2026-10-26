@@ -107,6 +107,8 @@ export interface SessionInfo {
   in_transaction: boolean
   busy: boolean
   broken: boolean
+  /** 当前 schema（MySQL 系为当前库）；读不到时为 null。 */
+  schema: string | null
 }
 
 /** schema 列表中的一项。 */
@@ -214,7 +216,14 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     /** 清掉后端的元数据缓存；不给 schema 时清整个连接的。 */
     refresh: (id: string, schema: string | null) => request<null>('POST', `${p(id)}/refresh`, { schema }),
     openSession: (profileId: string) => request<SessionInfo>('POST', '/sessions', { profile_id: profileId }),
-    closeSession: (id: number) => request<null>('DELETE', `/sessions/${id}?commit=false`),
+    session: (id: number) => request<SessionInfo>('GET', `/sessions/${id}`),
+    /** 关闭会话；有未提交的修改时按 commit 提交或回滚。 */
+    closeSession: (id: number, commit = false) => request<null>('DELETE', `/sessions/${id}?commit=${commit}`),
+    setAutocommit: (id: number, on: boolean) => request<SessionInfo>('POST', `/sessions/${id}/autocommit`, { on }),
+    commit: (id: number) => request<SessionInfo>('POST', `/sessions/${id}/commit`),
+    rollback: (id: number) => request<SessionInfo>('POST', `/sessions/${id}/rollback`),
+    reconnect: (id: number) => request<SessionInfo>('POST', `/sessions/${id}/reconnect`),
+    setSchema: (id: number, schema: string) => request<SessionInfo>('POST', `/sessions/${id}/schema`, { schema }),
     /** 会话的 WebSocket 地址。浏览器的 WebSocket 不能带请求头，令牌放在查询参数里。 */
     wsUrl: (sessionId: number, loc: { protocol: string; host: string } = window.location) =>
       `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/api/sessions/${sessionId}/ws?token=${encodeURIComponent(token)}`,

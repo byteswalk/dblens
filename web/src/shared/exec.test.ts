@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ExecState, type ServerEvent, cellText, initialExec, reduceExec } from './exec'
+import { type ExecState, ExecSocket, type ServerEvent, cellText, initialExec, reduceExec } from './exec'
 
 function run(events: ServerEvent[], maxRows = 2): ExecState {
   return events.reduce((s, e) => reduceExec(s, e, maxRows), initialExec)
@@ -9,6 +9,7 @@ function run(events: ServerEvent[], maxRows = 2): ExecState {
 const start = (index: number, keyword = 'SELECT'): ServerEvent => ({
   type: 'statement_start',
   index,
+  total: 2,
   start: 0,
   end: 8,
   info: { keyword },
@@ -49,8 +50,18 @@ describe('reduceExec', () => {
   it('失败、需要确认和协议错误', () => {
     const failed = run([start(0), { type: 'failed', index: 0, error: { kind: 'cancelled' } }, { type: 'done' }])
     expect(failed.statements[0].error).toEqual({ kind: 'cancelled' })
-    const confirm = run([start(0, 'DELETE'), { type: 'confirm_required', index: 0, start: 10, reason: '没有 WHERE' }])
-    expect(confirm.statements[0].confirm).toEqual({ start: 10, reason: '没有 WHERE' })
+    expect(failed.statements[0].errorOffset).toBeNull()
+    const at = run([start(0), { type: 'failed', index: 0, error: { kind: 'sql', code: '42601' }, offset: 7 }])
+    expect(at.statements[0].errorOffset).toBe(7)
+    // 需要确认的语句还没开始：记在整个状态上，不挂到前一条语句
+    const confirm = run([
+      start(0, 'INSERT'),
+      { type: 'statement_end', index: 0, elapsed_ms: 1 },
+      { type: 'confirm_required', index: 1, start: 10, end: 23, reason: '没有 WHERE' },
+      { type: 'done' },
+    ])
+    expect(confirm.confirm).toEqual({ index: 1, start: 10, end: 23, reason: '没有 WHERE' })
+    expect(confirm.statements).toHaveLength(1)
     const proto = run([{ type: 'error', error: { kind: 'busy', message: '上一段还没执行完' } }])
     expect(proto.protocolError?.kind).toBe('busy')
   })
@@ -66,5 +77,34 @@ describe('cellText', () => {
     expect(cellText({ t: 'lob', v: { binary: false, preview: 'abc', total_len: 100, truncated: true } })).toBe(
       'abc…（共 100）',
     )
+  })
+})
+
+describe('ExecSocket', () => {
+  it('exec 带上执行选项', async () => {
+    const sent: string[] = []
+    class FakeWs extends EventTarget {
+      send(m: string) {
+        sent.push(m)
+      }
+      close() {}
+    }
+    const real = globalThis.WebSocket
+    globalThis.WebSocket = function () {
+      const ws = new FakeWs()
+      queueMicrotask(() => ws.dispatchEvent(new Event('open')))
+      return ws
+    } as unknown as typeof WebSocket
+    try {
+      const sock = new ExecSocket('ws://x', () => {}, () => {})
+      await sock.exec('SELECT 1', { cursor: 3, continueOnError: true })
+      await sock.exec('SELECT 1', { explain: true, maxRows: 10 })
+    } finally {
+      globalThis.WebSocket = real
+    }
+    expect(sent.map((m) => JSON.parse(m))).toEqual([
+      { type: 'exec', sql: 'SELECT 1', confirmed: false, continue_on_error: true, cursor: 3, explain: false, max_rows: 500 },
+      { type: 'exec', sql: 'SELECT 1', confirmed: false, continue_on_error: false, cursor: null, explain: true, max_rows: 10 },
+    ])
   })
 })

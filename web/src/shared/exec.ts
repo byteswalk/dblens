@@ -1,4 +1,4 @@
-// 会话 WebSocket 执行协议（docs/notes/m0-4b-api.md）：发送 exec / fetch_more / cancel，
+// 会话 WebSocket 执行协议（docs/notes/m0-4b-api.md、docs/notes/m1b1-editor.md）：发送 exec / fetch_more / cancel，
 // 把服务端事件归并成界面要显示的状态。归并是纯函数，单独测试；ExecSocket 只负责收发。
 
 import type { ErrorBody } from './api'
@@ -16,15 +16,15 @@ export interface ColumnMeta {
 }
 
 export type ServerEvent =
-  | { type: 'statement_start'; index: number; start: number; end: number; info: { keyword: string } }
+  | { type: 'statement_start'; index: number; total: number; start: number; end: number; info: { keyword: string } }
   | { type: 'result_start'; columns: ColumnMeta[] }
   | { type: 'rows'; rows: CellValue[][] }
   | { type: 'result_end' }
   | { type: 'affected'; count: number }
   | { type: 'message'; text: string }
   | { type: 'statement_end'; index: number; elapsed_ms: number }
-  | { type: 'confirm_required'; index: number; start: number; reason: string }
-  | { type: 'failed'; index: number; error: ErrorBody }
+  | { type: 'confirm_required'; index: number; start: number; end: number; reason: string }
+  | { type: 'failed'; index: number; error: ErrorBody; offset?: number }
   | { type: 'done' }
   | { type: 'error'; error: ErrorBody }
 
@@ -37,6 +37,8 @@ export interface ResultSet {
 
 export interface StatementState {
   index: number
+  /** 是这次提交的最后一条语句。前面语句的结果要取完，后面的语句才会执行。 */
+  last: boolean
   /** 语句在提交的 SQL 中的 UTF-16 偏移，可直接用于 String.prototype.slice。 */
   start: number
   end: number
@@ -46,7 +48,8 @@ export interface StatementState {
   messages: string[]
   elapsedMs: number | null
   error: ErrorBody | null
-  confirm: { start: number; reason: string } | null
+  /** 数据库报告的出错位置（UTF-16 偏移）；没有时为 null。 */
+  errorOffset: number | null
 }
 
 export interface ExecState {
@@ -54,11 +57,19 @@ export interface ExecState {
   /** 一批装满了 max_rows 行，服务端在等 fetch_more。 */
   waitingForMore: boolean
   done: boolean
+  /** 第 `index` 条语句需要确认，脚本停在这里（这条还没有开始）。`start`/`end` 是它的 UTF-16 范围。 */
+  confirm: { index: number; start: number; end: number; reason: string } | null
   /** 协议层面的错误（消息无法解析、上一段还没执行完等）。 */
   protocolError: ErrorBody | null
 }
 
-export const initialExec: ExecState = { statements: [], waitingForMore: false, done: false, protocolError: null }
+export const initialExec: ExecState = {
+  statements: [],
+  waitingForMore: false,
+  done: false,
+  confirm: null,
+  protocolError: null,
+}
 
 function updateLast(state: ExecState, f: (s: StatementState) => StatementState): ExecState {
   const last = state.statements.length - 1
@@ -82,6 +93,7 @@ export function reduceExec(state: ExecState, ev: ServerEvent, maxRows: number): 
           ...state.statements,
           {
             index: ev.index,
+            last: ev.index + 1 >= ev.total,
             start: ev.start,
             end: ev.end,
             keyword: ev.info.keyword,
@@ -90,7 +102,7 @@ export function reduceExec(state: ExecState, ev: ServerEvent, maxRows: number): 
             messages: [],
             elapsedMs: null,
             error: null,
-            confirm: null,
+            errorOffset: null,
           },
         ],
       }
@@ -110,9 +122,12 @@ export function reduceExec(state: ExecState, ev: ServerEvent, maxRows: number): 
     case 'statement_end':
       return updateLast(state, (s) => ({ ...s, elapsedMs: ev.elapsed_ms }))
     case 'confirm_required':
-      return updateLast(state, (s) => ({ ...s, confirm: { start: ev.start, reason: ev.reason } }))
+      return { ...state, confirm: { index: ev.index, start: ev.start, end: ev.end, reason: ev.reason } }
     case 'failed':
-      return { ...updateLast(state, (s) => ({ ...s, error: ev.error })), waitingForMore: false }
+      return {
+        ...updateLast(state, (s) => ({ ...s, error: ev.error, errorOffset: ev.offset ?? null })),
+        waitingForMore: false,
+      }
     case 'done':
       return { ...state, done: true, waitingForMore: false }
     case 'error':
@@ -121,6 +136,18 @@ export function reduceExec(state: ExecState, ev: ServerEvent, maxRows: number): 
 }
 
 export const DEFAULT_MAX_ROWS = 500
+
+export interface ExecOptions {
+  /** 已确认：需要确认的语句直接执行。 */
+  confirmed?: boolean
+  /** 某条语句失败后继续执行后面的。 */
+  continueOnError?: boolean
+  /** 只执行这个 UTF-16 偏移所在的那条语句。 */
+  cursor?: number
+  /** 只生成执行计划。 */
+  explain?: boolean
+  maxRows?: number
+}
 
 /** 一个会话的执行连接。onEvent 收到服务端的每个事件；连接断开时服务端会取消正在执行的语句。 */
 export class ExecSocket {
@@ -142,8 +169,16 @@ export class ExecSocket {
     this.ws.send(JSON.stringify(msg))
   }
 
-  exec(sql: string, confirmed = false, maxRows = DEFAULT_MAX_ROWS) {
-    return this.send({ type: 'exec', sql, confirmed, max_rows: maxRows })
+  exec(sql: string, o: ExecOptions = {}) {
+    return this.send({
+      type: 'exec',
+      sql,
+      confirmed: o.confirmed ?? false,
+      continue_on_error: o.continueOnError ?? false,
+      cursor: o.cursor ?? null,
+      explain: o.explain ?? false,
+      max_rows: o.maxRows ?? DEFAULT_MAX_ROWS,
+    })
   }
 
   fetchMore(maxRows = DEFAULT_MAX_ROWS) {
