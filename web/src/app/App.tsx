@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 
 import ConnectionDialog from '../features/connections/ConnectionDialog'
+import { TABS_KEY, persistTabs, useTabs } from '../features/editor/tabs'
 import VaultDialog from '../features/connections/VaultDialog'
 import { type Api, createApi } from '../shared/api'
 import { useSetting, useSettings } from '../shared/settings'
@@ -43,6 +44,8 @@ function Boot({ api }: { api: Api }) {
       (values) => {
         useSettings.getState().init(values, api.putSetting)
         useUi.setState({ side: parseSide(values[SIDE_KEY]) })
+        useTabs.getState().restore(values[TABS_KEY])
+        persistTabs()
         setState('ready')
       },
       (e: Error) => setState(e),

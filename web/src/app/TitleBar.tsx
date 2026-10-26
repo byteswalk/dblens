@@ -3,13 +3,18 @@
 // 浏览器模式只有菜单和标题。
 
 import { App, Dropdown, type MenuProps } from 'antd'
+import { useQuery } from '@tanstack/react-query'
 import { IconCheck, IconCopy, IconDatabase, IconMinus, IconPin, IconSquare, IconX } from '@tabler/icons-react'
-import type { MouseEvent } from 'react'
+import { type MouseEvent, useEffect } from 'react'
 
+import { useQueryActions } from '../features/editor/actions'
+import { type EditorCommand, sendCommand } from '../features/editor/commands'
+import { useTabs } from '../features/editor/tabs'
 import { useSetting, useSettings } from '../shared/settings'
 import { type WindowAction, desktop, titleBarInset } from '../shared/shell'
 import { THEME_KEY, type ThemePref, parseThemePref } from '../shared/theme'
 import { type MenuGroup, buildMenus } from './menus'
+import { useApi } from './context'
 import { type SideKey, useUi } from './ui'
 import { useShellInfo } from './useShellInfo'
 
@@ -38,10 +43,23 @@ export default function TitleBar() {
   const ui = useUi()
   const theme = parseThemePref(useSetting(THEME_KEY))
   const act = (a: WindowAction) => desktop?.action(a).catch((e: unknown) => console.warn(a, e))
+  const { newQuery, closeActive } = useQueryActions()
+  const api = useApi()
+  const { data: profiles } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
+  const tab = useTabs((s) => s.tabs.find((t) => t.id === s.active))
+  const profile = profiles?.find((p) => p.id === tab?.profileId)
+  // 标题："当前标签 · 连接 — DBLens 数洞"
+  const title = tab ? `${tab.title} · ${profile?.name ?? '连接已删除'} — DBLens 数洞` : 'DBLens 数洞'
+  useEffect(() => {
+    document.title = title
+  }, [title])
 
   const run = (key: string) => {
     const [kind, arg] = key.split(':')
     if (key === 'new-connection') ui.openConnection(null)
+    else if (key === 'new-query') newQuery()
+    else if (key === 'close-tab') closeActive()
+    else if (kind === 'sql') sendCommand(arg as EditorCommand)
     else if (key === 'settings') ui.setSettingsOpen(true)
     else if (key === 'quit') act('quit')
     else if (kind === 'side') ui.setSide(arg as SideKey)
@@ -83,7 +101,7 @@ export default function TitleBar() {
           </Dropdown>
         ))}
       </div>
-      <span className="title">DBLens 数洞</span>
+      <span className="title">{title}</span>
       <span className="grow" />
       {desktop && (
         <div className="row" data-no-drag>

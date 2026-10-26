@@ -1,16 +1,22 @@
 // 主窗口布局（M1 设计稿第 1 部分）：标题栏；活动栏 + 可拖动、可折叠的侧栏 + 工作区；状态栏。
 // 侧栏宽度经 useDefaultLayout 存进设置（ui.layout.*），下次启动恢复。
+// 没有查询标签时工作区显示欢迎页；工作区（Monaco、结果表格）懒加载。
 
-import { Button, Empty } from 'antd'
-import { IconDatabase, IconHistory, IconPlus, IconSettings, IconStar, IconTool } from '@tabler/icons-react'
-import { useEffect, useRef } from 'react'
+import { Button, Empty, Spin } from 'antd'
+import { IconDatabase, IconFileCode, IconHistory, IconPlus, IconSettings, IconStar, IconTool } from '@tabler/icons-react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Group, Panel, type PanelImperativeHandle, Separator, useDefaultLayout } from 'react-resizable-panels'
 
+import { useQueryActions } from '../features/editor/actions'
+import { type EditorCommand, sendCommand } from '../features/editor/commands'
+import { useTabs } from '../features/editor/tabs'
 import ObjectTree from '../features/tree/ObjectTree'
 import { layoutStorage } from '../shared/settings'
 import StatusBar from './StatusBar'
 import TitleBar from './TitleBar'
 import { type SideKey, useUi } from './ui'
+
+const Workspace = lazy(() => import('../features/editor/Workspace'))
 
 const SIDES: { key: SideKey; title: string; icon: typeof IconDatabase }[] = [
   { key: 'db', title: '数据库', icon: IconDatabase },
@@ -26,20 +32,42 @@ function SideContent({ side }: { side: SideKey }) {
 
 function Welcome() {
   const openConnection = useUi((s) => s.openConnection)
+  const { newQuery } = useQueryActions()
   return (
     <div className="welcome">
       <IconDatabase size={48} stroke={1.2} />
       <div style={{ fontSize: 16, color: 'var(--text)' }}>DBLens 数洞</div>
-      <Button type="primary" icon={<IconPlus size={14} />} onClick={() => openConnection(null)}>
-        新建连接
-      </Button>
-      <div className="muted">在左侧的数据库树中展开连接，浏览库表结构</div>
+      <div className="row" style={{ gap: 8 }}>
+        <Button type="primary" icon={<IconPlus size={14} />} onClick={() => openConnection(null)}>
+          新建连接
+        </Button>
+        <Button icon={<IconFileCode size={14} />} onClick={() => newQuery()}>
+          新建查询
+        </Button>
+      </div>
+      <div className="muted">在左侧的数据库树中展开连接浏览库表结构，右键连接可新建查询（Ctrl+T）</div>
     </div>
   )
 }
 
+/** 全局快捷键（M1 设计文档 1.3 节）。焦点在编辑器里时由 Monaco 的动作处理，这里处理焦点在别处的情况。 */
+function shortcut(e: KeyboardEvent): EditorCommand | 'new-connection' | 'new-query' | 'close-tab' | null {
+  const ctrl = e.ctrlKey || e.metaKey
+  const key = e.key.toLowerCase()
+  if (ctrl && !e.shiftKey && !e.altKey && key === 'n') return 'new-connection'
+  if (ctrl && !e.shiftKey && !e.altKey && key === 't') return 'new-query'
+  if (ctrl && !e.shiftKey && !e.altKey && key === 'w') return 'close-tab'
+  if (ctrl && key === 'enter') return 'run-current'
+  if (!ctrl && !e.altKey && key === 'f5') return 'run-all'
+  if ((ctrl && key === 'pause') || (e.metaKey && key === '.')) return 'cancel'
+  if (e.shiftKey && e.altKey && key === 'f') return 'format'
+  return null
+}
+
 export default function Shell() {
   const { side, toggleSide, setSettingsOpen, openConnection } = useUi()
+  const { newQuery, closeActive } = useQueryActions()
+  const hasTabs = useTabs((s) => s.tabs.length > 0)
   const sidePanel = useRef<PanelImperativeHandle | null>(null)
   const layout = useDefaultLayout({ id: 'main', storage: layoutStorage })
 
@@ -51,17 +79,19 @@ export default function Shell() {
     else if (p.isCollapsed()) p.expand()
   }, [side])
 
-  // Ctrl+N 新建连接
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
-        e.preventDefault()
-        openConnection(null)
-      }
+      const cmd = shortcut(e)
+      if (!cmd) return
+      e.preventDefault()
+      if (cmd === 'new-connection') openConnection(null)
+      else if (cmd === 'new-query') newQuery()
+      else if (cmd === 'close-tab') closeActive()
+      else sendCommand(cmd)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openConnection])
+  }, [openConnection, newQuery, closeActive])
 
   const current = SIDES.find((s) => s.key === side)
   return (
@@ -92,7 +122,13 @@ export default function Shell() {
           </Panel>
           <Separator className="splitter" />
           <Panel id="work" minSize={400}>
-            <Welcome />
+            {hasTabs ? (
+              <Suspense fallback={<Spin style={{ margin: 48 }} />}>
+                <Workspace />
+              </Suspense>
+            ) : (
+              <Welcome />
+            )}
           </Panel>
         </Group>
       </div>

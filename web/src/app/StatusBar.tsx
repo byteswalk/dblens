@@ -1,16 +1,60 @@
-// 状态栏：对象树中选中的连接。执行相关的信息（事务、行数、耗时、光标位置）在 M1b 加入。
+// 状态栏（M1 设计文档 1.1 节）：有查询标签时显示它的连接和方言、事务状态、最近一次执行的行数和耗时、
+// 光标位置；没有时显示对象树中选中的连接。
 
 import { IconPlugConnected } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 
 import { DRIVERS } from '../features/connections/form'
+import { useCursor } from '../features/editor/cursor'
+import { VARIANT_NAMES } from '../features/editor/dialect'
+import { useTabRuntime } from '../features/editor/runner'
+import { useTabs } from '../features/editor/tabs'
+import { lastSummary } from '../features/results/results'
+import type { Profile } from '../shared/api'
 import { useApi } from './context'
 import { useUi } from './ui'
+
+function TabStatus({ tabId, profile }: { tabId: string; profile: Profile | undefined }) {
+  const rt = useTabRuntime(tabId)
+  const cursor = useCursor()
+  const s = rt.session
+  const dialect = VARIANT_NAMES[s?.variant ?? ''] ?? DRIVERS.find((d) => d.id === profile?.driver)?.label
+  const summary = lastSummary(rt.exec)
+  return (
+    <>
+      <span className="row" style={{ gap: 4 }}>
+        <IconPlugConnected size={14} />
+        {profile?.name ?? '连接已删除'}
+        {s?.schema && <span className="muted">· {s.schema}</span>}
+      </span>
+      {s && (
+        <span style={{ color: s.in_transaction ? 'var(--warn)' : undefined }}>
+          {s.autocommit ? '自动提交' : s.in_transaction ? '手动提交 · 事务中' : '手动提交'}
+        </span>
+      )}
+      {rt.running ? <span>执行中…</span> : summary && <span>{summary}</span>}
+      <span className="grow" />
+      <span>
+        行 {cursor.line}，列 {cursor.column}
+      </span>
+      {dialect && <span>{dialect}</span>}
+      <span>UTF-8</span>
+    </>
+  )
+}
 
 export default function StatusBar() {
   const api = useApi()
   const selected = useUi((s) => s.selectedProfile)
+  const active = useTabs((s) => s.tabs.find((t) => t.id === s.active))
   const { data: profiles } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
+  if (active) {
+    return (
+      <div className="row statusbar">
+        <TabStatus tabId={active.id} profile={profiles?.find((x) => x.id === active.profileId)} />
+      </div>
+    )
+  }
   const p = profiles?.find((x) => x.id === selected)
   return (
     <div className="row statusbar">

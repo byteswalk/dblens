@@ -21,6 +21,7 @@ import { type Key, type ReactNode, useCallback, useMemo, useState } from 'react'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
+import { useQueryActions } from '../editor/actions'
 import type { Api, Environment, Profile } from '../../shared/api'
 import { DRIVERS } from '../connections/form'
 import { withVault } from '../connections/vault'
@@ -125,6 +126,7 @@ export default function ObjectTree() {
   const qc = useQueryClient()
   const { message, modal } = App.useApp()
   const { openConnection, selectProfile } = useUi()
+  const { newQuery } = useQueryActions()
   const { data: profiles = [], error: profilesError } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
   const [loaded, setLoaded] = useState<Record<string, Loaded>>({})
   const [expanded, setExpanded] = useState<Key[]>([])
@@ -209,6 +211,8 @@ export default function ObjectTree() {
   const menuItems: MenuProps['items'] =
     menuNode?.type === 'c'
       ? [
+          { key: 'new-query', label: '新建查询', extra: 'Ctrl+T' },
+          { type: 'divider' },
           { key: 'edit', label: '编辑连接…' },
           { key: 'duplicate', label: '复制连接' },
           { key: 'delete', label: '删除连接', danger: true },
@@ -226,7 +230,8 @@ export default function ObjectTree() {
     const k = menuNode
     if (!k) return
     try {
-      if (key === 'edit' && k.type === 'c') openConnection(k.profileId)
+      if (key === 'new-query') newQuery(k.profileId)
+      else if (key === 'edit' && k.type === 'c') openConnection(k.profileId)
       else if (key === 'duplicate' && k.type === 'c') {
         const p = await api.profile(k.profileId)
         const { id: _, ...input } = p

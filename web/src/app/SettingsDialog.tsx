@@ -1,7 +1,9 @@
-// 设置：主题（跟随系统 / 亮色 / 暗色），桌面版另有"启动时自动检查更新"。macOS 上没有页面菜单，主题只能在这里改。
+// 设置：主题（跟随系统 / 亮色 / 暗色）、结果行数上限，桌面版另有"启动时自动检查更新"。
+// macOS 上没有页面菜单，主题只能在这里改。
 
-import { Form, Modal, Radio, Switch } from 'antd'
+import { Form, InputNumber, Modal, Radio, Switch } from 'antd'
 
+import { DEFAULT_ROW_CAP, ROW_CAP_KEY, rowCap } from '../features/editor/runner'
 import { useSetting, useSettings } from '../shared/settings'
 import { desktop } from '../shared/shell'
 import { THEME_KEY, parseThemePref } from '../shared/theme'
@@ -11,6 +13,7 @@ import { useShellInfo } from './useShellInfo'
 export default function SettingsDialog() {
   const { settingsOpen, setSettingsOpen } = useUi()
   const theme = parseThemePref(useSetting(THEME_KEY))
+  useSetting(ROW_CAP_KEY)
   const info = useShellInfo()
   return (
     <Modal title="设置" open={settingsOpen} onCancel={() => setSettingsOpen(false)} footer={null} width={480}>
@@ -24,6 +27,16 @@ export default function SettingsDialog() {
               { value: 'light', label: '亮色' },
               { value: 'dark', label: '暗色' },
             ]}
+          />
+        </Form.Item>
+        <Form.Item label="结果行数上限" extra="一个结果集读到这么多行后停止读取">
+          <InputNumber
+            min={500}
+            step={10000}
+            value={rowCap()}
+            onChange={(v) => useSettings.getState().set(ROW_CAP_KEY, v === null ? null : String(v))}
+            placeholder={String(DEFAULT_ROW_CAP)}
+            style={{ width: 160 }}
           />
         </Form.Item>
         {desktop && (

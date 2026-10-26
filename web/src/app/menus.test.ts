@@ -6,18 +6,19 @@ const base = { desktop: true, alwaysOnTop: false, autoCheckUpdate: true, theme: 
 const keys = (items: MenuEntry[]) => items.map((i) => (i === 'divider' ? '-' : i.key))
 
 describe('标题栏菜单', () => {
-  it('桌面版有文件、查看、窗口、帮助四组', () => {
+  it('桌面版有文件、查看、SQL、窗口、帮助五组', () => {
     const m = buildMenus(base)
-    expect(m.map((g) => g.label)).toEqual(['文件', '查看', '窗口', '帮助'])
-    expect(keys(m[0].items)).toEqual(['new-connection', '-', 'settings', '-', 'quit'])
-    expect(keys(m[3].items)).toEqual(['help:check-update', 'help:auto-check', '-', 'help:about'])
+    expect(m.map((g) => g.label)).toEqual(['文件', '查看', 'SQL', '窗口', '帮助'])
+    expect(keys(m[0].items)).toEqual(['new-connection', 'new-query', 'close-tab', '-', 'settings', '-', 'quit'])
+    expect(keys(m[2].items)).toEqual(['sql:run-current', 'sql:run-all', 'sql:cancel', '-', 'sql:format', 'sql:explain'])
+    expect(keys(m[4].items)).toEqual(['help:check-update', 'help:auto-check', '-', 'help:about'])
   })
 
   it('浏览器模式没有窗口菜单和退出，帮助只有关于', () => {
     const m = buildMenus({ ...base, desktop: false })
-    expect(m.map((g) => g.label)).toEqual(['文件', '查看', '帮助'])
-    expect(keys(m[0].items)).toEqual(['new-connection', '-', 'settings'])
-    expect(keys(m[2].items)).toEqual(['help:about'])
+    expect(m.map((g) => g.label)).toEqual(['文件', '查看', 'SQL', '帮助'])
+    expect(keys(m[0].items)).toEqual(['new-connection', 'new-query', 'close-tab', '-', 'settings'])
+    expect(keys(m[3].items)).toEqual(['help:about'])
   })
 
   it('勾选状态反映当前的侧栏、主题、置顶和自动检查', () => {
