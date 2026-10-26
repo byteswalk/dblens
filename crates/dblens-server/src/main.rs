@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use dblens_api::{ApiConfig, new_token, router, serve, with_web};
+use dblens_core::msg;
 use dblens_service::{Service, default_data_dir};
 
 mod update;
@@ -33,7 +34,9 @@ struct Args {
     update_url: Option<String>,
 }
 
-const USAGE: &str = "用法：dblens-server [--listen 地址:端口] [--data-dir 目录] [--web-dir 目录] [--allow-origin 来源]... \n                     [--update-url 地址] [--no-update-check]";
+fn usage() -> String {
+    msg!("server.usage").current()
+}
 
 fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
     let mut out = Args {
@@ -46,19 +49,24 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
     let mut no_update_check = false;
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
-        let mut value = |name: &str| it.next().ok_or_else(|| format!("{name} 后面缺少参数\n{USAGE}"));
+        let mut value = |name: &str| {
+            it.next()
+                .ok_or_else(|| format!("{}\n{}", msg!("server.missing_value", arg = name).current(), usage()))
+        };
         match a.as_str() {
             "--listen" => {
                 let v = value("--listen")?;
-                out.listen = v.parse().map_err(|_| format!("无效的监听地址：{v}"))?;
+                out.listen = v.parse().map_err(|_| msg!("server.bad_listen", value = v).current())?;
             }
             "--data-dir" => out.data_dir = Some(PathBuf::from(value("--data-dir")?)),
             "--web-dir" => out.web_dir = Some(PathBuf::from(value("--web-dir")?)),
             "--allow-origin" => out.allowed_origins.push(value("--allow-origin")?),
             "--update-url" => out.update_url = Some(value("--update-url")?),
             "--no-update-check" => no_update_check = true,
-            "-h" | "--help" => return Err(USAGE.to_string()),
-            other => return Err(format!("未知参数：{other}\n{USAGE}")),
+            "-h" | "--help" => return Err(usage()),
+            other => {
+                return Err(format!("{}\n{}", msg!("server.unknown_arg", arg = other).current(), usage()));
+            }
         }
     }
     if no_update_check {
@@ -84,7 +92,7 @@ async fn main() {
         }
     };
     if let Err(msg) = run(args).await {
-        eprintln!("启动失败：{msg}");
+        eprintln!("{}", msg!("server.start_failed", error = msg).current());
         std::process::exit(1);
     }
 }
@@ -98,19 +106,21 @@ async fn run(args: Args) -> Result<(), String> {
     let token = new_token();
     let listener = tokio::net::TcpListener::bind(args.listen)
         .await
-        .map_err(|e| format!("无法监听 {}：{e}", args.listen))?;
+        .map_err(|e| msg!("server.bind_failed", addr = args.listen, error = e).current())?;
     let addr = listener.local_addr().map_err(|e| e.to_string())?;
     if !addr.ip().is_loopback() {
         tracing::warn!("正在监听非本机地址 {addr}：同一网络中的其他人只要拿到访问令牌就能访问");
     }
     let web_dir = resolve_web_dir(args.web_dir, std::env::current_exe().ok());
     // 第一行是地址、第二行是令牌，便于脚本读取
-    println!("DBLens 服务已启动：http://{addr}");
-    println!("访问令牌：{token}");
-    println!("数据目录：{}", data_dir.display());
+    println!("{}", msg!("server.started", url = format!("http://{addr}")).current());
+    println!("{}", msg!("server.token", token = token).current());
+    println!("{}", msg!("server.data_dir", dir = data_dir.display()).current());
     // 令牌放在 # 后面：浏览器不会把它发给服务器，也不会出现在访问日志和 Referer 中
     match &web_dir {
-        Some(_) => println!("在浏览器中打开：http://{addr}/#token={token}"),
+        Some(_) => {
+            println!("{}", msg!("server.open_url", url = format!("http://{addr}/#token={token}")).current())
+        }
         None => tracing::warn!("没有找到前端页面目录（可用 --web-dir 指定），只提供接口"),
     }
     if let Some(url) = args.update_url {
@@ -132,6 +142,7 @@ async fn run(args: Args) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dblens_core::{Lang, with_lang};
 
     fn parse(args: &[&str]) -> Result<Args, String> {
         parse_args(args.iter().map(|s| s.to_string()))
@@ -167,9 +178,11 @@ mod tests {
         assert_eq!(a.data_dir, Some(PathBuf::from("d")));
         assert_eq!(a.web_dir, Some(PathBuf::from("w")));
         assert_eq!(a.allowed_origins, ["http://x", "http://y"]);
-        assert!(parse(&["--listen"]).unwrap_err().contains("缺少参数"));
-        assert!(parse(&["--listen", "nope"]).unwrap_err().contains("无效"));
-        assert!(parse(&["--bogus"]).unwrap_err().contains("未知参数"));
+        let zh = |args: &[&str]| with_lang(Lang::ZhCn, || parse(args).unwrap_err());
+        assert!(zh(&["--listen"]).contains("缺少参数"));
+        assert!(zh(&["--listen", "nope"]).contains("无效"));
+        assert!(zh(&["--bogus"]).contains("未知参数"));
+        assert!(with_lang(Lang::En, || parse(&["--bogus"]).unwrap_err()).contains("Unknown argument"));
     }
 
     #[test]

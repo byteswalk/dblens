@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dblens_api::{ApiConfig, new_token, router, serve, with_web};
+use dblens_core::msg;
 use dblens_service::{Service, default_data_dir};
 use tauri::Manager;
 
@@ -38,8 +39,8 @@ fn run(data_dir: PathBuf) -> Result<(), String> {
     let service = Arc::new(Service::open(&data_dir).map_err(|e| e.to_string())?);
     let token = new_token();
     // 先在当前线程绑定端口，窗口创建时地址已经确定
-    let listener =
-        std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| format!("无法监听本机端口：{e}"))?;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| msg!("desktop.bind_failed", error = e).current())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let addr = listener.local_addr().map_err(|e| e.to_string())?;
     let base = format!("http://{addr}/");

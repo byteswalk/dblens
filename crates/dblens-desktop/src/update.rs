@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use dblens_core::{Lang, default_lang, msg};
 use serde::{Deserialize, Serialize};
 use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuItemBuilder, Submenu, SubmenuBuilder};
 use tauri::{App, AppHandle, Manager, Wry};
@@ -49,36 +50,46 @@ pub fn can_self_update(os: &str, appimage: bool) -> bool {
 }
 
 /// 发现新版本时的提示文字。
-pub fn offer_text(version: &str, current: &str, notes: Option<&str>, self_update: bool) -> String {
-    let mut text = format!("发现新版本 {version}（当前 {current}）。");
+pub fn offer_text(
+    lang: Lang,
+    version: &str,
+    current: &str,
+    notes: Option<&str>,
+    self_update: bool,
+) -> String {
+    let mut text = msg!("update.found", version = version, current = current).render(lang);
     if let Some(notes) = notes.map(str::trim).filter(|n| !n.is_empty()) {
-        text.push_str("\n\n更新说明：\n");
+        text.push_str("\n\n");
+        text.push_str(&msg!("update.notes").render(lang));
+        text.push('\n');
         text.push_str(notes);
     }
-    if self_update {
-        text.push_str("\n\n现在下载并安装吗？安装完成后程序会自动重启。");
+    let action = if self_update {
+        msg!("update.ask_install")
     } else {
-        text.push_str(&format!("\n\n请到 {RELEASES_PAGE} 下载新版本。"));
-    }
+        msg!("update.download_page", url = RELEASES_PAGE)
+    };
+    text.push_str("\n\n");
+    text.push_str(&action.render(lang));
     text
 }
 
 /// 把更新插件的英文错误转成给用户看的说明，原文附在后面便于排查。
-pub fn error_text(err: &str) -> String {
+pub fn error_text(lang: Lang, err: &str) -> String {
     let lower = err.to_lowercase();
     let hint = if lower.contains("signature") {
-        "安装包签名校验失败，已取消安装。安装包可能被篡改，或更新源提供的签名不对"
+        msg!("update.bad_signature")
     } else if lower.contains("secure protocol") {
-        "更新源必须使用 https 地址"
+        msg!("update.needs_https")
     } else if lower.contains("could not fetch")
         || lower.contains("error sending request")
         || lower.contains("timed out")
     {
-        "无法连接更新源，请检查网络或 update.json 中的地址"
+        msg!("update.unreachable")
     } else {
         return err.to_string();
     };
-    format!("{hint}（{err}）")
+    msg!("update.error_with_cause", hint = hint, cause = err).render(lang)
 }
 
 struct UpdateState {
@@ -95,7 +106,8 @@ async fn dialog(
     buttons: MessageDialogButtons,
 ) -> bool {
     let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog().message(text).title("DBLens 数洞").kind(kind).buttons(buttons).show(move |ok| {
+    let title = msg!("app.name").render(default_lang());
+    app.dialog().message(text).title(title).kind(kind).buttons(buttons).show(move |ok| {
         let _ = tx.send(ok);
     });
     rx.await.unwrap_or(false)
@@ -109,7 +121,10 @@ async fn find_update(app: &AppHandle) -> Result<Option<Update>, String> {
     let endpoint = app.state::<UpdateState>().settings.lock().unwrap().endpoint.clone();
     let mut builder = app.updater_builder().timeout(TIMEOUT);
     if let Some(e) = endpoint.filter(|e| !e.trim().is_empty()) {
-        let url = e.trim().parse().map_err(|err| format!("update.json 中的更新源地址无效（{e}）：{err}"))?;
+        let url = e
+            .trim()
+            .parse()
+            .map_err(|err| msg!("update.bad_endpoint", endpoint = e, error = err).render(default_lang()))?;
         builder = builder.endpoints(vec![url]).map_err(|err| err.to_string())?;
     }
     builder.build().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())
@@ -145,7 +160,8 @@ pub async fn check(app: AppHandle, manual: bool) {
                 dialog(
                     &app,
                     MessageDialogKind::Error,
-                    format!("检查更新失败：{}", error_text(&e)),
+                    msg!("update.check_failed", error = error_text(default_lang(), &e))
+                        .render(default_lang()),
                     MessageDialogButtons::Ok,
                 )
                 .await;
@@ -156,24 +172,30 @@ pub async fn check(app: AppHandle, manual: bool) {
     let Some(update) = update else {
         tracing::info!("已是最新版本");
         if manual {
-            info(&app, format!("已是最新版本（{}）。", app.package_info().version)).await;
+            let version = app.package_info().version.to_string();
+            info(&app, msg!("update.up_to_date", version = version).render(default_lang())).await;
         }
         return;
     };
     tracing::info!("发现新版本 {}（当前 {}）", update.version, update.current_version);
     let self_update = can_self_update(std::env::consts::OS, std::env::var_os("APPIMAGE").is_some());
-    let text = offer_text(&update.version, &update.current_version, update.body.as_deref(), self_update);
+    let lang = default_lang();
+    let text =
+        offer_text(lang, &update.version, &update.current_version, update.body.as_deref(), self_update);
     if !self_update {
         info(&app, text).await;
         return;
     }
-    let buttons = MessageDialogButtons::OkCancelCustom("下载并安装".into(), "以后再说".into());
+    let buttons = MessageDialogButtons::OkCancelCustom(
+        msg!("update.install_button").render(lang),
+        msg!("update.later_button").render(lang),
+    );
     if !dialog(&app, MessageDialogKind::Info, text, buttons).await {
         return;
     }
     if let Err(e) = install(&app, update).await {
         tracing::error!("安装更新失败：{e}");
-        let text = format!("安装更新失败：{}", error_text(&e));
+        let text = msg!("update.install_failed", error = error_text(lang, &e)).render(lang);
         dialog(&app, MessageDialogKind::Error, text, MessageDialogButtons::Ok).await;
     }
 }
@@ -181,14 +203,15 @@ pub async fn check(app: AppHandle, manual: bool) {
 /// 读取更新设置，生成"帮助"菜单；开启了自动检查时，启动后在后台检查一次。
 pub fn init(app: &App, path: PathBuf) -> tauri::Result<Submenu<Wry>> {
     let settings: UpdateSettings = json_file::load(&path);
-    let auto_item = CheckMenuItemBuilder::with_id(MENU_AUTO, "启动时自动检查更新")
+    let lang = default_lang();
+    let auto_item = CheckMenuItemBuilder::with_id(MENU_AUTO, msg!("menu.auto_check").render(lang))
         .checked(settings.auto_check)
         .build(app)?;
-    let menu = SubmenuBuilder::new(app, "帮助")
-        .item(&MenuItemBuilder::with_id(MENU_CHECK, "检查更新…").build(app)?)
+    let menu = SubmenuBuilder::new(app, msg!("menu.help").render(lang))
+        .item(&MenuItemBuilder::with_id(MENU_CHECK, msg!("menu.check_update").render(lang)).build(app)?)
         .item(&auto_item)
         .separator()
-        .item(&MenuItemBuilder::with_id(MENU_ABOUT, "关于 DBLens").build(app)?)
+        .item(&MenuItemBuilder::with_id(MENU_ABOUT, msg!("menu.about").render(lang)).build(app)?)
         .build()?;
     if settings.auto_check {
         let handle = app.handle().clone();
@@ -269,25 +292,35 @@ mod tests {
     }
 
     #[test]
-    fn errors_are_explained_in_chinese() {
+    fn errors_are_explained_in_the_ui_language() {
         assert_eq!(
-            error_text("The signature verification failed"),
+            error_text(Lang::ZhCn, "The signature verification failed"),
             "安装包签名校验失败，已取消安装。安装包可能被篡改，或更新源提供的签名不对（The signature verification failed）"
         );
-        let insecure = error_text("The configured updater endpoint must use a secure protocol like `https`.");
+        assert!(
+            error_text(Lang::En, "The signature verification failed").starts_with("Signature check failed")
+        );
+        let insecure = error_text(
+            Lang::ZhCn,
+            "The configured updater endpoint must use a secure protocol like `https`.",
+        );
         assert!(insecure.starts_with("更新源必须使用 https 地址"), "{insecure}");
-        assert_eq!(error_text("something else"), "something else");
+        assert_eq!(error_text(Lang::ZhCn, "something else"), "something else");
     }
 
     #[test]
     fn offer_text_variants() {
         assert_eq!(
-            offer_text("0.2.0", "0.1.0", Some(" 修复若干问题 \n"), true),
+            offer_text(Lang::ZhCn, "0.2.0", "0.1.0", Some(" 修复若干问题 \n"), true),
             "发现新版本 0.2.0（当前 0.1.0）。\n\n更新说明：\n修复若干问题\n\n现在下载并安装吗？安装完成后程序会自动重启。"
         );
         assert_eq!(
-            offer_text("0.2.0", "0.1.0", Some("  "), false),
+            offer_text(Lang::ZhCn, "0.2.0", "0.1.0", Some("  "), false),
             format!("发现新版本 0.2.0（当前 0.1.0）。\n\n请到 {RELEASES_PAGE} 下载新版本。")
+        );
+        assert_eq!(
+            offer_text(Lang::En, "0.2.0", "0.1.0", None, true),
+            "Version 0.2.0 is available (current 0.1.0).\n\nDownload and install it now? The program restarts when done."
         );
     }
 }

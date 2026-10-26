@@ -6,6 +6,7 @@
 //!
 //! 窗口状态变化（最大化、置顶、自动检查更新）后，通过事件 [`EVENT`] 把新的 [`ShellInfo`] 推给页面。
 
+use dblens_core::msg;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -67,7 +68,7 @@ pub fn shell_info(app: AppHandle) -> ShellInfo {
 
 #[tauri::command]
 pub fn window_action(app: AppHandle, action: WindowAction) -> Result<(), String> {
-    let win = app.get_webview_window(window::MAIN).ok_or("主窗口不存在")?;
+    let win = app.get_webview_window(window::MAIN).ok_or_else(|| msg!("desktop.no_main_window").current())?;
     let result = match action {
         WindowAction::Minimize => win.minimize(),
         WindowAction::ToggleMaximize => {

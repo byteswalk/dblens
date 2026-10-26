@@ -1271,6 +1271,7 @@ name = "dblens-server"
 version = "0.1.0"
 dependencies = [
  "dblens-api",
+ "dblens-core",
  "dblens-service",
  "reqwest",
  "semver",

@@ -19,6 +19,7 @@ fn prints_address_and_token_and_enforces_it() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_dblens-server"))
         .args(["--listen", "127.0.0.1:0", "--no-update-check", "--data-dir"])
+        .env("DBLENS_LANG", "zh-CN")
         .arg(dir.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -47,6 +48,7 @@ fn serves_web_dir_and_prints_open_link() {
     std::fs::write(web.join("index.html"), "<html></html>").unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_dblens-server"))
         .args(["--listen", "127.0.0.1:0", "--no-update-check", "--data-dir"])
+        .env("DBLENS_LANG", "zh-CN")
         .arg(dir.path().join("data"))
         .arg("--web-dir")
         .arg(&web)
@@ -95,6 +97,7 @@ fn reports_newer_version_from_update_url() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_dblens-server"))
         .args(["--listen", "127.0.0.1:0", "--update-url", &url, "--data-dir"])
+        .env("DBLENS_LANG", "zh-CN")
         .arg(dir.path())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())

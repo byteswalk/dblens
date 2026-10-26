@@ -26,6 +26,8 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutEvent, ShortcutState};
 
+use dblens_core::{default_lang, msg};
+
 use crate::geometry::{self, MIN_SIZE, Rect};
 use crate::window_state::{self, WindowState};
 use crate::{shell, update};
@@ -206,15 +208,16 @@ fn mac_menu(
     saved: &WindowState,
     help: &Submenu<Wry>,
 ) -> tauri::Result<(tauri::menu::Menu<Wry>, CheckMenuItem<Wry>)> {
-    let on_top = CheckMenuItemBuilder::with_id(MENU_ON_TOP, "窗口置顶")
+    let lang = default_lang();
+    let on_top = CheckMenuItemBuilder::with_id(MENU_ON_TOP, msg!("menu.on_top").render(lang))
         .checked(saved.always_on_top)
         .accelerator(ON_TOP_SHORTCUT)
         .build(app)?;
-    let window_menu = SubmenuBuilder::new(app, "窗口")
+    let window_menu = SubmenuBuilder::new(app, msg!("menu.window").render(lang))
         .item(&on_top)
-        .item(&MenuItemBuilder::with_id(MENU_RESET, "恢复默认窗口位置和大小").build(app)?)
+        .item(&MenuItemBuilder::with_id(MENU_RESET, msg!("menu.reset_window").render(lang)).build(app)?)
         .separator()
-        .item(&MenuItemBuilder::with_id(MENU_QUIT, "退出").build(app)?)
+        .item(&MenuItemBuilder::with_id(MENU_QUIT, msg!("menu.quit").render(lang)).build(app)?)
         .build()?;
     Ok((MenuBuilder::new(app).item(&window_menu).item(help).build()?, on_top))
 }
@@ -232,7 +235,7 @@ pub fn create_main(
     let allowed = base.to_string();
     let mut builder =
         WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(base.parse().expect("接口地址")))
-            .title("DBLens 数洞")
+            .title(msg!("app.name").render(default_lang()))
             .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
             .visible(false)
             .initialization_script(init_script(token))

@@ -127,6 +127,85 @@ fn usages() -> Vec<(String, String, BTreeSet<String>)> {
     out
 }
 
+fn is_cjk(c: char) -> bool {
+    matches!(c, '\u{4e00}'..='\u{9fff}' | '\u{3000}'..='\u{303f}' | '\u{ff00}'..='\u{ffef}')
+}
+
+/// 一行中各个字符串字面量的内容。
+fn string_literals(line: &str) -> Vec<String> {
+    let (mut out, mut cur, mut in_str, mut escaped) = (Vec::new(), String::new(), false, false);
+    let mut prev = ' ';
+    for c in line.chars() {
+        if in_str {
+            match c {
+                _ if escaped => {
+                    escaped = false;
+                    cur.push(c);
+                }
+                '\\' => escaped = true,
+                '"' => {
+                    in_str = false;
+                    out.push(std::mem::take(&mut cur));
+                }
+                _ => cur.push(c),
+            }
+        } else if c == '"' && prev != '\'' {
+            in_str = true;
+        }
+        prev = c;
+    }
+    out
+}
+
+/// 不算给用户看的文字：日志、断言和测试里的说明、只在开发时打印到控制台的内容。
+const NOT_FOR_USERS: [&str; 12] = [
+    "tracing::",
+    "trace!(",
+    "debug!(",
+    "info!(",
+    "warn!(",
+    "error!(",
+    ".expect(",
+    "panic!",
+    "assert",
+    "unreachable!",
+    "eprintln!",
+    "#[doc",
+];
+
+/// 测试专用的支持代码。
+const TEST_SUPPORT: [&str; 3] = ["conformance.rs", "spike.rs", "fake.rs"];
+
+#[test]
+fn no_user_facing_chinese_left_in_source() {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(workspace().join("crates")).unwrap() {
+        let src = entry.unwrap().path().join("src");
+        if src.is_dir() {
+            rust_files(&src, &mut files);
+        }
+    }
+    let mut problems = Vec::new();
+    for file in files {
+        if TEST_SUPPORT.iter().any(|n| file.ends_with(n)) {
+            continue;
+        }
+        let text = fs::read_to_string(&file).unwrap();
+        let code = text.split("#[cfg(test)]").next().unwrap_or_default();
+        for (i, line) in code.lines().enumerate() {
+            let t = line.trim_start();
+            if t.starts_with("//") || NOT_FOR_USERS.iter().any(|p| line.contains(p)) {
+                continue;
+            }
+            if string_literals(line).iter().any(|s| s.chars().any(is_cjk)) {
+                let at = file.strip_prefix(workspace()).unwrap_or(&file).display().to_string();
+                problems.push(format!("{at}:{}：{}", i + 1, t));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "以下文字应改为 msg! 词条：\n{}", problems.join("\n"));
+}
+
 #[test]
 fn every_entry_has_both_languages_with_same_placeholders() {
     for (key, langs) in catalog() {

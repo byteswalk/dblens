@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+use dblens_core::msg;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::fmt;
@@ -19,7 +20,7 @@ pub fn appender(dir: &Path) -> Result<RollingFileAppender, String> {
         .filename_suffix("log")
         .max_log_files(KEEP_DAYS)
         .build(dir)
-        .map_err(|e| format!("无法创建日志目录 {}：{e}", dir.display()))
+        .map_err(|e| msg!("desktop.log_dir_failed", dir = dir.display(), error = e).current())
 }
 
 /// 初始化全局日志。返回的 guard 要一直持有到程序退出，否则缓冲中的日志会丢失。
