@@ -41,6 +41,8 @@ const MIGRATIONS: &[&str] = &[
         nonce      BLOB NOT NULL,
         cipher     BLOB NOT NULL
     );",
+    // 版本 2：连接配置记住上次连接成功时识别出的数据库变体（界面据此显示图标）
+    "ALTER TABLE profiles ADD COLUMN variant TEXT;",
 ];
 
 pub(crate) fn db_err(e: rusqlite::Error) -> Error {

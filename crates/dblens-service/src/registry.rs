@@ -204,6 +204,10 @@ impl DriverRegistry {
             drop(stream);
             dialect = dialect.refine(&rows);
         }
+        // 记下识别结果供界面显示图标；写不进去不影响连接
+        if let Err(e) = self.store.set_profile_variant(&profile.id, dialect.variant()) {
+            tracing::warn!("记录连接 {} 的数据库变体失败：{e}", profile.id);
+        }
         Ok((conn, dialect))
     }
 
@@ -246,7 +250,11 @@ mod tests {
         // 未确认：不可用，连接参数报驱动不可用
         let s = r.status(DriverId::Dameng).unwrap();
         assert!(s.compiled && s.needs_native_lib && !s.available && s.lib_dir.is_none());
-        let p = Profile { id: "1".into(), input: ProfileInput { driver: DriverId::Dameng, ..input("dm") } };
+        let p = Profile {
+            id: "1".into(),
+            input: ProfileInput { driver: DriverId::Dameng, ..input("dm") },
+            variant: None,
+        };
         assert!(matches!(r.connect_params(&p, "pw".into()), Err(Error::DriverUnavailable { .. })));
 
         assert!(matches!(

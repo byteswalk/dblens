@@ -106,7 +106,7 @@ impl Service {
 
     /// 测试一个（可能尚未保存的）连接配置。
     pub async fn test_connection(&self, input: ProfileInput, password: &str) -> Result<ServerSummary> {
-        let p = Profile { id: String::new(), input };
+        let p = Profile { id: String::new(), input, variant: None };
         self.registry.test_connection(&p, password.to_string()).await
     }
 
@@ -188,7 +188,13 @@ mod tests {
         assert!(matches!(s.test_connection(input("pg"), "wrong").await, Err(Error::Auth { .. })));
 
         let p = s.create_profile(input("pg"), Some("pw")).unwrap();
+        assert_eq!(p.variant, None);
         let info = s.open_session(&p.id).await.unwrap();
+        assert_eq!(
+            s.store.profile(&p.id).unwrap().variant,
+            Some(Variant::Postgres),
+            "连接时记下识别出的变体"
+        );
         assert_eq!((info.profile_id.as_str(), info.autocommit), (p.id.as_str(), true));
         s.sessions.execute(info.id, "ROWS 1", false).await.unwrap();
         let mut last = None;

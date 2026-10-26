@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use dblens_core::{Error, Result, msg};
+use dblens_dialect::Variant;
 use dblens_driver::{ConnectParams, DriverId};
 use rusqlite::{OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
@@ -73,6 +74,10 @@ pub struct Profile {
     pub id: String,
     #[serde(flatten)]
     pub input: ProfileInput,
+    /// 上次连接成功时识别出的数据库变体，由服务端写入；修改配置时忽略请求中的值，
+    /// 主机、端口或驱动变了则清空，下次连接再识别。
+    #[serde(default)]
+    pub variant: Option<Variant>,
 }
 
 impl Profile {
@@ -131,9 +136,15 @@ fn validate(p: &ProfileInput) -> Result<()> {
 const COLUMNS: &str =
     "id, name, driver, host, port, user, database, options, environment, color, connect_timeout_secs";
 
+/// 变体在库中存为它的序列化名称（如 `kingbase`）。
+fn variant_code(v: Variant) -> String {
+    serde_json::to_value(v).ok().and_then(|j| j.as_str().map(str::to_string)).unwrap_or_default()
+}
+
 fn from_row(r: &Row) -> rusqlite::Result<Profile> {
     let options: String = r.get(7)?;
     let environment: String = r.get(8)?;
+    let variant: Option<String> = r.get(11)?;
     Ok(Profile {
         id: r.get(0)?,
         input: ProfileInput {
@@ -148,6 +159,7 @@ fn from_row(r: &Row) -> rusqlite::Result<Profile> {
             color: r.get(9)?,
             connect_timeout_secs: u64::try_from(r.get::<_, i64>(10)?).unwrap_or(0),
         },
+        variant: variant.and_then(|v| serde_json::from_value(serde_json::Value::String(v)).ok()),
     })
 }
 
@@ -158,22 +170,26 @@ fn now() -> String {
 impl Store {
     pub fn list_profiles(&self) -> Result<Vec<Profile>> {
         self.with(|c| {
-            let mut st = c.prepare(&format!("SELECT {COLUMNS} FROM profiles ORDER BY name, id"))?;
+            let mut st = c.prepare(&format!("SELECT {COLUMNS}, variant FROM profiles ORDER BY name, id"))?;
             st.query_map([], from_row)?.collect()
         })
     }
 
     pub fn profile(&self, id: &str) -> Result<Profile> {
         self.with(|c| {
-            c.query_row(&format!("SELECT {COLUMNS} FROM profiles WHERE id = ?1"), params![id], from_row)
-                .optional()
+            c.query_row(
+                &format!("SELECT {COLUMNS}, variant FROM profiles WHERE id = ?1"),
+                params![id],
+                from_row,
+            )
+            .optional()
         })?
         .ok_or_else(|| Error::not_found(msg!("noun.profile", id = id)))
     }
 
     pub fn create_profile(&self, input: ProfileInput) -> Result<Profile> {
         validate(&input)?;
-        let p = Profile { id: uuid::Uuid::new_v4().to_string(), input };
+        let p = Profile { id: uuid::Uuid::new_v4().to_string(), input, variant: None };
         let i = &p.input;
         let options = serde_json::to_string(&i.options).map_err(|e| Error::internal(e.to_string()))?;
         let ts = now();
@@ -208,8 +224,10 @@ impl Store {
         let i = &input;
         let n = self.with(|c| {
             c.execute(
+                // SET 中引用的列是修改前的值：驱动、主机、端口都没变才保留识别出的变体
                 "UPDATE profiles SET name = ?2, driver = ?3, host = ?4, port = ?5, user = ?6, database = ?7,
-                        options = ?8, environment = ?9, color = ?10, connect_timeout_secs = ?11, updated_at = ?12
+                        options = ?8, environment = ?9, color = ?10, connect_timeout_secs = ?11, updated_at = ?12,
+                        variant = CASE WHEN driver = ?3 AND host = ?4 AND port = ?5 THEN variant END
                  WHERE id = ?1",
                 params![
                     id,
@@ -230,7 +248,19 @@ impl Store {
         if n == 0 {
             return Err(Error::not_found(msg!("noun.profile", id = id)));
         }
-        Ok(Profile { id: id.to_string(), input })
+        self.profile(id)
+    }
+
+    /// 记下连接成功时识别出的变体。配置不存在（如测试尚未保存的配置）时什么也不做。
+    pub fn set_profile_variant(&self, id: &str, variant: Variant) -> Result<()> {
+        let code = variant_code(variant);
+        self.with(|c| {
+            c.execute(
+                "UPDATE profiles SET variant = ?2 WHERE id = ?1 AND (variant IS NULL OR variant <> ?2)",
+                params![id, code],
+            )
+        })?;
+        Ok(())
     }
 
     /// 删除连接配置；本地加密保存的密码随之删除（外键级联）。系统钥匙串中的密码由 `Secrets` 删除。
@@ -286,6 +316,24 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn detected_variant_survives_edits_but_not_address_changes() {
+        let s = Store::open_in_memory().unwrap();
+        let p = s.create_profile(input("p")).unwrap();
+        assert_eq!(p.variant, None);
+        s.set_profile_variant(&p.id, Variant::Kingbase).unwrap();
+        assert_eq!(s.profile(&p.id).unwrap().variant, Some(Variant::Kingbase));
+        // 只改名称和环境：保留
+        let renamed =
+            s.update_profile(&p.id, ProfileInput { environment: Environment::Dev, ..input("q") }).unwrap();
+        assert_eq!(renamed.variant, Some(Variant::Kingbase));
+        // 换了主机：清空
+        let moved = s.update_profile(&p.id, ProfileInput { host: "other".into(), ..input("q") }).unwrap();
+        assert_eq!(moved.variant, None);
+        // 不存在的配置（如测试尚未保存的连接）：什么也不做
+        s.set_profile_variant("", Variant::Postgres).unwrap();
+    }
+
+    #[test]
     fn validation() {
         let s = Store::open_in_memory().unwrap();
         for bad in [
@@ -300,8 +348,11 @@ pub(crate) mod tests {
 
     #[test]
     fn params_and_json_shape() {
-        let p =
-            Profile { id: "1".into(), input: ProfileInput { database: Some(String::new()), ..input("x") } };
+        let p = Profile {
+            id: "1".into(),
+            input: ProfileInput { database: Some(String::new()), ..input("x") },
+            variant: Some(Variant::Kingbase),
+        };
         let cp = p.params("pw".into());
         assert_eq!((cp.host.as_str(), cp.port, cp.password.as_str()), ("db.local", 5432, "pw"));
         assert_eq!(cp.database, None, "空库名视为未指定");
@@ -310,6 +361,7 @@ pub(crate) mod tests {
         assert_eq!(json["id"], "1");
         assert_eq!(json["driver"], "postgres");
         assert_eq!(json["environment"], "prod");
+        assert_eq!(json["variant"], "kingbase");
         let back: Profile = serde_json::from_value(json).unwrap();
         assert_eq!(back, p);
         // 可选字段可以省略
