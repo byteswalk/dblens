@@ -19,6 +19,6 @@ pub use policy::{
 pub use profile::{Environment, Profile, ProfileInput};
 pub use registry::{DriverRegistry, DriverStatus, ServerSummary};
 pub use secret::{SecretBackend, SecretStatus, Secrets};
-pub use service::Service;
+pub use service::{LANG_SETTING, Service};
 pub use session::{ExecRequest, SessionEvent, SessionId, SessionInfo, SessionManager, statement_at};
 pub use store::{Store, default_data_dir};

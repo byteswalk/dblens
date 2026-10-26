@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use dblens_core::Result;
+use dblens_core::{Lang, Result, set_default_lang};
 
 use crate::metadata::{MetadataCache, MetadataService};
 use crate::policy::{DefaultPolicy, Policy};
@@ -12,6 +12,9 @@ use crate::registry::{DriverRegistry, ServerSummary};
 use crate::secret::Secrets;
 use crate::session::{SessionId, SessionInfo, SessionManager};
 use crate::store::Store;
+
+/// 界面语言设置：`auto`（跟随系统）、`zh-CN`、`en`。
+pub const LANG_SETTING: &str = "ui.lang";
 
 pub struct Service {
     pub store: Arc<Store>,
@@ -27,7 +30,16 @@ impl Service {
         let store = Arc::new(Store::open(data_dir)?);
         let secrets = Arc::new(Secrets::detect(store.clone()));
         let registry = Arc::new(DriverRegistry::new(store.clone()));
-        Ok(Self::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)))
+        let service = Self::with_parts(store, secrets, registry, Arc::new(DefaultPolicy));
+        service.apply_lang_setting()?;
+        Ok(service)
+    }
+
+    /// 按设置 `ui.lang` 设定进程的默认语言。
+    pub fn apply_lang_setting(&self) -> Result<()> {
+        let value = self.store.setting(LANG_SETTING)?;
+        set_default_lang(value.as_deref().and_then(Lang::from_setting));
+        Ok(())
     }
 
     /// 指定各个组成部分，供测试和团队版替换策略使用。

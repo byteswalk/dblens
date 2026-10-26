@@ -21,7 +21,7 @@ use std::sync::Arc;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::response::Response;
-use dblens_core::{Error, msg};
+use dblens_core::{Error, current_lang, msg, scope_lang};
 use dblens_service::{ExecRequest, Service, SessionEvent, SessionId};
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
@@ -113,7 +113,9 @@ pub async fn upgrade(
 ) -> ApiResult<Response> {
     s.service.sessions.info(id)?;
     let service = s.service.clone();
-    Ok(ws.on_upgrade(move |socket| run(socket, service, id)))
+    // 升级后的连接在新任务里运行，要带上这次请求的语言
+    let lang = current_lang();
+    Ok(ws.on_upgrade(move |socket| scope_lang(lang, run(socket, service, id))))
 }
 
 /// 从会话取事件发给客户端；每发出装满的一批行就等一次 `fetch_more`。
@@ -199,8 +201,8 @@ async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId) {
                 }
                 let (tx, rx) = mpsc::channel(1);
                 credit = Some(tx);
-                running =
-                    Some(tokio::spawn(pump(service.clone(), id, sql, max_rows.max(1), out.clone(), rx)));
+                let pumping = pump(service.clone(), id, sql, max_rows.max(1), out.clone(), rx);
+                running = Some(tokio::spawn(scope_lang(current_lang(), pumping)));
             }
             ClientMsg::FetchMore { max_rows } => {
                 if let Some(c) = &credit {

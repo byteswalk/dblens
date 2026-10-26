@@ -80,6 +80,9 @@ pub async fn set_setting(
         return Err(Error::invalid(msg!("api.setting_too_large", key = key)).into());
     }
     s.service.store.set_setting(&key, b.value.as_deref())?;
+    if key == dblens_service::LANG_SETTING {
+        s.service.apply_lang_setting()?;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

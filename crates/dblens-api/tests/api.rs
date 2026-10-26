@@ -183,17 +183,22 @@ type Ws = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<t
 
 /// 启动真实的服务，打开一个会话并连上它的 WebSocket。
 async fn ws_session() -> (Ws, Arc<Service>, u64) {
+    ws_open(dblens_service::Environment::Dev, "").await
+}
+
+/// 同上，可指定连接的环境和 WebSocket 地址上附加的查询参数（如 `&lang=en`）。
+async fn ws_open(env: dblens_service::Environment, query: &str) -> (Ws, Arc<Service>, u64) {
     let (app, service) = app();
     let profile =
         service.create_profile(serde_json::from_value(profile_json("p")).unwrap(), Some("pw")).unwrap();
     let mut input = profile.input.clone();
-    input.environment = dblens_service::Environment::Dev;
+    input.environment = env;
     service.update_profile(&profile.id, input).await.unwrap();
     let sid = service.open_session(&profile.id).await.unwrap().id;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { dblens_api::serve(listener, app).await.unwrap() });
-    let url = format!("ws://{addr}/api/sessions/{sid}/ws?token={TOKEN}");
+    let url = format!("ws://{addr}/api/sessions/{sid}/ws?token={TOKEN}{query}");
     let (ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
     (ws, service, sid)
 }
@@ -371,4 +376,43 @@ async fn schema_over_rest() {
     let (st, s) =
         call(&app, "POST", &format!("/api/sessions/{sid}/schema"), Some(json!({"schema": "hr"}))).await;
     assert_eq!((st, s["schema"].clone()), (StatusCode::OK, json!("hr")));
+}
+
+// ---- 语言 ----
+
+/// 带 `Accept-Language` 的 GET 请求；`token` 为 false 时不带令牌。
+async fn get_lang(app: &Router, uri: &str, lang: &str, token: bool) -> Value {
+    let mut req = Request::builder().uri(uri).header(header::ACCEPT_LANGUAGE, lang);
+    if token {
+        req = req.header(header::AUTHORIZATION, format!("Bearer {TOKEN}"));
+    }
+    let resp = app.clone().oneshot(req.body(Body::empty()).unwrap()).await.unwrap();
+    serde_json::from_slice(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap()
+}
+
+#[tokio::test]
+async fn errors_follow_accept_language() {
+    let (app, _) = app();
+    let zh = get_lang(&app, "/api/profiles/x", "zh-CN,zh;q=0.9,en;q=0.8", true).await;
+    assert_eq!((zh["kind"].clone(), zh["what"].clone()), (json!("not_found"), json!("连接配置 x")));
+    let en = get_lang(&app, "/api/profiles/x", "en-US,en;q=0.9", true).await;
+    assert_eq!(en["what"], "connection profile x");
+    // 令牌检查在语言协商之内：令牌错误也按请求语言
+    let en = get_lang(&app, "/api/profiles", "en", false).await;
+    assert_eq!(
+        (en["kind"].clone(), en["message"].clone()),
+        (json!("auth"), json!("Missing or wrong access token"))
+    );
+}
+
+#[tokio::test]
+async fn websocket_events_follow_lang_param() {
+    for (query, want) in [("&lang=en", "Production: DROP statement"), ("&lang=zh-CN", "生产环境：DROP 语句")]
+    {
+        let (mut ws, _, _) = ws_open(dblens_service::Environment::Prod, query).await;
+        send(&mut ws, json!({"type": "exec", "sql": "DROP TABLE t"})).await;
+        let events = until_done(&mut ws).await;
+        let confirm = events.iter().find(|e| e["type"] == "confirm_required").expect("应要求确认");
+        assert_eq!(confirm["reason"], want);
+    }
 }

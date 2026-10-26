@@ -3,6 +3,7 @@
 
 mod auth;
 mod error;
+mod lang;
 mod routes;
 mod web;
 mod ws;
@@ -77,6 +78,8 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/sessions/{id}/cancel", post(routes::cancel))
         .route("/sessions/{id}/ws", get(ws::upgrade))
         .layer(middleware::from_fn_with_state(state.clone(), auth::guard))
+        // 最外层：令牌错误等也按请求语言输出
+        .layer(middleware::from_fn(lang::negotiate))
         .with_state(state);
     Router::new().nest("/api", api)
 }
