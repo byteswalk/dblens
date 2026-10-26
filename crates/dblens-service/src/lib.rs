@@ -3,6 +3,8 @@
 /// 测试用的假驱动，供本 crate 和 `dblens-api` 的测试使用（feature `testing`）。
 #[cfg(any(test, feature = "testing"))]
 pub mod fake;
+mod favorite;
+mod history;
 mod metadata;
 mod policy;
 mod profile;
@@ -12,6 +14,11 @@ mod service;
 mod session;
 mod store;
 
+pub use favorite::{Favorite, FavoriteKind, FavoriteMove, FavoritePatch, NewFavorite};
+pub use history::{
+    DEFAULT_HISTORY_LIMIT, HISTORY_ENABLED_SETTING, HISTORY_LIMIT_SETTING, HistoryItem, HistoryLog,
+    HistoryQuery, NewHistory,
+};
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
 pub use policy::{
     Decision, DefaultPolicy, ExecContext, ObjectRef, Outcome, Policy, StatementInfo, StatementKind, classify,

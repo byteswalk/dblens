@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use dblens_core::{Error, Result, msg};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -43,6 +43,36 @@ const MIGRATIONS: &[&str] = &[
     );",
     // 版本 2：连接配置记住上次连接成功时识别出的数据库变体（界面据此显示图标）
     "ALTER TABLE profiles ADD COLUMN variant TEXT;",
+    // 版本 3：执行历史、收藏（M1c1）
+    "CREATE TABLE history (
+        id           INTEGER PRIMARY KEY,
+        at           INTEGER NOT NULL,
+        profile_id   TEXT NOT NULL,
+        profile_name TEXT NOT NULL,
+        driver       TEXT NOT NULL,
+        variant      TEXT,
+        schema       TEXT,
+        sql          TEXT NOT NULL,
+        elapsed_ms   INTEGER,
+        rows         INTEGER,
+        error        TEXT
+    );
+    CREATE INDEX history_at ON history(at);
+    CREATE INDEX history_profile ON history(profile_id, at);
+    CREATE TABLE favorites (
+        id         TEXT PRIMARY KEY,
+        parent_id  TEXT REFERENCES favorites(id) ON DELETE CASCADE,
+        kind       TEXT NOT NULL,
+        name       TEXT NOT NULL,
+        sql        TEXT,
+        note       TEXT,
+        driver     TEXT,
+        variant    TEXT,
+        position   INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX favorites_parent ON favorites(parent_id, position);",
 ];
 
 pub(crate) fn db_err(e: rusqlite::Error) -> Error {
@@ -97,9 +127,13 @@ impl Store {
 
     /// 在数据库连接上执行一段操作。操作都很快，直接持锁执行。
     pub(crate) fn with<T>(&self, f: impl FnOnce(&mut Connection) -> rusqlite::Result<T>) -> Result<T> {
-        let mut conn =
-            self.conn.lock().map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "store")))?;
+        let mut conn = self.lock()?;
         f(&mut conn).map_err(db_err)
+    }
+
+    /// 取得数据库连接，供需要在一个事务中做校验和多步修改的操作使用。
+    pub(crate) fn lock(&self) -> Result<MutexGuard<'_, Connection>> {
+        self.conn.lock().map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "store")))
     }
 
     pub fn setting(&self, key: &str) -> Result<Option<String>> {
