@@ -5,6 +5,7 @@ mod conn;
 mod ffi;
 mod handles;
 mod load;
+mod position;
 mod types;
 
 #[cfg(test)]

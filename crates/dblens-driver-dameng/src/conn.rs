@@ -10,6 +10,7 @@ use dblens_driver::{CancelHandle, ColumnMeta, ExecEvent, ServerInfo};
 
 use crate::ffi::*;
 use crate::handles::{ColDesc, Con, Stmt, succeeded};
+use crate::position::with_position;
 use crate::types::{DmType, PREVIEW, ParamData, bytes_value, classify, param_data, type_name, with_scale};
 
 /// 语句被 dpi_cancel 中断时 DM 返回的错误码（「操作被取消」，见技术验证笔记）。
@@ -230,7 +231,7 @@ impl BlockingConnection for DmConnection {
             Ok(bufs) => bufs,
             Err(e) => {
                 self.set_current(None);
-                return Err(map_cancel(&self.cancelled, e));
+                return Err(with_position(map_cancel(&self.cancelled, e), sql));
             }
         };
         let describe = || -> Result<(Columns, VecDeque<ExecEvent>, State)> {

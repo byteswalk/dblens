@@ -21,6 +21,7 @@ pub(crate) fn map_err(e: oracle::Error) -> Error {
         code => Error::Sql {
             code: format!("ORA-{code:05}"),
             message,
+            // 这里是字节偏移，执行语句的地方再换成字符偏移（见 `Error::position_bytes_to_chars`）
             position: (db.offset() > 0).then(|| db.offset() + 1),
         },
     }

@@ -97,15 +97,17 @@ impl BlockingConnection for OracleConnection {
         let binds = to_binds(params)?;
         let refs: Vec<&dyn ToSql> = binds.iter().map(|b| b.as_ref()).collect();
         // lob_locator：LOB 列以定位符返回，只读取预览部分，而不是把整个 LOB 拉到客户端
+        // Oracle 按字节报告出错位置，换成字符偏移
+        let sql_err = |e| map_err(e).position_bytes_to_chars(sql);
         let mut stmt = self
             .conn
             .statement(sql)
             .fetch_array_size(FETCH_ARRAY_SIZE)
             .lob_locator()
             .build()
-            .map_err(map_err)?;
+            .map_err(sql_err)?;
         if stmt.is_query() {
-            let rs = stmt.into_result_set::<OraRow>(&refs).map_err(map_err)?;
+            let rs = stmt.into_result_set::<OraRow>(&refs).map_err(sql_err)?;
             let columns: Vec<ColumnMeta> = rs.column_info().iter().map(column_meta).collect();
             return Ok(Box::new(OraExec {
                 pending: VecDeque::from([ExecEvent::ResultStart { columns }]),
@@ -115,7 +117,7 @@ impl BlockingConnection for OracleConnection {
         if let Err(e) = stmt.execute(&refs) {
             // 出错前已写入缓冲区的 DBMS_OUTPUT 要丢弃，否则会混进下一条语句的消息；收取本身的错误不能掩盖原错误
             let _ = drain_output(&self.conn);
-            return Err(map_err(e));
+            return Err(sql_err(e));
         }
         let affected = stmt.row_count().map_err(map_err)?;
         // 任何非查询语句都要收取：触发器等也可能写 DBMS_OUTPUT，不能留给之后无关的语句

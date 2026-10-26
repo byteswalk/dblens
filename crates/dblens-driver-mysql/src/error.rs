@@ -1,4 +1,4 @@
-use dblens_core::Error;
+use dblens_core::{Error, char_position};
 
 /// MySQL 错误码：查询被 KILL QUERY 中断。
 const ER_QUERY_INTERRUPTED: u16 = 1317;
@@ -15,6 +15,31 @@ pub(crate) fn map_err(e: mysql_async::Error) -> Error {
             Error::connect(e.to_string())
         }
         mysql_async::Error::Other(_) => Error::internal(e.to_string()),
+    }
+}
+
+/// 从语法错误信息 `… near 'FROM t' at line 2` 找出出错位置：`near` 后面是从出错处开始的原文（可能被截断），
+/// 在第 2 行起找它的第一行；为空表示语句意外结束，位置在末尾。返回字节偏移。
+fn locate(sql: &str, message: &str) -> Option<usize> {
+    let (head, line) = message.rsplit_once("' at line ")?;
+    let line: usize = line.trim().parse().ok()?;
+    let near = &head[head.find(" near '")? + 7..];
+    let line_start = sql.split_inclusive('\n').take(line.saturating_sub(1)).map(str::len).sum::<usize>();
+    let snippet = near.split('\n').next().unwrap_or_default();
+    if snippet.is_empty() {
+        return Some(sql.trim_end().len());
+    }
+    sql.get(line_start..)?.find(snippet).map(|at| line_start + at)
+}
+
+/// 给语法错误补上出错位置（字符偏移，从 1 开始）。
+pub(crate) fn with_position(e: Error, sql: &str) -> Error {
+    match e {
+        Error::Sql { code, message, position: None } => {
+            let position = locate(sql, &message).map(|b| char_position(sql, b));
+            Error::Sql { code, message, position }
+        }
+        other => other,
     }
 }
 
@@ -35,5 +60,25 @@ mod tests {
             map_err(server(1146, "Table 'x' doesn't exist")),
             Error::Sql { code: "1146".into(), message: "Table 'x' doesn't exist".into(), position: None }
         );
+    }
+
+    /// 信息取自 MySQL 9.7 和 MariaDB 12.3 的实测。
+    #[test]
+    fn locates_syntax_errors() {
+        let syntax = |near: &str, line: u32| {
+            format!(
+                "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '{near}' at line {line}"
+            )
+        };
+        let at = |sql: &str, msg: &str| locate(sql, msg).map(|b| sql[b..].to_string());
+        let sql = "SELECT '数洞', FROM t";
+        assert_eq!(at(sql, &syntax("FROM t", 1)).as_deref(), Some("FROM t"));
+        let sql = "SELECT 1,\n  'it''s', FROM t\nWHERE x";
+        assert_eq!(at(sql, &syntax("FROM t\nWHERE x", 2)).as_deref(), Some("FROM t\nWHERE x"));
+        assert_eq!(at("SELECT 1 FROM DUAL WHERE", &syntax("", 1)).as_deref(), Some(""));
+        assert_eq!(at("SELECT 1", "Table 'x' doesn't exist"), None);
+        let e = Error::Sql { code: "1064".into(), message: syntax("FROM t", 1), position: None };
+        let Error::Sql { position, .. } = with_position(e, "SELECT '数洞', FROM t") else { panic!() };
+        assert_eq!(position, Some(14));
     }
 }

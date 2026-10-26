@@ -4,7 +4,7 @@ use dblens_driver::{CancelHandle, Connection, ExecStream, ServerInfo};
 use mysql_async::prelude::Queryable;
 use mysql_async::{Conn, Opts};
 
-use crate::error::map_err;
+use crate::error::{map_err, with_position};
 use crate::exec::MyExec;
 use crate::value::to_mysql_param;
 
@@ -22,11 +22,12 @@ impl Connection for MySqlConnection {
     ) -> Result<Box<dyn ExecStream + 'a>> {
         if params.is_empty() {
             // 文本协议，支持一次返回多个结果集（如 CALL）
-            let result = self.conn.query_iter(sql).await.map_err(map_err)?;
+            let result = self.conn.query_iter(sql).await.map_err(|e| with_position(map_err(e), sql))?;
             Ok(Box::new(MyExec::new(result)))
         } else {
             let values = params.iter().map(to_mysql_param).collect::<Result<Vec<_>>>()?;
-            let result = self.conn.exec_iter(sql, values).await.map_err(map_err)?;
+            let result =
+                self.conn.exec_iter(sql, values).await.map_err(|e| with_position(map_err(e), sql))?;
             Ok(Box::new(MyExec::new(result)))
         }
     }

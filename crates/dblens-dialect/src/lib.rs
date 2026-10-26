@@ -4,6 +4,7 @@ mod dml;
 pub mod ident;
 pub mod literal;
 pub mod meta;
+mod session;
 mod split;
 pub mod types;
 mod variant;
@@ -13,6 +14,7 @@ use dblens_core::{LogicalType, Result, Value};
 use dblens_driver::{DriverId, ServerInfo};
 
 pub use dml::DmlTemplate;
+pub use session::may_change_schema;
 pub use split::{SqlStatement, split_statements};
 pub use variant::{Family, Variant};
 pub use version::parse_version;
@@ -98,6 +100,21 @@ impl Dialect {
 
     pub fn split(&self, sql: &str) -> Vec<SqlStatement> {
         split_statements(sql, self.family())
+    }
+
+    /// 生成执行计划要依次执行的语句，最后一条的结果集是计划（见 `session::explain`）。
+    pub fn explain(&self, sql: &str) -> Vec<String> {
+        session::explain(self.family(), sql)
+    }
+
+    /// 查询当前 schema 的语句，结果是一行一列。
+    pub fn current_schema_sql(&self) -> &'static str {
+        session::current_schema(self.family())
+    }
+
+    /// 切换当前 schema 的语句。
+    pub fn set_schema_sql(&self, schema: &str) -> String {
+        session::set_schema(self.family(), schema)
     }
 
     pub fn logical_type(&self, native: &str) -> LogicalType {

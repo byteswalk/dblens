@@ -5,6 +5,6 @@ pub mod schema;
 mod types;
 mod value;
 
-pub use error::{Error, Result};
+pub use error::{Error, Result, char_position};
 pub use types::{ColumnType, LogicalType};
 pub use value::{DEFAULT_LOB_PREVIEW_BYTES, LobPreview, Row, Value};

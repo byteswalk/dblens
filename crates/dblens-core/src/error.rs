@@ -37,7 +37,29 @@ pub enum Error {
     Internal { message: String },
 }
 
+/// `sql` 中的字节偏移（从 0 开始）换算成 `Error::Sql::position` 用的字符偏移（从 1 开始）。
+/// 偏移落在字符中间时按该字符算，超出末尾时取末尾之后的位置。
+pub fn char_position(sql: &str, byte: usize) -> u32 {
+    let mut end = byte.min(sql.len());
+    while !sql.is_char_boundary(end) {
+        end -= 1;
+    }
+    (sql[..end].chars().count() + 1) as u32
+}
+
 impl Error {
+    /// 按字节报告出错位置的数据库（如 Oracle）：把 `Sql` 错误的位置（从 1 开始的字节偏移）换成字符偏移。
+    pub fn position_bytes_to_chars(self, sql: &str) -> Self {
+        match self {
+            Error::Sql { code, message, position: Some(p) } => Error::Sql {
+                code,
+                message,
+                position: Some(char_position(sql, (p as usize).saturating_sub(1))),
+            },
+            other => other,
+        }
+    }
+
     pub fn connect(message: impl Into<String>) -> Self {
         Self::Connect { message: message.into() }
     }
@@ -80,5 +102,20 @@ mod tests {
         );
         assert_eq!(serde_json::to_value(Error::Locked).unwrap(), serde_json::json!({"kind":"locked"}));
         assert_eq!(Error::not_found("会话 7").to_string(), "找不到会话 7");
+    }
+
+    #[test]
+    fn byte_positions_become_char_positions() {
+        let sql = "SELECT '数洞', FROM t";
+        let from = sql.find("FROM").unwrap();
+        assert_eq!(char_position(sql, from), "SELECT '数洞', ".chars().count() as u32 + 1);
+        assert_eq!(char_position(sql, from + 1), char_position(sql, from) + 1);
+        // 落在汉字中间按该汉字算；超出末尾取末尾之后
+        assert_eq!(char_position(sql, sql.find('洞').unwrap() + 1), 10);
+        assert_eq!(char_position(sql, 1000), sql.chars().count() as u32 + 1);
+        let e = Error::Sql { code: "ORA-00936".into(), message: "x".into(), position: Some(from as u32 + 1) };
+        let Error::Sql { position, .. } = e.position_bytes_to_chars(sql) else { panic!() };
+        assert_eq!(position, Some(14));
+        assert_eq!(Error::Timeout.position_bytes_to_chars(sql), Error::Timeout);
     }
 }
