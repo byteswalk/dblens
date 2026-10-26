@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use dblens_core::{Lang, Result, set_default_lang};
 
+use crate::history::HistoryLog;
 use crate::metadata::{MetadataCache, MetadataService};
 use crate::policy::{DefaultPolicy, Policy};
 use crate::profile::{Profile, ProfileInput};
@@ -42,16 +43,28 @@ impl Service {
         Ok(())
     }
 
-    /// 指定各个组成部分，供测试和团队版替换策略使用。
+    /// 指定各个组成部分，供测试和团队版替换策略使用。历史由后台线程写入。
     pub fn with_parts(
         store: Arc<Store>,
         secrets: Arc<Secrets>,
         registry: Arc<DriverRegistry>,
         policy: Arc<dyn Policy>,
     ) -> Self {
+        let history = HistoryLog::start(store.clone());
+        Self::with_history(store, secrets, registry, policy, history)
+    }
+
+    /// 同 `with_parts`，另外指定历史的写法（测试中用 `HistoryLog::inline` 写完立即可查）。
+    pub fn with_history(
+        store: Arc<Store>,
+        secrets: Arc<Secrets>,
+        registry: Arc<DriverRegistry>,
+        policy: Arc<dyn Policy>,
+        history: HistoryLog,
+    ) -> Self {
         let cache = Arc::new(MetadataCache::new());
         Self {
-            sessions: SessionManager::new(policy, cache.clone()),
+            sessions: SessionManager::new(policy, cache.clone(), history),
             metadata: MetadataService::new(registry.clone(), secrets.clone(), cache),
             store,
             secrets,
@@ -115,7 +128,7 @@ impl Service {
         let p = self.store.profile(profile_id)?;
         let password = self.secrets.get(profile_id)?.unwrap_or_default();
         let (conn, dialect) = self.registry.connect(&p, password).await?;
-        let id = self.sessions.open(profile_id, p.input.environment, conn, dialect)?;
+        let id = self.sessions.open(&p, conn, dialect)?;
         // 读不到当前 schema 不影响使用，工具栏显示为未选择
         let _ = self.sessions.refresh_schema(id).await;
         self.sessions.info(id)

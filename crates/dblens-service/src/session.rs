@@ -2,11 +2,12 @@
 //! 执行是拉取式的：调用方每调用一次 `next` 取一个事件，结果集按批读取，读多少取多少。
 //! 每条语句执行前都经过 `Policy`；需要确认时脚本停下，调用方确认后用 `confirmed = true` 重新提交。
 //! 一次请求（`ExecRequest`）可以只执行光标所在的语句、失败后继续，或只生成执行计划。
+//! 每条语句执行完（成功、失败、被拒绝或被取消）记一条历史；执行计划和等待确认而没有执行的语句不记。
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use dblens_core::{Error, Msg, Result, Row, Value, msg};
 use dblens_dialect::{Dialect, SqlStatement, Variant, may_change_schema};
@@ -14,8 +15,10 @@ use dblens_driver::{CancelHandle, ColumnMeta, Connection, ExecEvent};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::history::{HistoryLog, NewHistory};
 use crate::metadata::MetadataCache;
 use crate::policy::{Decision, ExecContext, Outcome, Policy, StatementInfo, StatementKind, classify};
+use crate::profile::{Profile, driver_name, variant_code};
 
 pub type SessionId = u64;
 
@@ -217,6 +220,7 @@ struct Handle {
 pub struct SessionManager {
     policy: Arc<dyn Policy>,
     metadata: Arc<MetadataCache>,
+    history: HistoryLog,
     next_id: AtomicU64,
     sessions: Mutex<HashMap<SessionId, Handle>>,
 }
@@ -226,8 +230,8 @@ fn gone() -> Error {
 }
 
 impl SessionManager {
-    pub fn new(policy: Arc<dyn Policy>, metadata: Arc<MetadataCache>) -> Self {
-        Self { policy, metadata, next_id: AtomicU64::new(1), sessions: Mutex::new(HashMap::new()) }
+    pub fn new(policy: Arc<dyn Policy>, metadata: Arc<MetadataCache>, history: HistoryLog) -> Self {
+        Self { policy, metadata, history, next_id: AtomicU64::new(1), sessions: Mutex::new(HashMap::new()) }
     }
 
     fn handle<T>(&self, id: SessionId, f: impl FnOnce(&Handle) -> T) -> Result<T> {
@@ -239,13 +243,8 @@ impl SessionManager {
     }
 
     /// 用一个已建立的连接创建会话（连接由调用方通过 `DriverRegistry::connect` 建立）。
-    pub fn open(
-        &self,
-        profile_id: &str,
-        environment: crate::profile::Environment,
-        conn: Box<dyn Connection>,
-        dialect: Dialect,
-    ) -> Result<SessionId> {
+    pub fn open(&self, profile: &Profile, conn: Box<dyn Connection>, dialect: Dialect) -> Result<SessionId> {
+        let profile_id = profile.id.as_str();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let info = Arc::new(Mutex::new(SessionInfo {
             id,
@@ -261,9 +260,18 @@ impl SessionManager {
         let (tx, rx) = mpsc::channel(16);
         let actor = Actor {
             conn: Some(conn),
-            ctx: ExecContext { profile_id: profile_id.to_string(), environment, dialect },
+            ctx: ExecContext {
+                profile_id: profile_id.to_string(),
+                environment: profile.input.environment,
+                dialect,
+            },
+            owner: Owner {
+                name: profile.input.name.clone(),
+                driver: driver_name(profile.input.driver).to_string(),
+            },
             policy: self.policy.clone(),
             metadata: self.metadata.clone(),
+            history: self.history.clone(),
             info: info.clone(),
             cancel: cancel.clone(),
             rx,
@@ -380,11 +388,23 @@ struct Actor {
     /// 断开后仍保留（关闭时尝试回滚）；`Replace` 换成新连接。
     conn: Option<Box<dyn Connection>>,
     ctx: ExecContext,
+    owner: Owner,
     policy: Arc<dyn Policy>,
     metadata: Arc<MetadataCache>,
+    history: HistoryLog,
     info: Arc<Mutex<SessionInfo>>,
     cancel: Arc<Mutex<CancelHandle>>,
     rx: mpsc::Receiver<Command>,
+}
+
+/// 会话所属的连接配置，写历史用。
+struct Owner {
+    name: String,
+    driver: String,
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }
 
 fn reply<T>(tx: oneshot::Sender<Result<T>>, value: Result<T>) {
@@ -572,10 +592,17 @@ async fn take_request(rx: &mut mpsc::Receiver<Command>, queue: &mut VecDeque<Ses
     }
 }
 
-fn convert(ev: ExecEvent, affected: &mut Option<u64>) -> SessionEvent {
+/// 驱动事件转成会话事件，同时累计影响行数和取回的行数（写历史用）。
+fn convert(ev: ExecEvent, affected: &mut Option<u64>, fetched: &mut Option<u64>) -> SessionEvent {
     match ev {
-        ExecEvent::ResultStart { columns } => SessionEvent::ResultStart { columns },
-        ExecEvent::Rows(rows) => SessionEvent::Rows { rows },
+        ExecEvent::ResultStart { columns } => {
+            fetched.get_or_insert(0);
+            SessionEvent::ResultStart { columns }
+        }
+        ExecEvent::Rows(rows) => {
+            *fetched = Some(fetched.unwrap_or(0) + rows.len() as u64);
+            SessionEvent::Rows { rows }
+        }
         ExecEvent::ResultEnd => SessionEvent::ResultEnd,
         ExecEvent::Affected(count) => {
             *affected = Some(affected.unwrap_or(0) + count);
@@ -592,13 +619,32 @@ impl Actor {
         steps: Vec<Step>,
         req: &ExecRequest,
     ) -> Option<(bool, oneshot::Sender<Result<()>>)> {
-        let Actor { conn, ctx, policy, metadata, info, rx, .. } = self;
+        let Actor { conn, ctx, owner, policy, metadata, history, info, rx, .. } = self;
         let conn = conn.as_mut()?;
         let set = |f: &dyn Fn(&mut SessionInfo)| {
             if let Ok(mut i) = info.lock() {
                 f(&mut i);
             }
         };
+        // 记一条历史。当前 schema 取执行这条语句之前的（USE 等语句执行后才更新）
+        let record =
+            |step: &Step, at: i64, elapsed_ms: Option<u64>, rows: Option<u64>, error: Option<&Error>| {
+                if req.explain {
+                    return;
+                }
+                history.record(NewHistory {
+                    at,
+                    profile_id: ctx.profile_id.clone(),
+                    profile_name: owner.name.clone(),
+                    driver: owner.driver.clone(),
+                    variant: Some(variant_code(ctx.dialect.variant())),
+                    schema: info.lock().ok().and_then(|i| i.schema.clone()),
+                    sql: step.texts[0].clone(),
+                    elapsed_ms,
+                    rows,
+                    error: error.map(|e| e.to_string()),
+                });
+            };
         let mut queue: VecDeque<SessionEvent> = VecDeque::new();
         // 一个等着数据的 Next 请求：队列空时由执行循环取数据后回复
         let mut pending: Option<(usize, oneshot::Sender<Result<Option<SessionEvent>>>)> = None;
@@ -629,13 +675,11 @@ impl Actor {
                     break 'script;
                 }
                 Decision::Deny { reason } => {
+                    let error = Error::Denied { reason };
+                    record(&step, now_ms(), None, None, Some(&error));
                     // 先发开始事件，调用方才知道被拒绝的是哪一段
                     queue.push_back(start);
-                    queue.push_back(SessionEvent::Failed {
-                        index,
-                        error: Error::Denied { reason },
-                        offset: None,
-                    });
+                    queue.push_back(SessionEvent::Failed { index, error, offset: None });
                     if req.continue_on_error {
                         continue 'script;
                     }
@@ -662,7 +706,9 @@ impl Actor {
                 }
             }
             let started = Instant::now();
+            let at = now_ms();
             let mut affected = None;
+            let mut fetched = None;
             let mut result: Result<()> = Ok(());
             for text in &step.texts {
                 result = match conn.execute(text, &[]).await {
@@ -682,7 +728,7 @@ impl Actor {
                             },
                         };
                         match stream.next(max_rows).await {
-                            Ok(Some(ev)) => reply(tx, Ok(Some(convert(ev, &mut affected)))),
+                            Ok(Some(ev)) => reply(tx, Ok(Some(convert(ev, &mut affected, &mut fetched)))),
                             Ok(None) => {
                                 pending = Some((max_rows, tx));
                                 break Ok(());
@@ -704,12 +750,11 @@ impl Actor {
                 Err(e) => Outcome::Failed { message: e.to_string() },
             };
             policy.after_execute(ctx, &stmt, &outcome).await;
+            let elapsed_ms = started.elapsed().as_millis() as u64;
+            record(&step, at, Some(elapsed_ms), affected.or(fetched), result.as_ref().err());
             match result {
                 Ok(()) => {
-                    queue.push_back(SessionEvent::StatementEnd {
-                        index,
-                        elapsed_ms: started.elapsed().as_millis() as u64,
-                    });
+                    queue.push_back(SessionEvent::StatementEnd { index, elapsed_ms });
                     if stmt.kind == StatementKind::Ddl {
                         metadata.invalidate_objects(&ctx.profile_id, &stmt.objects);
                     }
@@ -771,19 +816,82 @@ mod tests {
 
     use super::*;
     use crate::fake::{FakeConn, Log};
+    use crate::history::HistoryQuery;
     use crate::policy::DefaultPolicy;
-    use crate::profile::Environment;
+    use crate::profile::{Environment, ProfileInput};
+    use crate::store::Store;
 
     fn manager() -> (SessionManager, Arc<MetadataCache>) {
         let cache = Arc::new(MetadataCache::new());
-        (SessionManager::new(Arc::new(DefaultPolicy), cache.clone()), cache)
+        (SessionManager::new(Arc::new(DefaultPolicy), cache.clone(), HistoryLog::off()), cache)
     }
 
     fn open(m: &SessionManager, env: Environment) -> (SessionId, Log) {
         let log: Log = Arc::default();
+        let input = ProfileInput { environment: env, ..crate::profile::tests::input("开发库") };
+        let profile = Profile { id: "p1".into(), input, variant: None };
         let id =
-            m.open("p1", env, Box::new(FakeConn::new(log.clone())), Dialect::new(Variant::Postgres)).unwrap();
+            m.open(&profile, Box::new(FakeConn::new(log.clone())), Dialect::new(Variant::Postgres)).unwrap();
         (id, log)
+    }
+
+    #[tokio::test]
+    async fn records_history_for_each_executed_statement() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let m = SessionManager::new(
+            Arc::new(DefaultPolicy),
+            Arc::new(MetadataCache::new()),
+            HistoryLog::inline(store.clone()),
+        );
+        let (id, _) = open(&m, Environment::None);
+        m.set_schema(id, "app").await.unwrap();
+        let req =
+            ExecRequest { continue_on_error: true, ..ExecRequest::new("ROWS 3; UPDATE t SET a = 1; FAIL") };
+        m.submit(id, req).await.unwrap();
+        drain(&m, id).await;
+        let items = store.history(&HistoryQuery::default()).unwrap();
+        let got: Vec<_> =
+            items.iter().map(|i| (i.entry.sql.as_str(), i.entry.rows, i.entry.error.is_some())).collect();
+        assert_eq!(
+            got,
+            [("FAIL", None, true), ("UPDATE t SET a = 1", Some(1), false), ("ROWS 3", Some(3), false)]
+        );
+        let e = &items[2].entry;
+        assert_eq!(
+            (
+                e.profile_id.as_str(),
+                e.profile_name.as_str(),
+                e.driver.as_str(),
+                e.variant.as_deref(),
+                e.schema.as_deref()
+            ),
+            ("p1", "开发库", "postgres", Some("postgres"), Some("app"))
+        );
+        assert!(e.elapsed_ms.is_some() && e.at > 0);
+
+        // 执行计划不记
+        m.submit(id, ExecRequest { explain: true, ..ExecRequest::new("ROWS 1") }).await.unwrap();
+        drain(&m, id).await;
+        assert_eq!(store.history(&HistoryQuery::default()).unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn statements_waiting_for_confirmation_are_not_recorded() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let m = SessionManager::new(
+            Arc::new(DefaultPolicy),
+            Arc::new(MetadataCache::new()),
+            HistoryLog::inline(store.clone()),
+        );
+        let (id, _) = open(&m, Environment::Prod);
+        m.execute(id, "ROWS 1; DROP TABLE t", false).await.unwrap();
+        drain(&m, id).await;
+        let items = store.history(&HistoryQuery::default()).unwrap();
+        assert_eq!(items.iter().map(|i| i.entry.sql.as_str()).collect::<Vec<_>>(), ["ROWS 1"]);
+        // 确认后执行的会记
+        m.execute(id, "DROP TABLE t", true).await.unwrap();
+        drain(&m, id).await;
+        assert_eq!(store.history(&HistoryQuery::default()).unwrap()[0].entry.sql, "DROP TABLE t");
     }
 
     /// 取完全部事件（每批最多 2 行）。

@@ -96,7 +96,7 @@ impl Profile {
     }
 }
 
-fn driver_name(d: DriverId) -> &'static str {
+pub(crate) fn driver_name(d: DriverId) -> &'static str {
     match d {
         DriverId::Mysql => "mysql",
         DriverId::Postgres => "postgres",
@@ -137,7 +137,7 @@ const COLUMNS: &str =
     "id, name, driver, host, port, user, database, options, environment, color, connect_timeout_secs";
 
 /// 变体在库中存为它的序列化名称（如 `kingbase`）。
-fn variant_code(v: Variant) -> String {
+pub(crate) fn variant_code(v: Variant) -> String {
     serde_json::to_value(v).ok().and_then(|j| j.as_str().map(str::to_string)).unwrap_or_default()
 }
 
