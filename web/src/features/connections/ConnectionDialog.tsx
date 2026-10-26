@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
+import DbIcon from '../../shared/DbIcon'
 import type { DriverId, Environment, ServerSummary } from '../../shared/api'
 import {
   type ConnectionForm,
@@ -274,14 +275,17 @@ export default function ConnectionDialog() {
           {DRIVER_IDS.map((id) => (
             <div
               key={id}
+              className="row"
               onClick={() => setForm((f) => switchDriver(f, id))}
               style={{
+                gap: 8,
                 padding: '6px 10px',
                 borderRadius: 4,
                 cursor: 'pointer',
                 background: form.driver === id ? 'var(--sel)' : undefined,
               }}
             >
+              <DbIcon driver={id} size={16} />
               {driverLabel(id)}
             </div>
           ))}

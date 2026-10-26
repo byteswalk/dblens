@@ -419,3 +419,20 @@ body {
   height: 280px;
   margin: 0;
 }
+
+/* 数据库图标（shared/DbIcon.tsx）：logo 用品牌色填充；字标是品牌色底板加白字。暗色主题下换用 --db-icon-dark */
+.db-icon {
+  flex: none;
+  vertical-align: -2px;
+}
+.db-icon path,
+.db-icon rect {
+  fill: var(--db-icon);
+}
+.db-icon text {
+  fill: #fff;
+}
+[data-theme='dark'] .db-icon path,
+[data-theme='dark'] .db-icon rect {
+  fill: var(--db-icon-dark);
+}

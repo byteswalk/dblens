@@ -24,7 +24,9 @@ import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import { useQueryActions } from '../editor/actions'
 import type { Api, Environment, Profile, RoutineInfo } from '../../shared/api'
+import DbIcon from '../../shared/DbIcon'
 import { driverLabel } from '../connections/form'
+import { variantName } from '../editor/dialect'
 import { withVault } from '../connections/vault'
 import {
   type CategoryKind,
@@ -153,11 +155,15 @@ export default function ObjectTree() {
       try {
         const items = await withVault(api, () => loadChildren(api, profiles, k))
         setLoaded((m) => ({ ...m, [key]: { items } }))
+        // 第一次连上时后端记下了识别出的数据库变体：重新取连接列表，换成具体数据库的图标
+        if (k.type === 'c' && !profiles.find((p) => p.id === k.profileId)?.variant) {
+          void qc.invalidateQueries({ queryKey: ['profiles'] })
+        }
       } catch (e) {
         setLoaded((m) => ({ ...m, [key]: { items: [], error: (e as Error).message } }))
       }
     },
-    [api, profiles],
+    [api, profiles, qc],
   )
 
   /** 刷新一个节点：清后端元数据缓存，丢掉它下面已加载和已展开的内容，再重新取。系统分组按整个连接刷新。 */
@@ -215,9 +221,10 @@ export default function ObjectTree() {
         title: (
           <span>
             <span className="dot" style={{ background: p.color || ENV_COLOR[env] }} />
+            <DbIcon driver={p.driver} variant={p.variant} />{' '}
             <b style={env === 'prod' ? { color: 'var(--danger)' } : undefined}>{p.name}</b>
             {env !== 'none' && <span className={`env ${env}`}>{t(`tree.env.${env}`)}</span>}
-            <span className="cm">{driverLabel(p.driver)}</span>
+            <span className="cm">{variantName(p.variant) ?? driverLabel(p.driver)}</span>
           </span>
         ),
         children: build(key, 1),

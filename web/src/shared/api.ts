@@ -87,6 +87,8 @@ export interface ProfileInput {
 
 export interface Profile extends ProfileInput {
   id: string
+  /** 上次连接成功时识别出的数据库变体（如 kingbase），没连接过时为空。 */
+  variant?: string | null
 }
 
 export interface ServerSummary {

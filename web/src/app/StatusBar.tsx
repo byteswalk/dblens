@@ -10,6 +10,7 @@ import { useCursor } from '../features/editor/cursor'
 import { variantName } from '../features/editor/dialect'
 import { useTabRuntime } from '../features/editor/runner'
 import { useTabs } from '../features/editor/tabs'
+import DbIcon from '../shared/DbIcon'
 import { lastSummary } from '../features/results/results'
 import type { Profile } from '../shared/api'
 import { useApi } from './context'
@@ -25,7 +26,7 @@ function TabStatus({ tabId, profile }: { tabId: string; profile: Profile | undef
   return (
     <>
       <span className="row" style={{ gap: 4 }}>
-        <IconPlugConnected size={14} />
+        {profile ? <DbIcon driver={profile.driver} variant={s?.variant ?? profile.variant} /> : <IconPlugConnected size={14} />}
         {profile?.name ?? t('app.status.connectionDeleted')}
         {s?.schema && <span className="muted">· {s.schema}</span>}
       </span>
@@ -65,8 +66,8 @@ export default function StatusBar() {
     <div className="row statusbar">
       {p ? (
         <span className="row" style={{ gap: 4 }}>
-          <IconPlugConnected size={14} />
-          {p.name} · {driverLabel(p.driver)} · {p.user}@{p.host}:{p.port}
+          <DbIcon driver={p.driver} variant={p.variant} />
+          {p.name} · {variantName(p.variant) ?? driverLabel(p.driver)} · {p.user}@{p.host}:{p.port}
         </span>
       ) : (
         <span className="muted">{t('app.status.noConnection')}</span>

@@ -47,6 +47,9 @@ importers:
       react-resizable-panels:
         specifier: 4.14.8
         version: 4.14.8(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      simple-icons:
+        specifier: 16.35.0
+        version: 16.35.0
       sql-formatter:
         specifier: 15.9.0
         version: 15.9.0
@@ -1583,6 +1586,10 @@ packages:
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
     hasBin: true
+
+  simple-icons@16.35.0:
+    resolution: {integrity: sha512-TCfl/2+GTrx0nCo4pEWGvxhOb8c6NsqOU1OpwjtF4lwJAthB8IYVD0fuIMjLMg6JFuG1YBO0t1iETQqJLqkoJA==}
+    engines: {node: '>=0.12.18'}
 
   source-map-js@1.2.2:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
@@ -3246,6 +3253,8 @@ snapshots:
       compute-scroll-into-view: 3.1.1
 
   semver@6.3.1: {}
+
+  simple-icons@16.35.0: {}
 
   source-map-js@1.2.2: {}
 

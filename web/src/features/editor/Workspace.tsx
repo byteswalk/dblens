@@ -7,17 +7,20 @@ import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
+import DbIcon from '../../shared/DbIcon'
+import type { Profile } from '../../shared/api'
 import QueryView from './QueryView'
 import { disposeModel } from './SqlEditor'
 import { useQueryActions } from './actions'
 import { useTabRuntime } from './runner'
 import { type QueryTab, useTabs } from './tabs'
 
-function TabTitle({ tab, active, envClass, profileName }: {
+function TabTitle({ tab, active, envClass, profileName, profile }: {
   tab: QueryTab
   active: boolean
   envClass: string
   profileName: string
+  profile: Profile | undefined
 }) {
   const { t } = useTranslation()
   const rt = useTabRuntime(tab.id)
@@ -35,7 +38,7 @@ function TabTitle({ tab, active, envClass, profileName }: {
       }}
       title={`${tab.title} · ${profileName}`}
     >
-      <IconFileCode size={14} />
+      {profile ? <DbIcon driver={profile.driver} variant={rt.session?.variant ?? profile.variant} /> : <IconFileCode size={14} />}
       <span className="tab-title">{tab.title}</span>
       {envClass === 'prod' ? <span>· {t('editor.tab.prod')}</span> : <span className="muted">{profileName}</span>}
       {rt.running && <span className="running-dot" />}
@@ -80,6 +83,7 @@ export default function Workspace() {
               active={tb.id === active}
               envClass={p?.environment && p.environment !== 'none' ? p.environment : ''}
               profileName={p?.name ?? t('editor.tab.profileDeleted')}
+              profile={p}
             />
           )
         })}
