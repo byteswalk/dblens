@@ -29,15 +29,16 @@
 接口：`GET /api/profiles/{id}/schemas/{schema}/ddl?kind=&name=`，返回 `{ "ddl": "…" }`。
 
 - `kind`：`table`、`view`、`materialized_view`、`sequence`、`function`、`procedure`、`package`、`package_body`、`synonym`。
-- 不支持的组合（如 MySQL 的 `package`）返回 `invalid`；对象不存在返回 `not_found`。
+- 不支持的组合（如 MySQL 的 `package`）返回 `invalid`；对象不存在时，PG 系返回 `not_found`，由数据库给出 DDL 的方言返回数据库的错误。
 
 各方言的取法：
 
 | 方言 | 取法 |
 |---|---|
-| MySQL 系（MySQL、MariaDB、TiDB、OceanBase、PolarDB） | `SHOW CREATE TABLE / VIEW / PROCEDURE / FUNCTION`；序列（MariaDB）用 `SHOW CREATE SEQUENCE`；其他类型不支持 |
-| Oracle、达梦 | `DBMS_METADATA.GET_DDL(类型, 名称, schema)`。包的规范和包体分开取；同义词用 `SYNONYM` 类型 |
+| MySQL 系（MySQL、MariaDB、TiDB、OceanBase、PolarDB） | `SHOW CREATE TABLE / VIEW`；序列（MariaDB）用 `SHOW CREATE SEQUENCE`；其他类型不支持 |
+| Oracle、达梦 | `DBMS_METADATA.GET_DDL(类型, 名称, schema)`：表、视图、物化视图、序列、同义词。表的 DDL 不含索引和注释（实测），用结构模型补上 |
 | PG 系（PostgreSQL、KingbaseES、openGauss、GaussDB、HighGo） | 由结构模型拼出（见下） |
+| 所有方言的函数、过程、包、包体 | 已有的程序源码查询（`DBMS_METADATA` 返回 CLOB，长的包会在 LOB 预览的 64 KB 处截断；程序源码按行读取） |
 
 PG 系的拼法：
 - **表**：
@@ -47,7 +48,7 @@ PG 系的拼法：
 - **序列**：`CREATE SEQUENCE … START / INCREMENT / MINVALUE / MAXVALUE / CACHE / [NO] CYCLE`。
 - **函数、过程**：已有的程序源码（`pg_get_functiondef`）。
 
-DDL 的拼装放在 `dblens-dialect`（无 IO，单元测试），取数放在服务层；MySQL、Oracle、达梦的查询语句作为元数据模板加入 `dblens-dialect/sql/*.sql`，沿用现有写法。
+DDL 的拼装和取 DDL 的查询放在 `dblens-dialect`（无 IO，单元测试），取数放在服务层，按 `MetaKey::Ddl` 缓存。
 
 界面：右键"查看 DDL"。
 - 弹出只读的 Monaco 预览（按连接的语言高亮），标题为对象名；
@@ -56,7 +57,7 @@ DDL 的拼装放在 `dblens-dialect`（无 IO，单元测试），取数放在�
 
 ## 4. 生成 SQL
 
-接口：`GET /api/profiles/{id}/schemas/{schema}/generate?table=&kind=&ref_schema=&ref_table=`，返回 `{ "sql": "…" }`。
+接口：`GET /api/profiles/{id}/schemas/{schema}/generate?object=&object_kind=&kind=&ref_schema=&ref_table=`，返回 `{ "sql": "…" }`。`object_kind` 为 `table`（默认）、`view`、`materialized_view`。
 
 `kind` 的取值：
 - `select`：每列一行，附列注释（已有的 `select_sql`）；
@@ -67,7 +68,8 @@ DDL 的拼装放在 `dblens-dialect`（无 IO，单元测试），取数放在�
   - 别名依次为 `t1`、`t2`…，`SELECT t1.*, t2.* … FROM 本表 t1 JOIN 被连接表 t2 ON t1.x = t2.y [AND …]`；
   - 同一个表被多个外键引用时，每个外键各连一次。
 
-关联查询的生成放在 `dblens-dialect`（单元测试）。"引用本表的表"需要读取整个 schema 的外键（已有的 schema 级表明细接口，有缓存）。
+关联查询的生成放在 `dblens-dialect`（单元测试）。"引用本表的表"需要读取整个 schema 的外键（已有的 schema 级表明细，有缓存）。
+外键关系另有接口 `GET …/relations?table=`，返回 `[{direction: out|in, name, schema, table, local_columns, other_columns}]`，前端用它组装"关联查询"子菜单。
 
 界面：表和视图的右键菜单增加"生成 SQL"子菜单：
 - SELECT、INSERT、UPDATE、DELETE（视图只有 SELECT）；
