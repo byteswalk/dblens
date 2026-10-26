@@ -8,6 +8,7 @@
 mod geometry;
 mod json_file;
 mod logging;
+mod shell;
 mod update;
 mod window;
 mod window_state;
@@ -48,6 +49,11 @@ fn run(data_dir: PathBuf) -> Result<(), String> {
         .plugin(tauri_plugin_global_shortcut::Builder::new().with_handler(window::on_shortcut).build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            shell::shell_info,
+            shell::window_action,
+            shell::set_auto_check_update
+        ])
         .setup(move |app| {
             let mut api = router(service, ApiConfig { token: token.clone(), allowed_origins: Vec::new() });
             match web_dir(app.path().resource_dir().ok()) {

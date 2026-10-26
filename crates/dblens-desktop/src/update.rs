@@ -1,6 +1,6 @@
 //! 自动更新（设计文档第 10 节）：
 //! - 启动后在后台检查更新源（静态的 `latest.json`）；有新版本时提示版本号和更新说明，用户确认后下载、校验签名、安装、重启。
-//! - 菜单"帮助"中可以手动检查，也可以关闭启动时的自动检查。
+//! - 菜单"帮助"中可以手动检查，也可以关闭启动时的自动检查（Windows、Linux 的菜单由页面绘制，经 `shell` 的命令调用这里）。
 //! - 更新源默认是 GitHub Releases；数据目录下的 `update.json` 可以改成内网地址。
 //! - Linux 上只有 AppImage 能自动安装；deb、rpm 只提示新版本，由用户自己下载。
 //!
@@ -201,26 +201,47 @@ pub fn init(app: &App, path: PathBuf) -> tauri::Result<Submenu<Wry>> {
     Ok(menu)
 }
 
-/// 处理"帮助"菜单的事件；不是这个菜单的事件返回 false。
+pub fn auto_check(app: &AppHandle) -> bool {
+    app.state::<UpdateState>().settings.lock().unwrap().auto_check
+}
+
+/// 开关启动时的自动检查：保存到 `update.json`，并同步 macOS 系统菜单的勾选状态。
+pub fn set_auto_check(app: &AppHandle, on: bool) {
+    let state = app.state::<UpdateState>();
+    let mut s = state.settings.lock().unwrap();
+    s.auto_check = on;
+    if let Err(e) = state.auto_item.set_checked(on) {
+        tracing::warn!("同步菜单勾选状态失败：{e}");
+    }
+    if let Err(e) = json_file::save(&state.path, &*s) {
+        tracing::warn!("无法保存更新设置到 {}：{e}", state.path.display());
+    }
+}
+
+/// "关于 DBLens"对话框。
+pub fn about(app: &AppHandle) {
+    let text = format!(
+        "DBLens 数洞 {}
+
+{RELEASES_PAGE}",
+        app.package_info().version
+    );
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { info(&app, text).await });
+}
+
+/// 处理"帮助"菜单（macOS 系统菜单）的事件；不是这个菜单的事件返回 false。
 pub fn on_menu(app: &AppHandle, id: &str) -> bool {
     match id {
         MENU_CHECK => {
             tauri::async_runtime::spawn(check(app.clone(), true));
         }
         MENU_AUTO => {
-            let state = app.state::<UpdateState>();
-            let mut s = state.settings.lock().unwrap();
-            // 点击时菜单项已自动切换了勾选状态
-            s.auto_check = state.auto_item.is_checked().unwrap_or(s.auto_check);
-            if let Err(e) = json_file::save(&state.path, &*s) {
-                tracing::warn!("无法保存更新设置到 {}：{e}", state.path.display());
-            }
+            // 点击时菜单项已自动切换了勾选状态，以它为准
+            let on = app.state::<UpdateState>().auto_item.is_checked().unwrap_or(true);
+            set_auto_check(app, on);
         }
-        MENU_ABOUT => {
-            let text = format!("DBLens 数洞 {}\n\n{RELEASES_PAGE}", app.package_info().version);
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move { info(&app, text).await });
-        }
+        MENU_ABOUT => about(app),
         _ => return false,
     }
     true
