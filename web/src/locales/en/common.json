@@ -1,0 +1,22 @@
+{
+  "appName": "DBLens",
+  "error": {
+    "connect": "Connection failed: {{message}}",
+    "auth": "Authentication failed: {{message}}",
+    "sql": "SQL error [{{code}}]: {{message}}",
+    "timeout": "Execution timed out",
+    "cancelled": "Execution cancelled",
+    "driver_unavailable": "Driver unavailable: {{hint}}",
+    "invalid": "Invalid input: {{message}}",
+    "not_found": "Not found: {{what}}",
+    "busy": "Session busy: {{message}}",
+    "locked": "The password vault is locked; enter the master password first",
+    "denied": "Execution denied: {{reason}}",
+    "internal": "Internal error: {{message}}"
+  },
+  "lang": {
+    "auto": "Follow system",
+    "zh-CN": "中文",
+    "en": "English"
+  }
+}

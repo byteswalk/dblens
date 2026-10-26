@@ -2,8 +2,10 @@
 // macOS 上没有页面菜单，主题只能在这里改。
 
 import { Form, InputNumber, Modal, Radio, Switch } from 'antd'
+import { useTranslation } from 'react-i18next'
 
 import { DEFAULT_ROW_CAP, ROW_CAP_KEY, rowCap } from '../features/editor/runner'
+import { LANG_KEY, parseLangPref } from '../shared/i18n'
 import { useSetting, useSettings } from '../shared/settings'
 import { desktop } from '../shared/shell'
 import { THEME_KEY, parseThemePref } from '../shared/theme'
@@ -11,13 +13,26 @@ import { useUi } from './ui'
 import { useShellInfo } from './useShellInfo'
 
 export default function SettingsDialog() {
+  const { t } = useTranslation()
   const { settingsOpen, setSettingsOpen } = useUi()
   const theme = parseThemePref(useSetting(THEME_KEY))
+  const lang = parseLangPref(useSetting(LANG_KEY))
   useSetting(ROW_CAP_KEY)
   const info = useShellInfo()
   return (
     <Modal title="设置" open={settingsOpen} onCancel={() => setSettingsOpen(false)} footer={null} width={480}>
       <Form layout="horizontal" labelCol={{ span: 8 }} style={{ marginTop: 16 }}>
+        <Form.Item label={t('app.settings.language')} extra={t('app.settings.languageHint')}>
+          <Radio.Group
+            value={lang}
+            onChange={(e) => useSettings.getState().set(LANG_KEY, e.target.value)}
+            options={[
+              { value: 'auto', label: t('common.lang.auto') },
+              { value: 'zh-CN', label: t('common.lang.zh-CN') },
+              { value: 'en', label: t('common.lang.en') },
+            ]}
+          />
+        </Form.Item>
         <Form.Item label="主题">
           <Radio.Group
             value={theme}

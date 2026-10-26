@@ -16,7 +16,12 @@ import StatusBar from './StatusBar'
 import TitleBar from './TitleBar'
 import { type SideKey, useUi } from './ui'
 
-const Workspace = lazy(() => import('../features/editor/Workspace'))
+// Monaco 自带文字的语言要在它加载前设定，所以先加载语言包再加载工作区
+const Workspace = lazy(async () => {
+  const { loadMonacoLocale } = await import('../features/editor/monacoLocale')
+  await loadMonacoLocale()
+  return import('../features/editor/Workspace')
+})
 
 const SIDES: { key: SideKey; title: string; icon: typeof IconDatabase }[] = [
   { key: 'db', title: '数据库', icon: IconDatabase },

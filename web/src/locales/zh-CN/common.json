@@ -1,0 +1,22 @@
+{
+  "appName": "DBLens 数洞",
+  "error": {
+    "connect": "连接失败：{{message}}",
+    "auth": "认证失败：{{message}}",
+    "sql": "SQL 错误 [{{code}}]：{{message}}",
+    "timeout": "执行超时",
+    "cancelled": "执行已取消",
+    "driver_unavailable": "驱动不可用：{{hint}}",
+    "invalid": "无效的输入：{{message}}",
+    "not_found": "找不到{{what}}",
+    "busy": "会话正忙：{{message}}",
+    "locked": "密码库已锁定，请先输入主密码",
+    "denied": "执行被拒绝：{{reason}}",
+    "internal": "内部错误：{{message}}"
+  },
+  "lang": {
+    "auto": "跟随系统",
+    "zh-CN": "中文",
+    "en": "English"
+  }
+}

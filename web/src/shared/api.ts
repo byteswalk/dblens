@@ -1,4 +1,7 @@
 // REST 接口客户端。接口说明见 docs/notes/m0-4b-api.md；页面与接口同源，路径都以 /api 开头。
+// 请求都带上当前界面语言（REST 用 Accept-Language，WebSocket 用 lang 参数），后端按它输出错误和提示。
+
+import { currentLang, t } from './i18n'
 
 export type DriverId = 'mysql' | 'postgres' | 'oracle' | 'dameng'
 export type Environment = 'none' | 'dev' | 'test' | 'prod'
@@ -25,33 +28,34 @@ export class ApiError extends Error {
   }
 }
 
-/** 把错误对象转成给用户看的一句话，与服务端 Display 的措辞一致。 */
+/** 把错误对象转成给用户看的一句话，与服务端 Display 的措辞一致（细节文字已由服务端按当前语言给出）。 */
 export function errorText(e: ErrorBody): string {
+  const v = { message: e.message ?? '', code: e.code ?? '', hint: e.hint ?? '', what: e.what ?? '', reason: e.reason ?? '' }
   switch (e.kind) {
     case 'connect':
-      return `连接失败：${e.message}`
+      return t('common.error.connect', v)
     case 'auth':
-      return `认证失败：${e.message}`
+      return t('common.error.auth', v)
     case 'sql':
-      return `SQL 错误 [${e.code}]：${e.message}`
+      return t('common.error.sql', v)
     case 'timeout':
-      return '执行超时'
+      return t('common.error.timeout')
     case 'cancelled':
-      return '执行已取消'
+      return t('common.error.cancelled')
     case 'driver_unavailable':
-      return `驱动不可用：${e.hint}`
+      return t('common.error.driver_unavailable', v)
     case 'invalid':
-      return `无效的输入：${e.message}`
+      return t('common.error.invalid', v)
     case 'not_found':
-      return `找不到${e.what}`
+      return t('common.error.not_found', v)
     case 'busy':
-      return `会话正忙：${e.message}`
+      return t('common.error.busy', v)
     case 'locked':
-      return '密码库已锁定，请先输入主密码'
+      return t('common.error.locked')
     case 'denied':
-      return `执行被拒绝：${e.reason}`
+      return t('common.error.denied', v)
     case 'internal':
-      return `内部错误：${e.message}`
+      return t('common.error.internal', v)
     default:
       return JSON.stringify(e)
   }
@@ -163,7 +167,7 @@ export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
 export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o)) {
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'Accept-Language': currentLang() }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
     const resp = await fetchFn(`/api${path}`, {
       method,
@@ -224,9 +228,9 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     rollback: (id: number) => request<SessionInfo>('POST', `/sessions/${id}/rollback`),
     reconnect: (id: number) => request<SessionInfo>('POST', `/sessions/${id}/reconnect`),
     setSchema: (id: number, schema: string) => request<SessionInfo>('POST', `/sessions/${id}/schema`, { schema }),
-    /** 会话的 WebSocket 地址。浏览器的 WebSocket 不能带请求头，令牌放在查询参数里。 */
+    /** 会话的 WebSocket 地址。浏览器的 WebSocket 不能带请求头，令牌和语言放在查询参数里。 */
     wsUrl: (sessionId: number, loc: { protocol: string; host: string } = window.location) =>
-      `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/api/sessions/${sessionId}/ws?token=${encodeURIComponent(token)}`,
+      `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/api/sessions/${sessionId}/ws?token=${encodeURIComponent(token)}&lang=${currentLang()}`,
   }
 }
 

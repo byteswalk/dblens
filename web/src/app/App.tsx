@@ -1,6 +1,7 @@
 // 应用入口：拿到令牌后读取设置，按主题配置 antd，挂上外壳和全局对话框。
 
 import { App as AntApp, ConfigProvider, Result, Spin, theme as antdTheme } from 'antd'
+import enUS from 'antd/locale/en_US'
 import zhCN from 'antd/locale/zh_CN'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
@@ -9,6 +10,7 @@ import ConnectionDialog from '../features/connections/ConnectionDialog'
 import { TABS_KEY, persistTabs, useTabs } from '../features/editor/tabs'
 import VaultDialog from '../features/connections/VaultDialog'
 import { type Api, createApi } from '../shared/api'
+import { LANG_KEY, applyLang, parseLangPref, resolveLang } from '../shared/i18n'
 import { useSetting, useSettings } from '../shared/settings'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../shared/theme'
 import SettingsDialog from './SettingsDialog'
@@ -23,9 +25,11 @@ function Themed() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
+  const lang = resolveLang(parseLangPref(useSetting(LANG_KEY)))
+  useEffect(() => applyLang(lang), [lang])
   const algorithm = [theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm, antdTheme.compactAlgorithm]
   return (
-    <ConfigProvider locale={zhCN} theme={{ algorithm, token: { fontSize: 12, borderRadius: 4 } }}>
+    <ConfigProvider locale={lang === 'en' ? enUS : zhCN} theme={{ algorithm, token: { fontSize: 12, borderRadius: 4 } }}>
       <AntApp style={{ height: '100%' }}>
         <Shell />
         <ConnectionDialog />
@@ -43,6 +47,8 @@ function Boot({ api }: { api: Api }) {
     api.settings().then(
       (values) => {
         useSettings.getState().init(values, api.putSetting)
+        // 先切好语言再显示界面，避免先按默认语言闪一下
+        applyLang(resolveLang(parseLangPref(values[LANG_KEY])))
         useUi.setState({ side: parseSide(values[SIDE_KEY]) })
         useTabs.getState().restore(values[TABS_KEY])
         persistTabs()
