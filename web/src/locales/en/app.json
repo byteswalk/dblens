@@ -11,7 +11,9 @@
     "theme": "Theme",
     "rowCap": "Max result rows",
     "rowCapHint": "Stop reading a result set after this many rows",
-    "autoCheckUpdate": "Check for updates at startup"
+    "autoCheckUpdate": "Check for updates at startup",
+    "syntaxCheck": "Syntax check",
+    "syntaxCheckHint": "Mark syntax problems while editing; databases compatible with MySQL / PostgreSQL / Oracle get yellow hints only. Does not affect execution"
   },
   "theme": {
     "system": "System",
@@ -37,7 +39,11 @@
     "inTransaction": "Manual commit · In transaction",
     "running": "Running…",
     "cursor": "Ln {{line}}, Col {{column}}",
-    "noConnection": "No connection selected"
+    "noConnection": "No connection selected",
+    "syntaxIssues_one": "{{count}} syntax issue",
+    "syntaxIssues_other": "{{count}} syntax issues",
+    "syntaxStopped": "Syntax check stopped (script too large or complex)",
+    "syntaxSkipped": "Script over 1 MB, syntax not checked"
   },
   "titleBar": {
     "windowTitle": "{{tab}} · {{connection}} — {{app}}",

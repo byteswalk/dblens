@@ -54,5 +54,10 @@
   },
   "dialect": {
     "dameng": "DM"
+  },
+  "syntax": {
+    "incomplete": "Statement is incomplete",
+    "near": "Syntax error near '{{near}}'",
+    "compatHint": " (checked with {{grammar}} grammar; {{name}} extensions may be flagged by mistake)"
   }
 }

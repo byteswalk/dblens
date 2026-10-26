@@ -11,7 +11,9 @@
     "theme": "主题",
     "rowCap": "结果行数上限",
     "rowCapHint": "一个结果集读到这么多行后停止读取",
-    "autoCheckUpdate": "启动时自动检查更新"
+    "autoCheckUpdate": "启动时自动检查更新",
+    "syntaxCheck": "语法检查",
+    "syntaxCheckHint": "编辑时标出语法问题；兼容 MySQL / PostgreSQL / Oracle 的国产库只标黄色提示。不影响执行"
   },
   "theme": {
     "system": "跟随系统",
@@ -37,7 +39,10 @@
     "inTransaction": "手动提交 · 事务中",
     "running": "执行中…",
     "cursor": "行 {{line}}，列 {{column}}",
-    "noConnection": "未选择连接"
+    "noConnection": "未选择连接",
+    "syntaxIssues": "{{count}} 处语法问题",
+    "syntaxStopped": "语法检查已停止（脚本过大或过于复杂）",
+    "syntaxSkipped": "脚本超过 1 MB，未检查语法"
   },
   "titleBar": {
     "windowTitle": "{{tab}} · {{connection}} — {{app}}",

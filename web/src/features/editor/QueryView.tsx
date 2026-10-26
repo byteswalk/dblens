@@ -12,6 +12,7 @@ import { type Profile, errorText } from '../../shared/api'
 import { layoutStorage } from '../../shared/settings'
 import ResultsPanel from '../results/ResultsPanel'
 import { defaultSchema, metaKey, metaReader } from '../sql/metadata'
+import { useSyntax } from '../sql/syntax'
 import ConfirmDialog from './ConfirmDialog'
 import Toolbar from './Toolbar'
 import { onCommand } from './commands'
@@ -68,6 +69,16 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
           case 'cancel':
             runner.cancel()
             break
+          case 'first-problem': {
+            const first = useSyntax.getState().tabs[tab.id]?.first
+            if (first) {
+              const pos = { lineNumber: first.line, column: first.column }
+              ed.setPosition(pos)
+              ed.revealPositionInCenter(pos)
+              ed.focus()
+            }
+            break
+          }
           case 'format': {
             if (!profile) return
             const range = selected ?? model.getFullModelRange()
@@ -81,7 +92,7 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
           }
         }
       }),
-    [runner, profile, rt.session?.variant, message, t],
+    [runner, profile, rt.session?.variant, message, t, tab.id],
   )
 
   // 协议层面的错误（如上一段还没执行完）用全局提示（M1 设计文档第 5 节），同时记在"消息"里

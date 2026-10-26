@@ -1,10 +1,11 @@
-// 设置：主题（跟随系统 / 亮色 / 暗色）、结果行数上限，桌面版另有"启动时自动检查更新"。
+// 设置：主题（跟随系统 / 亮色 / 暗色）、结果行数上限、语法检查，桌面版另有"启动时自动检查更新"。
 // macOS 上没有页面菜单，主题只能在这里改。
 
 import { Form, InputNumber, Modal, Radio, Switch } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { DEFAULT_ROW_CAP, ROW_CAP_KEY, rowCap } from '../features/editor/runner'
+import { SYNTAX_KEY, syntaxEnabled } from '../features/sql/syntax'
 import { LANG_KEY, parseLangPref } from '../shared/i18n'
 import { useSetting, useSettings } from '../shared/settings'
 import { desktop } from '../shared/shell'
@@ -18,6 +19,7 @@ export default function SettingsDialog() {
   const theme = parseThemePref(useSetting(THEME_KEY))
   const lang = parseLangPref(useSetting(LANG_KEY))
   useSetting(ROW_CAP_KEY)
+  const syntax = syntaxEnabled(useSetting(SYNTAX_KEY))
   const info = useShellInfo()
   return (
     <Modal title={t('app.settings.title')} open={settingsOpen} onCancel={() => setSettingsOpen(false)} footer={null} width={480}>
@@ -53,6 +55,9 @@ export default function SettingsDialog() {
             placeholder={String(DEFAULT_ROW_CAP)}
             style={{ width: 160 }}
           />
+        </Form.Item>
+        <Form.Item label={t('app.settings.syntaxCheck')} extra={t('app.settings.syntaxCheckHint')}>
+          <Switch checked={syntax} onChange={(on) => useSettings.getState().set(SYNTAX_KEY, on ? null : 'off')} />
         </Form.Item>
         {desktop && (
           <Form.Item label={t('app.settings.autoCheckUpdate')}>

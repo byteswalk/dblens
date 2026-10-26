@@ -54,5 +54,10 @@
   },
   "dialect": {
     "dameng": "达梦"
+  },
+  "syntax": {
+    "incomplete": "语句不完整",
+    "near": "“{{near}}”附近有语法错误",
+    "compatHint": "（按 {{grammar}} 语法检查，{{name}} 的扩展语法可能被误报）"
   }
 }

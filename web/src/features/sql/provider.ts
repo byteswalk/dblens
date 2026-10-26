@@ -16,19 +16,30 @@ export interface EditorSqlContext {
   meta: MetaReader
 }
 
-const contexts = new Map<string, () => EditorSqlContext | null>()
+interface Binding {
+  path: string
+  get: () => EditorSqlContext | null
+}
 
-/** 把编辑器模型（按 path）绑定到上下文；返回解绑函数。 */
+const bindings = new Map<string, Binding>()
+
+/** 把编辑器模型（按 path，即标签页 id）绑定到上下文；返回解绑函数。 */
 export function bindModel(path: string, get: () => EditorSqlContext | null): () => void {
   const key = monaco.Uri.parse(path).toString()
-  contexts.set(key, get)
+  const b = { path, get }
+  bindings.set(key, b)
   return () => {
-    if (contexts.get(key) === get) contexts.delete(key)
+    if (bindings.get(key) === b) bindings.delete(key)
   }
 }
 
 export function contextOf(model: monaco.editor.ITextModel): EditorSqlContext | null {
-  return contexts.get(model.uri.toString())?.() ?? null
+  return bindings.get(model.uri.toString())?.get() ?? null
+}
+
+/** 模型所属的标签页 id。 */
+export function pathOf(model: monaco.editor.ITextModel): string | null {
+  return bindings.get(model.uri.toString())?.path ?? null
 }
 
 const { CompletionItemKind: K } = monaco.languages

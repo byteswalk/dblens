@@ -1,15 +1,17 @@
 // 状态栏（M1 设计文档 1.1 节）：有查询标签时显示它的连接和方言、事务状态、最近一次执行的行数和耗时、
-// 光标位置；没有时显示对象树中选中的连接。
+// 语法问题数（点击跳到第一处）、光标位置；没有时显示对象树中选中的连接。
 
-import { IconPlugConnected } from '@tabler/icons-react'
+import { IconAlertTriangle, IconPlugConnected } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
 import { driverLabel } from '../features/connections/form'
+import { sendCommand } from '../features/editor/commands'
 import { useCursor } from '../features/editor/cursor'
 import { variantName } from '../features/editor/dialect'
 import { useTabRuntime } from '../features/editor/runner'
 import { useTabs } from '../features/editor/tabs'
+import { useSyntax } from '../features/sql/syntax'
 import DbIcon from '../shared/DbIcon'
 import { lastSummary } from '../features/results/results'
 import type { Profile } from '../shared/api'
@@ -23,6 +25,7 @@ function TabStatus({ tabId, profile }: { tabId: string; profile: Profile | undef
   const s = rt.session
   const dialect = variantName(s?.variant) ?? (profile && driverLabel(profile.driver))
   const summary = lastSummary(rt.exec)
+  const syntax = useSyntax((x) => x.tabs[tabId])
   return (
     <>
       <span className="row" style={{ gap: 4 }}>
@@ -41,6 +44,14 @@ function TabStatus({ tabId, profile }: { tabId: string; profile: Profile | undef
       )}
       {rt.running ? <span>{t('app.status.running')}</span> : summary && <span>{summary}</span>}
       <span className="grow" />
+      {syntax?.status === 'ok' && syntax.count > 0 && (
+        <span className="row" style={{ gap: 4, color: 'var(--warn)', cursor: 'pointer' }} onClick={() => sendCommand('first-problem')}>
+          <IconAlertTriangle size={14} />
+          {t('app.status.syntaxIssues', { count: syntax.count })}
+        </span>
+      )}
+      {syntax?.status === 'stopped' && <span className="muted">{t('app.status.syntaxStopped')}</span>}
+      {syntax?.status === 'skipped' && <span className="muted">{t('app.status.syntaxSkipped')}</span>}
       <span>{t('app.status.cursor', { line: cursor.line, column: cursor.column })}</span>
       {dialect && <span>{dialect}</span>}
       <span>UTF-8</span>

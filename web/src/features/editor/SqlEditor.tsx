@@ -1,6 +1,6 @@
 // SQL 编辑器：Monaco。每个标签页一个模型（以标签 id 为路径），切换标签时保留各自的撤销历史和光标。
 // 快捷键（M1 设计文档 1.3 节）注册为编辑器动作，焦点在编辑器里时由 Monaco 处理；错误标记来自执行结果。
-// 补全（M1b2）：模型绑定所在标签页的连接上下文，由 features/sql/provider.ts 提供补全项。
+// 补全与语法检查（M1b2）：模型绑定所在标签页的连接上下文，由 features/sql 中的 provider 和 checker 处理。
 
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { useEffect, useRef } from 'react'
@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useSetting } from '../../shared/settings'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../../shared/theme'
+import { attachChecker } from '../sql/checker'
 import { type EditorSqlContext, bindModel, registerSqlProviders } from '../sql/provider'
 import { type EditorCommand, sendCommand } from './commands'
 import { useCursor } from './cursor'
@@ -41,16 +42,21 @@ export interface SqlEditorProps {
 }
 
 export default function SqlEditor({ path, language, defaultValue, marks, sql, onChange, onReady }: SqlEditorProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const systemDark = useSystemDark()
   const theme = resolveTheme(parseThemePref(useSetting(THEME_KEY)), systemDark)
   const editorRef = useRef<MonacoEditor | null>(null)
   const sqlRef = useRef(sql)
   sqlRef.current = sql
   useEffect(() => bindModel(path, () => sqlRef.current), [path])
+  const checker = useRef<ReturnType<typeof attachChecker> | null>(null)
+  useEffect(() => () => checker.current?.dispose(), [])
+  // 识别出变体（标准档 / 兼容档）、换了连接或界面语言时重新检查
+  useEffect(() => checker.current?.recheck(), [sql?.driver, sql?.variant, i18n.language])
 
   const onMount: OnMount = (editor) => {
     editorRef.current = editor
+    checker.current = attachChecker(editor)
     for (const a of ACTIONS) {
       editor.addAction({
         id: `dblens.${a.id}`,
