@@ -345,6 +345,21 @@ pub async fn close_session(
 }
 
 #[derive(Deserialize)]
+pub struct SchemaBody {
+    pub schema: String,
+}
+
+/// 切换会话的当前 schema。
+pub async fn set_schema(
+    State(s): State<AppState>,
+    Path(id): Path<SessionId>,
+    Json(b): Json<SchemaBody>,
+) -> ApiResult<Json<SessionInfo>> {
+    s.service.sessions.set_schema(id, &b.schema).await?;
+    Ok(Json(s.service.sessions.info(id)?))
+}
+
+#[derive(Deserialize)]
 pub struct AutocommitBody {
     pub on: bool,
 }

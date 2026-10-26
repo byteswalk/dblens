@@ -312,3 +312,63 @@ async fn websocket_requires_token() {
             .is_err()
     );
 }
+
+/// 取到 done 为止的全部事件。
+async fn until_done(ws: &mut Ws) -> Vec<Value> {
+    let mut out = Vec::new();
+    loop {
+        let v = recv(ws).await;
+        let done = v["type"] == "done";
+        out.push(v);
+        if done {
+            return out;
+        }
+    }
+}
+
+#[tokio::test]
+async fn exec_options_over_websocket() {
+    let (mut ws, _, _) = ws_session().await;
+    let utf16 = |s: &str| s.encode_utf16().count();
+
+    // 出错继续：失败的语句带 UTF-16 的出错位置，后面的语句照常执行
+    let sql = "SELECT '数洞😀'; FAILAT 3; ROWS 0";
+    send(&mut ws, json!({"type": "exec", "sql": sql, "continue_on_error": true})).await;
+    let events = until_done(&mut ws).await;
+    let failed = events.iter().find(|e| e["type"] == "failed").unwrap();
+    let at = sql.find("FAILAT").unwrap() + 2;
+    assert_eq!(failed["offset"], json!(utf16(&sql[..at])));
+    let starts: Vec<&Value> = events.iter().filter(|e| e["type"] == "statement_start").collect();
+    assert_eq!(starts.iter().map(|e| e["total"].clone()).collect::<Vec<_>>(), [json!(3), json!(3), json!(3)]);
+
+    // 光标：UTF-16 偏移，只执行所在的那条
+    let cursor = utf16(&sql[..sql.find("ROWS").unwrap()]) + 1;
+    send(&mut ws, json!({"type": "exec", "sql": sql, "cursor": cursor})).await;
+    let events = until_done(&mut ws).await;
+    let starts: Vec<&Value> = events.iter().filter(|e| e["type"] == "statement_start").collect();
+    assert_eq!((starts.len(), starts[0]["total"].clone()), (1, json!(1)));
+    assert_eq!(starts[0]["start"], json!(utf16(&sql[..sql.find("ROWS").unwrap()])));
+
+    // 执行计划：多条语句时报错，会话不受影响
+    send(&mut ws, json!({"type": "exec", "sql": sql, "explain": true})).await;
+    let e = recv(&mut ws).await;
+    assert_eq!((e["type"].clone(), e["error"]["kind"].clone()), (json!("error"), json!("invalid")));
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 1", "explain": true})).await;
+    let events = until_done(&mut ws).await;
+    assert_eq!(events[0]["type"], "statement_start");
+    assert_eq!(events[0]["info"]["keyword"], "EXPLAIN");
+}
+
+#[tokio::test]
+async fn schema_over_rest() {
+    let (app, _) = app();
+    let (_, p) =
+        call(&app, "POST", "/api/profiles", Some(json!({"profile": profile_json("p"), "password": "pw"})))
+            .await;
+    let (_, s) = call(&app, "POST", "/api/sessions", Some(json!({"profile_id": p["id"]}))).await;
+    assert_eq!(s["schema"], "public", "打开会话时读取当前 schema");
+    let sid = s["id"].as_u64().unwrap();
+    let (st, s) =
+        call(&app, "POST", &format!("/api/sessions/{sid}/schema"), Some(json!({"schema": "hr"}))).await;
+    assert_eq!((st, s["schema"].clone()), (StatusCode::OK, json!("hr")));
+}

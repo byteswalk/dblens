@@ -1,7 +1,11 @@
 //! 会话的 WebSocket 执行协议：`GET /api/sessions/{id}/ws`。
 //!
 //! 客户端发送（JSON，按 `type` 区分）：
-//! - `{"type":"exec","sql":"…","confirmed":false,"max_rows":500}`：执行一段 SQL（可以多条语句）；
+//! - `{"type":"exec","sql":"…","confirmed":false,"max_rows":500}`：执行一段 SQL（可以多条语句）。`confirmed` 只对
+//!   第一条语句有效（确认后从那条重新提交），后面需要确认的语句仍会停下。可选字段：
+//!   - `continue_on_error`：某条语句失败后继续执行后面的；
+//!   - `cursor`：只执行这个 UTF-16 偏移所在的那条语句；
+//!   - `explain`：只生成执行计划（只能有一条语句，或用 `cursor` 选出一条）；
 //! - `{"type":"fetch_more","max_rows":500}`：取下一批行；
 //! - `{"type":"cancel"}`：取消正在执行的语句。
 //!
@@ -9,7 +13,7 @@
 //! `statement_end`、`confirm_required`、`failed`、`done`），协议层面的错误发 `{"type":"error","error":{…}}`。
 //! 每发出一个装满 `max_rows` 行的 `rows` 事件就停下，等客户端 `fetch_more` 后再取下一批（背压）；
 //! 不满一批说明结果集已取完，接着发后面的事件。其他事件不受限制。
-//! 事件中的 `start`/`end` 是 UTF-16 代码单元偏移（与 Monaco 编辑器一致），不是字节偏移。
+//! 事件中的 `start`/`end`、`failed` 的 `offset` 是 UTF-16 代码单元偏移（与 Monaco 编辑器一致），不是字节偏移。
 //! 连接断开时，正在执行的语句会被取消，剩余事件被丢弃，会话恢复空闲。
 
 use std::sync::Arc;
@@ -18,7 +22,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use dblens_core::Error;
-use dblens_service::{Service, SessionEvent, SessionId};
+use dblens_service::{ExecRequest, Service, SessionEvent, SessionId};
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::sync::mpsc;
@@ -42,6 +46,13 @@ enum ClientMsg {
         confirmed: bool,
         #[serde(default = "default_rows")]
         max_rows: usize,
+        #[serde(default)]
+        continue_on_error: bool,
+        /// UTF-16 偏移。
+        #[serde(default)]
+        cursor: Option<usize>,
+        #[serde(default)]
+        explain: bool,
     },
     FetchMore {
         #[serde(default = "default_rows")]
@@ -53,6 +64,18 @@ enum ClientMsg {
 /// 字节偏移换算成 UTF-16 偏移。
 pub fn utf16_offset(text: &str, byte: usize) -> usize {
     text.get(..byte.min(text.len())).map_or(0, |s| s.encode_utf16().count())
+}
+
+/// UTF-16 偏移换算成字节偏移；落在字符中间时取该字符的起点，超出末尾时取文本长度。
+pub fn byte_offset(text: &str, utf16: usize) -> usize {
+    let mut units = 0;
+    for (byte, c) in text.char_indices() {
+        units += c.len_utf16();
+        if units > utf16 {
+            return byte;
+        }
+    }
+    text.len()
 }
 
 /// 把事件中的字节偏移换成 UTF-16 偏移后序列化。
@@ -162,13 +185,15 @@ async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId) {
             }
         };
         match msg {
-            ClientMsg::Exec { sql, confirmed, max_rows } => {
+            ClientMsg::Exec { sql, confirmed, max_rows, continue_on_error, cursor, explain } => {
                 if running.as_ref().is_some_and(|h| !h.is_finished()) {
                     let busy = Error::Busy { message: "上一段 SQL 还没有执行完".into() };
                     let _ = out.send(error_message(&busy)).await;
                     continue;
                 }
-                if let Err(e) = service.sessions.execute(id, &sql, confirmed).await {
+                let cursor = cursor.map(|c| byte_offset(&sql, c));
+                let req = ExecRequest { sql: sql.clone(), confirmed, continue_on_error, cursor, explain };
+                if let Err(e) = service.sessions.submit(id, req).await {
                     let _ = out.send(error_message(&e)).await;
                     continue;
                 }
@@ -218,9 +243,36 @@ mod tests {
     }
 
     #[test]
+    fn byte_offsets_round_trip() {
+        let sql = "SELECT '数洞😀';\nSELECT 2";
+        for (byte, _) in sql.char_indices() {
+            assert_eq!(byte_offset(sql, utf16_offset(sql, byte)), byte);
+        }
+        assert_eq!(byte_offset(sql, 10_000), sql.len());
+        // emoji 的两个代码单元之间：取 emoji 的起点
+        let emoji = sql.find('😀').unwrap();
+        assert_eq!(byte_offset(sql, utf16_offset(sql, emoji) + 1), emoji);
+    }
+
+    #[test]
     fn parses_client_messages() {
         let m: ClientMsg = serde_json::from_str(r#"{"type":"exec","sql":"SELECT 1"}"#).unwrap();
-        assert!(matches!(m, ClientMsg::Exec { confirmed: false, max_rows: DEFAULT_MAX_ROWS, .. }));
+        assert!(matches!(
+            m,
+            ClientMsg::Exec {
+                confirmed: false,
+                max_rows: DEFAULT_MAX_ROWS,
+                continue_on_error: false,
+                cursor: None,
+                explain: false,
+                ..
+            }
+        ));
+        let m: ClientMsg = serde_json::from_str(
+            r#"{"type":"exec","sql":"x","continue_on_error":true,"cursor":3,"explain":true}"#,
+        )
+        .unwrap();
+        assert!(matches!(m, ClientMsg::Exec { continue_on_error: true, cursor: Some(3), explain: true, .. }));
         let m: ClientMsg = serde_json::from_str(r#"{"type":"fetch_more","max_rows":10}"#).unwrap();
         assert!(matches!(m, ClientMsg::FetchMore { max_rows: 10 }));
         assert!(matches!(

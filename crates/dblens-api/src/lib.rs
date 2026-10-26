@@ -70,6 +70,7 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/sessions", get(routes::sessions).post(routes::open_session))
         .route("/sessions/{id}", get(routes::session).delete(routes::close_session))
         .route("/sessions/{id}/autocommit", post(routes::set_autocommit))
+        .route("/sessions/{id}/schema", post(routes::set_schema))
         .route("/sessions/{id}/commit", post(routes::commit))
         .route("/sessions/{id}/rollback", post(routes::rollback))
         .route("/sessions/{id}/reconnect", post(routes::reconnect))
