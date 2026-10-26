@@ -14,9 +14,18 @@
   - 前端开发服务器要用 `dblens-server --allow-origin http://localhost:5173` 放行。
 - 令牌缺失或错误时返回 401，响应体为 `{"kind":"auth",…}`。
 
+## 语言（M1i 加入）
+
+- 响应和事件中给用户看的文字（错误、确认原因、驱动提示、数据库名称）按请求的语言输出，JSON 结构不变。
+- 请求的语言：查询参数 `lang`（WebSocket 用）优先，其次请求头 `Accept-Language` 中的第一个语言。
+  - `zh` 开头的取中文，其余取英文。
+  - 都没有时用默认语言：设置 `ui.lang`，为 `auto` 时看环境变量 `DBLENS_LANG`，再看系统语言。
+- 数据库返回的报错原文不翻译。
+- 修改设置 `ui.lang` 后，服务的默认语言随之改变。
+
 ## 错误
 
-出错时响应体就是错误对象，按 `kind` 区分，例如 `{"kind":"not_found","what":"连接配置 x"}`。状态码与 `kind` 的对应：
+出错时响应体就是错误对象，按 `kind` 区分，例如 `{"kind":"not_found","what":"连接配置 x"}`（英文为 `connection profile x`）。状态码与 `kind` 的对应：
 
 | 状态码 | kind | 含义 |
 |---|---|---|
@@ -69,6 +78,9 @@
   - `environment`：`none` / `dev` / `test` / `prod`；
   - `color`；
   - `connect_timeout_secs`。
+- 只读：`variant`，上次连接成功时识别出的数据库变体（如 `kingbase`），没连接过时为 null（M1i 加入）。
+  - 由服务端在连接成功时写入，修改配置时忽略请求中的值。
+  - 主机、端口或驱动变了则清空。
 
 ### 元数据
 
@@ -99,7 +111,9 @@
 | POST | `/sessions/{id}/cancel` | 取消正在执行的语句 |
 | POST | `/sessions/{id}/schema` | 切换当前 schema，`{"schema": "…"}`（M1b1 加入） |
 
-## WebSocket：`GET /api/sessions/{id}/ws?token=…`
+## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
+
+`lang` 可选，决定事件中文字的语言（见"语言"一节）。
 
 ### 客户端发送
 
