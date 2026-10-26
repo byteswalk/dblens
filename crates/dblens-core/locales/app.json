@@ -1,0 +1,5 @@
+{
+  "_version": 2,
+  "error.kind.not_found": {"zh-CN": "找不到%{what}", "en": "Not found: %{what}"},
+  "noun.session": {"zh-CN": "会话 %{id}", "en": "session %{id}"}
+}
