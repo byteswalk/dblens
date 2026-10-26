@@ -156,6 +156,8 @@ M1b 在写计划时（2026-10-25，用户确认）再拆成两份：
 - 2026-10-25 在 M1b2 之前插入 M1i：中英双语与数据库图标（设计 `docs/superpowers/specs/2026-10-25-m1i-i18n-icons-design.md`）。
 - M1i 已完成（详细计划 `docs/superpowers/plans/2026-10-25-m1i-i18n-icons.md`，说明 `docs/notes/m1i-i18n.md`）。
 - M1b2 已完成（设计 `docs/superpowers/specs/2026-10-25-m1b2-completion-design.md`，详细计划 `docs/superpowers/plans/2026-10-26-m1b2-completion.md`，说明 `docs/notes/m1b2-completion.md`）。
+- 2026-10-26 M1c 再拆成三份（用户确认）：M1c1 历史与收藏；M1c2 对象操作（查看 DDL、生成 SQL、关联查询、"查看数据"标签）；M1c3 导出与运维查询。
+- M1c1 已完成（设计 `docs/superpowers/specs/2026-10-26-m1c1-history-favorites-design.md`，详细计划 `docs/superpowers/plans/2026-10-26-m1c1-history-favorites.md`，说明 `docs/notes/m1c1-history-favorites.md`）。
 
 右键菜单中的"查看 DDL"和"生成 SQL"依赖 M1c 的后端，M1a 先不显示这两项。
 
