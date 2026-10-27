@@ -11,6 +11,7 @@ use crate::value::to_mysql_param;
 pub struct MySqlConnection {
     pub(crate) conn: Conn,
     pub(crate) opts: Opts,
+    pub(crate) lob_limit: usize,
 }
 
 #[async_trait]
@@ -23,13 +24,17 @@ impl Connection for MySqlConnection {
         if params.is_empty() {
             // 文本协议，支持一次返回多个结果集（如 CALL）
             let result = self.conn.query_iter(sql).await.map_err(|e| with_position(map_err(e), sql))?;
-            Ok(Box::new(MyExec::new(result)))
+            Ok(Box::new(MyExec::new(result, self.lob_limit)))
         } else {
             let values = params.iter().map(to_mysql_param).collect::<Result<Vec<_>>>()?;
             let result =
                 self.conn.exec_iter(sql, values).await.map_err(|e| with_position(map_err(e), sql))?;
-            Ok(Box::new(MyExec::new(result)))
+            Ok(Box::new(MyExec::new(result, self.lob_limit)))
         }
+    }
+
+    fn set_lob_limit(&mut self, bytes: usize) {
+        self.lob_limit = bytes;
     }
 
     /// 另开一个连接执行 `KILL QUERY <线程号>`。

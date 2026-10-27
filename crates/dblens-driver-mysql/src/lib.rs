@@ -76,7 +76,7 @@ impl Driver for MySqlDriver {
                 Error::connect(msg!("driver.connect_timeout", seconds = p.connect_timeout.as_secs()))
             })?
             .map_err(map_err)?;
-        Ok(Box::new(MySqlConnection { conn, opts }))
+        Ok(Box::new(MySqlConnection { conn, opts, lob_limit: dblens_core::DEFAULT_LOB_PREVIEW_BYTES }))
     }
 }
 

@@ -4,7 +4,7 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
-use dblens_core::{DEFAULT_LOB_PREVIEW_BYTES, Error, LobPreview, Result, Value, msg};
+use dblens_core::{Error, LobPreview, Result, Value, msg};
 
 use crate::ffi::*;
 
@@ -208,7 +208,6 @@ pub(crate) fn bytes_value(kind: DmType, bytes: Vec<u8>, total: Option<u64>, limi
 }
 
 /// 默认的大字段预览长度，供 conn.rs 使用。
-pub(crate) const PREVIEW: usize = DEFAULT_LOB_PREVIEW_BYTES;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ParamData {

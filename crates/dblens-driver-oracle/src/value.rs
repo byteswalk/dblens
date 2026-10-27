@@ -3,7 +3,7 @@
 use std::io::Read;
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
-use dblens_core::{DEFAULT_LOB_PREVIEW_BYTES, Error, Result, Value, msg};
+use dblens_core::{Error, Result, Value, msg};
 use dblens_driver::ColumnMeta;
 use oracle::sql_type::{Blob, Clob, Lob, Nclob, OracleType, ToSql};
 use oracle::{ColumnInfo, SqlValue};
@@ -38,7 +38,7 @@ pub(crate) fn column_meta(info: &ColumnInfo) -> ColumnMeta {
 }
 
 /// `complete` 为 false 时，`bytes` 超过了预览长度，cap_large 一定会把它转成预览。
-fn lob_preview(binary: bool, bytes: Vec<u8>, total: u64, complete: bool) -> Value {
+fn lob_preview(binary: bool, bytes: Vec<u8>, total: u64, complete: bool, limit: usize) -> Value {
     let value = if binary {
         Value::Bytes(bytes)
     } else {
@@ -47,7 +47,7 @@ fn lob_preview(binary: bool, bytes: Vec<u8>, total: u64, complete: bool) -> Valu
     if complete {
         return value;
     }
-    match value.cap_large(DEFAULT_LOB_PREVIEW_BYTES) {
+    match value.cap_large(limit) {
         Value::Lob(mut lob) => {
             lob.total_len = total;
             Value::Lob(lob)
@@ -65,12 +65,12 @@ const LOB_READ_CHUNK: usize = 16 * 1024;
 /// 因此 CLOB/NCLOB 预览的 `LobPreview.total_len` 是 UTF-16 代码单元数（字符数），而 BLOB 和
 /// `cap_large` 产生的预览（以及 MySQL、PG、达梦驱动）是字节数。各驱动的单位尚未统一，
 /// 使用方不得假定 `total_len` 在不同驱动之间单位相同。
-fn read_lob(mut lob: impl Read + Lob, binary: bool) -> Result<Value> {
+fn read_lob(mut lob: impl Read + Lob, binary: bool, limit: usize) -> Result<Value> {
     let total = lob.size().map_err(map_err)?;
     let mut bytes = Vec::new();
     let mut chunk = vec![0u8; LOB_READ_CHUNK];
     // 读到超过预览长度或读完为止；每次都是整块读取，字符 LOB 由 crate 保证只返回完整字符
-    while bytes.len() <= DEFAULT_LOB_PREVIEW_BYTES {
+    while bytes.len() <= limit {
         let n =
             lob.read(&mut chunk).map_err(|e| Error::internal(msg!("driver.lob_read_failed", error = e)))?;
         if n == 0 {
@@ -85,11 +85,12 @@ fn read_lob(mut lob: impl Read + Lob, binary: bool) -> Result<Value> {
     } else {
         String::from_utf8_lossy(&bytes).encode_utf16().count() as u64
     };
-    let complete = read_units == total && bytes.len() <= DEFAULT_LOB_PREVIEW_BYTES;
-    Ok(lob_preview(binary, bytes, total, complete))
+    let complete = read_units == total && bytes.len() <= limit;
+    Ok(lob_preview(binary, bytes, total, complete, limit))
 }
 
-pub(crate) fn oracle_value(v: &SqlValue) -> Result<Value> {
+/// `lob_limit`：CLOB/NCLOB/BLOB 最多读取的字节数（见 `Connection::set_lob_limit`）。
+pub(crate) fn oracle_value(v: &SqlValue, lob_limit: usize) -> Result<Value> {
     if v.is_null().map_err(map_err)? {
         return Ok(Value::Null);
     }
@@ -115,10 +116,10 @@ pub(crate) fn oracle_value(v: &SqlValue) -> Result<Value> {
         }
         OracleType::IntervalDS(_, _) | OracleType::IntervalYM(_) => Value::Interval(v.to_string()),
         OracleType::Raw(_) | OracleType::LongRaw => Value::Bytes(v.get::<Vec<u8>>().map_err(map_err)?),
-        OracleType::CLOB => read_lob(v.get::<Clob>().map_err(map_err)?, false)?,
+        OracleType::CLOB => read_lob(v.get::<Clob>().map_err(map_err)?, false, lob_limit)?,
         // NCLOB 在 oracle crate 中是独立类型，v.get::<Clob>() 会报类型转换错误
-        OracleType::NCLOB => read_lob(v.get::<Nclob>().map_err(map_err)?, false)?,
-        OracleType::BLOB => read_lob(v.get::<Blob>().map_err(map_err)?, true)?,
+        OracleType::NCLOB => read_lob(v.get::<Nclob>().map_err(map_err)?, false, lob_limit)?,
+        OracleType::BLOB => read_lob(v.get::<Blob>().map_err(map_err)?, true, lob_limit)?,
         OracleType::Boolean => Value::Bool(v.get().map_err(map_err)?),
         other => Value::Other { type_name: other.to_string(), text: v.to_string() },
     };

@@ -11,7 +11,7 @@ use dblens_driver::{CancelHandle, ColumnMeta, ExecEvent, ServerInfo};
 use crate::ffi::*;
 use crate::handles::{ColDesc, Con, Stmt, succeeded};
 use crate::position::with_position;
-use crate::types::{DmType, PREVIEW, ParamData, bytes_value, classify, param_data, type_name, with_scale};
+use crate::types::{DmType, ParamData, bytes_value, classify, param_data, type_name, with_scale};
 
 /// 语句被 dpi_cancel 中断时 DM 返回的错误码（「操作被取消」，见技术验证笔记）。
 const CANCELLED_CODE: &str = "-6515";
@@ -41,6 +41,7 @@ pub(crate) struct DmConnection {
     cancelled: Arc<AtomicBool>,
     /// 当前是否为自动提交；连接建立时已开启。
     autocommit: bool,
+    lob_limit: usize,
 }
 
 impl DmConnection {
@@ -50,6 +51,7 @@ impl DmConnection {
             current: Arc::new(Mutex::new(None)),
             cancelled: Arc::new(AtomicBool::new(false)),
             autocommit: true,
+            lob_limit: dblens_core::DEFAULT_LOB_PREVIEW_BYTES,
         }
     }
 
@@ -156,15 +158,18 @@ pub(crate) struct DmExec<'a> {
     columns: Columns,
     pending: VecDeque<ExecEvent>,
     state: State,
+    lob_limit: usize,
 }
 
 impl DmExec<'_> {
     fn read_row(&self) -> Result<Row> {
         let mut row = Vec::with_capacity(self.columns.len());
         for (i, (desc, kind)) in self.columns.iter().enumerate() {
-            let value = match self.stmt.get_data(i + 1, kind.is_binary(), PREVIEW)? {
+            let value = match self.stmt.get_data(i + 1, kind.is_binary(), self.lob_limit)? {
                 None => Value::Null,
-                Some((bytes, total)) => with_scale(bytes_value(*kind, bytes, total, PREVIEW), desc.scale),
+                Some((bytes, total)) => {
+                    with_scale(bytes_value(*kind, bytes, total, self.lob_limit), desc.scale)
+                }
             };
             row.push(value);
         }
@@ -214,6 +219,10 @@ impl Drop for DmExec<'_> {
 }
 
 impl BlockingConnection for DmConnection {
+    fn set_lob_limit(&mut self, bytes: usize) {
+        self.lob_limit = bytes;
+    }
+
     fn execute<'a>(&'a mut self, sql: &'a str, params: &'a [Value]) -> Result<Box<dyn BlockingExec + 'a>> {
         self.cancelled.store(false, Ordering::SeqCst);
         let stmt = Stmt::new(&self.con)?;
@@ -282,6 +291,7 @@ impl BlockingConnection for DmConnection {
             columns,
             pending,
             state,
+            lob_limit: self.lob_limit,
         }))
     }
 

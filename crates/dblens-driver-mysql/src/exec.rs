@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use dblens_core::{DEFAULT_LOB_PREVIEW_BYTES, Result, Row};
+use dblens_core::{Result, Row};
 use dblens_driver::{ExecEvent, ExecStream};
 use mysql_async::prelude::Protocol;
 use mysql_async::{Column, QueryResult};
@@ -23,20 +23,17 @@ pub(crate) struct MyExec<'a, P: Protocol> {
     result: QueryResult<'a, 'static, P>,
     columns: Arc<[Column]>,
     state: State,
+    lob_limit: usize,
 }
 
 impl<'a, P: Protocol> MyExec<'a, P> {
-    pub(crate) fn new(result: QueryResult<'a, 'static, P>) -> Self {
-        Self { result, columns: Arc::from(Vec::new()), state: State::Between }
+    pub(crate) fn new(result: QueryResult<'a, 'static, P>, lob_limit: usize) -> Self {
+        Self { result, columns: Arc::from(Vec::new()), state: State::Between, lob_limit }
     }
 }
 
-fn convert_row(row: mysql_async::Row, columns: &[Column]) -> Row {
-    row.unwrap()
-        .into_iter()
-        .zip(columns)
-        .map(|(v, c)| to_value(v, c).cap_large(DEFAULT_LOB_PREVIEW_BYTES))
-        .collect()
+fn convert_row(row: mysql_async::Row, columns: &[Column], lob_limit: usize) -> Row {
+    row.unwrap().into_iter().zip(columns).map(|(v, c)| to_value(v, c).cap_large(lob_limit)).collect()
 }
 
 #[async_trait]
@@ -65,7 +62,7 @@ where
                 let mut rows = Vec::new();
                 while rows.len() < max_rows.max(1) {
                     match self.result.next().await.map_err(map_err)? {
-                        Some(row) => rows.push(convert_row(row, &self.columns)),
+                        Some(row) => rows.push(convert_row(row, &self.columns, self.lob_limit)),
                         None => {
                             self.state = State::EndPending;
                             break;

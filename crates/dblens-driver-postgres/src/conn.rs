@@ -17,6 +17,7 @@ pub struct PgConnection {
     pub(crate) in_tx: bool,
     /// 加密连接时的 TLS 连接器；取消请求也要用它建立连接（服务器可能只接受加密连接）。
     pub(crate) tls: Option<tokio_postgres_rustls::MakeRustlsConnect>,
+    pub(crate) lob_limit: usize,
 }
 
 impl PgConnection {
@@ -57,8 +58,12 @@ impl Connection for PgConnection {
             let columns =
                 stmt.columns().iter().map(|c| ColumnMeta::new(c.name(), c.type_().name())).collect();
             let rows = self.client.query_raw(&stmt, args()).await.map_err(map_err)?;
-            Ok(Box::new(PgExec::rows(&mut self.notices, columns, rows)))
+            Ok(Box::new(PgExec::rows(&mut self.notices, columns, rows, self.lob_limit)))
         }
+    }
+
+    fn set_lob_limit(&mut self, bytes: usize) {
+        self.lob_limit = bytes;
     }
 
     fn cancel_handle(&self) -> CancelHandle {

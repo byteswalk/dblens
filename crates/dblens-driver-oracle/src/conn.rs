@@ -19,11 +19,12 @@ pub(crate) struct OracleConnection {
     conn: Arc<oracle::Connection>,
     /// 自行维护的自动提交标志（`oracle::Connection::set_autocommit` 需要 &mut，而连接要与取消句柄共享）。
     autocommit: bool,
+    lob_limit: usize,
 }
 
 impl OracleConnection {
     pub(crate) fn new(conn: Arc<oracle::Connection>) -> Self {
-        OracleConnection { conn, autocommit: true }
+        OracleConnection { conn, autocommit: true, lob_limit: dblens_core::DEFAULT_LOB_PREVIEW_BYTES }
     }
 }
 
@@ -51,15 +52,13 @@ fn drain_output(conn: &oracle::Connection) -> Result<Vec<String>> {
 pub(crate) struct OraExec {
     pending: VecDeque<ExecEvent>,
     rows: Option<ResultSet<'static, OraRow>>,
+    lob_limit: usize,
 }
 
-fn convert_row(row: &OraRow) -> Result<Row> {
+fn convert_row(row: &OraRow, lob_limit: usize) -> Result<Row> {
     // CLOB/NCLOB/BLOB 在 oracle_value 中已按预览读取（得到 Value::Lob，cap_large 对其原样放行）；
     // 这里再统一截断 LONG、LONG RAW 和超长 VARCHAR2 等非 LOB 的大值，与 MySQL、PG、达梦驱动一致
-    row.sql_values()
-        .iter()
-        .map(|v| oracle_value(v).map(|v| v.cap_large(dblens_core::DEFAULT_LOB_PREVIEW_BYTES)))
-        .collect()
+    row.sql_values().iter().map(|v| oracle_value(v, lob_limit).map(|v| v.cap_large(lob_limit))).collect()
 }
 
 impl BlockingExec for OraExec {
@@ -74,7 +73,7 @@ impl BlockingExec for OraExec {
         let mut ended = false;
         while rows.len() < max_rows.max(1) {
             match rs.next() {
-                Some(row) => rows.push(convert_row(&row.map_err(map_err)?)?),
+                Some(row) => rows.push(convert_row(&row.map_err(map_err)?, self.lob_limit)?),
                 None => {
                     ended = true;
                     break;
@@ -93,6 +92,10 @@ impl BlockingExec for OraExec {
 }
 
 impl BlockingConnection for OracleConnection {
+    fn set_lob_limit(&mut self, bytes: usize) {
+        self.lob_limit = bytes;
+    }
+
     fn execute<'a>(&'a mut self, sql: &'a str, params: &'a [Value]) -> Result<Box<dyn BlockingExec + 'a>> {
         let binds = to_binds(params)?;
         let refs: Vec<&dyn ToSql> = binds.iter().map(|b| b.as_ref()).collect();
@@ -112,6 +115,7 @@ impl BlockingConnection for OracleConnection {
             return Ok(Box::new(OraExec {
                 pending: VecDeque::from([ExecEvent::ResultStart { columns }]),
                 rows: Some(rs),
+                lob_limit: self.lob_limit,
             }));
         }
         if let Err(e) = stmt.execute(&refs) {
@@ -127,7 +131,7 @@ impl BlockingConnection for OracleConnection {
             self.conn.commit().map_err(map_err)?;
         }
         pending.push_back(ExecEvent::Affected(affected));
-        Ok(Box::new(OraExec { pending, rows: None }))
+        Ok(Box::new(OraExec { pending, rows: None, lob_limit: self.lob_limit }))
     }
 
     fn set_autocommit(&mut self, on: bool) -> Result<()> {

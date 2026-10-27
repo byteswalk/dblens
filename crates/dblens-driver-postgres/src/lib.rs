@@ -84,6 +84,14 @@ impl Driver for PgDriver {
                 (client, spawn_connection(connection))
             }
         };
-        Ok(Box::new(PgConnection { client, notices, conn_task, autocommit: true, in_tx: false, tls }))
+        Ok(Box::new(PgConnection {
+            client,
+            notices,
+            conn_task,
+            autocommit: true,
+            in_tx: false,
+            tls,
+            lob_limit: dblens_core::DEFAULT_LOB_PREVIEW_BYTES,
+        }))
     }
 }

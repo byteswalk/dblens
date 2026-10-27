@@ -58,6 +58,8 @@ impl Connection for FakeConn {
             started: false,
         }))
     }
+    fn set_lob_limit(&mut self, _bytes: usize) {}
+
     fn cancel_handle(&self) -> CancelHandle {
         let counter = self.cancelled.clone();
         CancelHandle::new(move || {

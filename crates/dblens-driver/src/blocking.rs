@@ -19,6 +19,9 @@ pub trait BlockingExec {
 /// 同步的连接。所有方法都只在该连接的专用线程上调用。
 pub trait BlockingConnection: Send + 'static {
     fn execute<'a>(&'a mut self, sql: &'a str, params: &'a [Value]) -> Result<Box<dyn BlockingExec + 'a>>;
+    /// 大字段（长文本、二进制、LOB）每个值最多读取的字节数，超出的部分截断为预览（`Value::Lob`）。
+    /// 新连接为 `DEFAULT_LOB_PREVIEW_BYTES`；导出时放宽（M1c3）。只影响之后执行的语句。
+    fn set_lob_limit(&mut self, bytes: usize);
     fn set_autocommit(&mut self, on: bool) -> Result<()>;
     fn commit(&mut self) -> Result<()>;
     fn rollback(&mut self) -> Result<()>;
@@ -41,6 +44,10 @@ enum Cmd {
     },
     /// 异步侧提前丢弃了执行流。
     EndExec,
+    /// 不需要回复：只改变之后执行的语句。
+    SetLobLimit {
+        bytes: usize,
+    },
     SetAutocommit {
         on: bool,
         reply: Reply<()>,
@@ -81,7 +88,7 @@ impl Cmd {
             Cmd::ServerInfo { reply } => {
                 let _ = reply.send(Err(busy()));
             }
-            Cmd::EndExec => {}
+            Cmd::EndExec | Cmd::SetLobLimit { .. } => {}
         }
     }
 }
@@ -117,6 +124,7 @@ fn run_worker<C: BlockingConnection>(mut conn: C, rx: mpsc::Receiver<Cmd>) {
                 let _ = reply.send(Ok(None));
             }
             Cmd::EndExec => {}
+            Cmd::SetLobLimit { bytes } => conn.set_lob_limit(bytes),
             Cmd::SetAutocommit { on, reply } => {
                 let _ = reply.send(conn.set_autocommit(on));
             }
@@ -194,6 +202,12 @@ impl Connection for AsyncConnection {
 
     fn cancel_handle(&self) -> CancelHandle {
         self.cancel.clone()
+    }
+
+    fn set_lob_limit(&mut self, bytes: usize) {
+        // 与 request 一样先释放被丢弃的执行流；发送失败说明工作线程已退出，下一条命令会报告
+        let _ = self.tx.send(Cmd::EndExec);
+        let _ = self.tx.send(Cmd::SetLobLimit { bytes });
     }
 
     async fn set_autocommit(&mut self, on: bool) -> Result<()> {

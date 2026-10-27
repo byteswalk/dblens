@@ -19,6 +19,9 @@ pub trait Connection: Send {
     -> Result<Box<dyn ExecStream + 'a>>;
     /// 返回可以从其他任务调用的取消句柄。
     fn cancel_handle(&self) -> CancelHandle;
+    /// 大字段（长文本、二进制、LOB）每个值最多读取的字节数，超出的部分截断为预览（`Value::Lob`）。
+    /// 新连接为 `DEFAULT_LOB_PREVIEW_BYTES`；导出时放宽（M1c3）。只影响之后执行的语句。
+    fn set_lob_limit(&mut self, bytes: usize);
     /// 切换自动提交。从手动切回自动时，未提交的事务会被提交（与 JDBC 行为一致）。
     async fn set_autocommit(&mut self, on: bool) -> Result<()>;
     async fn commit(&mut self) -> Result<()>;

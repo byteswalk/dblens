@@ -38,6 +38,8 @@ impl BlockingExec for FakeExec {
 }
 
 impl BlockingConnection for Fake {
+    fn set_lob_limit(&mut self, _bytes: usize) {}
+
     fn execute<'a>(&'a mut self, sql: &'a str, _params: &'a [Value]) -> Result<Box<dyn BlockingExec + 'a>> {
         let thread = std::thread::current().name().unwrap_or("").to_string();
         self.log.lock().unwrap().push(format!("{thread}:{sql}"));

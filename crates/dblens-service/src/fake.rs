@@ -104,6 +104,10 @@ impl ExecStream for FakeStream {
 
 #[async_trait]
 impl Connection for FakeConn {
+    fn set_lob_limit(&mut self, bytes: usize) {
+        self.log.lock().unwrap().push(format!("lob_limit {bytes}"));
+    }
+
     async fn execute<'a>(&'a mut self, sql: &'a str, _: &'a [Value]) -> Result<Box<dyn ExecStream + 'a>> {
         let sql = sql.trim();
         self.log.lock().unwrap().push(format!("execute {sql}"));

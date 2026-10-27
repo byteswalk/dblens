@@ -23,24 +23,26 @@ pub(crate) struct PgExec<'a> {
     notices: &'a mut UnboundedReceiver<String>,
     rows: Option<Pin<Box<RowStream>>>,
     state: State,
+    lob_limit: usize,
 }
 
 impl<'a> PgExec<'a> {
     pub(crate) fn affected(notices: &'a mut UnboundedReceiver<String>, n: u64) -> Self {
-        Self { notices, rows: None, state: State::Affected(n) }
+        Self { notices, rows: None, state: State::Affected(n), lob_limit: DEFAULT_LOB_PREVIEW_BYTES }
     }
 
     pub(crate) fn rows(
         notices: &'a mut UnboundedReceiver<String>,
         columns: Vec<ColumnMeta>,
         rows: RowStream,
+        lob_limit: usize,
     ) -> Self {
-        Self { notices, rows: Some(Box::pin(rows)), state: State::Start(columns) }
+        Self { notices, rows: Some(Box::pin(rows)), state: State::Start(columns), lob_limit }
     }
 }
 
-fn convert_row(row: &tokio_postgres::Row) -> Result<Row> {
-    (0..row.len()).map(|i| pg_value(row, i).map(|v| v.cap_large(DEFAULT_LOB_PREVIEW_BYTES))).collect()
+fn convert_row(row: &tokio_postgres::Row, lob_limit: usize) -> Result<Row> {
+    (0..row.len()).map(|i| pg_value(row, i).map(|v| v.cap_large(lob_limit))).collect()
 }
 
 #[async_trait]
@@ -61,7 +63,7 @@ impl ExecStream for PgExec<'_> {
                 let mut ended = false;
                 while rows.len() < max_rows.max(1) {
                     match stream.next().await {
-                        Some(row) => rows.push(convert_row(&row.map_err(map_err)?)?),
+                        Some(row) => rows.push(convert_row(&row.map_err(map_err)?, self.lob_limit)?),
                         None => {
                             ended = true;
                             break;

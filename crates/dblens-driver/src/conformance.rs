@@ -202,6 +202,19 @@ pub async fn large_text_becomes_lob_preview(f: &Fixture) {
     }
 }
 
+pub async fn lob_limit_reads_full_value(f: &Fixture) {
+    let mut c = connect(f).await;
+    c.set_lob_limit(1024 * 1024);
+    match single_value(&run(c.as_mut(), f.large_text, &[]).await.expect("执行失败")) {
+        Value::String(s) => assert_eq!(s.len(), 100_000),
+        other => panic!("期望完整的文本，实际：{other:?}"),
+    }
+    // 改回默认后又是预览
+    c.set_lob_limit(dblens_core::DEFAULT_LOB_PREVIEW_BYTES);
+    let v = single_value(&run(c.as_mut(), f.large_text, &[]).await.expect("执行失败"));
+    assert!(matches!(v, Value::Lob(_)), "{v:?}");
+}
+
 pub async fn type_round_trip(f: &Fixture) {
     let mut c = connect(f).await;
     for (sql, expected) in &f.type_cases {
@@ -263,6 +276,12 @@ macro_rules! conformance_tests {
             async fn large_text_becomes_lob_preview() {
                 if let Some(f) = $crate::conformance::load($env, $make) {
                     $crate::conformance::large_text_becomes_lob_preview(&f).await;
+                }
+            }
+            #[tokio::test]
+            async fn lob_limit_reads_full_value() {
+                if let Some(f) = $crate::conformance::load($env, $make) {
+                    $crate::conformance::lob_limit_reads_full_value(&f).await;
                 }
             }
             #[tokio::test]
