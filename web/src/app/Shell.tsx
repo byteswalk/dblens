@@ -2,7 +2,7 @@
 // 侧栏宽度经 useDefaultLayout 存进设置（ui.layout.*），下次启动恢复。
 // 没有查询标签时工作区显示欢迎页；工作区（Monaco、结果表格）懒加载。
 
-import { Button, Empty, Spin } from 'antd'
+import { Button, Spin } from 'antd'
 import { IconDatabase, IconFileCode, IconHistory, IconPlus, IconSettings, IconStar, IconTool } from '@tabler/icons-react'
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -15,6 +15,7 @@ import ExportDialog from '../features/export/ExportDialog'
 import FavoriteDialog from '../features/favorites/FavoriteDialog'
 import FavoritesPanel from '../features/favorites/FavoritesPanel'
 import HistoryPanel from '../features/history/HistoryPanel'
+import OpsPanel from '../features/ops/OpsPanel'
 import ObjectTree from '../features/tree/ObjectTree'
 import { layoutStorage } from '../shared/settings'
 import StatusBar from './StatusBar'
@@ -37,11 +38,10 @@ const SIDES: { key: SideKey; icon: typeof IconDatabase }[] = [
 ]
 
 function SideContent({ side }: { side: SideKey }) {
-  const { t } = useTranslation()
   if (side === 'db') return <ObjectTree />
   if (side === 'history') return <HistoryPanel />
   if (side === 'favorites') return <FavoritesPanel />
-  return <Empty style={{ marginTop: 48 }} description={t('app.side.comingSoon')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  return <OpsPanel />
 }
 
 function Welcome() {

@@ -29,8 +29,7 @@
     "db": "Database",
     "history": "History",
     "favorites": "Favorites",
-    "ops": "Ops Queries",
-    "comingSoon": "Coming soon"
+    "ops": "Ops Queries"
   },
   "welcome": {
     "newConnection": "New Connection",
@@ -135,5 +134,19 @@
     "edit": "Edit",
     "delete": "Delete",
     "deleteFolderConfirm": "Delete the folder \"{{name}}\" and everything in it?"
+  },
+  "ops": {
+    "hint": "Click to run in a new tab. In session and lock results, the kill_sql column holds the statement that ends the session; copy it and run it yourself.",
+    "category": {
+      "session": "Sessions",
+      "lock": "Locks",
+      "storage": "Storage",
+      "sql": "SQL Statistics"
+    },
+    "openNoRun": "Open in New Tab (Do Not Run)",
+    "copy": "Copy SQL",
+    "copied": "Copied",
+    "noProfile": "No connections yet",
+    "newConnection": "New Connection"
   }
 }

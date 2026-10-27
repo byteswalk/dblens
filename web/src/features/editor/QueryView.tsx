@@ -24,7 +24,7 @@ import { editorLanguage, formatSql } from './dialect'
 import { errorMarks } from './markers'
 import { runnerFor, useTabRuntime } from './runner'
 import SqlEditor, { type MonacoEditor } from './SqlEditor'
-import { type QueryTab, useTabs } from './tabs'
+import { type QueryTab, takeRun, useTabs } from './tabs'
 
 /** 会改变对象结构的语句（按首个关键字）。 */
 const DDL = new Set(['CREATE', 'ALTER', 'DROP', 'RENAME', 'TRUNCATE', 'COMMENT'])
@@ -117,6 +117,11 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
       }),
     [runner, profile, rt.session?.variant, message, t, tab.id],
   )
+
+  // 运维查询打开的标签：打开后立即执行全文
+  useEffect(() => {
+    if (takeRun(tab.id)) void runner.run(tab.sql, 0)
+  }, [tab.id]) // 只在标签第一次显示时检查
 
   // 协议层面的错误（如上一段还没执行完）用全局提示（M1 设计文档第 5 节），同时记在"消息"里
   const protocolError = rt.exec.protocolError

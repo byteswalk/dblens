@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
-import { TABS_KEY, parseTabs, persistTabs, useTabs } from './tabs'
+import { TABS_KEY, markRun, parseTabs, persistTabs, takeRun, useTabs } from './tabs'
 
 describe('标签页', () => {
   beforeEach(() => useTabs.getState().restore(undefined))
@@ -105,6 +105,17 @@ describe('数据标签', () => {
       order: { column: 'x', desc: false },
     })
     expect(tabs[0].data).toBeUndefined()
+  })
+})
+
+describe('打开后执行', () => {
+  it('标记只取走一次，不随标签保存', () => {
+    const id = useTabs.getState().open('p', 'SELECT 1')
+    markRun(id)
+    const saved = JSON.stringify({ tabs: useTabs.getState().tabs })
+    expect(saved).not.toContain('run')
+    expect(takeRun(id)).toBe(true)
+    expect(takeRun(id)).toBe(false)
   })
 })
 

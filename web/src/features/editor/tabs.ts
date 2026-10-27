@@ -138,6 +138,18 @@ export const useTabs = create<TabsState>()((set, get) => ({
   restore: (raw) => set(parseTabs(raw)),
 }))
 
+/** 打开后要立即执行的标签（运维查询，M1c3）。不随标签保存：重新打开页面时不会再执行。 */
+const pendingRuns = new Set<string>()
+
+export function markRun(tabId: string) {
+  pendingRuns.add(tabId)
+}
+
+/** 取走"打开后执行"的标记：有标记时返回 true，只返回一次。 */
+export function takeRun(tabId: string): boolean {
+  return pendingRuns.delete(tabId)
+}
+
 let stopPersist: (() => void) | null = null
 
 /** 标签有变化时延迟保存到设置（输入 SQL 时不必每个字都保存）。重复调用不会重复订阅。返回取消订阅的函数。 */

@@ -8,7 +8,7 @@ import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import { sendInsert } from './commands'
 import { disposeRunner, useRuntime } from './runner'
-import { useTabs } from './tabs'
+import { markRun, useTabs } from './tabs'
 
 export function useQueryActions() {
   const api = useApi()
@@ -28,8 +28,8 @@ export function useQueryActions() {
     else useUi.getState().openConnection(null)
   }
 
-  /** 用给定的 SQL 新开标签：连接已删除或没给时，依次用对象树中选中的、当前标签的、第一个连接。 */
-  const openSql = (sql: string, profileId?: string) => {
+  /** 用给定的 SQL 新开标签：连接已删除或没给时，依次用对象树中选中的、当前标签的、第一个连接。`run` 为 true 时打开后立即执行。 */
+  const openSql = (sql: string, profileId?: string, { run = false } = {}) => {
     const { tabs, active } = useTabs.getState()
     const exists = (id?: string | null) => (id && profiles?.some((p) => p.id === id) ? id : undefined)
     const id =
@@ -37,8 +37,10 @@ export function useQueryActions() {
       exists(useUi.getState().selectedProfile) ??
       exists(tabs.find((x) => x.id === active)?.profileId) ??
       profiles?.[0]?.id
-    if (id) useTabs.getState().open(id, sql)
-    else useUi.getState().openConnection(null)
+    if (id) {
+      const tabId = useTabs.getState().open(id, sql)
+      if (run) markRun(tabId)
+    } else useUi.getState().openConnection(null)
   }
 
   /** 插入到当前编辑器的光标处；当前不是查询标签（没有标签或是数据标签）时新开一个。 */

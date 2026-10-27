@@ -29,8 +29,7 @@
     "db": "数据库",
     "history": "历史",
     "favorites": "收藏",
-    "ops": "运维查询",
-    "comingSoon": "即将推出"
+    "ops": "运维查询"
   },
   "welcome": {
     "newConnection": "新建连接",
@@ -133,5 +132,19 @@
     "edit": "编辑",
     "delete": "删除",
     "deleteFolderConfirm": "删除文件夹“{{name}}”及其中的全部内容？"
+  },
+  "ops": {
+    "hint": "点击在新标签中执行。会话和锁的结果中 kill_sql 列是结束会话的语句，复制后自行执行。",
+    "category": {
+      "session": "会话",
+      "lock": "锁",
+      "storage": "存储",
+      "sql": "SQL 统计"
+    },
+    "openNoRun": "在新标签中打开（不执行）",
+    "copy": "复制 SQL",
+    "copied": "已复制",
+    "noProfile": "还没有连接",
+    "newConnection": "新建连接"
   }
 }
