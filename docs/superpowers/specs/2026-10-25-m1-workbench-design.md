@@ -159,6 +159,7 @@ M1b 在写计划时（2026-10-25，用户确认）再拆成两份：
 - 2026-10-26 M1c 再拆成三份（用户确认）：M1c1 历史与收藏；M1c2 对象操作（查看 DDL、生成 SQL、关联查询、"查看数据"标签）；M1c3 导出与运维查询。
 - M1c1 已完成（设计 `docs/superpowers/specs/2026-10-26-m1c1-history-favorites-design.md`，详细计划 `docs/superpowers/plans/2026-10-26-m1c1-history-favorites.md`，说明 `docs/notes/m1c1-history-favorites.md`）。
 - M1c2 已完成（设计 `docs/superpowers/specs/2026-10-26-m1c2-object-actions-design.md`，详细计划 `docs/superpowers/plans/2026-10-26-m1c2-object-actions.md`，说明 `docs/notes/m1c2-object-actions.md`）。
+- M1c3 已完成（设计 `docs/superpowers/specs/2026-10-26-m1c3-export-ops-design.md`，详细计划 `docs/superpowers/plans/2026-10-26-m1c3-export-ops.md`，说明 `docs/notes/m1c3-export-ops.md`）。M1 全部完成。
 
 右键菜单中的"查看 DDL"和"生成 SQL"依赖 M1c 的后端，M1a 先不显示这两项。
 
