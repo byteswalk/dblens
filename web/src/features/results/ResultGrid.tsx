@@ -1,5 +1,6 @@
 // 结果表格（M1 设计文档 2.1 节）：Glide Data Grid，canvas 渲染。行号、数值右对齐、NULL 灰显；
 // 滚动到接近已加载的末尾时续取下一批；双击或回车查看单元格；选中区域可用 Ctrl+C 复制（制表符分隔）。
+// 数据标签（M1c2）：点列头排序，排序的列头带箭头。
 
 import '@glideapps/glide-data-grid/dist/index.css'
 
@@ -15,6 +16,7 @@ import {
 import { useMemo, useState } from 'react'
 
 import { type ResultSet, cellText } from '../../shared/exec'
+import { type Order, sortedTitle } from '../data/sort'
 import { useSetting } from '../../shared/settings'
 import { THEME_KEY } from '../../shared/theme'
 import CellViewer, { type ViewedCell } from './CellViewer'
@@ -60,16 +62,19 @@ export interface ResultGridProps {
   /** 服务端在等 fetch_more（这个结果集还有下一批）。 */
   waiting: boolean
   onFetchMore(): void
+  /** 当前的排序；给出 onSort 时点列头排序。 */
+  sort?: Order
+  onSort?(column: string): void
 }
 
-export default function ResultGrid({ result, waiting, onFetchMore }: ResultGridProps) {
+export default function ResultGrid({ result, waiting, onFetchMore, sort, onSort }: ResultGridProps) {
   const theme = useGridTheme()
   const [viewed, setViewed] = useState<ViewedCell | null>(null)
   // 列宽在列信息和第一批行到达时估计，续取的行不影响
   const hasRows = result.rows.length > 0
   const columns: GridColumn[] = useMemo(
-    () => result.columns.map((c, i) => ({ id: String(i), title: c.name, width: columnWidth(result, i) })),
-    [result.columns, hasRows],
+    () => result.columns.map((c, i) => ({ id: String(i), title: sortedTitle(c.name, sort), width: columnWidth(result, i) })),
+    [result.columns, hasRows, sort],
   )
   const muted = useMemo(() => ({ textDark: theme.textLight }), [theme])
 
@@ -98,6 +103,7 @@ export default function ResultGrid({ result, waiting, onFetchMore }: ResultGridP
         getCellContent={getCellContent}
         getCellsForSelection
         onVisibleRegionChanged={onVisible}
+        onHeaderClicked={onSort ? (col) => onSort(result.columns[col].name) : undefined}
         onCellActivated={([col, row]) =>
           setViewed({ column: result.columns[col].name, row: row + 1, value: result.rows[row][col] })
         }

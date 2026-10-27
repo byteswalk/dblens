@@ -61,5 +61,14 @@
     "incomplete": "语句不完整",
     "near": "“{{near}}”附近有语法错误",
     "compatHint": "（按 {{grammar}} 语法检查，{{name}} 的扩展语法可能被误报）"
+  },
+  "data": {
+    "filterPlaceholder": "WHERE 条件，回车应用，如 status = 1",
+    "refresh": "刷新",
+    "stop": "停止",
+    "count": "统计行数",
+    "total": "共 {{count}} 行",
+    "loaded": "已读取 {{count}} 行",
+    "sortHint": "点列头排序：升序、降序、不排序"
   }
 }

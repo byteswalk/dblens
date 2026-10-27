@@ -1,7 +1,7 @@
-// 工作区（设计稿第 2 部分）：标签栏和当前标签页。标签顶部有一条环境色线，生产连接的标签整块标红、
+// 工作区（设计稿第 2 部分）：标签栏和当前标签页（查询标签或数据标签）。标签顶部有一条环境色线，生产连接的标签整块标红、
 // 标题带"生产"。懒加载：Monaco 和结果表格只在打开第一个查询标签时才加载。
 
-import { IconFileCode, IconPlus, IconX } from '@tabler/icons-react'
+import { IconFileCode, IconPlus, IconTable, IconX } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { useApi } from '../../app/context'
 import DbIcon from '../../shared/DbIcon'
 import type { Profile } from '../../shared/api'
+import DataView from '../data/DataView'
 import QueryView from './QueryView'
 import { disposeModel } from './SqlEditor'
 import { useQueryActions } from './actions'
@@ -38,7 +39,13 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
       }}
       title={`${tab.title} · ${profileName}`}
     >
-      {profile ? <DbIcon driver={profile.driver} variant={rt.session?.variant ?? profile.variant} /> : <IconFileCode size={14} />}
+      {tab.data ? (
+        <IconTable size={14} />
+      ) : profile ? (
+        <DbIcon driver={profile.driver} variant={rt.session?.variant ?? profile.variant} />
+      ) : (
+        <IconFileCode size={14} />
+      )}
       <span className="tab-title">{tab.title}</span>
       {envClass === 'prod' ? <span>· {t('editor.tab.prod')}</span> : <span className="muted">{profileName}</span>}
       {rt.running && <span className="running-dot" />}
@@ -91,7 +98,8 @@ export default function Workspace() {
           <IconPlus size={14} />
         </div>
       </div>
-      {tab && <QueryView tab={tab} profiles={profiles} />}
+      {tab &&
+        (tab.data ? <DataView key={tab.id} tab={tab} profiles={profiles} /> : <QueryView tab={tab} profiles={profiles} />)}
     </div>
   )
 }

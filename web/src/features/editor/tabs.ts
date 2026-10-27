@@ -1,19 +1,57 @@
 // 查询标签页（M1 设计文档 1 节）：每个标签绑定一个连接，有自己的 SQL。打开的标签和其中的 SQL 存进设置
 // （ui.tabs），下次启动时恢复；会话不恢复，第一次执行时再打开。
+// 数据标签（M1c2 设计文档第 5 节）：带 data 的标签，只读地浏览一张表 / 视图 / 物化视图，同一对象只开一个。
 
 import { create } from 'zustand'
 
+import type { TargetKind } from '../../shared/api'
 import { t } from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
 
 export const TABS_KEY = 'ui.tabs'
 
+/** 数据标签浏览的对象，以及当前的过滤条件和排序（一并保存）。 */
+export interface DataTarget {
+  schema: string
+  object: string
+  objectKind: TargetKind
+  /** WHERE 后的条件；空表示不过滤。 */
+  filter?: string
+  order?: { column: string; desc: boolean } | null
+}
+
 export interface QueryTab {
   id: string
-  /** 「查询1」这样的标题：新建时按界面语言生成，之后是数据，不随语言变化。 */
+  /** 「查询1」这样的标题：新建时按界面语言生成，之后是数据，不随语言变化。数据标签为对象名。 */
   title: string
   profileId: string
   sql: string
+  /** 有值时是数据标签。 */
+  data?: DataTarget
+}
+
+const TARGET_KINDS: readonly unknown[] = ['table', 'view', 'materialized_view'] satisfies TargetKind[]
+
+function isDataTarget(v: unknown): v is DataTarget {
+  const d = v as DataTarget | null
+  const o = d?.order
+  return (
+    typeof d?.schema === 'string' &&
+    typeof d.object === 'string' &&
+    TARGET_KINDS.includes(d.objectKind) &&
+    (d.filter === undefined || typeof d.filter === 'string') &&
+    (o === undefined || o === null || (typeof o.column === 'string' && typeof o.desc === 'boolean'))
+  )
+}
+
+/** 是否同一个对象的数据标签。 */
+export function sameData(tab: QueryTab, profileId: string, d: DataTarget): boolean {
+  return (
+    tab.profileId === profileId &&
+    tab.data?.schema === d.schema &&
+    tab.data.object === d.object &&
+    tab.data.objectKind === d.objectKind
+  )
 }
 
 interface Persisted {
@@ -34,7 +72,8 @@ export function parseTabs(raw: string | undefined): Persisted {
         typeof t?.id === 'string' &&
         typeof t.title === 'string' &&
         typeof t.profileId === 'string' &&
-        typeof t.sql === 'string',
+        typeof t.sql === 'string' &&
+        (t.data === undefined || isDataTarget(t.data)),
     )
     const active = tabs.some((t) => t.id === v.active) ? (v.active as string) : (tabs[0]?.id ?? null)
     return { tabs, active, seq: typeof v.seq === 'number' && v.seq > 0 ? v.seq : tabs.length + 1 }
@@ -46,6 +85,10 @@ export function parseTabs(raw: string | undefined): Persisted {
 interface TabsState extends Persisted {
   /** 新建标签并切换过去，返回它的 id。 */
   open(profileId: string, sql?: string): string
+  /** 打开对象的数据标签：已经打开过时切换过去。返回标签的 id。 */
+  openData(profileId: string, target: DataTarget): string
+  /** 修改数据标签的过滤条件和排序。 */
+  setData(id: string, patch: Pick<DataTarget, 'filter' | 'order'>): void
   close(id: string): void
   activate(id: string): void
   setSql(id: string, sql: string): void
@@ -66,6 +109,20 @@ export const useTabs = create<TabsState>()((set, get) => ({
     set({ tabs: [...tabs, tab], active: tab.id, seq: seq + 1 })
     return tab.id
   },
+  openData: (profileId, target) => {
+    const { tabs } = get()
+    const same = tabs.find((x) => sameData(x, profileId, target))
+    if (same) {
+      set({ active: same.id })
+      return same.id
+    }
+    const data = { schema: target.schema, object: target.object, objectKind: target.objectKind }
+    const tab: QueryTab = { id: newId(), title: target.object, profileId, sql: '', data }
+    set({ tabs: [...tabs, tab], active: tab.id })
+    return tab.id
+  },
+  setData: (id, patch) =>
+    set({ tabs: get().tabs.map((x) => (x.id === id && x.data ? { ...x, data: { ...x.data, ...patch } } : x)) }),
   close: (id) => {
     const { tabs, active } = get()
     const i = tabs.findIndex((t) => t.id === id)

@@ -41,9 +41,11 @@ export function useQueryActions() {
     else useUi.getState().openConnection(null)
   }
 
-  /** 插入到当前编辑器的光标处；没有打开的标签时新开一个。 */
+  /** 插入到当前编辑器的光标处；当前不是查询标签（没有标签或是数据标签）时新开一个。 */
   const insertSql = (sql: string, profileId?: string) => {
-    if (useTabs.getState().active) sendInsert(sql)
+    const { tabs, active } = useTabs.getState()
+    const tab = tabs.find((x) => x.id === active)
+    if (tab && !tab.data) sendInsert(sql)
     else openSql(sql, profileId)
   }
 

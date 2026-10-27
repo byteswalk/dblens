@@ -8,12 +8,16 @@ import { useTranslation } from 'react-i18next'
 
 import { errorText } from '../../shared/api'
 import type { TabRuntime } from '../editor/runner'
+import type { Order } from '../data/sort'
 import ResultGrid from './ResultGrid'
 import { type ResultTab, messageLines, resultTabs } from './results'
 
 export interface ResultsPanelProps {
   rt: TabRuntime
   onFetchMore(): void
+  /** 数据标签的排序（见 ResultGrid）。 */
+  sort?: Order
+  onSort?(column: string): void
 }
 
 function TabIcon({ tab, explain }: { tab: ResultTab; explain: boolean }) {
@@ -22,7 +26,7 @@ function TabIcon({ tab, explain }: { tab: ResultTab; explain: boolean }) {
   return explain ? <IconBinaryTree size={14} /> : <IconTable size={14} />
 }
 
-export default function ResultsPanel({ rt, onFetchMore }: ResultsPanelProps) {
+export default function ResultsPanel({ rt, onFetchMore, sort, onSort }: ResultsPanelProps) {
   const { t } = useTranslation()
   const { exec, explain, capped, running } = rt
   const tabs = resultTabs(exec, explain, capped)
@@ -61,6 +65,8 @@ export default function ResultsPanel({ rt, onFetchMore }: ResultsPanelProps) {
             result={exec.statements[current.stmt].results[current.result]}
             waiting={exec.waitingForMore && current.stmt === lastStmt}
             onFetchMore={onFetchMore}
+            sort={sort}
+            onSort={onSort}
           />
         )}
         {current.kind === 'error' && (

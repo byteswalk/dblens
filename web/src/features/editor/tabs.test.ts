@@ -62,7 +62,49 @@ describe('标签页', () => {
       seq: 4,
     })
     expect(parseTabs('not json')).toEqual({ tabs: [], active: null, seq: 1 })
+    const data = { schema: 's', object: 't', objectKind: 'view', filter: 'a > 1', order: { column: 'a', desc: true } }
+    const withData = JSON.stringify({
+      tabs: [
+        { id: 'd', title: 't', profileId: 'p', sql: '', data },
+        { id: 'bad', title: 't', profileId: 'p', sql: '', data: { schema: 's', object: 't', objectKind: 'index' } },
+      ],
+    })
+    expect(parseTabs(withData).tabs).toEqual([{ id: 'd', title: 't', profileId: 'p', sql: '', data }])
     expect(parseTabs(undefined).tabs).toEqual([])
+  })
+})
+
+describe('数据标签', () => {
+  beforeEach(() => useTabs.getState().restore(undefined))
+
+  it('标题为对象名，不占查询编号；同一对象只开一个', () => {
+    const { open, openData, activate } = useTabs.getState()
+    const q = open('p')
+    const a = openData('p', { schema: 's', object: 'orders', objectKind: 'table' })
+    activate(q)
+    expect(openData('p', { schema: 's', object: 'orders', objectKind: 'table' })).toBe(a)
+    expect(useTabs.getState().active).toBe(a)
+    const b = openData('p2', { schema: 's', object: 'orders', objectKind: 'table' })
+    expect(b).not.toBe(a)
+    open('p')
+    expect(useTabs.getState().tabs.map((x) => x.title)).toEqual(['查询1', 'orders', 'orders', '查询2'])
+  })
+
+  it('修改过滤和排序；查询标签不受影响', () => {
+    const { open, openData, setData } = useTabs.getState()
+    const q = open('p')
+    const d = openData('p', { schema: 's', object: 'v', objectKind: 'view' })
+    setData(d, { filter: 'x = 1', order: { column: 'x', desc: false } })
+    setData(q, { filter: 'y' })
+    const tabs = useTabs.getState().tabs
+    expect(tabs[1].data).toEqual({
+      schema: 's',
+      object: 'v',
+      objectKind: 'view',
+      filter: 'x = 1',
+      order: { column: 'x', desc: false },
+    })
+    expect(tabs[0].data).toBeUndefined()
   })
 })
 

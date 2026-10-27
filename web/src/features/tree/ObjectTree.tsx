@@ -1,7 +1,8 @@
 // 数据库对象树（设计文档 7.3 节；M1 设计稿第 1、3 部分）：所有连接在一棵树里，可以同时展开多个。
 // 懒加载：展开时向后端取下一层（后端有元数据缓存，"刷新"会先清后端缓存再重新取）。顶部过滤框按名称或注释过滤已加载的对象。
 // 右键菜单（M1a）：连接 —— 编辑、复制、删除、刷新；其他节点 —— 复制名称、刷新。
-// 对象节点另有（M1c2）："查看 DDL"（弹出只读预览）、"生成 SQL"（插入到当前编辑器）。
+// 对象节点另有（M1c2）："查看数据"（数据标签，也可双击打开）、"查看 DDL"（弹出只读预览）、
+// "生成 SQL"（插入到当前编辑器）。
 
 import { App, Dropdown, Input, type MenuProps, Tree } from 'antd'
 import type { DataNode, EventDataNode } from 'antd/es/tree'
@@ -24,6 +25,7 @@ import { useTranslation } from 'react-i18next'
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import { useQueryActions } from '../editor/actions'
+import { useTabs } from '../editor/tabs'
 import type { Api, Environment, Profile, RoutineInfo } from '../../shared/api'
 import DbIcon from '../../shared/DbIcon'
 import { driverLabel } from '../connections/form'
@@ -286,14 +288,23 @@ export default function ObjectTree() {
   function objectItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 'o') return []
     const items: NonNullable<MenuProps['items']> = []
-    if (ddlKind(k.kind, routineKindOf(k))) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     const target = targetKind(k.kind)
+    if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
+    if (ddlKind(k.kind, routineKindOf(k))) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     if (target) {
       // generateMenu 的项是 antd 菜单项的子集
       const children = generateMenu(target, relations) as NonNullable<MenuProps['items']>
       items.push({ key: 'gen-menu', label: t('tree.menu.generate'), children })
     }
     return items.length ? [...items, { type: 'divider' }] : []
+  }
+
+  /** 打开表、视图、物化视图的数据标签；其他节点不处理。 */
+  const openData = (k: NodeKey) => {
+    const objectKind = k.type === 'o' ? targetKind(k.kind) : null
+    if (k.type === 'o' && objectKind) {
+      useTabs.getState().openData(k.profileId, { schema: k.schema, object: k.name, objectKind })
+    }
   }
 
   const onMenu = async (key: string) => {
@@ -309,7 +320,8 @@ export default function ObjectTree() {
           ref: gen.relation && { schema: gen.relation.schema, table: gen.relation.table },
         })
         insertSql(sql, k.profileId)
-      } else if (key === 'ddl' && k.type === 'o') {
+      } else if (key === 'view-data') openData(k)
+      else if (key === 'ddl' && k.type === 'o') {
         const kind = ddlKind(k.kind, routineKindOf(k))
         const driver = profiles.find((p) => p.id === k.profileId)?.driver
         if (kind && driver) setDdl({ profileId: k.profileId, driver, schema: k.schema, kind, name: k.name })
@@ -371,6 +383,10 @@ export default function ObjectTree() {
             loadedKeys={Object.keys(loaded)}
             loadData={(node: EventDataNode<DataNode>) => load(String(node.key))}
             onSelect={(_, { node }) => selectProfile(decodeKey(String(node.key)).profileId)}
+            onDoubleClick={(_, node) => {
+              const key = String(node.key)
+              if (!key.includes('\u0002')) openData(decodeKey(key))
+            }}
             onRightClick={({ node }) => {
               const key = String(node.key)
               setMenuNode(key.includes('\u0002') ? null : decodeKey(key))

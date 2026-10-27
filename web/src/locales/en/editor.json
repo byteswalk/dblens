@@ -61,5 +61,14 @@
     "incomplete": "Statement is incomplete",
     "near": "Syntax error near '{{near}}'",
     "compatHint": " (checked with {{grammar}} grammar; {{name}} extensions may be flagged by mistake)"
+  },
+  "data": {
+    "filterPlaceholder": "WHERE condition, Enter to apply, e.g. status = 1",
+    "refresh": "Refresh",
+    "stop": "Stop",
+    "count": "Count Rows",
+    "total": "{{count}} rows in total",
+    "loaded": "{{count}} rows loaded",
+    "sortHint": "Click a column header to sort: ascending, descending, none"
   }
 }
