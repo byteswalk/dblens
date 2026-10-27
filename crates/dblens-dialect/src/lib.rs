@@ -23,7 +23,7 @@ pub use ddl::{DdlKind, ddl_text, normalize_ddl};
 pub use dml::DmlTemplate;
 pub use ops::{OpsCategory, OpsQuery};
 pub use session::may_change_schema;
-pub use split::{SqlStatement, split_statements};
+pub use split::{SqlStatement, StreamSplitter, split_statements};
 pub use variant::{Family, Variant};
 pub use version::parse_version;
 

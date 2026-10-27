@@ -1,5 +1,10 @@
 //! SQL 语句拆分：处理字符串、注释、PG 的 $$ 引号、MySQL 的 DELIMITER 命令，
-//! 以及 Oracle/达梦的 PL/SQL 块和 `/` 结束符。保留每条语句在原文中的字节范围，便于定位出错位置。
+//! 以及 Oracle/达梦的 PL/SQL 块和 `/` 结束符。保留每条语句在原文中的字节范围和起始行号，便于定位出错位置。
+//!
+//! 可以分块喂入（`StreamSplitter`，执行 SQL 文件用）：跨块保留结束符、PL/SQL 块、字符串和注释的状态，
+//! 从上次停下的位置继续扫描。块末尾不足以判断的结构（被切开的结束符、未闭合的字符串或注释、
+//! 未读到换行的行首命令、PL/SQL 块开头的关键字）等下一块再判断，文本结束时按结束处理；
+//! 因此任意切块方式的结果都与整段拆分相同。`split_statements` 就是一次喂入全文。
 //!
 //! ## 已知限制
 //! - Oracle/达梦的 PL/SQL 块必须有单独一行的 `/` 才会结束；没有的话，后面的语句会被并入（与 SQL*Plus 一致）。
@@ -12,6 +17,7 @@
 //! - `/` 后面跟注释时不算结束符。
 //! - `q''` 的定界符必须是 ASCII 字符。
 //! - 达梦是否支持 `q''` 字符串尚未验证。
+//! - 分块喂入时，跨越多块的单个字符串、注释或 `$$` 函数体，每来一块都从它的开头重新查找结尾。
 
 use crate::Family;
 
@@ -22,29 +28,26 @@ pub struct SqlStatement {
     /// 在原文中的字节范围，满足 `&sql[start..end] == text`。
     pub start: usize,
     pub end: usize,
+    /// 语句开头所在的行号，从 1 开始。
+    pub line: usize,
 }
 
 /// 按家族的语法规则拆分多条语句。
 pub fn split_statements(sql: &str, family: Family) -> Vec<SqlStatement> {
-    let mut s = Splitter {
-        sql,
-        b: sql.as_bytes(),
-        family,
-        i: 0,
-        stmt_start: 0,
-        has_code: false,
-        block: false,
-        delimiter: b";".to_vec(),
-        out: Vec::new(),
-    };
-    s.run();
-    s.out
+    let mut s = StreamSplitter::new(family);
+    let mut out = s.feed(sql);
+    out.extend(s.finish());
+    out
 }
 
-struct Splitter<'a> {
-    sql: &'a str,
-    b: &'a [u8],
+/// 分块拆分：`feed` 返回本块中已经完整的语句，`finish` 返回文本末尾剩下的。
+/// 语句的位置和行号是在全部已喂入文本中的。
+pub struct StreamSplitter {
     family: Family,
+    /// 尚未拆完的文本，从全文的 `base` 处开始：比当前语句的开头多留几个字节，供向前查看（标识符、行首）。
+    buf: String,
+    base: usize,
+    /// 扫描位置；`buf` 内的位置，下同。
     i: usize,
     stmt_start: usize,
     /// 当前语句是否已出现注释以外的内容。
@@ -52,6 +55,9 @@ struct Splitter<'a> {
     /// 是否处于 PL/SQL 块中（块内 `;` 不拆分）。
     block: bool,
     delimiter: Vec<u8>,
+    /// 行号：`line_pos` 处位于第 `line` 行。
+    line_pos: usize,
+    line: usize,
     out: Vec<SqlStatement>,
 }
 
@@ -64,57 +70,144 @@ fn is_blank(c: char) -> bool {
     c.is_whitespace() || c == '\u{feff}'
 }
 
-impl Splitter<'_> {
+/// 扫描的一步：处理了（`Done`）、不是这种结构（`No`）、块末尾的内容还不足以判断（`Wait`）。
+enum Step {
+    Done,
+    No,
+    Wait,
+}
+
+impl StreamSplitter {
+    pub fn new(family: Family) -> Self {
+        Self {
+            family,
+            buf: String::new(),
+            base: 0,
+            i: 0,
+            stmt_start: 0,
+            has_code: false,
+            block: false,
+            delimiter: b";".to_vec(),
+            line_pos: 0,
+            line: 1,
+            out: Vec::new(),
+        }
+    }
+
+    /// 喂入一块文本，返回已经完整的语句。
+    pub fn feed(&mut self, chunk: &str) -> Vec<SqlStatement> {
+        self.buf.push_str(chunk);
+        self.run(false);
+        self.compact();
+        std::mem::take(&mut self.out)
+    }
+
+    /// 文本结束：等待中的结构按结束处理，返回剩下的语句（包括没有结束符的最后一条）。
+    pub fn finish(mut self) -> Vec<SqlStatement> {
+        self.run(true);
+        let end = self.buf.len();
+        self.finish_stmt(end);
+        self.out
+    }
+
     fn plsql(&self) -> bool {
         matches!(self.family, Family::Oracle | Family::Dameng)
     }
 
-    fn run(&mut self) {
-        while self.i < self.b.len() {
-            if (self.i == 0 || self.b[self.i - 1] == b'\n') && self.line_command() {
-                continue;
+    /// 丢掉当前语句之前的文本（留几个字节供向前查看），内存只与当前语句的长度有关。
+    fn compact(&mut self) {
+        let mut cut = self.stmt_start.min(self.i).saturating_sub(4);
+        while !self.buf.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        if cut == 0 {
+            return;
+        }
+        if self.line_pos < cut {
+            self.line += newlines(&self.buf.as_bytes()[self.line_pos..cut]);
+            self.line_pos = cut;
+        }
+        self.buf.drain(..cut);
+        self.base += cut;
+        self.i -= cut;
+        self.stmt_start -= cut;
+        self.line_pos -= cut;
+    }
+
+    fn run(&mut self, eof: bool) {
+        while self.i < self.buf.len() {
+            if self.base + self.i == 0 || self.buf.as_bytes()[self.i - 1] == b'\n' {
+                match self.line_command(eof) {
+                    Step::Done => continue,
+                    Step::Wait => return,
+                    Step::No => {}
+                }
             }
-            if self.skip_comment() || self.skip_string() {
-                continue;
+            match self.skip_comment(eof) {
+                Step::Done => continue,
+                Step::Wait => return,
+                Step::No => {}
             }
-            if !self.block && self.b[self.i..].starts_with(&self.delimiter) {
-                let end = self.i;
-                self.i += self.delimiter.len();
-                self.finish(end);
-                continue;
+            match self.skip_string(eof) {
+                Step::Done => continue,
+                Step::Wait => return,
+                Step::No => {}
+            }
+            let rest = &self.buf.as_bytes()[self.i..];
+            if !self.block {
+                if rest.starts_with(&self.delimiter) {
+                    let end = self.i;
+                    self.i += self.delimiter.len();
+                    self.finish_stmt(end);
+                    continue;
+                }
+                // 结束符可能被块边界切开（如 `$$` 只读到第一个 `$`）
+                if !eof && rest.len() < self.delimiter.len() && self.delimiter.starts_with(rest) {
+                    return;
+                }
             }
             let c = self.char_here();
             if !is_blank(c) {
+                // 判断 PL/SQL 块要看开头的几个关键字
+                if !self.has_code && !eof && self.plsql() && !words_complete(rest, 6) {
+                    return;
+                }
                 self.mark_code();
             }
             self.i += c.len_utf8();
         }
-        self.finish(self.b.len());
     }
 
     /// `self.i` 处的字符；`self.i` 始终位于字符边界上。
     fn char_here(&self) -> char {
-        self.sql[self.i..].chars().next().unwrap_or('\0')
+        self.buf[self.i..].chars().next().unwrap_or('\0')
     }
 
     /// 遇到第一段非注释内容时记下，并判断是否是 PL/SQL 块的开头。
     fn mark_code(&mut self) {
         if !self.has_code {
             self.has_code = true;
-            self.block = self.plsql() && starts_plsql(&self.b[self.i..]);
+            self.block = self.plsql() && starts_plsql(&self.buf.as_bytes()[self.i..]);
         }
     }
 
     /// 结束当前语句（范围到 `end` 为止），并从 `self.i` 开始新语句。
-    fn finish(&mut self, end: usize) {
+    fn finish_stmt(&mut self, end: usize) {
         if self.has_code {
-            let seg = &self.sql[self.stmt_start..end];
+            let seg = &self.buf[self.stmt_start..end];
             let rest = seg.trim_start_matches(is_blank);
-            let text = rest.trim_end_matches(is_blank);
+            let text = rest.trim_end_matches(is_blank).to_string();
             if !text.is_empty() {
                 let s = end - rest.len();
                 let e = s + text.len();
-                self.out.push(SqlStatement { text: text.to_string(), start: s, end: e });
+                self.line += newlines(&self.buf.as_bytes()[self.line_pos..s]);
+                self.line_pos = s;
+                self.out.push(SqlStatement {
+                    text,
+                    start: self.base + s,
+                    end: self.base + e,
+                    line: self.line,
+                });
             }
         }
         self.stmt_start = self.i;
@@ -122,151 +215,206 @@ impl Splitter<'_> {
         self.block = false;
     }
 
-    /// 行首命令：MySQL 的 `DELIMITER xx`，Oracle/达梦单独一行的 `/`。处理了就返回 true。
-    fn line_command(&mut self) -> bool {
+    /// 行首命令：MySQL 的 `DELIMITER xx`，Oracle/达梦单独一行的 `/`。
+    /// 行还没读完时，能确定不是命令就返回 `No`，否则等下一块。
+    fn line_command(&mut self, eof: bool) -> Step {
+        let b = self.buf.as_bytes();
         let mut j = self.i;
-        while j < self.b.len() && matches!(self.b[j], b' ' | b'\t') {
+        while j < b.len() && matches!(b[j], b' ' | b'\t') {
             j += 1;
         }
-        let line_end = self.b[j..].iter().position(|&c| c == b'\n').map_or(self.b.len(), |p| j + p);
-        let line = self.b[j..line_end].trim_ascii_end();
-        let next_line = (line_end + 1).min(self.b.len());
+        let newline = b[j..].iter().position(|&c| c == b'\n').map(|p| j + p);
+        let complete = newline.is_some() || eof;
+        let line_end = newline.unwrap_or(b.len());
+        let head = &b[j..line_end];
+        let line = head.trim_ascii_end();
+        let next_line = (line_end + 1).min(b.len());
         match self.family {
             // 只在语句开头识别；语句中间的 delimiter 是普通标识符（如 `SELECT a,\n  delimiter AS d`）
-            Family::MySql
-                if !self.has_code
-                    && line.len() > 9
-                    && line[..9].eq_ignore_ascii_case(b"delimiter")
-                    && line[9].is_ascii_whitespace() =>
-            {
-                self.finish(self.i);
-                self.delimiter = line[9..].trim_ascii().to_vec();
-                self.i = next_line;
-                self.stmt_start = next_line;
-                true
-            }
-            Family::Oracle | Family::Dameng if line == b"/" => {
-                self.finish(self.i);
-                self.i = next_line;
-                self.stmt_start = next_line;
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn skip_comment(&mut self) -> bool {
-        let b = self.b;
-        let i = self.i;
-        let next = b.get(i + 1).copied();
-        let line_end = |from: usize| b[from..].iter().position(|&c| c == b'\n').map_or(b.len(), |p| from + p);
-        if b[i] == b'-' && next == Some(b'-') {
-            // MySQL 要求 `--` 后跟空白或行尾才是注释
-            if self.family == Family::MySql
-                && !matches!(b.get(i + 2), None | Some(b' ' | b'\t' | b'\r' | b'\n'))
-            {
-                return false;
-            }
-            self.i = line_end(i);
-            return true;
-        }
-        if b[i] == b'#' && self.family == Family::MySql {
-            self.i = line_end(i);
-            return true;
-        }
-        if b[i] == b'/' && next == Some(b'*') {
-            // MySQL 的 /*! … */ 与 Oracle 的 /*+ … */ 提示属于语句内容
-            if matches!(b.get(i + 2), Some(b'!' | b'+')) {
-                self.mark_code();
-            }
-            let nested = self.family == Family::Postgres;
-            let mut depth = 1;
-            let mut j = i + 2;
-            while j < b.len() && depth > 0 {
-                if b[j] == b'*' && b.get(j + 1) == Some(&b'/') {
-                    depth -= 1;
-                    j += 2;
-                } else if nested && b[j] == b'/' && b.get(j + 1) == Some(&b'*') {
-                    depth += 1;
-                    j += 2;
-                } else {
-                    j += 1;
+            Family::MySql if !self.has_code => {
+                if !complete {
+                    let n = head.len().min(9);
+                    let maybe = head[..n].eq_ignore_ascii_case(&b"delimiter"[..n])
+                        && head.get(9).is_none_or(u8::is_ascii_whitespace);
+                    return if maybe { Step::Wait } else { Step::No };
                 }
+                if line.len() > 9
+                    && line[..9].eq_ignore_ascii_case(b"delimiter")
+                    && line[9].is_ascii_whitespace()
+                {
+                    let delimiter = line[9..].trim_ascii().to_vec();
+                    self.finish_stmt(self.i);
+                    self.delimiter = delimiter;
+                    self.i = next_line;
+                    self.stmt_start = next_line;
+                    return Step::Done;
+                }
+                Step::No
             }
-            self.i = j.min(b.len());
-            return true;
+            Family::Oracle | Family::Dameng => {
+                if !complete {
+                    let maybe = head.first().is_none_or(|&c| c == b'/')
+                        && head.iter().skip(1).all(u8::is_ascii_whitespace);
+                    return if maybe { Step::Wait } else { Step::No };
+                }
+                if line == b"/" {
+                    self.finish_stmt(self.i);
+                    self.i = next_line;
+                    self.stmt_start = next_line;
+                    return Step::Done;
+                }
+                Step::No
+            }
+            _ => Step::No,
         }
-        false
     }
 
-    fn skip_string(&mut self) -> bool {
-        let b = self.b;
+    fn skip_comment(&mut self, eof: bool) -> Step {
+        let b = self.buf.as_bytes();
+        let i = self.i;
+        let mysql = self.family == Family::MySql;
+        // 注释到行尾（换行本身不算注释）；还没读到换行时等下一块
+        let line_end = || match b[i..].iter().position(|&c| c == b'\n') {
+            Some(p) => Some(i + p),
+            None => eof.then_some(b.len()),
+        };
+        let (end, hint) = match (b[i], b.get(i + 1)) {
+            (b'-' | b'/', None) => return if eof { Step::No } else { Step::Wait },
+            (b'-', Some(b'-')) => {
+                // MySQL 要求 `--` 后跟空白或行尾才是注释
+                if mysql {
+                    match b.get(i + 2) {
+                        None if !eof => return Step::Wait,
+                        None | Some(b' ' | b'\t' | b'\r' | b'\n') => {}
+                        Some(_) => return Step::No,
+                    }
+                }
+                (line_end(), false)
+            }
+            (b'#', _) if mysql => (line_end(), false),
+            (b'/', Some(b'*')) => {
+                // MySQL 的 /*! … */ 与 Oracle 的 /*+ … */ 提示属于语句内容
+                let hint = match b.get(i + 2) {
+                    None if !eof => return Step::Wait,
+                    c => matches!(c, Some(b'!' | b'+')),
+                };
+                let nested = self.family == Family::Postgres;
+                let mut depth = 1;
+                let mut j = i + 2;
+                while j < b.len() && depth > 0 {
+                    if b[j] == b'*' && b.get(j + 1) == Some(&b'/') {
+                        depth -= 1;
+                        j += 2;
+                    } else if nested && b[j] == b'/' && b.get(j + 1) == Some(&b'*') {
+                        depth += 1;
+                        j += 2;
+                    } else {
+                        j += 1;
+                    }
+                }
+                ((depth == 0 || eof).then_some(j.min(b.len())), hint)
+            }
+            _ => return Step::No,
+        };
+        let Some(end) = end else { return Step::Wait };
+        if hint {
+            self.mark_code();
+        }
+        self.i = end;
+        Step::Done
+    }
+
+    fn skip_string(&mut self, eof: bool) -> Step {
+        let b = self.buf.as_bytes();
         let i = self.i;
         let c = b[i];
         let prev_is_ident = i > 0 && is_ident_byte(b[i - 1]);
+        let oracle = self.family == Family::Oracle;
+        // 判断 q-quote 要往后看两三个字节
+        let need = |n: usize| !eof && b.len() < i + n;
         let end = if c == b'\'' {
             let pg_escape = self.family == Family::Postgres
                 && i > 0
                 && matches!(b[i - 1], b'E' | b'e')
                 && (i < 2 || !is_ident_byte(b[i - 2]));
-            Some(scan_quoted(b, i + 1, b'\'', self.family == Family::MySql || pg_escape))
+            scan_quoted(b, i + 1, b'\'', self.family == Family::MySql || pg_escape, eof)
         } else if c == b'"' {
-            Some(scan_quoted(b, i + 1, b'"', self.family == Family::MySql))
+            scan_quoted(b, i + 1, b'"', self.family == Family::MySql, eof)
         } else if c == b'`' && self.family == Family::MySql {
-            Some(scan_quoted(b, i + 1, b'`', false))
-        } else if matches!(c, b'n' | b'N')
-            && self.family == Family::Oracle
-            && matches!(b.get(i + 1), Some(b'q' | b'Q'))
-            && b.get(i + 2) == Some(&b'\'')
-            && !prev_is_ident
-        {
+            scan_quoted(b, i + 1, b'`', false, eof)
+        } else if matches!(c, b'n' | b'N') && oracle && !prev_is_ident {
             // Oracle 的 nq'X…X' 字符串（national 字符集的 q-quote）
-            Some(scan_q_quote(b, i + 3))
-        } else if matches!(c, b'q' | b'Q')
-            && self.family == Family::Oracle
-            && b.get(i + 1) == Some(&b'\'')
-            && !prev_is_ident
-        {
-            Some(scan_q_quote(b, i + 2))
+            if need(3) && b.get(i + 1).is_none_or(|c| matches!(c, b'q' | b'Q')) {
+                return Step::Wait;
+            }
+            if matches!(b.get(i + 1), Some(b'q' | b'Q')) && b.get(i + 2) == Some(&b'\'') {
+                scan_q_quote(b, i + 3, eof)
+            } else {
+                return Step::No;
+            }
+        } else if matches!(c, b'q' | b'Q') && oracle && !prev_is_ident {
+            if need(2) {
+                return Step::Wait;
+            }
+            if b.get(i + 1) == Some(&b'\'') {
+                scan_q_quote(b, i + 2, eof)
+            } else {
+                return Step::No;
+            }
         } else if c == b'$' && self.family == Family::Postgres && !prev_is_ident {
-            dollar_tag_len(b, i).map(|len| scan_dollar(b, i, len))
+            match dollar_tag_len(b, i, eof) {
+                Tag::Wait => return Step::Wait,
+                Tag::No => return Step::No,
+                Tag::Len(len) => scan_dollar(b, i, len, eof),
+            }
         } else {
-            None
+            return Step::No;
         };
         match end {
             Some(e) => {
                 self.mark_code();
                 self.i = e;
-                true
+                Step::Done
             }
-            None => false,
+            None => Step::Wait,
         }
     }
 }
 
-/// 扫描引号字符串，返回结束引号之后的位置；没有结束引号时返回文本末尾。
-fn scan_quoted(b: &[u8], mut j: usize, quote: u8, backslash: bool) -> usize {
+fn newlines(b: &[u8]) -> usize {
+    b.iter().filter(|&&c| c == b'\n').count()
+}
+
+/// 扫描引号字符串，返回结束引号之后的位置；没有结束引号时：文本已结束则返回末尾，否则 None（等下一块）。
+fn scan_quoted(b: &[u8], mut j: usize, quote: u8, backslash: bool, eof: bool) -> Option<usize> {
     while j < b.len() {
         let c = b[j];
         if backslash && c == b'\\' {
+            if j + 1 >= b.len() && !eof {
+                return None;
+            }
             j += 2;
             continue;
         }
         if c == quote {
-            if b.get(j + 1) == Some(&quote) {
-                j += 2;
-                continue;
+            match b.get(j + 1) {
+                // 末尾的引号：下一块可能以同一引号开头（两个引号表示一个）
+                None if !eof => return None,
+                Some(&n) if n == quote => {
+                    j += 2;
+                    continue;
+                }
+                _ => return Some(j + 1),
             }
-            return j + 1;
         }
         j += 1;
     }
-    b.len()
+    eof.then_some(b.len())
 }
 
 /// Oracle 的 q'X…X' 字符串，`start` 指向定界符 X。
-fn scan_q_quote(b: &[u8], start: usize) -> usize {
-    let Some(&open) = b.get(start) else { return b.len() };
+fn scan_q_quote(b: &[u8], start: usize, eof: bool) -> Option<usize> {
+    let Some(&open) = b.get(start) else { return eof.then_some(b.len()) };
     let close = match open {
         b'[' => b']',
         b'{' => b'}',
@@ -277,37 +425,50 @@ fn scan_q_quote(b: &[u8], start: usize) -> usize {
     let mut j = start + 1;
     while j + 1 < b.len() {
         if b[j] == close && b[j + 1] == b'\'' {
-            return j + 2;
+            return Some(j + 2);
         }
         j += 1;
     }
-    b.len()
+    eof.then_some(b.len())
 }
 
-/// PG 的 `$标签$` 或 `$$`：返回标签长度（含两端的 `$`），不是标签时返回 None。
-fn dollar_tag_len(b: &[u8], i: usize) -> Option<usize> {
+enum Tag {
+    Len(usize),
+    No,
+    Wait,
+}
+
+/// PG 的 `$标签$` 或 `$$`：标签长度（含两端的 `$`）。
+fn dollar_tag_len(b: &[u8], i: usize, eof: bool) -> Tag {
     let mut j = i + 1;
-    if b.get(j) == Some(&b'$') {
-        return Some(2);
-    }
-    if !b.get(j).is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_') {
-        return None;
+    match b.get(j) {
+        None if !eof => return Tag::Wait,
+        Some(b'$') => return Tag::Len(2),
+        Some(c) if c.is_ascii_alphabetic() || *c == b'_' => {}
+        _ => return Tag::No,
     }
     while j < b.len() && (b[j].is_ascii_alphanumeric() || b[j] == b'_') {
         j += 1;
     }
-    (b.get(j) == Some(&b'$')).then_some(j - i + 1)
+    match b.get(j) {
+        Some(b'$') => Tag::Len(j - i + 1),
+        None if !eof => Tag::Wait,
+        _ => Tag::No,
+    }
 }
 
-fn scan_dollar(b: &[u8], i: usize, tag_len: usize) -> usize {
+fn scan_dollar(b: &[u8], i: usize, tag_len: usize, eof: bool) -> Option<usize> {
     let tag = &b[i..i + tag_len];
     let body = i + tag_len;
-    b[body..].windows(tag_len).position(|w| w == tag).map_or(b.len(), |p| body + p + tag_len)
+    match b[body..].windows(tag_len).position(|w| w == tag) {
+        Some(p) => Some(body + p + tag_len),
+        None => eof.then_some(b.len()),
+    }
 }
 
 /// 语句开头是否是 PL/SQL 块（Oracle/达梦）。
 fn starts_plsql(s: &[u8]) -> bool {
-    let words = leading_words(s, 6);
+    let (words, _) = leading_words(s, 6);
     let w = |k: usize| words.get(k).map(String::as_str).unwrap_or("");
     match w(0) {
         "DECLARE" | "BEGIN" => true,
@@ -325,7 +486,13 @@ fn starts_plsql(s: &[u8]) -> bool {
     }
 }
 
-fn leading_words(s: &[u8], n: usize) -> Vec<String> {
+/// 开头的 n 个单词是否已经完整：取词停在文本末尾之前（末尾的单词可能还没读完）。
+fn words_complete(s: &[u8], n: usize) -> bool {
+    leading_words(s, n).1 < s.len()
+}
+
+/// 开头的至多 n 个单词（大写），以及取词停下的位置。
+fn leading_words(s: &[u8], n: usize) -> (Vec<String>, usize) {
     let mut out = Vec::new();
     let mut j = 0;
     while out.len() < n {
@@ -341,7 +508,7 @@ fn leading_words(s: &[u8], n: usize) -> Vec<String> {
         }
         out.push(String::from_utf8_lossy(&s[start..j]).to_ascii_uppercase());
     }
-    out
+    (out, j)
 }
 
 #[cfg(test)]
@@ -510,5 +677,125 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// 按伪随机长度（1..=max 字节，切在字符边界上）把文本切块喂入。
+    fn split_in_chunks(sql: &str, family: Family, seed: u64, max: usize) -> Vec<SqlStatement> {
+        let mut s = StreamSplitter::new(family);
+        let mut out = Vec::new();
+        let mut rng = seed;
+        let mut pos = 0;
+        while pos < sql.len() {
+            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let mut end = (pos + 1 + (rng >> 33) as usize % max).min(sql.len());
+            while !sql.is_char_boundary(end) {
+                end += 1;
+            }
+            out.extend(s.feed(&sql[pos..end]));
+            pos = end;
+        }
+        out.extend(s.finish());
+        out
+    }
+
+    const FAMILIES: [Family; 4] = [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng];
+
+    /// 上面各测试用过的文本，加上结构可能恰好被切开的例子。
+    const SAMPLES: &[&str] = &[
+        "SELECT 1; SELECT 2",
+        "  SELECT 1 ;\n\n",
+        ";;; \n ;",
+        "-- 只有注释\n/* 还有 */",
+        "SELECT '数洞;'; SELECT 2",
+        "SELECT 'a;b'; SELECT \"c;d\"; SELECT `e;f`",
+        "SELECT 'it''s; ok', 'a\\';b'; SELECT 2",
+        "-- x;\nSELECT 1; # y;\nSELECT 2 /* ; */;",
+        "SELECT 5--2; SELECT 1",
+        "DELIMITER $$\nCREATE PROCEDURE p() BEGIN SELECT 1; SELECT 2; END$$\nDELIMITER ;\nSELECT 3;",
+        "SELECT 0;\ndelimiter //\nSELECT 1//",
+        "SELECT a,\n  delimiter AS d FROM t",
+        "CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql; SELECT 1",
+        "DO $body$ BEGIN PERFORM 1; END $body$; SELECT 2",
+        "SELECT $1; SELECT 2",
+        "SELECT E'a\\';b'; SELECT 2",
+        "SELECT 'a\\'; SELECT 2",
+        "/* a /* b */ ; */ SELECT 1; SELECT 2",
+        "SELECT 5--2;\nSELECT 1",
+        "BEGIN\n  NULL;\n  NULL;\nEND;\n/\nSELECT 1 FROM DUAL;",
+        "CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n  NULL;\nEND;\n/\n",
+        "create or replace editionable function f return number is begin return 1; end;\n/",
+        "SELECT 1 FROM DUAL\n/\nSELECT 2 FROM DUAL\n  /  \n",
+        "SELECT 4 / 2 FROM DUAL;",
+        "SELECT q'[a;b]' FROM DUAL; SELECT Q'#c;d#' FROM DUAL",
+        "SELECT nq'[it's;x]' FROM dual; SELECT 2 FROM dual",
+        "DECLARE\n  x INT;\nBEGIN\n  x := 1;\nEND;\n/\nSELECT 1;",
+        "SELECT 'abc; SELECT 2",
+        "\u{feff}SELECT 1;\u{3000}SELECT 2\u{3000}",
+        "DELIMITER\nSELECT 1;",
+        "-- 注释;\nSELECT '数据;\\' FROM t; /* 块 */ # 井\nDELIMITER //\n\
+         SELECT $$体;$$, $a$标;$a$, q'[中;]', nq'<x>' FROM DUAL//\nDELIMITER ;\n\
+         SELECT \"双;\", `反;` ;\nBEGIN NULL; END;\n/\n\u{3000}SELECT 1 -- 行尾\u{feff}",
+        "SELECT 1;\r\nSELECT 2;\r\n/\r\nCREATE OR REPLACE\r\n  PACKAGE pk AS x INT; END;\r\n/\r\n",
+        "INSERT INTO t VALUES ('a''b', E'\\\\', $q$x$q$, 'c'); -- 末尾注释",
+        "SELECT 1 /*+ hint */; SELECT /*! 2 */; #",
+    ];
+
+    #[test]
+    fn chunked_feeding_matches_whole_text() {
+        for sql in SAMPLES {
+            for family in FAMILIES {
+                let whole = split_statements(sql, family);
+                for max in [1, 2, 3, 5, 8, 64] {
+                    for seed in 0..10 {
+                        assert_eq!(
+                            split_in_chunks(sql, family, seed, max),
+                            whole,
+                            "{family:?} max={max} seed={seed}：{sql:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_two_chunk_split_matches_whole_text() {
+        for sql in SAMPLES {
+            for family in FAMILIES {
+                let whole = split_statements(sql, family);
+                for (k, _) in sql.char_indices().skip(1) {
+                    let mut s = StreamSplitter::new(family);
+                    let mut out = s.feed(&sql[..k]);
+                    out.extend(s.feed(&sql[k..]));
+                    out.extend(s.finish());
+                    assert_eq!(out, whole, "{family:?} 切在 {k}：{sql:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn line_numbers_and_offsets_across_chunks() {
+        let sql = "SELECT 1;\nSELECT 2;\n\n  -- c\n  SELECT\n3;\nSELECT '多\n行'; SELECT 4";
+        let lines: Vec<usize> = split_statements(sql, Family::Postgres).iter().map(|s| s.line).collect();
+        assert_eq!(lines, [1, 2, 4, 7, 8]);
+        // 长文本分块喂入：位置和行号是全文中的
+        let big: String = (0..2000).map(|n| format!("INSERT INTO t VALUES ({n}, '行{n}');\n")).collect();
+        let out = split_in_chunks(&big, Family::MySql, 7, 4096);
+        assert_eq!(out.len(), 2000);
+        for (n, s) in out.iter().enumerate() {
+            assert_eq!(&big[s.start..s.end], s.text);
+            assert_eq!(s.line, n + 1);
+        }
+    }
+
+    #[test]
+    fn statements_come_out_as_soon_as_complete() {
+        let mut s = StreamSplitter::new(Family::MySql);
+        assert!(s.feed("SELECT 1").is_empty());
+        let done = s.feed("; SELECT 2;\nSELECT");
+        assert_eq!(done.iter().map(|s| s.text.as_str()).collect::<Vec<_>>(), ["SELECT 1", "SELECT 2"]);
+        assert!(s.feed(" 3").is_empty());
+        assert_eq!(s.finish()[0].text, "SELECT 3");
     }
 }
