@@ -114,7 +114,7 @@ async function loadChildren(api: Api, profiles: Profile[], k: NodeKey): Promise<
     }
     case 'k': {
       const obj = (name: string, comment: string | null, extra?: string, routineKind?: RoutineInfo['kind']) => ({
-        key: encodeKey({ type: 'o', profileId: k.profileId, schema: k.schema, kind: k.kind, name }),
+        key: encodeKey({ type: 'o', profileId: k.profileId, schema: k.schema, kind: k.kind, name, routineKind }),
         label: name,
         comment,
         extra,
@@ -173,12 +173,6 @@ export default function ObjectTree() {
     staleTime: 30_000,
   })
   const relations = relationsError ? [] : relationsData
-
-  /** 对象节点的程序类型（函数、过程、包、包体），从已加载的上一层取。 */
-  const routineKindOf = (k: Extract<NodeKey, { type: 'o' }>) =>
-    loaded[encodeKey({ type: 'k', profileId: k.profileId, schema: k.schema, kind: k.kind })]?.items.find(
-      (i) => i.key === encodeKey(k),
-    )?.routineKind
 
   const load = useCallback(
     async (key: string) => {
@@ -290,7 +284,7 @@ export default function ObjectTree() {
     const items: NonNullable<MenuProps['items']> = []
     const target = targetKind(k.kind)
     if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
-    if (ddlKind(k.kind, routineKindOf(k))) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
+    if (ddlKind(k.kind, k.routineKind)) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     if (target) {
       // generateMenu 的项是 antd 菜单项的子集
       const children = generateMenu(target, relations) as NonNullable<MenuProps['items']>
@@ -322,7 +316,7 @@ export default function ObjectTree() {
         insertSql(sql, k.profileId)
       } else if (key === 'view-data') openData(k)
       else if (key === 'ddl' && k.type === 'o') {
-        const kind = ddlKind(k.kind, routineKindOf(k))
+        const kind = ddlKind(k.kind, k.routineKind)
         const driver = profiles.find((p) => p.id === k.profileId)?.driver
         if (kind && driver) setDdl({ profileId: k.profileId, driver, schema: k.schema, kind, name: k.name })
       } else if (key === 'new-query') newQuery(k.profileId)

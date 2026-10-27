@@ -28,6 +28,7 @@ describe('对象树节点', () => {
       { type: 's', profileId: 'p1', schema: 'my.schema' },
       { type: 'k', profileId: 'p1', schema: 'HR', kind: 'materialized_views' },
       { type: 'o', profileId: 'p1', schema: 'public', kind: 'tables', name: '订单 明细' },
+      { type: 'o', profileId: 'p1', schema: 'HR', kind: 'routines', name: 'PKG', routineKind: 'package_body' },
       { type: 'l', profileId: 'p1', schema: 'public', table: 'orders', column: 'id' },
     ]
     for (const k of keys) expect(decodeKey(encodeKey(k))).toEqual(k)

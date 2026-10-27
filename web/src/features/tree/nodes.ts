@@ -43,7 +43,7 @@ export function categoriesFor(driver: DriverId): Category[] {
  * - `s` schema：s、profileId、schema
  * - `g` 系统 schema 分组：g、profileId
  * - `k` 分类：k、profileId、schema、kind
- * - `o` 对象：o、profileId、schema、kind、name
+ * - `o` 对象：o、profileId、schema、kind、name，程序另有 routineKind（包和包体同名，靠它区分）
  * - `l` 列：l、profileId、schema、table、column
  */
 export type NodeKey =
@@ -51,7 +51,14 @@ export type NodeKey =
   | { type: 's'; profileId: string; schema: string }
   | { type: 'g'; profileId: string }
   | { type: 'k'; profileId: string; schema: string; kind: CategoryKind }
-  | { type: 'o'; profileId: string; schema: string; kind: CategoryKind; name: string }
+  | {
+      type: 'o'
+      profileId: string
+      schema: string
+      kind: CategoryKind
+      name: string
+      routineKind?: RoutineInfo['kind']
+    }
   | { type: 'l'; profileId: string; schema: string; table: string; column: string }
 
 const SEP = '\u0001'
@@ -66,14 +73,14 @@ export function encodeKey(k: NodeKey): string {
     case 'k':
       return [k.type, k.profileId, k.schema, k.kind].join(SEP)
     case 'o':
-      return [k.type, k.profileId, k.schema, k.kind, k.name].join(SEP)
+      return [k.type, k.profileId, k.schema, k.kind, k.name, ...(k.routineKind ? [k.routineKind] : [])].join(SEP)
     case 'l':
       return [k.type, k.profileId, k.schema, k.table, k.column].join(SEP)
   }
 }
 
 export function decodeKey(s: string): NodeKey {
-  const [type, profileId, a, b, c] = s.split(SEP)
+  const [type, profileId, a, b, c, d] = s.split(SEP)
   switch (type) {
     case 'c':
       return { type, profileId }
@@ -84,7 +91,9 @@ export function decodeKey(s: string): NodeKey {
     case 'k':
       return { type, profileId, schema: a, kind: b as CategoryKind }
     case 'o':
-      return { type, profileId, schema: a, kind: b as CategoryKind, name: c }
+      return d
+        ? { type, profileId, schema: a, kind: b as CategoryKind, name: c, routineKind: d as RoutineInfo['kind'] }
+        : { type, profileId, schema: a, kind: b as CategoryKind, name: c }
     case 'l':
       return { type, profileId, schema: a, table: b, column: c }
     default:

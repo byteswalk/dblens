@@ -133,9 +133,10 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
         const sel = ed?.getSelection()
         const model = ed?.getModel()
         if (!ed || !sel || !model) return
-        // 光标前已有内容时另起一行，不和原有的 SQL 连在一起
+        // 光标前、后已有内容时各另起一行，不和原有的 SQL 连在一起
         const before = model.getLineContent(sel.startLineNumber).slice(0, sel.startColumn - 1)
-        const text = before.trim() ? `\n${sql}` : sql
+        const after = model.getLineContent(sel.endLineNumber).slice(sel.endColumn - 1)
+        const text = `${before.trim() ? '\n' : ''}${sql}${after.trim() ? '\n' : ''}`
         ed.executeEdits('insert', [{ range: sel, text, forceMoveMarkers: true }])
         ed.focus()
       }),

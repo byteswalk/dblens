@@ -143,6 +143,23 @@ describe('执行器', () => {
     expect(rt(tabId).exec.waitingForMore).toBe(true)
   })
 
+  it('重新执行：先取消还在等续取的结果，结束后再提交', async () => {
+    const r = new Runner(fakeApi(), tabId)
+    await r.run('select * from t', 0)
+    const ws = FakeWs.last
+    const batch = Array.from({ length: 500 }, (_, i) => [{ t: 'int', v: i }])
+    ws.push({ type: 'statement_start', index: 0, total: 1, start: 0, end: 15, info: { keyword: 'SELECT' } })
+    ws.push({ type: 'result_start', columns: [{ name: 'n', type_name: 'int', nullable: false }] })
+    ws.push({ type: 'rows', rows: batch })
+    const again = r.rerun('select * from t order by n')
+    await flush()
+    expect(ws.sent.map((m) => m.type)).toEqual(['exec', 'cancel'])
+    ws.push({ type: 'done' })
+    await again
+    expect(ws.sent.at(-1)).toMatchObject({ type: 'exec', sql: 'select * from t order by n' })
+    expect(rt(tabId).running).toBe(true)
+  })
+
   it('关闭时关闭会话并丢掉状态', async () => {
     const api = fakeApi()
     const r = new Runner(api, tabId)

@@ -7,7 +7,7 @@
 //!   - `cursor`：只执行这个 UTF-16 偏移所在的那条语句；
 //!   - `explain`：只生成执行计划（只能有一条语句，或用 `cursor` 选出一条）；
 //! - `{"type":"fetch_more","max_rows":500}`：取下一批行；
-//! - `{"type":"cancel"}`：取消正在执行的语句。
+//! - `{"type":"cancel"}`：取消正在执行的语句；正在等 `fetch_more` 时丢掉还没读的行，接着发后面的事件直到 `done`。
 //!
 //! 服务端发送 `SessionEvent`（`statement_start`、`result_start`、`rows`、`result_end`、`affected`、`message`、
 //! `statement_end`、`confirm_required`、`failed`、`done`），协议层面的错误发 `{"type":"error","error":{…}}`。
@@ -118,6 +118,31 @@ pub async fn upgrade(
     Ok(ws.on_upgrade(move |socket| scope_lang(lang, run(socket, service, id))))
 }
 
+/// 发给 pump 的额度为 0：客户端取消了还没读完的结果。
+const STOP: usize = 0;
+
+/// 客户端取消了还没读完的结果：在服务端读完并丢掉剩下的行（驱动要求读完才能执行下一条），
+/// 其他事件照常发出，直到 `done`。
+async fn discard(service: &Service, id: SessionId, sql: &str, out: &mpsc::Sender<String>) {
+    loop {
+        match service.sessions.next(id, 1000).await {
+            Ok(Some(SessionEvent::Rows { .. } | SessionEvent::ResultEnd)) => {}
+            Ok(Some(event)) => {
+                let done = event == SessionEvent::Done;
+                let _ = out.send(encode(event, sql)).await;
+                if done {
+                    return;
+                }
+            }
+            Ok(None) => return,
+            Err(e) => {
+                let _ = out.send(error_message(&e)).await;
+                return;
+            }
+        }
+    }
+}
+
 /// 从会话取事件发给客户端；每发出装满的一批行就等一次 `fetch_more`。
 async fn pump(
     service: Arc<Service>,
@@ -139,7 +164,8 @@ async fn pump(
                 }
                 if full {
                     match credit.recv().await {
-                        Some(n) => max_rows = n.max(1),
+                        Some(STOP) => return discard(&service, id, &sql, &out).await,
+                        Some(n) => max_rows = n,
                         None => break,
                     }
                 }
@@ -206,12 +232,16 @@ async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId) {
             }
             ClientMsg::FetchMore { max_rows } => {
                 if let Some(c) = &credit {
-                    let _ = c.try_send(max_rows);
+                    let _ = c.try_send(max_rows.max(1));
                 }
             }
             ClientMsg::Cancel => {
                 if let Err(e) = service.sessions.cancel(id).await {
                     let _ = out.send(error_message(&e)).await;
+                }
+                // 正在等 fetch_more 时语句并没有在执行，数据库层面的取消不起作用：让 pump 丢掉剩下的行（STOP）
+                if let Some(c) = &credit {
+                    let _ = c.try_send(STOP);
                 }
             }
         }

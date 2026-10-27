@@ -180,6 +180,26 @@ export class Runner {
     }
   }
 
+  /**
+   * 先停下正在执行的（包括还在等续取的结果），再执行 sql。数据标签换过滤条件、排序或刷新时用：
+   * 首批结果读完后服务端在等续取，执行状态一直是 running，run 会忽略新的提交。
+   */
+  async rerun(sql: string) {
+    if (this.rt().running) {
+      const stopped = new Promise<void>((resolve) => {
+        const off = useRuntime.subscribe((s) => {
+          if (!s.tabs[this.tabId]?.running) {
+            off()
+            resolve()
+          }
+        })
+      })
+      this.cancel()
+      await stopped
+    }
+    await this.run(sql, 0)
+  }
+
   /** 用户确认后，从需要确认的那条语句接着执行。 */
   async confirm() {
     const { exec, submission } = this.rt()

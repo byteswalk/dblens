@@ -151,7 +151,7 @@
     - `cursor`：只执行这个 UTF-16 偏移所在的语句；
     - `explain`：只生成执行计划。
 - `{"type":"fetch_more","max_rows":500}`：取下一批行。
-- `{"type":"cancel"}`：取消。
+- `{"type":"cancel"}`：取消。服务端正在等 `fetch_more` 时（语句并没有在执行），丢掉还没读的行，接着发后面的事件直到 `done`（M1c2 加入）。
 
 ### 服务端发送
 

@@ -285,6 +285,29 @@ async fn cancel_over_websocket() {
 }
 
 #[tokio::test]
+async fn cancel_while_waiting_for_fetch_more_discards_the_rest() {
+    let (mut ws, _, _) = ws_session().await;
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 10", "max_rows": 2})).await;
+    for _ in 0..3 {
+        recv(&mut ws).await;
+    }
+    assert!(quiet(&mut ws).await, "在等 fetch_more");
+    send(&mut ws, json!({"type": "cancel"})).await;
+    let mut types = Vec::new();
+    loop {
+        let v = recv(&mut ws).await;
+        types.push(v["type"].as_str().unwrap().to_string());
+        if v["type"] == "done" {
+            break;
+        }
+    }
+    assert!(!types.iter().any(|t| t == "rows"), "剩下的行被丢掉：{types:?}");
+    // 会话照常可用
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 1"})).await;
+    assert_eq!(recv(&mut ws).await["type"], "statement_start");
+}
+
+#[tokio::test]
 async fn disconnect_mid_result_frees_the_session() {
     let (mut ws, service, sid) = ws_session().await;
     send(&mut ws, json!({"type": "exec", "sql": "ROWS 10", "max_rows": 1})).await;

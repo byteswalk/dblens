@@ -31,7 +31,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
   const load = async (d: DataTarget) => {
     try {
       const sql = await api.dataSql(tab.profileId, d.schema, { object: d.object, filter: d.filter, order: d.order })
-      await runner.run(sql, 0)
+      await runner.rerun(sql)
     } catch (e) {
       message.error((e as Error).message)
     }
@@ -85,7 +85,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           onPressEnter={() => apply({ filter: filter.trim() || undefined })}
         />
         <Tooltip title={t('editor.data.refresh')} mouseEnterDelay={0.6}>
-          <Button type="text" size="small" disabled={!profile || rt.running} onClick={() => void load(data)}>
+          <Button type="text" size="small" disabled={!profile} onClick={() => void load(data)}>
             <IconRefresh size={16} />
           </Button>
         </Tooltip>
