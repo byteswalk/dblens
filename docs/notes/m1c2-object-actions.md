@@ -61,6 +61,11 @@ web/src/
 
 - 程序节点的键增加 routineKind：包和包体同名，原来的键相同，查看包体的 DDL 会取成包。这是实测时发现的。
 
+## 依赖
+
+- 2026-10-26 复查（`node scripts/check-deps.mjs`）：共 75 个直接依赖，升级 i18next 26.5.2 → 26.5.3（发布满 7 天的最新版）。
+- 未满 7 天暂不升级：@tanstack/react-query 5.105.0、antd 6.6.8、react-i18next 17.1.9、react-resizable-panels 4.15.0、simple-icons 16.36.0、minijinja 3.0.4、uuid 1.29.0。
+
 ## 验证
 
 - 后端：fmt、clippy 通过；全部测试在 `DBLENS_LANG=en` 下对 5 个实库通过。
