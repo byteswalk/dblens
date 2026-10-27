@@ -20,7 +20,7 @@ const POSTGRES: &str = include_str!("../../sql/postgres.sql");
 const ORACLE: &str = include_str!("../../sql/oracle.sql");
 const DAMENG: &str = include_str!("../../sql/dameng.sql");
 
-const ALL_VARIANTS: [Variant; 12] = [
+pub(crate) const ALL_VARIANTS: [Variant; 12] = [
     Variant::MySql,
     Variant::MariaDb,
     Variant::TiDb,

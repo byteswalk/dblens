@@ -4,7 +4,7 @@
 
 mod assemble;
 mod rows;
-mod template;
+pub(crate) mod template;
 
 use serde::{Deserialize, Serialize};
 
