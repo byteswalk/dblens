@@ -179,7 +179,7 @@
 | POST | `/profiles/{id}/imports/ddl` | `{schema, table, create}` → `{sql}`：新建表的建表语句 |
 | POST | `/imports` | 提交导入任务，返回 201 和 `{"id"}`。请求体：`{profile_id, source, file, schema, table, create?, mapping: [{source, target}], mode, transaction?, batch_size?, on_error?, empty_as_string?}` |
 | POST | `/sql-files` | 提交执行 SQL 文件的任务，返回 201 和 `{"id"}`。请求体：`{profile_id, source, encoding?, schema?, continue_on_error?, transaction?}` |
-| GET | `/tasks/{id}` | 任务状态：`{id, kind, state, phase, progress, warnings, error, error_line, committed_line, failures, confirm, report}` |
+| GET | `/tasks/{id}` | 任务状态：`{id, kind, state, phase, progress, warnings, error, error_line, committed_line, failures, confirm, report, remaining}` |
 | DELETE | `/tasks/{id}` | 进行中（或等待确认）时取消；已结束时删除任务和报告。204 |
 | POST | `/tasks/{id}/confirm` | `{yes}`：回答确认。不在等待确认时 400 |
 | GET | `/tasks/{id}/report?token=…` | 下载报告（导入的出错报告 CSV、SQL 文件的执行日志）。任务过期前可以多次下载 |
@@ -195,6 +195,21 @@
 - `failures`：至多 100 条 `{index, line, error, text}`。导入为跳过的行（`line` 为文件行号），SQL 文件为失败的语句（`index` 为语句序号）。
 - 上传大小上限：设置项 `ui.import.upload_limit_mb`（MB），默认 2048。超过时 400，已收到的部分删除。
 - 同时进行的任务最多 4 个，超过时 409。
+
+### 表设计器（M3 加入）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/profiles/{id}/design/caps` | 方言能力和类型目录：`{reorder, checks, descending_index, on_delete, on_update, index_methods, types: [{name, params, char_unit}]}`；`params` 为 `none` / `length` / `precision_scale` |
+| GET | `/profiles/{id}/design/table?schema=&name=` | 原表（直接从库读取，不走缓存）：`{table, storage: {engine, charset, collation, tablespace, row_count}, fingerprint}` |
+| POST | `/profiles/{id}/design/preview` | 预览，不执行：`{errors, changes, statements, rebuild: {reasons, active, refused}, warnings, transactional, denied, confirm, conflict}` |
+| POST | `/profiles/{id}/design/apply` | 执行，返回 201 和 `{"id"}`（任务，`kind` 为 `design`，状态用 `/tasks/{id}`）。有校验错误、原表已被修改、不能重建、没有改动时 400，被执行策略拒绝时 403 |
+
+- 请求体：`{schema, name, draft, renames: {columns, indexes}, rebuild, fingerprint}`。`name` 为已有表的名字，新建表时为 null；`draft` 是完整的表结构（与 `/schemas/{schema}/tables` 返回的相同）；`renames` 为"新名 → 原名"；`rebuild` 为用户手动选择重建；`fingerprint` 为打开时读到的指纹，执行前核对。
+- `errors`：`[{section, row, field, message}]`，`section` 为 `table` / `columns` / `primary_key` / `indexes` / `foreign_keys` / `uniques` / `checks`，`row` 是该部分中的序号（不含标为删除的行）。
+- `changes`：变更列表，每项 `{kind, …}`，`kind` 为 `create_table`、`set_table_comment`、`add_column`、`drop_column`、`rename_column`、`alter_column`、`move_column`、`add_*` / `drop_*`（`primary_key`、`unique`、`check`、`foreign_key`、`index`）、`rename_index`。
+- `statements`：`[{kind: "sql", sql, changes} | {kind: "count_check", source, target, changes}]`；`count_check` 是重建时由程序执行的核对行数。
+- 任务失败时 `remaining` 为没有执行的语句（以 `;` 分隔），PG 家族整体回滚时为 null。
 
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 
