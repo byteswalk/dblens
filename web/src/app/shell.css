@@ -591,3 +591,19 @@ body {
 [data-theme='dark'] .db-icon rect {
   fill: var(--db-icon-dark);
 }
+
+/* 导入向导、执行 SQL 文件对话框（M2b） */
+.form-label {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.ddl-preview {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: pre-wrap;
+}

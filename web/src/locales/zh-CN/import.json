@@ -1,0 +1,141 @@
+{
+  "title": "导入数据",
+  "cancel": "取消",
+  "back": "上一步",
+  "next": "下一步",
+  "steps": {
+    "file": "选择文件",
+    "target": "目标与列映射",
+    "options": "写入选项"
+  },
+  "file": {
+    "choose": "选择文件…",
+    "change": "换一个文件…",
+    "filter": "CSV / Excel",
+    "all": "所有文件",
+    "unknownFormat": "不认识的扩展名，按 CSV 读取",
+    "encoding": "编码",
+    "auto": "自动",
+    "delimiter": "分隔符",
+    "delimiters": {
+      "comma": "逗号",
+      "semicolon": "分号",
+      "tab": "Tab",
+      "pipe": "竖线"
+    },
+    "header": "首行是列名",
+    "sheet": "工作表",
+    "excelNote": "Excel 文件会整个读入内存，数据很多时建议另存为 CSV 再导入",
+    "ragged": "{{count}} 行的列数与列名不一致（多出的忽略，缺少的为 NULL）。",
+    "badEncoding": "{{count}} 个单元格有无法转码的字符，请检查编码。",
+    "errorCells": "{{count}} 个错误值（如 #N/A）按 NULL 导入。",
+    "previewNote": "预览前 {{count}} 行"
+  },
+  "target": {
+    "schema": "Schema",
+    "existing": "导入到已有表",
+    "new": "导入到新表",
+    "newName": "新表名",
+    "chooseTable": "选择表",
+    "fileColumn": "文件列",
+    "sample": "第一行的值",
+    "tableColumn": "表列",
+    "skip": "（不导入）",
+    "badCells": "预览中 {{count}} 个值不能转换为这一列的类型，例如：{{first}}",
+    "columnName": "列名",
+    "type": "类型",
+    "nullable": "可空",
+    "key": "主键",
+    "problem": {
+      "empty": "列名不能为空",
+      "duplicate": "列名重复"
+    }
+  },
+  "types": {
+    "int": "整数",
+    "bigint": "长整数",
+    "decimal": "精确小数",
+    "float": "浮点数",
+    "bool": "布尔",
+    "var_char": "字符串",
+    "text": "长文本",
+    "date": "日期",
+    "time": "时间",
+    "timestamp": "日期时间"
+  },
+  "options": {
+    "mode": "写入方式",
+    "modes": {
+      "append": "追加",
+      "replace": "清空后导入",
+      "upsert": "按主键更新"
+    },
+    "upsertBlocked": {
+      "no_key": "表没有主键",
+      "key_unmapped": "主键列没有全部映射"
+    },
+    "replaceWarn": "将删除表中的全部数据（DELETE，与导入在同一个事务中，失败时一起回滚；大表清空较慢）",
+    "mysqlUpsert": "MySQL 系：任何唯一键冲突都会走更新，不只是主键",
+    "transaction": "事务",
+    "batch": "分批提交",
+    "whole": "整体一个事务",
+    "batchSize": "每批行数",
+    "stop": "出错时停止",
+    "skip": "出错时跳过",
+    "wholeNote": "任何一行出错，全部回滚",
+    "stopNote": "出错时回滚出错的那一批并停止，之前的批已提交",
+    "skipNote": "出错时把那一批逐行重试，失败的行写入出错报告，其余照常写入",
+    "empty": "空单元格",
+    "emptyNull": "写 NULL",
+    "emptyString": "文本列写空字符串",
+    "prodNote": "这是生产环境的连接，开始前会再次确认",
+    "prodTitle": "导入到生产环境",
+    "prodContent": "将以“{{mode}}”的方式导入到 {{table}}。",
+    "start": "开始导入"
+  },
+  "task": {
+    "importTitle": "导入 {{file}} → {{table}}",
+    "scanning": "正在扫描",
+    "creating": "正在建表",
+    "clearing": "正在清空表",
+    "rows": "已读 {{read}} 行，已写 {{written}} 行，跳过 {{skipped}} 行",
+    "statements": "已执行 {{done}} / {{total}} 条，失败 {{failed}} 条",
+    "waiting": "等待确认",
+    "cancel": "取消",
+    "done": "{{title}}：完成",
+    "failed": "{{title}}：失败",
+    "cancelled": "{{title}}：已取消"
+  },
+  "result": {
+    "written": "写入 {{count}} 行",
+    "skipped": "跳过 {{count}} 行",
+    "warnings": "{{count}} 处警告（列数不一致、转码失败或错误值）",
+    "errorLine": "出错位置：第 {{line}} 行",
+    "committed": "已提交到第 {{line}} 行",
+    "report": "下载出错报告",
+    "openData": "打开数据"
+  },
+  "sql": {
+    "title": "执行 SQL 文件",
+    "start": "开始执行",
+    "taskTitle": "执行 {{file}}（{{connection}}）",
+    "defaultSchema": "连接的默认 schema",
+    "onError": "出错时",
+    "continue": "继续执行下一条",
+    "transaction": "整体一个事务（全部成功才提交）",
+    "transactionNote": "出错时固定为停止并回滚。MySQL、Oracle、达梦的 DDL 会隐式提交，不能回滚；文件中不应再有自己的事务语句。",
+    "scanNote": "开始后先扫描整个文件：统计语句数，检查需要确认的语句（如 DROP、不带 WHERE 的 DELETE）。",
+    "prodNote": "这是生产环境的连接，扫描后会列出语句数和危险语句，确认后才执行",
+    "confirmTitle": "确认执行 SQL 文件",
+    "confirmContent": "文件共 {{total}} 条语句。以下语句需要确认：",
+    "confirmMore": "另有 {{count}} 条需要确认的语句没有列出",
+    "confirmOk": "确认执行",
+    "result": "成功 {{ok}} 条，失败 {{failed}} 条，影响 {{affected}} 行",
+    "log": "下载执行日志",
+    "failures": "查看失败的语句",
+    "failuresTitle": "失败的语句（{{count}} 条）",
+    "line": "第 {{line}} 行",
+    "openInQuery": "在新查询标签中打开",
+    "moreInLog": "只列出前 100 条，其余见执行日志"
+  }
+}

@@ -21,6 +21,8 @@ interface UiState {
   /** 连接对话框：打开时 profileId 为 null 表示新建。 */
   connectionDialog: { profileId: string | null } | null
   settingsOpen: boolean
+  /** 要刷新的对象树节点（导入建表、执行 SQL 文件之后）：schema 为 null 时刷新整个连接；n 每次加一。 */
+  treeRefresh: { profileId: string; schema: string | null; n: number } | null
   setSide(side: SideKey | null): void
   /** 点活动栏：点当前侧栏则折叠，否则切换过去。 */
   toggleSide(side: SideKey): void
@@ -28,6 +30,7 @@ interface UiState {
   openConnection(profileId: string | null): void
   closeConnection(): void
   setSettingsOpen(open: boolean): void
+  refreshTree(profileId: string, schema: string | null): void
 }
 
 export const useUi = create<UiState>()((set, get) => ({
@@ -35,6 +38,7 @@ export const useUi = create<UiState>()((set, get) => ({
   selectedProfile: null,
   connectionDialog: null,
   settingsOpen: false,
+  treeRefresh: null,
   setSide: (side) => {
     set({ side })
     useSettings.getState().set(SIDE_KEY, side ?? 'none')
@@ -44,4 +48,5 @@ export const useUi = create<UiState>()((set, get) => ({
   openConnection: (profileId) => set({ connectionDialog: { profileId } }),
   closeConnection: () => set({ connectionDialog: null }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  refreshTree: (profileId, schema) => set({ treeRefresh: { profileId, schema, n: (get().treeRefresh?.n ?? 0) + 1 } }),
 }))

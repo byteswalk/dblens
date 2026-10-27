@@ -1,0 +1,141 @@
+{
+  "title": "Import Data",
+  "cancel": "Cancel",
+  "back": "Back",
+  "next": "Next",
+  "steps": {
+    "file": "Choose File",
+    "target": "Target and Columns",
+    "options": "Write Options"
+  },
+  "file": {
+    "choose": "Choose File…",
+    "change": "Choose Another File…",
+    "filter": "CSV / Excel",
+    "all": "All Files",
+    "unknownFormat": "Unknown extension; reading as CSV",
+    "encoding": "Encoding",
+    "auto": "Auto",
+    "delimiter": "Delimiter",
+    "delimiters": {
+      "comma": "Comma",
+      "semicolon": "Semicolon",
+      "tab": "Tab",
+      "pipe": "Pipe"
+    },
+    "header": "First row is header",
+    "sheet": "Worksheet",
+    "excelNote": "Excel files are read into memory as a whole; for large data, save as CSV first",
+    "ragged": "{{count}} rows have a different number of columns from the header (extra ignored, missing as NULL).",
+    "badEncoding": "{{count}} cells have characters that could not be decoded; check the encoding.",
+    "errorCells": "{{count}} error values (such as #N/A) will be imported as NULL.",
+    "previewNote": "Previewing the first {{count}} rows"
+  },
+  "target": {
+    "schema": "Schema",
+    "existing": "Existing table",
+    "new": "New table",
+    "newName": "New table name",
+    "chooseTable": "Choose a table",
+    "fileColumn": "File column",
+    "sample": "First row",
+    "tableColumn": "Table column",
+    "skip": "(Skip)",
+    "badCells": "{{count}} values in the preview cannot be converted to this column's type, e.g. {{first}}",
+    "columnName": "Column",
+    "type": "Type",
+    "nullable": "Nullable",
+    "key": "Key",
+    "problem": {
+      "empty": "Column names cannot be empty",
+      "duplicate": "Duplicate column names"
+    }
+  },
+  "types": {
+    "int": "Integer",
+    "bigint": "Big integer",
+    "decimal": "Decimal",
+    "float": "Float",
+    "bool": "Boolean",
+    "var_char": "String",
+    "text": "Long text",
+    "date": "Date",
+    "time": "Time",
+    "timestamp": "Date and time"
+  },
+  "options": {
+    "mode": "Write mode",
+    "modes": {
+      "append": "Append",
+      "replace": "Replace all rows",
+      "upsert": "Update by primary key"
+    },
+    "upsertBlocked": {
+      "no_key": "The table has no primary key",
+      "key_unmapped": "Not all primary key columns are mapped"
+    },
+    "replaceWarn": "All rows in the table will be deleted (DELETE, in the same transaction as the import and rolled back on failure; slow for large tables)",
+    "mysqlUpsert": "MySQL family: any unique key conflict leads to an update, not only the primary key",
+    "transaction": "Transaction",
+    "batch": "Commit in batches",
+    "whole": "One transaction",
+    "batchSize": "Rows per batch",
+    "stop": "Stop on error",
+    "skip": "Skip on error",
+    "wholeNote": "Any failed row rolls back everything",
+    "stopNote": "On error, the failing batch is rolled back and the import stops; earlier batches stay committed",
+    "skipNote": "On error, the failing batch is retried row by row; failed rows go to the error report, others are written",
+    "empty": "Empty cells",
+    "emptyNull": "Write NULL",
+    "emptyString": "Empty string for text columns",
+    "prodNote": "This is a production connection; you will be asked to confirm before starting",
+    "prodTitle": "Import into production",
+    "prodContent": "Rows will be imported into {{table}} with \"{{mode}}\".",
+    "start": "Start Import"
+  },
+  "task": {
+    "importTitle": "Import {{file}} → {{table}}",
+    "scanning": "Scanning",
+    "creating": "Creating the table",
+    "clearing": "Clearing the table",
+    "rows": "{{read}} rows read, {{written}} written, {{skipped}} skipped",
+    "statements": "{{done}} / {{total}} statements run, {{failed}} failed",
+    "waiting": "Waiting for confirmation",
+    "cancel": "Cancel",
+    "done": "{{title}}: done",
+    "failed": "{{title}}: failed",
+    "cancelled": "{{title}}: cancelled"
+  },
+  "result": {
+    "written": "{{count}} rows written",
+    "skipped": "{{count}} rows skipped",
+    "warnings": "{{count}} warnings (column count mismatch, decoding failure or error values)",
+    "errorLine": "Error at line {{line}}",
+    "committed": "Committed up to line {{line}}",
+    "report": "Download Error Report",
+    "openData": "Open Data"
+  },
+  "sql": {
+    "title": "Run SQL File",
+    "start": "Run",
+    "taskTitle": "Run {{file}} ({{connection}})",
+    "defaultSchema": "Connection default schema",
+    "onError": "On error",
+    "continue": "Continue with the next statement",
+    "transaction": "One transaction (commit only if all succeed)",
+    "transactionNote": "Stops and rolls back on error. DDL in MySQL, Oracle and DM commits implicitly and cannot be rolled back; the file should not contain its own transaction statements.",
+    "scanNote": "The whole file is scanned first: statements are counted and those needing confirmation (such as DROP or DELETE without WHERE) are checked.",
+    "prodNote": "This is a production connection; after scanning, the statement count and risky statements are listed for confirmation",
+    "confirmTitle": "Confirm Running the SQL File",
+    "confirmContent": "The file has {{total}} statements. These need confirmation:",
+    "confirmMore": "{{count}} more statements needing confirmation are not listed",
+    "confirmOk": "Run",
+    "result": "{{ok}} succeeded, {{failed}} failed, {{affected}} rows affected",
+    "log": "Download Log",
+    "failures": "Failed Statements",
+    "failuresTitle": "Failed statements ({{count}})",
+    "line": "Line {{line}}",
+    "openInQuery": "Open in New Query",
+    "moreInLog": "Only the first 100 are listed; see the log for the rest"
+  }
+}
