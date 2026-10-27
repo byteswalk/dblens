@@ -63,6 +63,8 @@ web/src/
 - 新增 `csv` 1.4.0（MIT / Unlicense）。
 - 新增 `rust_xlsxwriter` 0.100.0（MIT / Apache-2.0，特性 `constant_memory`、`chrono`）。写计划时最新的 0.101.0 发布未满 7 天。
 - `dblens-api` 的 tokio 多开 `fs`、`io-util` 特性（下载时流式读文件）。
+- 2026-10-26 执行时复查（`node scripts/check-deps.mjs`）：共 77 个直接依赖，0 个可升级；未满 7 天的有 @tanstack/react-query 5.105.0、antd 6.6.8、i18next 26.5.11、react-i18next 17.1.9、react-resizable-panels 4.15.0、simple-icons 16.36.0、minijinja 3.0.4、rust_xlsxwriter 0.101.0、uuid 1.29.0。
+  - 本机经代理上网时，Node 的 `fetch` 默认不读 `HTTPS_PROXY`，查询会全部失败（输出"查询失败：fetch failed"，最后仍显示"0 个可升级"）。需要先设 `NODE_USE_ENV_PROXY=1`。
 
 ## 验证
 
