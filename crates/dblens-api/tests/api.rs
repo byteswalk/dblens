@@ -519,3 +519,24 @@ async fn ops_follow_language() {
     assert!(zh[0]["sql"].as_str().unwrap().contains("pg_stat_activity"), "没连接过时按驱动选 PG 的模板");
     assert_eq!(get("en").await[0]["name"], "Sessions");
 }
+
+// ---- 表数据编辑（M2a） ----
+
+#[tokio::test]
+async fn changes_routes_report_errors() {
+    let (app, _) = app();
+    let set = json!({"schema": "public", "table": "t", "changes": [{"kind": "delete", "key": {"id": {"t": "int", "v": 1}}}]});
+    let (st, e) = call(&app, "POST", "/api/profiles/nope/changes/preview", Some(set.clone())).await;
+    assert_eq!((st, e["kind"].clone()), (StatusCode::NOT_FOUND, json!("not_found")));
+    let (st, _) = call(&app, "POST", "/api/sessions/999/changes", Some(set)).await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+    // 改动的种类不认识：请求体不合法（axum 的拒绝是纯文本，不经过 call 解析 JSON）
+    let bad = json!({"schema": "public", "table": "t", "changes": [{"kind": "upsert"}]});
+    let req = Request::post("/api/profiles/nope/changes/preview")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(bad.to_string()))
+        .unwrap();
+    let st = app.clone().oneshot(req).await.unwrap().status();
+    assert!(st.is_client_error(), "{st}");
+}

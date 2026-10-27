@@ -81,6 +81,8 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/profiles/{id}/schemas/{schema}/relations", get(routes::relations))
         .route("/profiles/{id}/schemas/{schema}/data-sql", post(routes::data_sql))
         .route("/profiles/{id}/ops", get(exports::ops))
+        .route("/profiles/{id}/changes/preview", post(routes::preview_changes))
+        .route("/sessions/{id}/changes", post(routes::apply_changes))
         .route("/exports", post(exports::create))
         .route("/exports/{id}", get(exports::status).delete(exports::cancel_or_remove))
         .route("/exports/{id}/file", get(exports::file))

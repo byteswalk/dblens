@@ -12,8 +12,9 @@ use dblens_dialect::meta::{MetaKey, ObjectInfo, SchemaInfo};
 use dblens_dialect::{DdlKind, Relation};
 use dblens_driver::DriverId;
 use dblens_service::{
-    DataOrder, DriverStatus, Favorite, FavoritePatch, GenerateKind, HistoryItem, HistoryQuery, NewFavorite,
-    ObjectKind, Profile, ProfileInput, SecretStatus, ServerSummary, SessionId, SessionInfo,
+    ApplyOutcome, ChangeSet, DataOrder, DriverStatus, Favorite, FavoritePatch, GenerateKind, HistoryItem,
+    HistoryQuery, NewFavorite, ObjectKind, Profile, ProfileInput, SecretStatus, ServerSummary, SessionId,
+    SessionInfo,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -515,6 +516,27 @@ pub async fn rollback(State(s): State<AppState>, Path(id): Path<SessionId>) -> A
 
 pub async fn reconnect(State(s): State<AppState>, Path(id): Path<SessionId>) -> ApiResult<Json<SessionInfo>> {
     Ok(Json(s.service.reconnect_session(id).await?))
+}
+
+// ---- 表数据编辑（M2a） ----
+
+/// 预览改动集生成的语句：`[{index, sql}]`，`sql` 是值写成字面量的形式，不执行。
+pub async fn preview_changes(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(set): Json<ChangeSet>,
+) -> ApiResult<Json<Vec<Value>>> {
+    let statements = s.service.preview_changes(&id, &set).await?;
+    Ok(Json(statements.into_iter().map(|st| json!({ "index": st.index, "sql": st.preview })).collect()))
+}
+
+/// 在会话中执行改动集。失败时整体回滚，结果中 `failed` 带失败的改动序号和错误（仍是 200）。
+pub async fn apply_changes(
+    State(s): State<AppState>,
+    Path(id): Path<SessionId>,
+    Json(set): Json<ChangeSet>,
+) -> ApiResult<Json<ApplyOutcome>> {
+    Ok(Json(s.service.apply_changes(id, &set).await?))
 }
 
 pub async fn cancel(State(s): State<AppState>, Path(id): Path<SessionId>) -> ApiResult<StatusCode> {

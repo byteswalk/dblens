@@ -139,6 +139,22 @@
 
 每条：`{id, parent_id, kind, name, sql, note, driver, variant, position, created_at, updated_at}`。收藏必须有 SQL，文件夹没有；上级必须是文件夹；不能把文件夹移到它自己或它的下级中（都返回 `invalid`）。
 
+### 表数据编辑（M2a 加入）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/profiles/{id}/changes/preview` | 预览改动集生成的语句，返回 `[{index, sql}]`（`sql` 中的值写成字面量），不执行 |
+| POST | `/sessions/{id}/changes` | 在会话中执行改动集，返回 `{applied, failed}`。失败时已整体回滚，`failed` 为 `{index, error}`（仍是 200）；会话正忙时 409 |
+
+- 改动集：`{schema, table, changes: [...]}`，每个改动按 `kind` 区分：
+  - `{"kind": "update", "key": {列: 值}, "original": {列: 原值}, "values": {列: 新值}}`；
+  - `{"kind": "insert", "values": {列: 值}}`；
+  - `{"kind": "delete", "key": {列: 值}}`。
+
+  值的格式同结果集（`{"t": 类型, "v": 值}`）。`key` 必须正好是表的行标识列（主键，没有时为所有列非空的唯一键）。
+- 表没有行标识、引用了不存在的列、写了生成列时 400（`invalid`）。
+- 执行时每条语句必须恰好影响 1 行：为 0 时报"已被修改或删除"，大于 1 时报行标识不唯一。
+
 ### 导出（M1c3 加入）
 
 | 方法 | 路径 | 说明 |
