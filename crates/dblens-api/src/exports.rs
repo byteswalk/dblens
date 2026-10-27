@@ -64,7 +64,16 @@ fn disposition(name: &str) -> HeaderValue {
 /// 浏览器模式下载导出的文件（链接中用 `?token=` 带令牌）。下载后任务不再存在。
 pub async fn file(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
     let (path, name) = s.service.exports.take_file(&id)?;
-    let guard = RemoveOnDrop(path.clone());
+    Ok(stream_file(path, &name, true).await?)
+}
+
+/// 以附件形式流式返回文件；`remove` 为 true 时传完（或连接中断）后删除文件。
+pub(crate) async fn stream_file(
+    path: std::path::PathBuf,
+    name: &str,
+    remove: bool,
+) -> dblens_core::Result<Response> {
+    let guard = remove.then(|| RemoveOnDrop(path.clone()));
     let f = tokio::fs::File::open(&path)
         .await
         .map_err(|e| dblens_core::Error::internal(dblens_core::msg!("export.write_failed", error = e)))?;
@@ -83,7 +92,7 @@ pub async fn file(State(s): State<AppState>, Path(id): Path<String>) -> ApiResul
     });
     let mut resp = Body::from_stream(stream).into_response();
     resp.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
-    resp.headers_mut().insert(header::CONTENT_DISPOSITION, disposition(&name));
+    resp.headers_mut().insert(header::CONTENT_DISPOSITION, disposition(name));
     Ok(resp)
 }
 

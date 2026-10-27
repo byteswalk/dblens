@@ -540,3 +540,148 @@ async fn changes_routes_report_errors() {
     let st = app.clone().oneshot(req).await.unwrap().status();
     assert!(st.is_client_error(), "{st}");
 }
+
+/// 上传原始字节，返回状态和响应。
+async fn upload_bytes(app: &Router, name: &str, bytes: Vec<u8>) -> (StatusCode, Value) {
+    let req = Request::post(format!("/api/uploads?name={name}"))
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .body(Body::from(bytes))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+async fn wait_task(app: &Router, id: &str) -> Value {
+    for _ in 0..500 {
+        let (_, s) = call(app, "GET", &format!("/api/tasks/{id}"), None).await;
+        if s["state"] != "running" {
+            return s;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("任务没有结束");
+}
+
+#[tokio::test]
+async fn upload_preview_import_and_tasks() {
+    let (app, service) = app();
+    let dir = tempfile::tempdir().unwrap();
+    service.tasks.set_dirs(dir.path().join("tasks"), dir.path().join("imports"));
+    let (_, p) = call(
+        &app,
+        "POST",
+        "/api/profiles",
+        Some(json!({"profile": {"name": "开发", "driver": "postgres", "host": "h", "port": 1, "user": "u", "environment": "dev"}, "password": "pw"})),
+    )
+    .await;
+    let pid = p["id"].as_str().unwrap().to_string();
+
+    // 上传超过 2 MB 的文件（不受默认请求体上限限制），文件名为中文
+    let mut csv = String::from("编号,名称\n");
+    for k in 0..200_000 {
+        csv += &format!("{k},名{k}\n");
+    }
+    assert!(csv.len() > 2 * 1024 * 1024);
+    let (st, up) = upload_bytes(&app, "%E6%95%B0%E6%8D%AE.csv", csv.clone().into_bytes()).await;
+    assert_eq!(st, StatusCode::CREATED, "{up}");
+    assert_eq!((up["name"].as_str(), up["size"].as_u64()), (Some("数据.csv"), Some(csv.len() as u64)));
+    let source = json!({"upload": up["id"]});
+
+    let (st, pv) = call(
+        &app,
+        "POST",
+        "/api/imports/preview",
+        Some(json!({"source": source, "file": {"format": "csv"}})),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{pv}");
+    assert_eq!(pv["columns"], json!(["编号", "名称"]));
+    assert_eq!(pv["rows"].as_array().unwrap().len(), 100);
+    assert_eq!(pv["types"][0], json!({"kind": "int", "bits": 64}));
+    assert_eq!((pv["encoding"].as_str(), pv["delimiter"].as_str()), (Some("UTF-8"), Some(",")));
+
+    let create = json!({"columns": [
+        {"name": "编号", "logical": {"kind": "int", "bits": 64}, "nullable": false},
+        {"name": "名称", "logical": {"kind": "var_char", "len": 50}}
+    ], "primary_key": ["编号"]});
+    let (st, ddl) = call(
+        &app,
+        "POST",
+        &format!("/api/profiles/{pid}/imports/ddl"),
+        Some(json!({"schema": "public", "table": "导入", "create": create})),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{ddl}");
+    assert!(ddl["sql"].as_str().unwrap().starts_with("CREATE TABLE public.\"导入\""), "{ddl}");
+
+    let import = json!({
+        "profile_id": pid, "source": source, "file": {"format": "csv"}, "schema": "public", "table": "导入",
+        "create": create, "mode": "append",
+        "mapping": [{"source": 0, "target": "编号"}, {"source": 1, "target": "名称"}]
+    });
+    let (st, created) = call(&app, "POST", "/api/imports", Some(import)).await;
+    assert_eq!(st, StatusCode::CREATED, "{created}");
+    let task = wait_task(&app, created["id"].as_str().unwrap()).await;
+    assert_eq!((task["state"].as_str(), task["kind"].as_str()), (Some("done"), Some("import")), "{task}");
+    assert_eq!(task["progress"]["rows_written"], 200_000);
+
+    // SQL 文件：一条失败，出错时继续；下载日志、取失败语句的全文
+    let (_, up) = upload_bytes(&app, "a.sql", b"SELECT 1;\nFAIL;\nSELECT 2;".to_vec()).await;
+    let (st, created) = call(
+        &app,
+        "POST",
+        "/api/sql-files",
+        Some(json!({"profile_id": pid, "source": {"upload": up["id"]}, "continue_on_error": true})),
+    )
+    .await;
+    assert_eq!(st, StatusCode::CREATED, "{created}");
+    let id = created["id"].as_str().unwrap().to_string();
+    let task = wait_task(&app, &id).await;
+    assert_eq!(task["state"], "done", "{task}");
+    assert_eq!((task["failures"][0]["line"].as_u64(), task["report"].as_str()), (Some(2), Some("a-log.txt")));
+    assert_eq!(task["failures"][0]["error"]["kind"], "sql");
+    let (_, sql) = call(&app, "GET", &format!("/api/tasks/{id}/statements/0"), None).await;
+    assert_eq!(sql["sql"], "FAIL");
+    let req = Request::get(format!("/api/tasks/{id}/report?token={TOKEN}")).body(Body::empty()).unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(resp.headers()[header::CONTENT_DISPOSITION].to_str().unwrap().contains("a-log.txt"));
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    assert!(String::from_utf8_lossy(&body).contains("FAIL"));
+    // 浏览器模式不能另存为到本机路径
+    let (st, _) =
+        call(&app, "POST", &format!("/api/tasks/{id}/report"), Some(json!({"path": "C:/x.txt"}))).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    // 删除已结束的任务
+    let (st, _) = call(&app, "DELETE", &format!("/api/tasks/{id}"), None).await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    let (st, _) = call(&app, "GET", &format!("/api/tasks/{id}"), None).await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+    let (st, _) = call(&app, "POST", &format!("/api/tasks/{id}/confirm"), Some(json!({"yes": true}))).await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn uploads_respect_the_limit_and_paths_are_desktop_only() {
+    let (app, service) = app();
+    let dir = tempfile::tempdir().unwrap();
+    service.tasks.set_dirs(dir.path().join("tasks"), dir.path().join("imports"));
+    let (st, _) =
+        call(&app, "PUT", "/api/settings/ui.import.upload_limit_mb", Some(json!({"value": "1"}))).await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    let (st, e) = upload_bytes(&app, "big.csv", vec![b'a'; 1024 * 1024 + 1]).await;
+    assert_eq!((st, e["kind"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid")), "{e}");
+    assert_eq!(std::fs::read_dir(dir.path().join("imports")).unwrap().count(), 0, "超限的文件已删除");
+    let file = dir.path().join("a.csv");
+    std::fs::write(&file, "a\n1\n").unwrap();
+    let (st, _) = call(
+        &app,
+        "POST",
+        "/api/imports/preview",
+        Some(json!({"source": {"path": file}, "file": {"format": "csv"}})),
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST, "浏览器模式不接受本机路径");
+}

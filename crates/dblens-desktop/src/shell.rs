@@ -126,6 +126,17 @@ pub async fn save_dialog(app: AppHandle, default_name: String, filters: Vec<File
     dialog.blocking_save_file().and_then(|p| p.into_path().ok()).map(|p| p.display().to_string())
 }
 
+/// 系统"打开"对话框（导入、执行 SQL 文件时选择文件）。用户取消时返回 None。
+#[tauri::command]
+pub async fn open_dialog(app: AppHandle, filters: Vec<FileFilter>) -> Option<String> {
+    let mut dialog = app.dialog().file();
+    for f in &filters {
+        let exts: Vec<&str> = f.extensions.iter().map(String::as_str).collect();
+        dialog = dialog.add_filter(&f.name, &exts);
+    }
+    dialog.blocking_pick_file().and_then(|p| p.into_path().ok()).map(|p| p.display().to_string())
+}
+
 /// 在系统的文件管理器中显示文件（导出完成后"打开所在文件夹"）。
 #[tauri::command]
 pub fn reveal_in_folder(path: String) -> Result<(), String> {

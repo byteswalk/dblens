@@ -6,6 +6,7 @@ mod error;
 mod exports;
 mod lang;
 mod routes;
+mod tasks;
 mod web;
 mod ws;
 
@@ -18,6 +19,7 @@ use dblens_service::Service;
 use tokio::net::TcpListener;
 
 pub use error::{ApiError, status_of};
+pub use tasks::{DEFAULT_UPLOAD_LIMIT_MB, UPLOAD_LIMIT_SETTING};
 pub use web::with_web;
 pub use ws::{DEFAULT_MAX_ROWS, utf16_offset};
 
@@ -86,6 +88,15 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/exports", post(exports::create))
         .route("/exports/{id}", get(exports::status).delete(exports::cancel_or_remove))
         .route("/exports/{id}/file", get(exports::file))
+        .route("/uploads", post(tasks::upload))
+        .route("/imports/preview", post(tasks::preview))
+        .route("/imports", post(tasks::import))
+        .route("/profiles/{id}/imports/ddl", post(tasks::ddl))
+        .route("/sql-files", post(tasks::sql_file))
+        .route("/tasks/{id}", get(tasks::status).delete(tasks::cancel_or_remove))
+        .route("/tasks/{id}/confirm", post(tasks::confirm))
+        .route("/tasks/{id}/report", get(tasks::report).post(tasks::save_report))
+        .route("/tasks/{id}/statements/{n}", get(tasks::statement))
         .route("/sessions", get(routes::sessions).post(routes::open_session))
         .route("/sessions/{id}", get(routes::session).delete(routes::close_session))
         .route("/sessions/{id}/autocommit", post(routes::set_autocommit))

@@ -81,6 +81,7 @@
   "import.report_error": {"zh-CN": "错误", "en": "Error"},
   "import.report_line": {"zh-CN": "行号", "en": "Line"},
   "import.row_width": {"zh-CN": "一行有 %{actual} 个值，应为 %{expected} 个", "en": "A row has %{actual} values; expected %{expected}"},
+  "import.too_large": {"zh-CN": "文件超过上传上限 %{limit} MB（可在设置中修改）", "en": "The file exceeds the upload limit of %{limit} MB (can be changed in settings)"},
   "import.upload_failed": {"zh-CN": "保存上传的文件失败：%{error}", "en": "Failed to save the uploaded file: %{error}"},
   "import.upsert_needs_key": {"zh-CN": "按主键更新要求表 %{table} 有主键，且主键列都已映射", "en": "Updating by primary key requires table %{table} to have a primary key with all its columns mapped"},
   "internal.lock_poisoned": {"zh-CN": "内部锁已损坏（%{lock}）", "en": "Internal lock poisoned (%{lock})"},
