@@ -143,6 +143,8 @@ impl Connection for FakeConn {
                 stream.events.push_back(ExecEvent::Affected(0));
             }
             "SLEEP" => stream.sleep = Some((self.cancelled.clone(), self.wake.clone())),
+            // 表数据编辑的冲突：没有影响任何行
+            _ if sql.contains("zero_rows") => stream.events.push_back(ExecEvent::Affected(0)),
             _ => match sql.strip_prefix("ROWS ").and_then(|n| n.parse::<i64>().ok()) {
                 Some(n) => {
                     stream

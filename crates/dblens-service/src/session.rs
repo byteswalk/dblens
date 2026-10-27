@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use dblens_core::{Error, Msg, Result, Row, Value, msg};
-use dblens_dialect::{Dialect, SqlStatement, Variant, may_change_schema};
+use dblens_dialect::{ChangeStatement, Dialect, SqlStatement, Variant, may_change_schema};
 use dblens_driver::{CancelHandle, ColumnMeta, Connection, ExecEvent};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
@@ -175,10 +175,30 @@ async fn run_quiet(conn: &mut Box<dyn Connection>, sql: &str) -> Result<()> {
     Ok(())
 }
 
+/// 改动集执行失败的那一条（M2a）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ApplyFailure {
+    /// 在改动集中的序号。
+    pub index: usize,
+    pub error: Error,
+}
+
+/// 改动集的执行结果：全部成功时 `failed` 为 None，`applied` 是执行的语句数；失败时已整体回滚。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ApplyOutcome {
+    pub applied: usize,
+    pub failed: Option<ApplyFailure>,
+}
+
 enum Command {
     Execute {
         req: ExecRequest,
         reply: oneshot::Sender<Result<()>>,
+    },
+    /// 在一个事务里执行表数据编辑生成的语句（M2a）。
+    Apply {
+        statements: Vec<ChangeStatement>,
+        reply: oneshot::Sender<Result<ApplyOutcome>>,
     },
     /// 切换当前 schema；`None` 只重新读取。
     Schema {
@@ -325,6 +345,12 @@ impl SessionManager {
         self.call(id, |reply| Command::Execute { req, reply }).await
     }
 
+    /// 在一个事务里执行表数据编辑的语句（M2a 设计文档第 5 节）：每条必须恰好影响 1 行，否则整体回滚。
+    /// 会话正在执行（如还有没读完的结果）时报 `Busy`；会话已经在手动事务中时报 `invalid`。
+    pub async fn apply(&self, id: SessionId, statements: Vec<ChangeStatement>) -> Result<ApplyOutcome> {
+        self.call(id, |reply| Command::Apply { statements, reply }).await
+    }
+
     /// 切换当前 schema，成功后会话信息中的 `schema` 随之更新。
     pub async fn set_schema(&self, id: SessionId, schema: &str) -> Result<()> {
         let set = Some(schema.to_string());
@@ -460,6 +486,13 @@ impl Actor {
                         return;
                     }
                 }
+                Command::Apply { statements, reply: tx } => {
+                    self.update(|i| i.busy = true);
+                    let r = self.apply(statements).await;
+                    self.update(|i| i.busy = false);
+                    self.note_error(&r);
+                    reply(tx, r);
+                }
                 Command::Next { reply: tx, .. } => reply(tx, Ok(None)),
                 Command::Schema { set, reply: tx } => {
                     let r = self.schema(set.as_deref()).await;
@@ -545,6 +578,84 @@ impl Actor {
         Ok(())
     }
 
+    /// 执行改动集：临时关闭自动提交，逐条执行（先经过执行策略，影响行数必须为 1），
+    /// 全部成功才提交，否则回滚。预览就是用户的确认，策略要求确认的语句直接执行；策略拒绝的语句算失败。
+    /// 每条执行过的语句都写一条历史（预览形式的 SQL）；回滚时它们都记为失败。
+    async fn apply(&mut self, statements: Vec<ChangeStatement>) -> Result<ApplyOutcome> {
+        let state = self.snapshot();
+        if state.broken {
+            return Err(Error::connect(msg!("session.broken_reconnect")));
+        }
+        if state.in_transaction || !state.autocommit {
+            return Err(Error::invalid(msg!("changes.in_transaction")));
+        }
+        let Actor { conn, ctx, owner, policy, history, .. } = self;
+        let Some(conn) = conn.as_mut() else { return Err(Error::connect(msg!("session.disconnected"))) };
+        conn.set_autocommit(false).await?;
+        let mut done: Vec<NewHistory> = Vec::new();
+        let mut failed: Option<ApplyFailure> = None;
+        for st in &statements {
+            let at = now_ms();
+            let started = Instant::now();
+            let info = classify(&ctx.dialect, &st.sql);
+            let result: Result<u64> = async {
+                if let Decision::Deny { reason } = policy.before_execute(ctx, &info).await {
+                    return Err(Error::Denied { reason });
+                }
+                let mut stream = conn.execute(&st.sql, &st.params).await?;
+                let mut affected = 0;
+                while let Some(ev) = stream.next(100).await? {
+                    if let ExecEvent::Affected(n) = ev {
+                        affected += n;
+                    }
+                }
+                match affected {
+                    1 => Ok(1),
+                    0 => Err(Error::invalid(msg!("changes.conflict", n = st.index + 1))),
+                    n => Err(Error::invalid(msg!("changes.not_unique", n = st.index + 1, count = n))),
+                }
+            }
+            .await;
+            let outcome = match &result {
+                Ok(_) => Outcome::Succeeded { affected: Some(1) },
+                Err(Error::Cancelled) => Outcome::Cancelled,
+                Err(e) => Outcome::Failed { message: e.to_string() },
+            };
+            policy.after_execute(ctx, &info, &outcome).await;
+            done.push(NewHistory {
+                at,
+                profile_id: ctx.profile_id.clone(),
+                profile_name: owner.name.clone(),
+                driver: owner.driver.clone(),
+                variant: Some(variant_code(ctx.dialect.variant())),
+                schema: state.schema.clone(),
+                sql: st.preview.clone(),
+                elapsed_ms: Some(started.elapsed().as_millis() as u64),
+                rows: result.as_ref().ok().copied(),
+                error: result.as_ref().err().map(ToString::to_string),
+            });
+            if let Err(error) = result {
+                failed = Some(ApplyFailure { index: st.index, error });
+                break;
+            }
+        }
+        let end = if failed.is_none() { conn.commit().await } else { conn.rollback().await };
+        // 恢复自动提交；提交或回滚已经结束了事务
+        let restore = conn.set_autocommit(true).await;
+        if failed.is_some() {
+            let rolled_back = msg!("changes.rolled_back").current();
+            for h in done.iter_mut().filter(|h| h.error.is_none()) {
+                h.error = Some(rolled_back.clone());
+            }
+        }
+        for h in done {
+            history.record(h);
+        }
+        end?;
+        restore?;
+        Ok(ApplyOutcome { applied: if failed.is_none() { statements.len() } else { 0 }, failed })
+    }
+
     /// 关闭连接；有未提交的修改时按 `commit` 提交或回滚。
     async fn close(&mut self, commit: bool) -> Result<()> {
         let Some(mut conn) = self.conn.take() else { return Ok(()) };
@@ -583,6 +694,7 @@ async fn take_request(rx: &mut mpsc::Receiver<Command>, queue: &mut VecDeque<Ses
             },
             Command::Close { commit, reply: tx } => return Req::Close(commit, tx),
             Command::Execute { reply: tx, .. } => reply(tx, Err(busy())),
+            Command::Apply { reply: tx, .. } => reply(tx, Err(busy())),
             Command::SetAutocommit { reply: tx, .. }
             | Command::Schema { reply: tx, .. }
             | Command::Commit { reply: tx }
@@ -797,6 +909,7 @@ impl Actor {
                 Command::Next { reply: tx, .. } => reply(tx, Ok(queue.pop_front())),
                 Command::Close { commit, reply: tx } => return Some((commit, tx)),
                 Command::Execute { reply: tx, .. } => reply(tx, Err(busy())),
+                Command::Apply { reply: tx, .. } => reply(tx, Err(busy())),
                 Command::SetAutocommit { reply: tx, .. }
                 | Command::Schema { reply: tx, .. }
                 | Command::Commit { reply: tx }
@@ -833,6 +946,65 @@ mod tests {
         let id =
             m.open(&profile, Box::new(FakeConn::new(log.clone())), Dialect::new(Variant::Postgres)).unwrap();
         (id, log)
+    }
+
+    #[tokio::test]
+    async fn apply_commits_or_rolls_back_as_a_whole() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let m = SessionManager::new(
+            Arc::new(DefaultPolicy),
+            Arc::new(MetadataCache::new()),
+            HistoryLog::inline(store.clone()),
+        );
+        let (id, log) = open(&m, Environment::Prod);
+        let st = |index: usize, sql: &str| ChangeStatement {
+            index,
+            sql: sql.into(),
+            params: vec![],
+            preview: format!("{sql} -- 预览"),
+        };
+        let ok = m
+            .apply(id, vec![st(1, "DELETE FROM t WHERE id = 2"), st(0, "UPDATE t SET a = 1 WHERE id = 1")])
+            .await
+            .unwrap();
+        assert_eq!((ok.applied, ok.failed), (2, None));
+        let tail: Vec<String> = log.lock().unwrap().iter().rev().take(5).rev().cloned().collect();
+        assert_eq!(
+            tail,
+            [
+                "autocommit false",
+                "execute DELETE FROM t WHERE id = 2",
+                "execute UPDATE t SET a = 1 WHERE id = 1",
+                "commit",
+                "autocommit true"
+            ]
+        );
+
+        // 第二条没有影响任何行：整体回滚，两条都记为失败
+        let bad = m
+            .apply(
+                id,
+                vec![
+                    st(0, "UPDATE t SET a = 1 WHERE id = 1"),
+                    st(3, "UPDATE t SET zero_rows = 1 WHERE id = 9"),
+                ],
+            )
+            .await
+            .unwrap();
+        let failed = bad.failed.unwrap();
+        assert_eq!((bad.applied, failed.index), (0, 3));
+        assert!(matches!(failed.error, Error::Invalid { .. }));
+        assert!(log.lock().unwrap().ends_with(&["rollback".to_string(), "autocommit true".to_string()]));
+        let info = m.info(id).unwrap();
+        assert!(info.autocommit && !info.in_transaction && !info.busy);
+        let items = store.history(&HistoryQuery::default()).unwrap();
+        assert_eq!(items[0].entry.sql, "UPDATE t SET zero_rows = 1 WHERE id = 9 -- 预览");
+        assert!(items[0].entry.error.is_some() && items[1].entry.error.is_some(), "回滚时都记为失败");
+        assert_eq!(items[2].entry.error, None);
+
+        // 手动事务中不能提交编辑
+        m.set_autocommit(id, false).await.unwrap();
+        assert!(matches!(m.apply(id, vec![]).await, Err(Error::Invalid { .. })));
     }
 
     #[tokio::test]
