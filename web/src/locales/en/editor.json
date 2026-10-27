@@ -48,7 +48,12 @@
     "untitled": "Query {{n}}",
     "prod": "Production",
     "profileDeleted": "Connection deleted",
-    "newQuery": "New Query (Ctrl+T)"
+    "newQuery": "New Query (Ctrl+T)",
+    "close": "Close",
+    "closeOthers": "Close Others",
+    "closeRight": "Close to the Right",
+    "closeAll": "Close All",
+    "list": "All tabs"
   },
   "runner": {
     "tabClosed": "The tab has been closed",

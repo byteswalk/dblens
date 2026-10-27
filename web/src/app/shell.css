@@ -385,8 +385,18 @@ body {
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
   align-items: stretch;
+  overflow: hidden;
+}
+/* 标签先缩到最窄，再放不下才滚动；滚动条隐藏，用滚轮横滚 */
+.tab-strip {
+  align-items: stretch;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
+}
+.tab-strip::-webkit-scrollbar {
+  display: none;
 }
 .tab {
   display: flex;
@@ -396,13 +406,27 @@ body {
   border-right: 1px solid var(--border);
   border-top: 2px solid transparent;
   color: var(--text-2);
-  max-width: 240px;
+  flex: 0 1 240px;
+  min-width: 120px;
   white-space: nowrap;
+  overflow: hidden;
   cursor: pointer;
 }
 .tab .tab-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 缩窄时连接名先让出空间，再缩标题 */
+.tab .tab-sub {
+  min-width: 0;
+  flex-shrink: 1000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tab .x,
+.tab svg {
+  flex: none;
 }
 .tab.on {
   background: var(--panel);
@@ -429,7 +453,13 @@ body {
   color: var(--danger);
 }
 .tab.add {
+  flex: none;
+  min-width: 0;
   padding: 0 12px;
+}
+.tab.add.list {
+  border-right: none;
+  border-left: 1px solid var(--border);
 }
 .tab .running-dot {
   width: 6px;

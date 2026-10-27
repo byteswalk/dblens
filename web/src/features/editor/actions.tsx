@@ -52,60 +52,73 @@ export function useQueryActions() {
     else openSql(sql, profileId)
   }
 
-  /** 关闭标签页：数据标签有未提交的编辑时先确认放弃；有未提交的事务时先问提交还是回滚。 */
-  const closeQuery = (tabId: string) => {
-    const tab = useTabs.getState().tabs.find((x) => x.id === tabId)
-    if (!tab) return
-    if (tab.data && hasPendingEdits(tabId)) {
-      modal.confirm({
-        title: t('editor.data.edit.discardTitle'),
-        content: t('editor.data.edit.discardContent'),
-        okText: t('editor.data.edit.discardOk'),
-        okType: 'danger',
-        onOk: () => {
-          useEdits.getState().clear(tabId)
-          closeQuery(tabId)
-        },
+  /** 关闭标签页：数据标签有未提交的编辑时先确认放弃；有未提交的事务时先问提交还是回滚。对话框结束（关闭或取消）后完成。 */
+  const closeQuery = (tabId: string): Promise<void> =>
+    new Promise((done) => {
+      const tab = useTabs.getState().tabs.find((x) => x.id === tabId)
+      if (!tab) return done()
+      if (tab.data && hasPendingEdits(tabId)) {
+        modal.confirm({
+          title: t('editor.data.edit.discardTitle'),
+          content: t('editor.data.edit.discardContent'),
+          okText: t('editor.data.edit.discardOk'),
+          okType: 'danger',
+          onOk: () => {
+            useEdits.getState().clear(tabId)
+            void closeQuery(tabId).then(done)
+          },
+          onCancel: () => done(),
+        })
+        return
+      }
+      const finish = async (commit: boolean) => {
+        await disposeRunner(tabId, commit)
+        useEdits.getState().clear(tabId)
+        useTabs.getState().close(tabId)
+        done()
+      }
+      if (!useRuntime.getState().tabs[tabId]?.session?.in_transaction) {
+        void finish(false)
+        return
+      }
+      const m = modal.confirm({
+        title: t('editor.closeTab.title', { title: tab.title }),
+        content: t('editor.closeTab.content'),
+        okText: t('editor.closeTab.commit'),
+        cancelText: t('editor.closeTab.cancel'),
+        onOk: () => finish(true),
+        onCancel: () => done(),
+        footer: (_, { OkBtn, CancelBtn }) => (
+          <>
+            <CancelBtn />
+            <Button
+              danger
+              onClick={() => {
+                m.destroy()
+                void finish(false)
+              }}
+            >
+              {t('editor.closeTab.rollback')}
+            </Button>
+            <OkBtn />
+          </>
+        ),
       })
-      return
-    }
-    const finish = async (commit: boolean) => {
-      await disposeRunner(tabId, commit)
-      useEdits.getState().clear(tabId)
-      useTabs.getState().close(tabId)
-    }
-    if (!useRuntime.getState().tabs[tabId]?.session?.in_transaction) {
-      void finish(false)
-      return
-    }
-    const m = modal.confirm({
-      title: t('editor.closeTab.title', { title: tab.title }),
-      content: t('editor.closeTab.content'),
-      okText: t('editor.closeTab.commit'),
-      cancelText: t('editor.closeTab.cancel'),
-      onOk: () => finish(true),
-      footer: (_, { OkBtn, CancelBtn }) => (
-        <>
-          <CancelBtn />
-          <Button
-            danger
-            onClick={() => {
-              m.destroy()
-              void finish(false)
-            }}
-          >
-            {t('editor.closeTab.rollback')}
-          </Button>
-          <OkBtn />
-        </>
-      ),
     })
+
+  /** 依次关闭多个标签；要确认的标签先切过去再问，取消的留下，接着处理下一个。 */
+  const closeMany = async (ids: string[]) => {
+    for (const id of ids) {
+      const needsAsk = hasPendingEdits(id) || useRuntime.getState().tabs[id]?.session?.in_transaction
+      if (needsAsk) useTabs.getState().activate(id)
+      await closeQuery(id)
+    }
   }
 
   const closeActive = () => {
     const active = useTabs.getState().active
-    if (active) closeQuery(active)
+    if (active) void closeQuery(active)
   }
 
-  return { newQuery, openSql, insertSql, closeQuery, closeActive }
+  return { newQuery, openSql, insertSql, closeQuery, closeMany, closeActive }
 }

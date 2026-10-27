@@ -1,9 +1,11 @@
 // 工作区（设计稿第 2 部分）：标签栏和当前标签页（查询标签或数据标签）。标签顶部有一条环境色线，生产连接的标签整块标红、
 // 标题带"生产"。懒加载：Monaco 和结果表格只在打开第一个查询标签时才加载。
+// 标签多时先缩窄（悬停看全名），再放不下就用滚轮横向滚动，不显示滚动条；右端 ▾ 列出全部标签；右键菜单批量关闭。
 
-import { IconFileCode, IconPlus, IconTable, IconX } from '@tabler/icons-react'
+import { Dropdown, type MenuProps } from 'antd'
+import { IconChevronDown, IconFileCode, IconPlus, IconTable, IconX } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useRef } from 'react'
+import { type WheelEvent, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
@@ -25,40 +27,62 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
 }) {
   const { t } = useTranslation()
   const rt = useTabRuntime(tab.id)
-  const { closeQuery } = useQueryActions()
+  const { closeQuery, closeMany } = useQueryActions()
+  const menu: MenuProps = {
+    items: [
+      { key: 'close', label: t('editor.tab.close') },
+      { key: 'others', label: t('editor.tab.closeOthers') },
+      { key: 'right', label: t('editor.tab.closeRight') },
+      { key: 'all', label: t('editor.tab.closeAll') },
+    ],
+    onClick: ({ key }) => {
+      const ids = useTabs.getState().tabs.map((x) => x.id)
+      const i = ids.indexOf(tab.id)
+      if (key === 'close') void closeQuery(tab.id)
+      else if (key === 'others') void closeMany(ids.filter((id) => id !== tab.id))
+      else if (key === 'right') void closeMany(ids.slice(i + 1))
+      else void closeMany(ids)
+    },
+  }
   return (
-    <div
-      className={`tab ${envClass}${active ? ' on' : ''}`}
-      onClick={() => useTabs.getState().activate(tab.id)}
-      onMouseDown={(e) => {
-        // 中键关闭
-        if (e.button === 1) {
-          e.preventDefault()
-          closeQuery(tab.id)
-        }
-      }}
-      title={`${tab.title} · ${profileName}`}
-    >
-      {tab.data ? (
-        <IconTable size={16} />
-      ) : profile ? (
-        <DbIcon driver={profile.driver} variant={rt.session?.variant ?? profile.variant} />
-      ) : (
-        <IconFileCode size={16} />
-      )}
-      <span className="tab-title">{tab.title}</span>
-      {envClass === 'prod' ? <span>· {t('editor.tab.prod')}</span> : <span className="muted">{profileName}</span>}
-      {rt.running && <span className="running-dot" />}
-      <span
-        className="x"
-        onClick={(e) => {
-          e.stopPropagation()
-          closeQuery(tab.id)
+    <Dropdown trigger={['contextMenu']} menu={menu}>
+      <div
+        className={`tab ${envClass}${active ? ' on' : ''}`}
+        onClick={() => useTabs.getState().activate(tab.id)}
+        onMouseDown={(e) => {
+          // 中键关闭
+          if (e.button === 1) {
+            e.preventDefault()
+            void closeQuery(tab.id)
+          }
         }}
+        title={`${tab.title} · ${profileName}`}
       >
-        <IconX size={14} />
-      </span>
-    </div>
+        {tab.data ? (
+          <IconTable size={16} />
+        ) : profile ? (
+          <DbIcon driver={profile.driver} variant={rt.session?.variant ?? profile.variant} />
+        ) : (
+          <IconFileCode size={16} />
+        )}
+        <span className="tab-title">{tab.title}</span>
+        {envClass === 'prod' ? (
+          <span className="tab-sub">· {t('editor.tab.prod')}</span>
+        ) : (
+          <span className="tab-sub muted">{profileName}</span>
+        )}
+        {rt.running && <span className="running-dot" />}
+        <span
+          className="x"
+          onClick={(e) => {
+            e.stopPropagation()
+            void closeQuery(tab.id)
+          }}
+        >
+          <IconX size={14} />
+        </span>
+      </div>
+    </Dropdown>
   )
 }
 
@@ -77,26 +101,55 @@ export default function Workspace() {
     known.current = now
   }, [tabs])
 
+  // 切换或新开标签时把当前标签滚到可见处
+  const strip = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    strip.current?.querySelector('.tab.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [active, tabs.length])
+  // 竖向滚轮横向滚动标签
+  const onWheel = (e: WheelEvent) => {
+    if (strip.current && e.deltaX === 0) strip.current.scrollLeft += e.deltaY
+  }
+
+  const profileName = (id: string) => profiles.find((x) => x.id === id)?.name ?? t('editor.tab.profileDeleted')
+  const list: MenuProps = {
+    items: tabs.map((tb) => ({ key: tb.id, label: `${tb.title} · ${profileName(tb.profileId)}` })),
+    selectable: true,
+    selectedKeys: active ? [active] : [],
+    onClick: ({ key }) => useTabs.getState().activate(key),
+    style: { maxHeight: 480, overflowY: 'auto' },
+  }
+
   const tab = tabs.find((x) => x.id === active)
   return (
     <div className="workspace">
       <div className="row tabs">
-        {tabs.map((tb) => {
-          const p = profiles.find((x) => x.id === tb.profileId)
-          return (
-            <TabTitle
-              key={tb.id}
-              tab={tb}
-              active={tb.id === active}
-              envClass={p?.environment && p.environment !== 'none' ? p.environment : ''}
-              profileName={p?.name ?? t('editor.tab.profileDeleted')}
-              profile={p}
-            />
-          )
-        })}
+        <div className="row tab-strip" ref={strip} onWheel={onWheel}>
+          {tabs.map((tb) => {
+            const p = profiles.find((x) => x.id === tb.profileId)
+            return (
+              <TabTitle
+                key={tb.id}
+                tab={tb}
+                active={tb.id === active}
+                envClass={p?.environment && p.environment !== 'none' ? p.environment : ''}
+                profileName={profileName(tb.profileId)}
+                profile={p}
+              />
+            )
+          })}
+        </div>
         <div className="tab add" title={t('editor.tab.newQuery')} onClick={() => newQuery()}>
           <IconPlus size={16} />
         </div>
+        <span className="grow" />
+        {tabs.length > 0 && (
+          <Dropdown trigger={['click']} menu={list}>
+            <div className="tab add list" title={t('editor.tab.list')}>
+              <IconChevronDown size={16} />
+            </div>
+          </Dropdown>
+        )}
       </div>
       {tab &&
         (tab.data ? <DataView key={tab.id} tab={tab} profiles={profiles} /> : <QueryView tab={tab} profiles={profiles} />)}

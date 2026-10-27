@@ -48,7 +48,12 @@
     "untitled": "查询{{n}}",
     "prod": "生产",
     "profileDeleted": "连接已删除",
-    "newQuery": "新建查询（Ctrl+T）"
+    "newQuery": "新建查询（Ctrl+T）",
+    "close": "关闭",
+    "closeOthers": "关闭其他",
+    "closeRight": "关闭右侧",
+    "closeAll": "关闭全部",
+    "list": "全部标签"
   },
   "runner": {
     "tabClosed": "标签页已关闭",
