@@ -3,6 +3,7 @@
 mod browse;
 mod changes;
 mod ddl;
+pub mod design;
 mod dml;
 pub mod ident;
 mod import;
