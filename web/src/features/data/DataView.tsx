@@ -232,7 +232,8 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
         </Button>
         {total !== null && <span className="muted">{t('editor.data.total', { count: Number(total) })}</span>}
       </div>
-      {isTable && (
+      {/* 表显示编辑按钮；视图和没有行标识的表显示只读原因 */}
+      {(isTable || readOnlyReason) && (
         <div className="row toolbar">
           {readOnlyReason ? (
             <span className="muted">{readOnlyReason}</span>
