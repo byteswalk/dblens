@@ -2,6 +2,7 @@
 //! 另提供前端页面的静态文件服务（`with_web`）。桌面模式和浏览器模式（`dblens-server`）共用。所有请求都要带访问令牌，浏览器请求还要通过 Origin 校验。
 
 mod auth;
+mod design;
 mod error;
 mod exports;
 mod lang;
@@ -84,6 +85,10 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/profiles/{id}/schemas/{schema}/data-sql", post(routes::data_sql))
         .route("/profiles/{id}/ops", get(exports::ops))
         .route("/profiles/{id}/changes/preview", post(routes::preview_changes))
+        .route("/profiles/{id}/design/caps", get(design::caps))
+        .route("/profiles/{id}/design/table", get(design::table))
+        .route("/profiles/{id}/design/preview", post(design::preview))
+        .route("/profiles/{id}/design/apply", post(design::apply))
         .route("/sessions/{id}/changes", post(routes::apply_changes))
         .route("/exports", post(exports::create))
         .route("/exports/{id}", get(exports::status).delete(exports::cancel_or_remove))

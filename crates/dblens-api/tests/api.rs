@@ -685,3 +685,47 @@ async fn uploads_respect_the_limit_and_paths_are_desktop_only() {
     .await;
     assert_eq!(st, StatusCode::BAD_REQUEST, "浏览器模式不接受本机路径");
 }
+
+/// 表设计器（M3）：能力和类型目录、预览新建表（含校验错误）、执行后任务完成、执行有错误的草稿被拒绝。
+#[tokio::test]
+async fn design_routes() {
+    let (app, _) = app();
+    let (_, p) =
+        call(&app, "POST", "/api/profiles", Some(json!({"profile": profile_json("d"), "password": "pw"})))
+            .await;
+    let id = p["id"].as_str().unwrap().to_string();
+    let (st, caps) = call(&app, "GET", &format!("/api/profiles/{id}/design/caps"), None).await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(caps["reorder"], json!(false));
+    assert!(caps["types"].as_array().unwrap().iter().any(|t| t["name"] == "jsonb" && t["params"] == "none"));
+
+    let col = |name: &str, native: &str| json!({"name": name, "ordinal": 0, "data_type": {"native": native, "logical": {"kind": "other"}}, "nullable": true});
+    let draft = json!({"name": "t", "columns": [col("id", "bigint"), col("note", "text")], "primary_key": {"name": null, "columns": ["id"]}});
+    let body = json!({"schema": "public", "draft": draft});
+    let (st, p) = call(&app, "POST", &format!("/api/profiles/{id}/design/preview"), Some(body.clone())).await;
+    assert_eq!(st, StatusCode::OK, "{p}");
+    assert_eq!(p["errors"], json!([]));
+    assert_eq!(p["changes"][0]["kind"], "create_table");
+    assert_eq!(p["statements"][0]["kind"], "sql");
+    assert!(p["statements"][0]["sql"].as_str().unwrap().starts_with("CREATE TABLE public.t"));
+    assert_eq!(p["warnings"][0], "Primary key column id will be set to NOT NULL");
+    assert_eq!(p["transactional"], json!(true));
+
+    let (st, r) = call(&app, "POST", &format!("/api/profiles/{id}/design/apply"), Some(body)).await;
+    assert_eq!(st, StatusCode::CREATED, "{r}");
+    let task = wait_task(&app, r["id"].as_str().unwrap()).await;
+    assert_eq!((task["kind"].clone(), task["state"].clone()), (json!("design"), json!("done")), "{task}");
+
+    // 校验错误：预览列出位置，执行被拒绝
+    let bad = json!({"schema": "public", "draft": {"name": "", "columns": [col("id", "")]}});
+    let (_, p) = call(&app, "POST", &format!("/api/profiles/{id}/design/preview"), Some(bad.clone())).await;
+    assert_eq!(
+        p["errors"][0],
+        json!({"section": "table", "row": null, "field": "name", "message": "Name is required"})
+    );
+    assert_eq!(p["errors"][1]["field"], "type");
+    let (st, e) = call(&app, "POST", &format!("/api/profiles/{id}/design/apply"), Some(bad)).await;
+    assert_eq!((st, e["kind"].clone()), (StatusCode::BAD_REQUEST, json!("invalid")));
+    let (st, _) = call(&app, "GET", "/api/profiles/nope/design/caps", None).await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+}
