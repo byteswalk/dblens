@@ -128,7 +128,7 @@ impl Dialect {
         Ok(out.trim_end().to_string() + "\n")
     }
 
-    fn table_create(&self, schema: &str, t: &Table) -> String {
+    pub(crate) fn table_create(&self, schema: &str, t: &Table) -> String {
         let q = self.qualified(Some(schema), &t.name);
         let list = |cols: &[String]| cols.iter().map(|c| self.ident(c)).collect::<Vec<_>>().join(", ");
         let mut items: Vec<String> = Vec::new();
