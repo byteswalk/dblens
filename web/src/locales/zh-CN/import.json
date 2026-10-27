@@ -16,6 +16,7 @@
     "unknownFormat": "不认识的扩展名，按 CSV 读取",
     "encoding": "编码",
     "auto": "自动",
+    "autoWith": "自动（{{value}}）",
     "delimiter": "分隔符",
     "delimiters": {
       "comma": "逗号",

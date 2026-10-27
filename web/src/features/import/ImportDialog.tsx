@@ -232,7 +232,7 @@ export default function ImportDialog() {
               style={{ width: 120 }}
               onChange={(encoding) => setOpts((o) => ({ ...o, encoding }))}
               options={[
-                { value: 'auto', label: t('import.file.auto') + (pv?.encoding ? `（${pv.encoding}）` : '') },
+                { value: 'auto', label: pv?.encoding ? t('import.file.autoWith', { value: pv.encoding }) : t('import.file.auto') },
                 { value: 'utf8', label: 'UTF-8' },
                 { value: 'gbk', label: 'GBK' },
               ]}
@@ -246,7 +246,12 @@ export default function ImportDialog() {
               style={{ width: 140 }}
               onChange={(d) => setOpts((o) => ({ ...o, delimiter: d === 'auto' ? null : d }))}
               options={[
-                { value: 'auto', label: t('import.file.auto') + (pv?.delimiter ? `（${delimiterName(pv.delimiter, t)}）` : '') },
+                {
+                  value: 'auto',
+                  label: pv?.delimiter
+                    ? t('import.file.autoWith', { value: delimiterName(pv.delimiter, t) })
+                    : t('import.file.auto'),
+                },
                 { value: ',', label: t('import.file.delimiters.comma') },
                 { value: ';', label: t('import.file.delimiters.semicolon') },
                 { value: '\t', label: t('import.file.delimiters.tab') },
