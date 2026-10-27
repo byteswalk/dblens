@@ -331,12 +331,12 @@ pub fn diff_table(original: Option<&Table>, draft: &Table, renames: &Renames) ->
             .collect(),
         ..x.clone()
     };
-    let same_index = |x: &Index, y: &Index| {
-        x.columns == y.columns
-            && x.unique == y.unique
-            && x.method.as_deref().map(str::to_ascii_uppercase)
-                == y.method.as_deref().map(str::to_ascii_uppercase)
+    // 索引方法：不写与各库的默认方法（BTREE、NORMAL）相同
+    let method = |x: &Index| {
+        x.method.as_deref().map(str::to_ascii_uppercase).filter(|m| !matches!(m.as_str(), "BTREE" | "NORMAL"))
     };
+    let same_index =
+        |x: &Index, y: &Index| x.columns == y.columns && x.unique == y.unique && method(x) == method(y);
     let mut used = vec![false; orig.indexes.len()];
     let mut renames_ix = Vec::new();
     for x in &draft.indexes {

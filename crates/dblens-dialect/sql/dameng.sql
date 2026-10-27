@@ -332,11 +332,12 @@ WHERE d.REFERENCED_OWNER = {{ bind("schema") }}
 ORDER BY d.OWNER, d.NAME
 
 -- [grants]
+-- DM's ALL_TAB_PRIVS names the schema column OWNER (Oracle: TABLE_SCHEMA).
 SELECT p.GRANTEE AS "grantee",
        p.PRIVILEGE AS "privilege",
        p.GRANTABLE AS "grantable"
 FROM ALL_TAB_PRIVS p
-WHERE p.TABLE_SCHEMA = {{ bind("schema") }}
+WHERE p.OWNER = {{ bind("schema") }}
   AND p.TABLE_NAME = {{ bind("table") }}
 ORDER BY p.GRANTEE, p.PRIVILEGE
 

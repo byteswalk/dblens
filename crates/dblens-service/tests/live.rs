@@ -8,16 +8,18 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use dblens_core::{Error, LogicalType, Value};
-use dblens_dialect::meta::MetaKey;
+use dblens_core::schema::{CheckConstraint, Column, Index, IndexColumn, PrimaryKey, Table, UniqueConstraint};
+use dblens_core::{ColumnType, Error, LogicalType, Value};
+use dblens_dialect::design::{Renames, TableChange, diff_table};
+use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_dialect::{DdlKind, Direction, RowChange, WriteMode};
 use dblens_driver::{ConnectParams, DriverId};
 use dblens_service::{
-    ChangeSet, ColumnMapping, DEFAULT_BATCH, DataOrder, DefaultPolicy, DriverRegistry, Environment,
-    ExecRequest, ExportFormat, ExportOptions, ExportRequest, ExportSource, ExportState, ExportStatus,
-    FileOptions, FileSource, GenerateKind, ImportRequest, NewColumn, NewTable, ObjectKind, OnError,
-    ProfileInput, SecretBackend, Secrets, Service, SessionEvent, SessionId, SqlFileRequest, Store, TaskState,
-    TaskStatus, Transaction,
+    ChangeSet, ColumnMapping, DEFAULT_BATCH, DataOrder, DefaultPolicy, DesignRequest, DriverRegistry,
+    Environment, ExecRequest, ExportFormat, ExportOptions, ExportRequest, ExportSource, ExportState,
+    ExportStatus, FileOptions, FileSource, GenerateKind, ImportRequest, NewColumn, NewTable, ObjectKind,
+    OnError, ProfileInput, SecretBackend, Secrets, Service, SessionEvent, SessionId, SqlFileRequest, Store,
+    TaskState, TaskStatus, Transaction,
 };
 
 struct Live {
@@ -1098,4 +1100,296 @@ async fn oracle_sql_file() {
 #[tokio::test]
 async fn dameng_sql_file() {
     sql_file_flow("DBLENS_TEST_DM_URL").await;
+}
+
+/// 表设计器（M3）：新建表；修改列、索引、注释后读回元数据与草稿比对；调整列顺序并改类型（强制重建：
+/// 数据、约束、索引、触发器、其他表指向本表的外键、自增接续、依赖视图）；原表被别人改过时拒绝执行；中途失败。
+async fn design_flow(env: &str) {
+    let Some(live) = setup(env).await else { return };
+    let live = &live;
+    let s = &live.service;
+    let id = s.open_session(&live.profile_id).await.unwrap().id;
+    let upper = matches!(live.driver, DriverId::Oracle | DriverId::Dameng);
+    let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
+    let oracle_drop =
+        |what: &str| format!("BEGIN EXECUTE IMMEDIATE 'DROP {what}'; EXCEPTION WHEN OTHERS THEN NULL; END;");
+    let cleanup = || async {
+        let sqls = match live.driver {
+            DriverId::Oracle => {
+                vec![oracle_drop("VIEW m3_v"), oracle_drop("TABLE m3_items"), oracle_drop("TABLE m3_t")]
+            }
+            _ => vec![
+                "DROP VIEW IF EXISTS m3_v".into(),
+                "DROP TABLE IF EXISTS m3_items".into(),
+                "DROP TABLE IF EXISTS m3_t".into(),
+            ],
+        };
+        for sql in sqls {
+            live.submit(id, ExecRequest::new(sql)).await;
+        }
+    };
+    cleanup().await;
+    let types: [&str; 4] = match live.driver {
+        DriverId::Mysql => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
+        DriverId::Postgres => ["bigint", "varchar(20)", "numeric(10,2)", "varchar(40)"],
+        DriverId::Oracle => ["NUMBER(19)", "VARCHAR2(20)", "NUMBER(10,2)", "VARCHAR2(40)"],
+        DriverId::Dameng => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
+    };
+    let col = |name: &str, native: &str| Column {
+        name: n(name),
+        ordinal: 0,
+        data_type: ColumnType { native: native.into(), logical: LogicalType::Other },
+        nullable: true,
+        default: None,
+        comment: None,
+        auto_increment: false,
+        generated: None,
+    };
+    let mut id_col = col("id", types[0]);
+    (id_col.nullable, id_col.auto_increment) = (false, true);
+    let mut amount = col("amount", types[2]);
+    (amount.default, amount.comment) = (Some("0".into()), Some("金额".into()));
+    let draft = Table {
+        name: n("m3_t"),
+        comment: Some("设计器测试".into()),
+        columns: vec![id_col, col("code", types[1]), amount, col("note", types[3])],
+        primary_key: Some(PrimaryKey { name: Some(n("pk_m3_t")), columns: vec![n("id")] }),
+        uniques: vec![UniqueConstraint { name: Some(n("uk_m3_code")), columns: vec![n("code")] }],
+        checks: vec![CheckConstraint {
+            name: Some(n("ck_m3_amount")),
+            expression: format!("{} >= 0", n("amount")),
+        }],
+        indexes: vec![Index {
+            name: n("ix_m3_note"),
+            columns: vec![IndexColumn { name: n("note"), descending: false }],
+            unique: false,
+            method: None,
+        }],
+        ..Default::default()
+    };
+    let request = |name: Option<&str>,
+                   draft: Table,
+                   renames: Renames,
+                   rebuild: bool,
+                   fingerprint: Option<String>| {
+        DesignRequest { schema: live.schema.clone(), name: name.map(n), draft, renames, rebuild, fingerprint }
+    };
+    let apply = |req: DesignRequest| async move {
+        let task = s.start_design(&live.profile_id, req).await.unwrap();
+        wait_task(s, &task).await
+    };
+
+    // 1. 新建表
+    let p = s
+        .preview_design(&live.profile_id, &request(None, draft.clone(), Renames::default(), false, None))
+        .await
+        .unwrap();
+    assert!(p.errors.is_empty() && p.denied.is_none(), "{env}：{p:?}");
+    let st = apply(request(None, draft.clone(), Renames::default(), false, None)).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    for (code, amount, note) in [("a", "1.5", "n1"), ("b", "2.5", "n2"), ("c", "3", "n3")] {
+        live.run(id, &format!("INSERT INTO m3_t (code, amount, note) VALUES ('{code}', {amount}, '{note}')"))
+            .await;
+    }
+    live.run(id, "CREATE TABLE m3_items (item_id INT PRIMARY KEY, order_code VARCHAR(20))").await;
+    live.run(
+        id,
+        "ALTER TABLE m3_items ADD CONSTRAINT fk_m3_items FOREIGN KEY (order_code) REFERENCES m3_t (code)",
+    )
+    .await;
+    live.run(id, "INSERT INTO m3_items VALUES (1, 'a')").await;
+    live.run(id, "CREATE VIEW m3_v AS SELECT id, code FROM m3_t").await;
+    // 2. 修改：note 改名为 remark 并加长，amount 不可空、改默认值和注释，换索引，加列 extra，改表注释
+    let t = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap();
+    assert_eq!(t.table.columns.len(), 4, "{env}");
+    assert!(t.table.columns[0].auto_increment, "{env}：{:?}", t.table.columns[0]);
+    let mut d = t.table.clone();
+    let note_type = d.columns[3].data_type.native.clone();
+    d.columns[3].name = n("remark");
+    d.columns[3].data_type.native = note_type.replace("40", "60");
+    d.columns[2].nullable = false;
+    d.columns[2].default = Some("1".into());
+    d.columns[2].comment = Some("金额（元）".into());
+    let mut extra = col("extra", &note_type.replace("40", "10"));
+    extra.comment = Some("附加".into());
+    d.columns.push(extra);
+    d.indexes = vec![Index {
+        name: n("ix_m3_remark"),
+        columns: vec![IndexColumn { name: n("remark"), descending: true }],
+        unique: false,
+        method: None,
+    }];
+    d.comment = Some("设计器测试（改）".into());
+    let renames = Renames { columns: [(n("remark"), n("note"))].into(), ..Default::default() };
+    let req = request(Some("m3_t"), d.clone(), renames.clone(), false, Some(t.fingerprint.clone()));
+    let p = s.preview_design(&live.profile_id, &req).await.unwrap();
+    assert!(p.errors.is_empty() && !p.rebuild.active && p.rebuild.reasons.is_empty(), "{env}：{p:?}");
+    let st = apply(req).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    let after = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap().table;
+    // 读回的结构与草稿一致（默认值的写法各库不同，只比较是否有默认值）
+    let left = diff_table(Some(&after), &d, &Renames::default()).unwrap().changes;
+    let left: Vec<_> = left
+        .into_iter()
+        .filter(|c| match c {
+            TableChange::AlterColumn { from, to } => {
+                Column { default: None, ..from.clone() } != Column { default: None, ..to.clone() }
+                    && !(from.default.is_some() && to.default.is_some())
+            }
+            _ => true,
+        })
+        .collect();
+    assert!(left.is_empty(), "{env}：读回后仍有差异 {left:?}");
+
+    let trigger: &[&str] = match live.driver {
+        DriverId::Mysql => {
+            &["CREATE TRIGGER m3_trg BEFORE INSERT ON m3_t FOR EACH ROW SET NEW.remark = 'trg'"]
+        }
+        DriverId::Postgres => &[
+            "CREATE OR REPLACE FUNCTION m3_trg_f() RETURNS trigger AS $$ BEGIN NEW.remark := 'trg'; RETURN NEW; END; $$ LANGUAGE plpgsql",
+            "CREATE TRIGGER m3_trg BEFORE INSERT ON m3_t FOR EACH ROW EXECUTE FUNCTION m3_trg_f()",
+        ],
+        DriverId::Oracle | DriverId::Dameng => &[
+            "CREATE OR REPLACE TRIGGER m3_trg BEFORE INSERT ON m3_t FOR EACH ROW BEGIN :NEW.remark := 'trg'; END;",
+        ],
+    };
+    for sql in trigger {
+        live.run(id, sql).await;
+    }
+
+    // 3. 原表被别人改过：拒绝执行
+    let t = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap();
+    live.run(id, "ALTER TABLE m3_t ADD tmp_col INT").await;
+    let mut d = t.table.clone();
+    d.comment = Some("冲突".into());
+    let err = s
+        .start_design(
+            &live.profile_id,
+            request(Some("m3_t"), d, Renames::default(), false, Some(t.fingerprint)),
+        )
+        .await;
+    assert!(matches!(err, Err(Error::Invalid { .. })), "{env}：{err:?}");
+    live.run(id, "ALTER TABLE m3_t DROP COLUMN tmp_col").await;
+
+    // 4. 重建：amount 挪到最前、extra 改成数值类型；PG 有依赖视图时拒绝
+    live.run(id, "UPDATE m3_t SET extra = '10'").await;
+    if live.driver != DriverId::Mysql {
+        live.run(id, "GRANT SELECT ON m3_t TO PUBLIC").await;
+    }
+    let t = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap();
+    let mut d = t.table.clone();
+    let amount = d.columns.remove(2);
+    d.columns.insert(0, amount);
+    let number = match live.driver {
+        DriverId::Mysql => "INT",
+        DriverId::Postgres => "integer",
+        DriverId::Oracle => "NUMBER(10)",
+        DriverId::Dameng => "INT",
+    };
+    d.columns[4].data_type.native = number.into();
+    let req = request(Some("m3_t"), d.clone(), Renames::default(), true, Some(t.fingerprint.clone()));
+    let p = s.preview_design(&live.profile_id, &req).await.unwrap();
+    assert!(p.rebuild.active, "{env}");
+    assert_eq!(
+        p.rebuild.reasons.is_empty(),
+        live.driver == DriverId::Mysql,
+        "{env}：{:?}",
+        p.rebuild.reasons
+    );
+    if live.driver == DriverId::Postgres {
+        assert!(p.rebuild.refused.is_some(), "{env}：PG 有依赖视图时拒绝重建");
+        live.run(id, "DROP VIEW m3_v").await;
+    }
+    let p = s.preview_design(&live.profile_id, &req).await.unwrap();
+    assert!(p.rebuild.refused.is_none(), "{env}：{p:?}");
+    let st = apply(req).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    let after = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap().table;
+    let names: Vec<&str> = after.columns.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [n("amount"), n("id"), n("code"), n("remark"), n("extra")]
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        "{env}"
+    );
+    assert!(after.columns[1].auto_increment, "{env}：自增保留");
+    assert_eq!(after.columns[0].comment.as_deref(), Some("金额（元）"), "{env}");
+    assert_eq!(after.comment.as_deref(), Some("设计器测试（改）"), "{env}");
+    assert_eq!(after.uniques.len(), 1, "{env}");
+    assert_eq!(
+        after.indexes.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(),
+        [n("ix_m3_remark")],
+        "{env}"
+    );
+    assert_eq!(after.checks.len(), draft.checks.len(), "{env}");
+    assert_eq!(after.triggers.len(), 1, "{env}：触发器重建");
+    let one = |sql: String| async move { text(&first_value(&live.run(id, &sql).await)) };
+    assert_eq!(one("SELECT COUNT(*) FROM m3_t".into()).await.as_deref(), Some("3"), "{env}");
+    assert_eq!(
+        one("SELECT SUM(extra) FROM m3_t".into()).await.as_deref(),
+        Some("30"),
+        "{env}：类型转换后的数据"
+    );
+    // 自增接续、触发器生效
+    live.run(id, "INSERT INTO m3_t (code, amount) VALUES ('d', 4)").await;
+    assert_eq!(one("SELECT MAX(id) FROM m3_t".into()).await.as_deref(), Some("4"), "{env}");
+    assert_eq!(one("SELECT remark FROM m3_t WHERE code = 'd'".into()).await.as_deref(), Some("trg"), "{env}");
+    // 授权恢复（MySQL 的授权按表名记录，不受影响）
+    if live.driver != DriverId::Mysql {
+        let profile = s.profile(&live.profile_id).unwrap();
+        let args =
+            MetaArgs { schema: Some(live.schema.clone()), table: Some(n("m3_t")), ..Default::default() };
+        let rows = s.metadata.rows(&profile, MetaKey::Grants, &args).await.unwrap().unwrap();
+        let grants = dblens_dialect::meta::grants(&rows).unwrap();
+        assert!(grants.iter().any(|g| g.grantee == "PUBLIC" && g.privilege == "SELECT"), "{env}：{grants:?}");
+    }
+    // 其他表指向本表的外键还在
+    let items = s.design_table(&live.profile_id, &live.schema, &n("m3_items")).await.unwrap().table;
+    assert_eq!(items.foreign_keys.len(), 1, "{env}");
+    if live.driver != DriverId::Postgres {
+        assert_eq!(one("SELECT COUNT(*) FROM m3_v".into()).await.as_deref(), Some("4"), "{env}：视图仍可用");
+    }
+
+    // 5. 中途失败：加列后检查约束出错。PG 全部回滚；其他库已执行的保留
+    let t = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap();
+    let mut d = t.table.clone();
+    d.columns.push(col("z", types[1]));
+    d.checks.push(CheckConstraint { name: Some(n("ck_m3_bad")), expression: "no_such_column > 0".into() });
+    let st = apply(request(Some("m3_t"), d, Renames::default(), false, Some(t.fingerprint))).await;
+    assert_eq!(st.state, TaskState::Failed, "{env}：{st:?}");
+    let cols = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap().table.columns.len();
+    assert_eq!(cols, if live.driver == DriverId::Postgres { 5 } else { 6 }, "{env}");
+
+    cleanup().await;
+    if live.driver == DriverId::Postgres {
+        live.run(id, "DROP FUNCTION IF EXISTS m3_trg_f()").await;
+    }
+    s.sessions.close(id, false).await.unwrap();
+}
+
+#[tokio::test]
+async fn mysql_design() {
+    design_flow("DBLENS_TEST_MYSQL_URL").await;
+}
+
+#[tokio::test]
+async fn mariadb_design() {
+    design_flow("DBLENS_TEST_MARIADB_URL").await;
+}
+
+#[tokio::test]
+async fn postgres_design() {
+    design_flow("DBLENS_TEST_PG_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_design() {
+    design_flow("DBLENS_TEST_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_design() {
+    design_flow("DBLENS_TEST_DM_URL").await;
 }

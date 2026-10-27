@@ -299,11 +299,12 @@ WHERE d.REFERENCED_OWNER = ?
 ORDER BY d.OWNER, d.NAME
 
 -- [grants] [String("HR"), String("EMP")]
+-- DM's ALL_TAB_PRIVS names the schema column OWNER (Oracle: TABLE_SCHEMA).
 SELECT p.GRANTEE AS "grantee",
        p.PRIVILEGE AS "privilege",
        p.GRANTABLE AS "grantable"
 FROM ALL_TAB_PRIVS p
-WHERE p.TABLE_SCHEMA = ?
+WHERE p.OWNER = ?
   AND p.TABLE_NAME = ?
 ORDER BY p.GRANTEE, p.PRIVILEGE
 
