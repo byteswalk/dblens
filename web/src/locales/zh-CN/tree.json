@@ -28,7 +28,14 @@
     "duplicateConnection": "复制连接",
     "deleteConnection": "删除连接",
     "copyName": "复制名称",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "viewData": "查看数据",
+    "viewDdl": "查看 DDL",
+    "generate": "生成 SQL",
+    "join": "关联查询",
+    "joinAll": "全部外键",
+    "joinNone": "没有外键",
+    "loading": "加载中…"
   },
   "duplicate": {
     "name": "{{name}} 副本",
@@ -42,5 +49,11 @@
   "copied": "已复制",
   "error": {
     "badKey": "无法识别的节点键：{{key}}"
+  },
+  "ddl": {
+    "title": "{{name}} 的 DDL",
+    "copy": "复制",
+    "openInTab": "在新标签中打开",
+    "close": "关闭"
   }
 }

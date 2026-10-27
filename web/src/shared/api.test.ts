@@ -31,6 +31,29 @@ describe('createApi', () => {
     })
   })
 
+  it('对象操作的参数（M1c2）', async () => {
+    const { fn, calls } = fakeFetch(200, { sql: 'SELECT 1' })
+    const api = createApi('tok', fn)
+    await expect(
+      api.generate('p', 'my schema', {
+        object: 't',
+        objectKind: 'table',
+        kind: 'join',
+        ref: { schema: 'my schema', table: 'u' },
+      }),
+    ).resolves.toBe('SELECT 1')
+    expect(calls[0].url).toBe(
+      '/api/profiles/p/schemas/my%20schema/generate?object=t&object_kind=table&kind=join&ref_schema=my+schema&ref_table=u',
+    )
+    await api.dataSql('p', 's', { object: 't', filter: 'a > 1', order: { column: 'a', desc: true } })
+    expect(calls[1].url).toBe('/api/profiles/p/schemas/s/data-sql')
+    expect(JSON.parse(calls[1].init?.body as string)).toEqual({
+      object: 't',
+      filter: 'a > 1',
+      order: { column: 'a', desc: true },
+    })
+  })
+
   it('204 没有响应体', async () => {
     const { fn, calls } = fakeFetch(204, null)
     await expect(createApi('tok', fn).deleteProfile('a/b')).resolves.toBeNull()

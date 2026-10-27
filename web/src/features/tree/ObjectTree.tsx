@@ -1,6 +1,7 @@
 // 数据库对象树（设计文档 7.3 节；M1 设计稿第 1、3 部分）：所有连接在一棵树里，可以同时展开多个。
 // 懒加载：展开时向后端取下一层（后端有元数据缓存，"刷新"会先清后端缓存再重新取）。顶部过滤框按名称或注释过滤已加载的对象。
-// 右键菜单（M1a）：连接 —— 编辑、复制、删除、刷新；其他节点 —— 复制名称、刷新。"查看 DDL""生成 SQL"等在 M1c 加入。
+// 右键菜单（M1a）：连接 —— 编辑、复制、删除、刷新；其他节点 —— 复制名称、刷新。
+// 对象节点另有（M1c2）："查看 DDL"（弹出只读预览）、"生成 SQL"（插入到当前编辑器）。
 
 import { App, Dropdown, Input, type MenuProps, Tree } from 'antd'
 import type { DataNode, EventDataNode } from 'antd/es/tree'
@@ -17,7 +18,7 @@ import {
   IconTable,
 } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { type Key, type ReactNode, useCallback, useMemo, useState } from 'react'
+import { type Key, type ReactNode, Suspense, lazy, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
@@ -29,6 +30,7 @@ import { driverLabel } from '../connections/form'
 import { variantName } from '../editor/dialect'
 import { withVault } from '../connections/vault'
 import { metaKey } from '../sql/metadata'
+import type { DdlTarget } from './DdlDialog'
 import {
   type CategoryKind,
   type NodeKey,
@@ -41,6 +43,14 @@ import {
   qualifiedName,
   routineKindLabel,
 } from './nodes'
+import { ddlKind, generateChoice, generateMenu, targetKind } from './objectMenu'
+
+// 预览用 Monaco：和工作区一样先加载它的语言包，第一次查看 DDL 时才加载
+const DdlDialog = lazy(async () => {
+  const { loadMonacoLocale } = await import('../editor/monacoLocale')
+  await loadMonacoLocale()
+  return import('./DdlDialog')
+})
 
 /**
  * 已加载的一层子节点。`items` 中的 key 为编码后的节点键。
@@ -143,12 +153,30 @@ export default function ObjectTree() {
   const { t } = useTranslation()
   const { message, modal } = App.useApp()
   const { openConnection, selectProfile } = useUi()
-  const { newQuery } = useQueryActions()
+  const { newQuery, insertSql } = useQueryActions()
   const { data: profiles = [], error: profilesError } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
   const [loaded, setLoaded] = useState<Record<string, Loaded>>({})
   const [expanded, setExpanded] = useState<Key[]>([])
   const [filter, setFilter] = useState('')
   const [menuNode, setMenuNode] = useState<NodeKey | null>(null)
+  const [ddl, setDdl] = useState<DdlTarget | null>(null)
+
+  // 右键表时取它的外键关系，组装"关联查询"子菜单；取不到时当作没有外键
+  const relTable = menuNode?.type === 'o' && menuNode.kind === 'tables' ? menuNode : null
+  const { data: relationsData, error: relationsError } = useQuery({
+    queryKey: ['relations', relTable?.profileId, relTable?.schema, relTable?.name],
+    queryFn: () => api.relations(relTable!.profileId, relTable!.schema, relTable!.name),
+    enabled: !!relTable,
+    retry: false,
+    staleTime: 30_000,
+  })
+  const relations = relationsError ? [] : relationsData
+
+  /** 对象节点的程序类型（函数、过程、包、包体），从已加载的上一层取。 */
+  const routineKindOf = (k: Extract<NodeKey, { type: 'o' }>) =>
+    loaded[encodeKey({ type: 'k', profileId: k.profileId, schema: k.schema, kind: k.kind })]?.items.find(
+      (i) => i.key === encodeKey(k),
+    )?.routineKind
 
   const load = useCallback(
     async (key: string) => {
@@ -248,16 +276,44 @@ export default function ObjectTree() {
         ]
       : menuNode
         ? [
+            ...objectItems(menuNode),
             ...(qualifiedName(menuNode) ? [{ key: 'copy', label: t('tree.menu.copyName') }] : []),
             { key: 'refresh', label: t('tree.menu.refresh') },
           ]
         : []
 
+  /** 对象节点的查看 DDL、生成 SQL，后面接分隔线；其他节点没有。 */
+  function objectItems(k: NodeKey): NonNullable<MenuProps['items']> {
+    if (k.type !== 'o') return []
+    const items: NonNullable<MenuProps['items']> = []
+    if (ddlKind(k.kind, routineKindOf(k))) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
+    const target = targetKind(k.kind)
+    if (target) {
+      // generateMenu 的项是 antd 菜单项的子集
+      const children = generateMenu(target, relations) as NonNullable<MenuProps['items']>
+      items.push({ key: 'gen-menu', label: t('tree.menu.generate'), children })
+    }
+    return items.length ? [...items, { type: 'divider' }] : []
+  }
+
   const onMenu = async (key: string) => {
     const k = menuNode
     if (!k) return
     try {
-      if (key === 'new-query') newQuery(k.profileId)
+      const gen = k.type === 'o' ? generateChoice(key, relations) : null
+      if (gen && k.type === 'o') {
+        const sql = await api.generate(k.profileId, k.schema, {
+          object: k.name,
+          objectKind: targetKind(k.kind) ?? 'table',
+          kind: gen.kind,
+          ref: gen.relation && { schema: gen.relation.schema, table: gen.relation.table },
+        })
+        insertSql(sql, k.profileId)
+      } else if (key === 'ddl' && k.type === 'o') {
+        const kind = ddlKind(k.kind, routineKindOf(k))
+        const driver = profiles.find((p) => p.id === k.profileId)?.driver
+        if (kind && driver) setDdl({ profileId: k.profileId, driver, schema: k.schema, kind, name: k.name })
+      } else if (key === 'new-query') newQuery(k.profileId)
       else if (key === 'edit' && k.type === 'c') openConnection(k.profileId)
       else if (key === 'duplicate' && k.type === 'c') {
         const p = await api.profile(k.profileId)
@@ -322,6 +378,11 @@ export default function ObjectTree() {
           />
         </div>
       </Dropdown>
+      {ddl && (
+        <Suspense fallback={null}>
+          <DdlDialog target={ddl} onClose={() => setDdl(null)} />
+        </Suspense>
+      )}
     </div>
   )
 }

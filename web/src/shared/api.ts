@@ -149,6 +149,48 @@ export interface TableInfo {
   primary_key: { name: string | null; columns: string[] } | null
 }
 
+/** 查看 DDL 的对象种类（M1c2）。 */
+export type DdlKind =
+  | 'table'
+  | 'view'
+  | 'materialized_view'
+  | 'sequence'
+  | 'function'
+  | 'procedure'
+  | 'package'
+  | 'package_body'
+  | 'synonym'
+
+/** 生成 SQL、数据标签的对象种类：视图和物化视图只能生成 SELECT。 */
+export type TargetKind = 'table' | 'view' | 'materialized_view'
+
+export type GenerateKind = 'select' | 'insert' | 'update' | 'delete' | 'join'
+
+/** 表的一个外键关系：out 为本表引用的表，in 为引用本表的表（同一 schema）。 */
+export interface Relation {
+  direction: 'out' | 'in'
+  name: string | null
+  schema: string
+  table: string
+  local_columns: string[]
+  other_columns: string[]
+}
+
+export interface GenerateParams {
+  object: string
+  objectKind: TargetKind
+  kind: GenerateKind
+  /** 关联查询只连接这张表；不给时连接本表引用的全部表。 */
+  ref?: { schema: string; table: string }
+}
+
+export interface DataSqlParams {
+  object: string
+  filter?: string
+  order?: { column: string; desc: boolean } | null
+  count?: boolean
+}
+
 export interface SequenceInfo {
   name: string
 }
@@ -283,6 +325,25 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     sequences: (id: string, schema: string) => request<SequenceInfo[]>('GET', `${s(id, schema)}/sequences`),
     routines: (id: string, schema: string) => request<RoutineInfo[]>('GET', `${s(id, schema)}/routines`),
     synonyms: (id: string, schema: string) => request<SynonymInfo[]>('GET', `${s(id, schema)}/synonyms`),
+    ddl: async (id: string, schema: string, kind: DdlKind, name: string) =>
+      (await request<{ ddl: string }>('GET', `${s(id, schema)}/ddl${q({ kind, name })}`)).ddl,
+    generate: async (id: string, schema: string, g: GenerateParams) =>
+      (
+        await request<{ sql: string }>(
+          'GET',
+          `${s(id, schema)}/generate${q({
+            object: g.object,
+            object_kind: g.objectKind,
+            kind: g.kind,
+            ref_schema: g.ref?.schema,
+            ref_table: g.ref?.table,
+          })}`,
+        )
+      ).sql,
+    relations: (id: string, schema: string, table: string) =>
+      request<Relation[]>('GET', `${s(id, schema)}/relations${q({ table })}`),
+    dataSql: async (id: string, schema: string, d: DataSqlParams) =>
+      (await request<{ sql: string }>('POST', `${s(id, schema)}/data-sql`, d)).sql,
     /** 清掉后端的元数据缓存；不给 schema 时清整个连接的。 */
     refresh: (id: string, schema: string | null) => request<null>('POST', `${p(id)}/refresh`, { schema }),
     history: (p: HistoryParams = {}) =>

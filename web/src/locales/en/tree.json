@@ -28,7 +28,14 @@
     "duplicateConnection": "Duplicate Connection",
     "deleteConnection": "Delete Connection",
     "copyName": "Copy Name",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "viewData": "View Data",
+    "viewDdl": "View DDL",
+    "generate": "Generate SQL",
+    "join": "Join Query",
+    "joinAll": "All Foreign Keys",
+    "joinNone": "No foreign keys",
+    "loading": "Loading…"
   },
   "duplicate": {
     "name": "{{name}} copy",
@@ -42,5 +49,11 @@
   "copied": "Copied",
   "error": {
     "badKey": "Unrecognized node key: {{key}}"
+  },
+  "ddl": {
+    "title": "DDL of {{name}}",
+    "copy": "Copy",
+    "openInTab": "Open in New Tab",
+    "close": "Close"
   }
 }
