@@ -11,6 +11,7 @@ import { Group, Panel, type PanelImperativeHandle, Separator, useDefaultLayout }
 import { useQueryActions } from '../features/editor/actions'
 import { type EditorCommand, sendCommand } from '../features/editor/commands'
 import { useTabs } from '../features/editor/tabs'
+import ExportDialog from '../features/export/ExportDialog'
 import FavoriteDialog from '../features/favorites/FavoriteDialog'
 import FavoritesPanel from '../features/favorites/FavoritesPanel'
 import HistoryPanel from '../features/history/HistoryPanel'
@@ -155,6 +156,7 @@ export default function Shell() {
       </div>
       <StatusBar />
       <FavoriteDialog />
+      <ExportDialog />
     </div>
   )
 }

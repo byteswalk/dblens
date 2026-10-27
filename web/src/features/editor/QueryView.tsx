@@ -11,6 +11,7 @@ import { useApi } from '../../app/context'
 import { type Profile, errorText } from '../../shared/api'
 import { layoutStorage } from '../../shared/settings'
 import ResultsPanel from '../results/ResultsPanel'
+import { useExportDialog } from '../export/dialog'
 import { useFavoriteDialog } from '../favorites/dialog'
 import { sqlDialect } from '../sql/dialects'
 import { defaultSchema, metaKey, metaReader } from '../sql/metadata'
@@ -202,7 +203,20 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
         </Panel>
         <Separator className="splitter-h" />
         <Panel id="results" defaultSize="40%" minSize={60}>
-          <ResultsPanel rt={rt} onFetchMore={() => runner.fetchMore()} />
+          <ResultsPanel
+            rt={rt}
+            onFetchMore={() => runner.fetchMore()}
+            onExport={(i) => {
+              // 导出这条语句的原文（取自执行时的全文）
+              const s = rt.exec.statements[i]
+              useExportDialog.getState().open({
+                profileId: tab.profileId,
+                source: { sql: rt.source.slice(s.start, s.end) },
+                baseName: 'export',
+                inTransaction: !!rt.session?.in_transaction,
+              })
+            }}
+          />
         </Panel>
       </Group>
       <ConfirmDialog

@@ -1,8 +1,8 @@
 // 结果面板（设计稿第 2 部分）：结果集、失败的语句、消息各一个标签。每次执行后自动选中第一个结果集，
-// 没有结果集时选中第一个失败的语句，再没有就选"消息"。
+// 没有结果集时选中第一个失败的语句，再没有就选"消息"。结果集标签右侧有"导出"按钮（M1c3，执行计划的结果除外）。
 
-import { IconAlertCircle, IconBinaryTree, IconMessage, IconTable } from '@tabler/icons-react'
-import { Spin } from 'antd'
+import { IconAlertCircle, IconBinaryTree, IconDownload, IconMessage, IconTable } from '@tabler/icons-react'
+import { Button, Spin } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -18,6 +18,8 @@ export interface ResultsPanelProps {
   /** 数据标签的排序（见 ResultGrid）。 */
   sort?: Order
   onSort?(column: string): void
+  /** 导出第 `stmt` 条语句的结果；不给时不显示导出按钮。 */
+  onExport?(stmt: number): void
 }
 
 function TabIcon({ tab, explain }: { tab: ResultTab; explain: boolean }) {
@@ -26,7 +28,7 @@ function TabIcon({ tab, explain }: { tab: ResultTab; explain: boolean }) {
   return explain ? <IconBinaryTree size={16} /> : <IconTable size={16} />
 }
 
-export default function ResultsPanel({ rt, onFetchMore, sort, onSort }: ResultsPanelProps) {
+export default function ResultsPanel({ rt, onFetchMore, sort, onSort, onExport }: ResultsPanelProps) {
   const { t } = useTranslation()
   const { exec, explain, capped, running } = rt
   const tabs = resultTabs(exec, explain, capped)
@@ -57,6 +59,17 @@ export default function ResultsPanel({ rt, onFetchMore, sort, onSort }: ResultsP
         ))}
         <span className="grow" />
         {running && <Spin size="small" style={{ marginRight: 8 }} />}
+        {onExport && current.kind === 'result' && !explain && (
+          <Button
+            type="text"
+            size="small"
+            icon={<IconDownload size={16} />}
+            onClick={() => onExport(current.stmt)}
+            style={{ marginRight: 4 }}
+          >
+            {t('results.export.button')}
+          </Button>
+        )}
       </div>
       <div className="results-body">
         {current.kind === 'result' && (

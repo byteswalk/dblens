@@ -46,5 +46,46 @@
     "copyFailed": "Copy failed",
     "text": "Text",
     "hex": "Hex"
+  },
+  "export": {
+    "button": "Export",
+    "title": "Export",
+    "format": "Format",
+    "formats": {
+      "csv": "CSV",
+      "xlsx": "Excel (xlsx)",
+      "insert": "INSERT statements",
+      "json": "JSON"
+    },
+    "delimiter": "Delimiter",
+    "delimiters": {
+      "comma": "Comma",
+      "tab": "Tab",
+      "semicolon": "Semicolon"
+    },
+    "header": "Column names in the first row",
+    "bom": "Add a UTF-8 BOM (so Excel opens non-ASCII text correctly)",
+    "nullText": "Write NULL as",
+    "nullEmpty": "Empty",
+    "table": "Target table",
+    "rowsPerInsert": "Rows per statement",
+    "xlsxNote": "The first row holds column names; rows beyond 1048575 continue on the next sheet; cells hold at most 32767 characters.",
+    "jsonNote": "An array of objects, one per row, keyed by column name.",
+    "uncommitted": "The export runs in a new session and cannot see uncommitted changes in this tab",
+    "ok": "Export",
+    "running": "Exporting {{name}}",
+    "progress_one": "{{count}} row written",
+    "progress_other": "{{count}} rows written",
+    "cancel": "Cancel",
+    "done": "Export finished: {{name}}",
+    "doneRows_one": "{{count}} row",
+    "doneRows_other": "{{count}} rows",
+    "lobTruncated_one": "{{count}} large value exceeded 256 MB; only the first part was written",
+    "lobTruncated_other": "{{count}} large values exceeded 256 MB; only the first part was written",
+    "cellTruncated_one": "{{count}} cell exceeded 32767 characters and was truncated",
+    "cellTruncated_other": "{{count}} cells exceeded 32767 characters and were truncated",
+    "reveal": "Open Containing Folder",
+    "failed": "Export failed: {{name}}",
+    "cancelled": "Export cancelled: {{name}}"
   }
 }

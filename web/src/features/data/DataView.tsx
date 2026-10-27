@@ -2,7 +2,7 @@
 // 工具栏：连接和 schema（只显示）、WHERE 过滤、刷新、停止、统计行数；表格沿用查询标签的结果面板，点列头排序。
 // SELECT 由后端按方言生成（data-sql），经这个标签自己的会话执行（沿用 runner：续取、取消、行数上限）。
 
-import { IconPlayerStop, IconRefresh, IconSum } from '@tabler/icons-react'
+import { IconDownload, IconPlayerStop, IconRefresh, IconSum } from '@tabler/icons-react'
 import { Alert, App, Button, Input, Tooltip } from 'antd'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,6 +12,7 @@ import DbIcon from '../../shared/DbIcon'
 import type { Profile } from '../../shared/api'
 import ResultsPanel from '../results/ResultsPanel'
 import { runnerFor, useTabRuntime } from '../editor/runner'
+import { useExportDialog } from '../export/dialog'
 import { type DataTarget, type QueryTab, useTabs } from '../editor/tabs'
 import { countRows } from './count'
 import { nextOrder } from './sort'
@@ -96,6 +97,22 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
         </Tooltip>
         <Button size="small" icon={<IconSum size={14} />} loading={counting} disabled={!profile} onClick={() => void count()}>
           {t('editor.data.count')}
+        </Button>
+        <Button
+          size="small"
+          icon={<IconDownload size={14} />}
+          disabled={!profile}
+          onClick={() =>
+            useExportDialog.getState().open({
+              profileId: tab.profileId,
+              source: { data: { schema: data.schema, object: data.object, filter: data.filter, order: data.order } },
+              baseName: data.object,
+              table: `${data.schema}.${data.object}`,
+              inTransaction: false,
+            })
+          }
+        >
+          {t('results.export.button')}
         </Button>
         {total !== null && <span className="muted">{t('editor.data.total', { count: Number(total) })}</span>}
       </div>

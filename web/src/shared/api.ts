@@ -191,6 +191,52 @@ export interface DataSqlParams {
   count?: boolean
 }
 
+/** 导出格式（M1c3）。 */
+export type ExportFormat = 'csv' | 'xlsx' | 'insert' | 'json'
+
+/** 导出选项；只有对应格式用到的字段起作用。 */
+export interface ExportOptions {
+  delimiter: ',' | '\t' | ';'
+  header: boolean
+  bom: boolean
+  null_text: string
+  table: string
+  rows_per_insert: number
+}
+
+/** 导出什么：一条查询语句，或数据标签的对象。 */
+export type ExportSource =
+  | { sql: string }
+  | { data: { schema: string; object: string; filter?: string; order?: { column: string; desc: boolean } | null } }
+
+export interface ExportRequest {
+  profile_id: string
+  source: ExportSource
+  format: ExportFormat
+  options: ExportOptions
+  /** 桌面版"另存为"选出的路径；浏览器模式不给。 */
+  path: string | null
+  file_name: string
+}
+
+export interface ExportStatus {
+  id: string
+  state: 'running' | 'done' | 'failed' | 'cancelled'
+  rows: number
+  warnings: { lob_truncated: number; cell_truncated: number }
+  error: ErrorBody | null
+  file_name: string
+  path: string | null
+}
+
+/** 一条运维查询（M1c3）。 */
+export interface OpsQuery {
+  key: string
+  name: string
+  category: 'session' | 'lock' | 'storage' | 'sql'
+  sql: string
+}
+
 export interface SequenceInfo {
   name: string
 }
@@ -364,6 +410,13 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     updateFavorite: (id: string, patch: FavoritePatch) =>
       request<Favorite>('PUT', `/favorites/${encodeURIComponent(id)}`, patch),
     deleteFavorite: (id: string) => request<null>('DELETE', `/favorites/${encodeURIComponent(id)}`),
+    ops: (id: string) => request<OpsQuery[]>('GET', `${p(id)}/ops`),
+    startExport: async (req: ExportRequest) => (await request<{ id: string }>('POST', '/exports', req)).id,
+    exportStatus: (id: string) => request<ExportStatus>('GET', `/exports/${encodeURIComponent(id)}`),
+    /** 进行中的导出取消；已结束的删除记录。 */
+    cancelExport: (id: string) => request<null>('DELETE', `/exports/${encodeURIComponent(id)}`),
+    /** 浏览器模式的下载地址：链接不能带请求头，令牌放在查询参数里。 */
+    exportFileUrl: (id: string) => `/api/exports/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}`,
     openSession: (profileId: string) => request<SessionInfo>('POST', '/sessions', { profile_id: profileId }),
     session: (id: number) => request<SessionInfo>('GET', `/sessions/${id}`),
     /** 关闭会话；有未提交的修改时按 commit 提交或回滚。 */

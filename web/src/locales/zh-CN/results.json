@@ -36,5 +36,42 @@
     "copyFailed": "复制失败",
     "text": "文本",
     "hex": "十六进制"
+  },
+  "export": {
+    "button": "导出",
+    "title": "导出",
+    "format": "格式",
+    "formats": {
+      "csv": "CSV",
+      "xlsx": "Excel（xlsx）",
+      "insert": "INSERT 语句",
+      "json": "JSON"
+    },
+    "delimiter": "分隔符",
+    "delimiters": {
+      "comma": "逗号",
+      "tab": "制表符",
+      "semicolon": "分号"
+    },
+    "header": "第一行写列名",
+    "bom": "加 UTF-8 BOM（Excel 直接打开中文不乱码）",
+    "nullText": "NULL 写成",
+    "nullEmpty": "空",
+    "table": "目标表",
+    "rowsPerInsert": "每条语句的行数",
+    "xlsxNote": "第一行是列名；超过 1048575 行时续到下一个工作表；单元格最多 32767 个字符。",
+    "jsonNote": "对象数组，每行一个对象，键为列名。",
+    "uncommitted": "导出用新会话执行，看不到当前标签中未提交的修改",
+    "ok": "导出",
+    "running": "正在导出 {{name}}",
+    "progress": "已写出 {{count}} 行",
+    "cancel": "取消",
+    "done": "导出完成：{{name}}",
+    "doneRows": "共 {{count}} 行",
+    "lobTruncated": "{{count}} 个大字段超过 256 MB，只写出了前一部分",
+    "cellTruncated": "{{count}} 个单元格超过 32767 个字符，已截断",
+    "reveal": "打开所在文件夹",
+    "failed": "导出失败：{{name}}",
+    "cancelled": "已取消导出：{{name}}"
   }
 }
