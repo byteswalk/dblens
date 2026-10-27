@@ -94,6 +94,10 @@
 | GET | `…/schemas/{schema}/routines` | 存储过程、函数、包 |
 | GET | `…/schemas/{schema}/synonyms` | 同义词 |
 | GET | `…/schemas/{schema}/source?kind=view_definition\|routine_source&name=&routine_kind=` | 视图定义或程序源码 |
+| GET | `…/schemas/{schema}/ddl?kind=&name=` | 对象的 DDL，`{"ddl": "…"}`（M1c2 加入）。`kind`：table / view / materialized_view / sequence / function / procedure / package / package_body / synonym；该数据库没有这种对象时 400；对象不存在时 404，由数据库给出 DDL 的（MySQL 系、Oracle、达梦）则是数据库的错误（422） |
+| GET | `…/schemas/{schema}/generate?object=&object_kind=&kind=&ref_schema=&ref_table=` | 生成 SQL，`{"sql": "…"}`（M1c2 加入）。`kind`：select / insert / update / delete / join；`object_kind`：table（默认）/ view / materialized_view，视图只能 select；update、delete 需要主键；join 给出 `ref_table` 时只连接与它相关的外键，否则连接本表引用的全部表 |
+| GET | `…/schemas/{schema}/relations?table=` | 表的外键关系（M1c2 加入）：`[{direction: out\|in, name, schema, table, local_columns, other_columns}]`，`in` 只含同一 schema 中引用它的表 |
+| POST | `…/schemas/{schema}/data-sql` | 数据标签的 SQL（M1c2 加入），`{"object", "filter"?, "order"?: {"column", "desc"}, "count"?}` → `{"sql": "…"}`；`filter` 为空白时不加 WHERE，`count` 为 true 时生成 `SELECT COUNT(*)` |
 | POST | `/profiles/{id}/refresh` | 刷新元数据缓存，`{"schema": "…" \| null}` |
 
 ### 会话

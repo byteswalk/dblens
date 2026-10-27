@@ -32,7 +32,14 @@ async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (St
     let resp = app.clone().oneshot(req).await.unwrap();
     let status = resp.status();
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    (status, if bytes.is_empty() { Value::Null } else { serde_json::from_slice(&bytes).unwrap() })
+    // 参数解析失败时 axum 返回纯文本
+    let body = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes)
+            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into()))
+    };
+    (status, body)
 }
 
 async fn flow(env: &str) {
@@ -91,6 +98,35 @@ async fn flow(env: &str) {
     let (st, s) = call(&app, "POST", "/api/sessions", Some(json!({"profile_id": id}))).await;
     assert_eq!(st, StatusCode::CREATED, "{s}");
     let sid = s["id"].as_u64().unwrap();
+
+    // 对象操作（M1c2）：取数和拼装在服务层的实库测试中覆盖，这里只看路由、参数和状态码
+    let schema = s["schema"].as_str().unwrap();
+    let base = format!("/api/profiles/{id}/schemas/{schema}");
+    let (st, d) = call(
+        &app,
+        "POST",
+        &format!("{base}/data-sql"),
+        Some(json!({
+            "object": "c2_x", "filter": " ", "order": {"column": "id", "desc": true},
+        })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{d}");
+    let sql = d["sql"].as_str().unwrap().to_lowercase();
+    assert!(sql.contains("c2_x") && sql.contains("desc") && !sql.contains("where"), "{sql}");
+    let (st, d) =
+        call(&app, "POST", &format!("{base}/data-sql"), Some(json!({"object": "c2_x", "count": true}))).await;
+    assert!(st == StatusCode::OK && d["sql"].as_str().unwrap().to_lowercase().contains("count(*)"), "{d}");
+    // 不存在的表：PG 系由结构模型拼装时 404；其余由数据库报错（422）
+    let (st, e) = call(&app, "GET", &format!("{base}/ddl?kind=table&name=c2_no_such"), None).await;
+    assert!(st.is_client_error(), "{st} {e}");
+    let (st, e) = call(&app, "GET", &format!("{base}/relations?table=c2_no_such"), None).await;
+    assert_eq!(st, StatusCode::NOT_FOUND, "{e}");
+    let (st, e) =
+        call(&app, "GET", &format!("{base}/generate?object=c2_v&object_kind=view&kind=insert"), None).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST, "{e}");
+    let (st, _) = call(&app, "GET", &format!("{base}/ddl?kind=bogus&name=x"), None).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
 
     // WebSocket：900 行，每批 400 行
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

@@ -9,12 +9,14 @@ use axum::http::StatusCode;
 use dblens_core::schema::{Routine, Sequence, Synonym, Table, View};
 use dblens_core::{Error, msg};
 use dblens_dialect::meta::{MetaKey, ObjectInfo, SchemaInfo};
+use dblens_dialect::{DdlKind, Relation};
 use dblens_driver::DriverId;
 use dblens_service::{
-    DriverStatus, Favorite, FavoritePatch, HistoryItem, HistoryQuery, NewFavorite, Profile, ProfileInput,
-    SecretStatus, ServerSummary, SessionId, SessionInfo,
+    DataOrder, DriverStatus, Favorite, FavoritePatch, GenerateKind, HistoryItem, HistoryQuery, NewFavorite,
+    ObjectKind, Profile, ProfileInput, SecretStatus, ServerSummary, SessionId, SessionInfo,
 };
 use serde::Deserialize;
+use serde_json::{Value, json};
 
 use crate::AppState;
 use crate::error::ApiResult;
@@ -342,6 +344,85 @@ pub struct RefreshBody {
     /// 只刷新这个 schema；不给则刷新整个连接。
     #[serde(default)]
     pub schema: Option<String>,
+}
+
+// ---- 对象操作（M1c2） ----
+
+#[derive(Deserialize)]
+pub struct DdlQuery {
+    /// table / view / materialized_view / sequence / function / procedure / package / package_body / synonym。
+    pub kind: DdlKind,
+    pub name: String,
+}
+
+pub async fn ddl(
+    State(s): State<AppState>,
+    Path((id, schema)): Path<(String, String)>,
+    Query(q): Query<DdlQuery>,
+) -> ApiResult<Json<Value>> {
+    let p = s.service.profile(&id)?;
+    let ddl = s.service.metadata.ddl(&p, &schema, q.kind, &q.name).await?;
+    Ok(Json(json!({ "ddl": ddl })))
+}
+
+#[derive(Deserialize)]
+pub struct GenerateQuery {
+    pub object: String,
+    /// table / view / materialized_view，默认 table。
+    #[serde(default)]
+    pub object_kind: ObjectKind,
+    /// select / insert / update / delete / join。
+    pub kind: GenerateKind,
+    /// 关联查询只连接这张表；两个都不给时连接本表引用的全部表。
+    pub ref_schema: Option<String>,
+    pub ref_table: Option<String>,
+}
+
+pub async fn generate(
+    State(s): State<AppState>,
+    Path((id, schema)): Path<(String, String)>,
+    Query(q): Query<GenerateQuery>,
+) -> ApiResult<Json<Value>> {
+    let p = s.service.profile(&id)?;
+    let reference = q.ref_table.as_deref().map(|t| (q.ref_schema.as_deref().unwrap_or(&schema), t));
+    let sql = s.service.metadata.generate(&p, &schema, &q.object, q.object_kind, q.kind, reference).await?;
+    Ok(Json(json!({ "sql": sql })))
+}
+
+#[derive(Deserialize)]
+pub struct RelationsQuery {
+    pub table: String,
+}
+
+pub async fn relations(
+    State(s): State<AppState>,
+    Path((id, schema)): Path<(String, String)>,
+    Query(q): Query<RelationsQuery>,
+) -> ApiResult<Json<Vec<Relation>>> {
+    let p = s.service.profile(&id)?;
+    Ok(Json(s.service.metadata.relations(&p, &schema, &q.table).await?))
+}
+
+#[derive(Deserialize)]
+pub struct DataSqlBody {
+    pub object: String,
+    /// WHERE 后的条件，原样拼入。
+    pub filter: Option<String>,
+    pub order: Option<DataOrder>,
+    /// true 时生成 `SELECT COUNT(*)`。
+    #[serde(default)]
+    pub count: bool,
+}
+
+pub async fn data_sql(
+    State(s): State<AppState>,
+    Path((id, schema)): Path<(String, String)>,
+    Json(b): Json<DataSqlBody>,
+) -> ApiResult<Json<Value>> {
+    let p = s.service.profile(&id)?;
+    let filter = b.filter.as_deref().map(str::trim).filter(|f| !f.is_empty());
+    let sql = s.service.metadata.data_sql(&p, &schema, &b.object, filter, b.order.as_ref(), b.count).await?;
+    Ok(Json(json!({ "sql": sql })))
 }
 
 /// 手动刷新：让元数据缓存失效。
