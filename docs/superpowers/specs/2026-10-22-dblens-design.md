@@ -323,6 +323,10 @@ trait Policy: Send + Sync {
 | M5 迁移 | 选择源和目标 → 按逻辑类型映射结构，生成目标 DDL，可人工调整 → 分批迁移数据（断点续传、进度、行数校验） → 最后建索引和约束 | M2 的批量读写、M3 的 DDL 生成、类型映射 |
 | 后续 | 团队管控（多用户、RBAC、SQL 审核、审计、执行前备份）、JDBC 桥、SQLite、SQL Server 等 | 浏览器模式、Policy、Driver 接口 |
 
+进度：
+- 2026-10-26 M2 拆成两份（用户确认）：M2a 表数据编辑；M2b 导入（CSV / Excel 导入到表、SQL 文件导入）和对象树"导出整表"的入口。查询结果和数据标签的导出已在 M1c3 完成。
+- M2a 已完成（设计 `docs/superpowers/specs/2026-10-26-m2a-data-editing-design.md`，详细计划 `docs/superpowers/plans/2026-10-26-m2a-data-editing.md`，说明 `docs/notes/m2a-data-editing.md`）。
+
 ## 12. 风险与待验证项
 
 | 风险 | 应对 |
