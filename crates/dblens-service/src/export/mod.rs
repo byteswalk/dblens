@@ -7,4 +7,5 @@ pub use job::{
     EXPORT_LOB_LIMIT, ExportManager, ExportRequest, ExportSource, ExportState, ExportStatus,
     MAX_RUNNING_EXPORTS,
 };
+pub(crate) use write::cell_text;
 pub use write::{ExportFormat, ExportOptions, ExportWarnings};

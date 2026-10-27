@@ -19,6 +19,7 @@ argon2.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 chacha20poly1305.workspace = true
+calamine.workspace = true
 chrono.workspace = true
 csv.workspace = true
 dblens-core.workspace = true
@@ -29,6 +30,8 @@ dblens-driver-mysql = { workspace = true, optional = true }
 dblens-driver-oracle = { workspace = true, optional = true }
 dblens-driver-postgres = { workspace = true, optional = true }
 directories.workspace = true
+encoding_rs.workspace = true
+encoding_rs_io.workspace = true
 keyring.workspace = true
 rusqlite.workspace = true
 rust_xlsxwriter.workspace = true

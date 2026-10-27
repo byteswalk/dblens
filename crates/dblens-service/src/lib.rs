@@ -7,6 +7,7 @@ mod export;
 pub mod fake;
 mod favorite;
 mod history;
+mod import;
 mod metadata;
 mod objects;
 mod policy;
@@ -26,6 +27,10 @@ pub use favorite::{Favorite, FavoriteKind, FavoriteMove, FavoritePatch, NewFavor
 pub use history::{
     DEFAULT_HISTORY_LIMIT, HISTORY_ENABLED_SETTING, HISTORY_LIMIT_SETTING, HistoryItem, HistoryLog,
     HistoryQuery, NewHistory,
+};
+pub use import::{
+    EmptyAs, FileFormat, FileOptions, FilePreview, FileReader, FileRow, ReadWarnings, TextEncoding, convert,
+    infer_type, preview_file,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
 pub use objects::{DataOrder, GenerateKind, ObjectKind};
