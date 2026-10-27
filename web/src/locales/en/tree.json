@@ -35,7 +35,11 @@
     "join": "Join Query",
     "joinAll": "All Foreign Keys",
     "joinNone": "No foreign keys",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "import": "Import Data…",
+    "importNew": "Import into New Table…",
+    "sqlFile": "Run SQL File…",
+    "exportData": "Export Data…"
   },
   "duplicate": {
     "name": "{{name}} copy",

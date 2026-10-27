@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { useQueryActions } from '../features/editor/actions'
 import { type EditorCommand, sendCommand } from '../features/editor/commands'
 import { useTabs } from '../features/editor/tabs'
+import { useImportDialogs } from '../features/import/dialog'
 import { useSetting, useSettings } from '../shared/settings'
 import { type WindowAction, desktop, titleBarInset } from '../shared/shell'
 import { THEME_KEY, type ThemePref, parseThemePref } from '../shared/theme'
@@ -68,6 +69,13 @@ export default function TitleBar() {
     if (key === 'new-connection') ui.openConnection(null)
     else if (key === 'new-query') newQuery()
     else if (key === 'close-tab') closeActive()
+    else if (key === 'import' || key === 'sql-file') {
+      // 用对象树中选中的连接，没有时用当前标签的、第一个连接；一个都没有时新建连接
+      const id = ui.selectedProfile ?? tab?.profileId ?? profiles?.[0]?.id
+      if (!id) ui.openConnection(null)
+      else if (key === 'import') useImportDialogs.getState().openImport({ profileId: id, schema: null, table: null, create: false })
+      else useImportDialogs.getState().openSqlFile({ profileId: id, schema: null })
+    }
     else if (kind === 'sql') sendCommand(arg as EditorCommand)
     else if (key === 'settings') ui.setSettingsOpen(true)
     else if (key === 'quit') act('quit')

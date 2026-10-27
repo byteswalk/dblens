@@ -64,7 +64,9 @@
       "newQuery": "New Query",
       "closeTab": "Close Tab",
       "settings": "Settings…",
-      "quit": "Exit"
+      "quit": "Exit",
+      "import": "Import Data…",
+      "sqlFile": "Run SQL File…"
     },
     "view": {
       "title": "View",

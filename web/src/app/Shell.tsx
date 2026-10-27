@@ -12,6 +12,8 @@ import { useQueryActions } from '../features/editor/actions'
 import { type EditorCommand, sendCommand } from '../features/editor/commands'
 import { useTabs } from '../features/editor/tabs'
 import ExportDialog from '../features/export/ExportDialog'
+import ImportDialog from '../features/import/ImportDialog'
+import SqlFileDialog from '../features/import/SqlFileDialog'
 import FavoriteDialog from '../features/favorites/FavoriteDialog'
 import FavoritesPanel from '../features/favorites/FavoritesPanel'
 import HistoryPanel from '../features/history/HistoryPanel'
@@ -157,6 +159,8 @@ export default function Shell() {
       <StatusBar />
       <FavoriteDialog />
       <ExportDialog />
+      <ImportDialog />
+      <SqlFileDialog />
     </div>
   )
 }

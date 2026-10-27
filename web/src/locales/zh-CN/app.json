@@ -63,7 +63,9 @@
       "newQuery": "新建查询",
       "closeTab": "关闭标签",
       "settings": "设置…",
-      "quit": "退出"
+      "quit": "退出",
+      "import": "导入数据…",
+      "sqlFile": "执行 SQL 文件…"
     },
     "view": {
       "title": "查看",

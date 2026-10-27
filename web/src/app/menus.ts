@@ -28,6 +28,9 @@ export function buildMenus(s: MenuState): MenuGroup[] {
     { key: 'new-query', label: t('app.menu.file.newQuery'), shortcut: 'Ctrl+T' },
     { key: 'close-tab', label: t('app.menu.file.closeTab'), shortcut: 'Ctrl+W' },
     'divider',
+    { key: 'import', label: t('app.menu.file.import') },
+    { key: 'sql-file', label: t('app.menu.file.sqlFile') },
+    'divider',
   ]
   file.push({ key: 'settings', label: t('app.menu.file.settings') })
   if (s.desktop) file.push('divider', { key: 'quit', label: t('app.menu.file.quit') })

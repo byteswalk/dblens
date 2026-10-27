@@ -35,7 +35,11 @@
     "join": "关联查询",
     "joinAll": "全部外键",
     "joinNone": "没有外键",
-    "loading": "加载中…"
+    "loading": "加载中…",
+    "import": "导入数据…",
+    "importNew": "导入到新表…",
+    "sqlFile": "执行 SQL 文件…",
+    "exportData": "导出数据…"
   },
   "duplicate": {
     "name": "{{name}} 副本",

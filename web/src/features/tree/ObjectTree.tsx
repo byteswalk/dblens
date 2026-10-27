@@ -19,13 +19,15 @@ import {
   IconTable,
 } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { type Key, type ReactNode, Suspense, lazy, useCallback, useMemo, useState } from 'react'
+import { type Key, type ReactNode, Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import { useQueryActions } from '../editor/actions'
 import { useTabs } from '../editor/tabs'
+import { useExportDialog } from '../export/dialog'
+import { useImportDialogs } from '../import/dialog'
 import type { Api, Environment, Profile, RoutineInfo } from '../../shared/api'
 import DbIcon from '../../shared/DbIcon'
 import { driverLabel } from '../connections/form'
@@ -205,6 +207,17 @@ export default function ObjectTree() {
     await load(key)
   }
 
+  // 导入建了表、执行了 SQL 文件：刷新对应的 schema（没有展开过的不用刷新）
+  const treeRefresh = useUi((s) => s.treeRefresh)
+  useEffect(() => {
+    if (!treeRefresh) return
+    const { profileId, schema } = treeRefresh
+    const node: NodeKey = schema ? { type: 's', profileId, schema } : { type: 'c', profileId }
+    if (loaded[encodeKey(node)]) void refresh(node)
+    // 只在收到新的刷新请求时执行
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [treeRefresh])
+
   const treeData = useMemo<DataNode[]>(() => {
     const build = (parent: string, depth: number): DataNode[] | undefined => {
       const l = loaded[parent]
@@ -263,6 +276,7 @@ export default function ObjectTree() {
     menuNode?.type === 'c'
       ? [
           { key: 'new-query', label: t('tree.menu.newQuery'), extra: 'Ctrl+T' },
+          { key: 'sql-file', label: t('tree.menu.sqlFile') },
           { type: 'divider' },
           { key: 'edit', label: t('tree.menu.editConnection') },
           { key: 'duplicate', label: t('tree.menu.duplicateConnection') },
@@ -272,18 +286,31 @@ export default function ObjectTree() {
         ]
       : menuNode
         ? [
+            ...schemaItems(menuNode),
             ...objectItems(menuNode),
             ...(qualifiedName(menuNode) ? [{ key: 'copy', label: t('tree.menu.copyName') }] : []),
             { key: 'refresh', label: t('tree.menu.refresh') },
           ]
         : []
 
-  /** 对象节点的查看 DDL、生成 SQL，后面接分隔线；其他节点没有。 */
+  /** schema 节点：导入到新表、执行 SQL 文件，后面接分隔线。 */
+  function schemaItems(k: NodeKey): NonNullable<MenuProps['items']> {
+    if (k.type !== 's') return []
+    return [
+      { key: 'import-new', label: t('tree.menu.importNew') },
+      { key: 'sql-file', label: t('tree.menu.sqlFile') },
+      { type: 'divider' },
+    ]
+  }
+
+  /** 对象节点的查看数据、导入导出、查看 DDL、生成 SQL，后面接分隔线；其他节点没有。 */
   function objectItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 'o') return []
     const items: NonNullable<MenuProps['items']> = []
     const target = targetKind(k.kind)
     if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
+    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import') })
+    if (target) items.push({ key: 'export-data', label: t('tree.menu.exportData') })
     if (ddlKind(k.kind, k.routineKind)) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     if (target) {
       // generateMenu 的项是 antd 菜单项的子集
@@ -315,6 +342,21 @@ export default function ObjectTree() {
         })
         insertSql(sql, k.profileId)
       } else if (key === 'view-data') openData(k)
+      else if (key === 'import' && k.type === 'o') {
+        useImportDialogs.getState().openImport({ profileId: k.profileId, schema: k.schema, table: k.name, create: false })
+      } else if (key === 'import-new' && k.type === 's') {
+        useImportDialogs.getState().openImport({ profileId: k.profileId, schema: k.schema, table: null, create: true })
+      } else if (key === 'sql-file') {
+        useImportDialogs.getState().openSqlFile({ profileId: k.profileId, schema: k.type === 's' ? k.schema : null })
+      } else if (key === 'export-data' && k.type === 'o') {
+        useExportDialog.getState().open({
+          profileId: k.profileId,
+          source: { data: { schema: k.schema, object: k.name } },
+          baseName: k.name,
+          table: `${k.schema}.${k.name}`,
+          inTransaction: false,
+        })
+      }
       else if (key === 'ddl' && k.type === 'o') {
         const kind = ddlKind(k.kind, k.routineKind)
         const driver = profiles.find((p) => p.id === k.profileId)?.driver

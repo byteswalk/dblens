@@ -13,6 +13,7 @@ import {
   IconRowRemove,
   IconSum,
   IconTrashX,
+  IconUpload,
 } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, App, Button, Input, Tooltip } from 'antd'
@@ -26,6 +27,7 @@ import ResultsPanel from '../results/ResultsPanel'
 import { useQueryActions } from '../editor/actions'
 import { runnerFor, useTabRuntime } from '../editor/runner'
 import { useExportDialog } from '../export/dialog'
+import { useImportDialogs } from '../import/dialog'
 import { type DataTarget, type QueryTab, useTabs } from '../editor/tabs'
 import ChangePreview from './ChangePreview'
 import { countRows } from './count'
@@ -230,6 +232,20 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
         >
           {t('results.export.button')}
         </Button>
+        {isTable && (
+          <Button
+            size="small"
+            icon={<IconUpload size={14} />}
+            disabled={!profile}
+            onClick={() =>
+              useImportDialogs
+                .getState()
+                .openImport({ profileId: tab.profileId, schema: data.schema, table: data.object, create: false })
+            }
+          >
+            {t('editor.data.import')}
+          </Button>
+        )}
         {total !== null && <span className="muted">{t('editor.data.total', { count: Number(total) })}</span>}
       </div>
       {/* 表显示编辑按钮；视图和没有行标识的表显示只读原因 */}
