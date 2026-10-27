@@ -13,13 +13,14 @@ use dblens_dialect::meta::MetaKey;
 use dblens_dialect::{DdlKind, Direction};
 use dblens_driver::{ConnectParams, DriverId};
 use dblens_service::{
-    DataOrder, DefaultPolicy, DriverRegistry, Environment, ExecRequest, GenerateKind, ObjectKind,
-    ProfileInput, SecretBackend, Secrets, Service, SessionEvent, SessionId, Store,
+    DataOrder, DefaultPolicy, DriverRegistry, Environment, ExecRequest, ExportFormat, ExportOptions,
+    ExportRequest, ExportSource, ExportState, ExportStatus, GenerateKind, ObjectKind, ProfileInput,
+    SecretBackend, Secrets, Service, SessionEvent, SessionId, Store,
 };
 
 struct Live {
     _dir: tempfile::TempDir,
-    service: Service,
+    service: Arc<Service>,
     profile_id: String,
     driver: DriverId,
     /// 测试表所在的 schema。
@@ -42,7 +43,7 @@ async fn setup(env: &str) -> Option<Live> {
             registry.set_lib_dir(driver, Some(Path::new(lib))).unwrap();
         }
     }
-    let service = Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy));
+    let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
     let mut options = params.options.clone();
     options.retain(|k, _| !LIB_OPTIONS.contains(&k.as_str()));
     let schema = match driver {
@@ -456,4 +457,159 @@ async fn oracle_objects() {
 #[tokio::test]
 async fn dameng_objects() {
     objects_flow("DBLENS_TEST_DM_URL").await;
+}
+
+/// 运维查询（M1c3）：逐个执行。`allowed_failures` 是测试库上已知会失败的（如没有安装 pg_stat_statements）。
+async fn ops_flow(env: &str, allowed_failures: &[&str]) {
+    let Some(live) = setup(env).await else { return };
+    let s = &live.service;
+    let id = s.open_session(&live.profile_id).await.unwrap().id;
+    let mut failed = Vec::new();
+    for q in s.ops(&live.profile_id).unwrap() {
+        let events = live.submit(id, ExecRequest::new(q.sql.clone())).await;
+        if let Some(SessionEvent::Failed { error, .. }) =
+            events.iter().find(|e| matches!(e, SessionEvent::Failed { .. }))
+        {
+            eprintln!("{env} {}：{error}", q.key);
+            failed.push(q.key.as_str());
+        } else {
+            assert!(events.iter().any(|e| matches!(e, SessionEvent::ResultStart { .. })), "{env} {}", q.key);
+        }
+    }
+    assert!(failed.iter().all(|k| allowed_failures.contains(k)), "{env}：{failed:?}");
+    s.sessions.close(id, false).await.unwrap();
+}
+
+#[tokio::test]
+async fn mysql_ops() {
+    ops_flow("DBLENS_TEST_MYSQL_URL", &[]).await;
+}
+
+#[tokio::test]
+async fn mariadb_ops() {
+    ops_flow("DBLENS_TEST_MARIADB_URL", &[]).await;
+}
+
+#[tokio::test]
+async fn postgres_ops() {
+    // 测试库没有安装 pg_stat_statements 扩展
+    ops_flow("DBLENS_TEST_PG_URL", &["slow_sql"]).await;
+}
+
+#[tokio::test]
+async fn oracle_ops() {
+    ops_flow("DBLENS_TEST_ORACLE_URL", &[]).await;
+}
+
+#[tokio::test]
+async fn dameng_ops() {
+    ops_flow("DBLENS_TEST_DM_URL", &[]).await;
+}
+
+/// 导出（M1c3）：一行含中文和超过 64 KB 的大字段，四种格式都写出完整内容；另导出多行核对行数。
+async fn export_flow(env: &str) {
+    let Some(live) = setup(env).await else { return };
+    let s = &live.service;
+    let dir = tempfile::tempdir().unwrap();
+    let (big, rows_sql, rows) = match live.driver {
+        DriverId::Mysql => (
+            "SELECT 1 AS id, '中文' AS name, REPEAT('数', 100000) AS txt, CHAR_LENGTH(REPEAT('数', 100000)) AS len",
+            "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 990) SELECT n FROM t",
+            990,
+        ),
+        DriverId::Postgres => (
+            "SELECT 1 AS id, '中文' AS name, repeat('数', 100000) AS txt, 100000 AS len",
+            "SELECT g AS n FROM generate_series(1, 2500) AS g",
+            2500,
+        ),
+        DriverId::Oracle | DriverId::Dameng => (
+            "SELECT 1 AS \"id\", '中文' AS \"name\", RPAD(TO_CLOB('数'), 100000, '数') AS \"txt\", \
+             LENGTH(RPAD(TO_CLOB('数'), 100000, '数')) AS \"len\" FROM DUAL",
+            "SELECT LEVEL AS \"n\" FROM DUAL CONNECT BY LEVEL <= 2500",
+            2500,
+        ),
+    };
+    let export = |sql: &str, format: ExportFormat, name: &str| {
+        let path = dir.path().join(name);
+        let req = ExportRequest {
+            profile_id: live.profile_id.clone(),
+            source: ExportSource::Sql(sql.to_string()),
+            format,
+            options: ExportOptions { bom: false, table: "c3_t".into(), ..Default::default() },
+            path: Some(path.clone()),
+            file_name: name.to_string(),
+        };
+        async move {
+            let id = s.start_export(req, true).await.unwrap();
+            let st = loop {
+                let st = s.exports.status(&id).unwrap();
+                if st.state != ExportState::Running {
+                    break st;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            };
+            (st, path)
+        }
+    };
+    let done = |st: &ExportStatus| assert_eq!(st.state, ExportState::Done, "{env}：{st:?}");
+
+    // CSV：数据库报告的字符数与写出的一致
+    let (st, path) = export(big, ExportFormat::Csv, "big.csv").await;
+    done(&st);
+    assert_eq!((st.rows, st.warnings.lob_truncated), (1, 0), "{env}");
+    let mut csv = csv::Reader::from_path(&path).unwrap();
+    let record = csv.records().next().unwrap().unwrap();
+    let len: usize = record[3].parse().unwrap();
+    assert!(len * 3 > 64 * 1024, "{env}：大字段要超过 64 KB，实际 {len} 个字符");
+    assert_eq!((&record[1], record[2].chars().count()), ("中文", len), "{env}");
+
+    // JSON
+    let (st, path) = export(big, ExportFormat::Json, "big.json").await;
+    done(&st);
+    let v: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(v[0]["txt"].as_str().unwrap().chars().count(), len, "{env}");
+
+    // INSERT：完整的大字段写在一条语句里
+    let (st, path) = export(big, ExportFormat::Insert, "big.sql").await;
+    done(&st);
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.starts_with("INSERT INTO c3_t ("), "{env}：{}", &text[..80]);
+    assert_eq!(text.matches('数').count(), len, "{env}");
+
+    // xlsx：单元格上限 32767 个字符，截断并报警告
+    let (st, path) = export(big, ExportFormat::Xlsx, "big.xlsx").await;
+    done(&st);
+    assert_eq!(st.warnings.cell_truncated, 1, "{env}");
+    assert_eq!(&std::fs::read(&path).unwrap()[..2], b"PK");
+
+    // 多行
+    let (st, path) = export(rows_sql, ExportFormat::Json, "rows.json").await;
+    done(&st);
+    let v: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!((st.rows, v.as_array().unwrap().len()), (rows, rows as usize), "{env}");
+}
+
+#[tokio::test]
+async fn mysql_export() {
+    export_flow("DBLENS_TEST_MYSQL_URL").await;
+}
+
+#[tokio::test]
+async fn mariadb_export() {
+    export_flow("DBLENS_TEST_MARIADB_URL").await;
+}
+
+#[tokio::test]
+async fn postgres_export() {
+    export_flow("DBLENS_TEST_PG_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_export() {
+    export_flow("DBLENS_TEST_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_export() {
+    export_flow("DBLENS_TEST_DM_URL").await;
 }

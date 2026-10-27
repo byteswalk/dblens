@@ -28,6 +28,7 @@ base64 = "0.23.1"
 bytes = "1.12.1"
 chacha20poly1305 = "0.11.0"
 chrono = { version = "0.4.45", default-features = false, features = ["std", "clock", "serde"] }
+csv = "1.4.0"
 directories = "6.0.0"
 futures = "0.3.34"
 http-body-util = "0.1.5"
@@ -40,6 +41,7 @@ oracle = { version = "0.6.3", features = ["chrono"] }
 percent-encoding = "2.3.2"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
 rusqlite = { version = "0.41.0", features = ["bundled"] }
+rust_xlsxwriter = { version = "0.100.0", default-features = false, features = ["constant_memory", "chrono"] }
 rust-i18n = "4.2.4"
 rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 semver = "1.0.28"

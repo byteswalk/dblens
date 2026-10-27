@@ -4,7 +4,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use dblens_core::{Lang, Result, set_default_lang};
+use dblens_dialect::{Dialect, OpsQuery, Variant};
 
+use crate::export::ExportManager;
 use crate::history::HistoryLog;
 use crate::metadata::{MetadataCache, MetadataService};
 use crate::policy::{DefaultPolicy, Policy};
@@ -23,6 +25,9 @@ pub struct Service {
     pub registry: Arc<DriverRegistry>,
     pub sessions: SessionManager,
     pub metadata: MetadataService,
+    /// 导出任务（M1c3）。
+    pub exports: ExportManager,
+    pub(crate) history: HistoryLog,
 }
 
 impl Service {
@@ -33,6 +38,7 @@ impl Service {
         let registry = Arc::new(DriverRegistry::new(store.clone()));
         let service = Self::with_parts(store, secrets, registry, Arc::new(DefaultPolicy));
         service.apply_lang_setting()?;
+        service.exports.set_dir(data_dir.join("exports"));
         Ok(service)
     }
 
@@ -64,8 +70,10 @@ impl Service {
     ) -> Self {
         let cache = Arc::new(MetadataCache::new());
         Self {
-            sessions: SessionManager::new(policy, cache.clone(), history),
+            sessions: SessionManager::new(policy, cache.clone(), history.clone()),
             metadata: MetadataService::new(registry.clone(), secrets.clone(), cache),
+            exports: ExportManager::default(),
+            history,
             store,
             secrets,
             registry,
@@ -121,6 +129,13 @@ impl Service {
     pub async fn test_connection(&self, input: ProfileInput, password: &str) -> Result<ServerSummary> {
         let p = Profile { id: String::new(), input, variant: None };
         self.registry.test_connection(&p, password.to_string()).await
+    }
+
+    /// 连接可用的运维查询（M1c3）：按上次连接时识别出的变体选模板，没连接过时按驱动。不需要连接数据库。
+    pub fn ops(&self, profile_id: &str) -> Result<&'static [OpsQuery]> {
+        let p = self.store.profile(profile_id)?;
+        let variant = p.variant.unwrap_or_else(|| Variant::base(p.input.driver));
+        Ok(Dialect::new(variant).ops_queries())
     }
 
     /// 为编辑器标签页打开一个会话（独占一个连接）。

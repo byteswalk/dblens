@@ -111,6 +111,11 @@ impl Connection for FakeConn {
     async fn execute<'a>(&'a mut self, sql: &'a str, _: &'a [Value]) -> Result<Box<dyn ExecStream + 'a>> {
         let sql = sql.trim();
         self.log.lock().unwrap().push(format!("execute {sql}"));
+        // 导出只接受查询语句：`SELECT ROWS n`、`SELECT SLEEP`、`SELECT FAIL` 与去掉 SELECT 的语句相同
+        let sql = sql
+            .strip_prefix("SELECT ")
+            .filter(|s| s.starts_with("ROWS ") || matches!(*s, "SLEEP" | "FAIL"))
+            .unwrap_or(sql);
         let mut stream = FakeStream { events: VecDeque::new(), rows_left: 0, next_value: 1, sleep: None };
         match sql {
             "FAIL" => {
