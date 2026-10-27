@@ -326,6 +326,7 @@ trait Policy: Send + Sync {
 进度：
 - 2026-10-26 M2 拆成两份（用户确认）：M2a 表数据编辑；M2b 导入（CSV / Excel 导入到表、SQL 文件导入）和对象树"导出整表"的入口。查询结果和数据标签的导出已在 M1c3 完成。
 - M2a 已完成（设计 `docs/superpowers/specs/2026-10-26-m2a-data-editing-design.md`，详细计划 `docs/superpowers/plans/2026-10-26-m2a-data-editing.md`，说明 `docs/notes/m2a-data-editing.md`）。
+- M2b 已完成（设计 `docs/superpowers/specs/2026-10-27-m2b-import-design.md`，详细计划 `docs/superpowers/plans/2026-10-27-m2b-import.md`，说明 `docs/notes/m2b-import.md`），M2 完成。
 
 ## 12. 风险与待验证项
 

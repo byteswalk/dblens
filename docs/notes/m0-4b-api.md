@@ -170,6 +170,32 @@
 - 同时进行的任务最多 4 个，超出时 409（`busy`）。已结束的任务保留 1 小时。
 - 导出另开一个连接执行，大字段每个值最多读 256 MB；照常记入执行历史。
 
+### 导入与执行 SQL 文件（M2b 加入）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/uploads?name=原文件名` | 请求体是文件内容（不限于 2 MB，上限见下），边收边写到数据目录的 `imports/`。返回 201 和 `{id, name, size}` |
+| POST | `/imports/preview` | `{source, file}` → `{columns, rows, types, warnings: {ragged_rows, bad_encoding, error_cells}, sheets, encoding, delimiter}`：前 100 行，`types` 按前 1000 行推断 |
+| POST | `/profiles/{id}/imports/ddl` | `{schema, table, create}` → `{sql}`：新建表的建表语句 |
+| POST | `/imports` | 提交导入任务，返回 201 和 `{"id"}`。请求体：`{profile_id, source, file, schema, table, create?, mapping: [{source, target}], mode, transaction?, batch_size?, on_error?, empty_as_string?}` |
+| POST | `/sql-files` | 提交执行 SQL 文件的任务，返回 201 和 `{"id"}`。请求体：`{profile_id, source, encoding?, schema?, continue_on_error?, transaction?}` |
+| GET | `/tasks/{id}` | 任务状态：`{id, kind, state, phase, progress, warnings, error, error_line, committed_line, failures, confirm, report}` |
+| DELETE | `/tasks/{id}` | 进行中（或等待确认）时取消；已结束时删除任务和报告。204 |
+| POST | `/tasks/{id}/confirm` | `{yes}`：回答确认。不在等待确认时 400 |
+| GET | `/tasks/{id}/report?token=…` | 下载报告（导入的出错报告 CSV、SQL 文件的执行日志）。任务过期前可以多次下载 |
+| POST | `/tasks/{id}/report` | `{path}`：桌面程序把报告复制到"另存为"选的路径；浏览器模式 400 |
+| GET | `/tasks/{id}/statements/{n}` | `{sql}`：前 100 条失败中第 n 条（从 0 开始）的完整语句 |
+
+- `source`：`{"upload": id}`（上传的文件），或 `{"path": "…"}`（本机路径，只有桌面程序接受，必须是存在的文件）。
+- `file`：`{format: "csv" | "excel", encoding?: "auto" | "utf8" | "gbk", delimiter?, header?: true, sheet?}`。
+- `create`：`{columns: [{name, logical, nullable?}], primary_key: [列名]}`；`logical` 为逻辑类型的 JSON（如 `{"kind": "var_char", "len": 50}`）。新建表时 `mode` 只能是 `append`。
+- `mode`：`append` / `replace`（清空后导入，固定为整体一个事务）/ `upsert`（按主键更新，要求主键列都已映射）。`transaction`：`whole` / `batch`（默认，`batch_size` 默认 1000，范围 100–100000）；`on_error`：`stop`（默认）/ `skip`。
+- 任务的 `state`：`running` / `confirm`（等待确认，`confirm` 为 `{items: [{line, text, reason}], more}`）/ `done` / `failed` / `cancelled`。`phase`：`preparing` / `scanning` / `creating` / `clearing` / `writing` / `executing` / `finished`。
+- `progress`：`{read, total, rows_read, rows_written, rows_skipped, statements_done, statements_total, statements_failed, affected}`；`read`/`total` 为已读字节和文件大小（Excel 为行数）。
+- `failures`：至多 100 条 `{index, line, error, text}`。导入为跳过的行（`line` 为文件行号），SQL 文件为失败的语句（`index` 为语句序号）。
+- 上传大小上限：设置项 `ui.import.upload_limit_mb`（MB），默认 2048。超过时 400，已收到的部分删除。
+- 同时进行的任务最多 4 个，超过时 409。
+
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 
 `lang` 可选，决定事件中文字的语言（见"语言"一节）。
