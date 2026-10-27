@@ -1,6 +1,7 @@
 //! 导入（M2b 设计文档第 4、5 节）：读取 CSV / Excel 文件、预览与类型推断、值的转换。
 
 mod file;
+mod job;
 mod values;
 
 use std::path::Path;
@@ -10,7 +11,12 @@ use serde::Serialize;
 
 use crate::export::{ExportWarnings, cell_text};
 
+pub(crate) use file::open_text;
 pub use file::{FileFormat, FileOptions, FileReader, FileRow, ReadWarnings, TextEncoding};
+pub(crate) use job::exec;
+pub use job::{
+    ColumnMapping, DEFAULT_BATCH, ImportRequest, NewColumn, NewTable, OnError, Transaction, new_table,
+};
 pub use values::{EmptyAs, INFER_ROWS, convert, infer_type};
 
 /// 预览返回的行数。

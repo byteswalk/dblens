@@ -15,6 +15,7 @@ use crate::registry::{DriverRegistry, ServerSummary};
 use crate::secret::Secrets;
 use crate::session::{SessionId, SessionInfo, SessionManager};
 use crate::store::Store;
+use crate::task::TaskManager;
 
 /// 界面语言设置：`auto`（跟随系统）、`zh-CN`、`en`。
 pub const LANG_SETTING: &str = "ui.lang";
@@ -27,6 +28,8 @@ pub struct Service {
     pub metadata: MetadataService,
     /// 导出任务（M1c3）。
     pub exports: ExportManager,
+    /// 导入和执行 SQL 文件的任务、上传的文件（M2b）。
+    pub tasks: TaskManager,
     pub(crate) history: HistoryLog,
 }
 
@@ -39,6 +42,7 @@ impl Service {
         let service = Self::with_parts(store, secrets, registry, Arc::new(DefaultPolicy));
         service.apply_lang_setting()?;
         service.exports.set_dir(data_dir.join("exports"));
+        service.tasks.set_dirs(data_dir.join("tasks"), data_dir.join("imports"));
         Ok(service)
     }
 
@@ -73,6 +77,7 @@ impl Service {
             sessions: SessionManager::new(policy, cache.clone(), history.clone()),
             metadata: MetadataService::new(registry.clone(), secrets.clone(), cache),
             exports: ExportManager::default(),
+            tasks: TaskManager::default(),
             history,
             store,
             secrets,

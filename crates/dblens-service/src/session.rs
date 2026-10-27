@@ -254,6 +254,11 @@ impl SessionManager {
         Self { policy, metadata, history, next_id: AtomicU64::new(1), sessions: Mutex::new(HashMap::new()) }
     }
 
+    /// 执行策略（后台任务也要先问它）。
+    pub(crate) fn policy(&self) -> Arc<dyn Policy> {
+        self.policy.clone()
+    }
+
     fn handle<T>(&self, id: SessionId, f: impl FnOnce(&Handle) -> T) -> Result<T> {
         let sessions = self
             .sessions

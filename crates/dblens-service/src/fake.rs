@@ -4,6 +4,7 @@
 //! - `FAIL`：SQL 错误；`FAILAT n`：带出错位置 n 的 SQL 错误；`DISCONNECT`：连接错误；
 //! - `SELECT current_schema()`：当前 schema（初始为 public），`SET search_path TO "x"` 切换它；
 //! - `SLEEP`：一直等到被取消，然后返回 `Cancelled`；
+//! - 参数中有文本 `FAIL` 时报 SQL 错误，有 `SLEEP` 时同 `SLEEP`（导入测试用）；
 //! - 其他：影响 1 行。
 
 use std::collections::VecDeque;
@@ -108,7 +109,11 @@ impl Connection for FakeConn {
         self.log.lock().unwrap().push(format!("lob_limit {bytes}"));
     }
 
-    async fn execute<'a>(&'a mut self, sql: &'a str, _: &'a [Value]) -> Result<Box<dyn ExecStream + 'a>> {
+    async fn execute<'a>(
+        &'a mut self,
+        sql: &'a str,
+        params: &'a [Value],
+    ) -> Result<Box<dyn ExecStream + 'a>> {
         let sql = sql.trim();
         self.log.lock().unwrap().push(format!("execute {sql}"));
         // 导出只接受查询语句：`SELECT ROWS n`、`SELECT SLEEP`、`SELECT FAIL` 与去掉 SELECT 的语句相同
@@ -117,6 +122,14 @@ impl Connection for FakeConn {
             .filter(|s| s.starts_with("ROWS ") || matches!(*s, "SLEEP" | "FAIL"))
             .unwrap_or(sql);
         let mut stream = FakeStream { events: VecDeque::new(), rows_left: 0, next_value: 1, sleep: None };
+        let param = |text: &str| params.iter().any(|p| matches!(p, Value::String(s) if s == text));
+        if param("FAIL") {
+            return Err(Error::Sql { code: "23505".into(), message: "重复的键".into(), position: None });
+        }
+        if param("SLEEP") {
+            stream.sleep = Some((self.cancelled.clone(), self.wake.clone()));
+            return Ok(Box::new(stream));
+        }
         match sql {
             "FAIL" => {
                 return Err(Error::Sql {

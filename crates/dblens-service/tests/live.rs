@@ -8,14 +8,16 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use dblens_core::{Error, Value};
+use dblens_core::{Error, LogicalType, Value};
 use dblens_dialect::meta::MetaKey;
-use dblens_dialect::{DdlKind, Direction, RowChange};
+use dblens_dialect::{DdlKind, Direction, RowChange, WriteMode};
 use dblens_driver::{ConnectParams, DriverId};
 use dblens_service::{
-    ChangeSet, DataOrder, DefaultPolicy, DriverRegistry, Environment, ExecRequest, ExportFormat,
-    ExportOptions, ExportRequest, ExportSource, ExportState, ExportStatus, GenerateKind, ObjectKind,
-    ProfileInput, SecretBackend, Secrets, Service, SessionEvent, SessionId, Store,
+    ChangeSet, ColumnMapping, DEFAULT_BATCH, DataOrder, DefaultPolicy, DriverRegistry, Environment,
+    ExecRequest, ExportFormat, ExportOptions, ExportRequest, ExportSource, ExportState, ExportStatus,
+    FileOptions, FileSource, GenerateKind, ImportRequest, NewColumn, NewTable, ObjectKind, OnError,
+    ProfileInput, SecretBackend, Secrets, Service, SessionEvent, SessionId, SqlFileRequest, Store, TaskState,
+    TaskStatus, Transaction,
 };
 
 struct Live {
@@ -790,4 +792,310 @@ async fn oracle_editing() {
 #[tokio::test]
 async fn dameng_editing() {
     editing_flow("DBLENS_TEST_DM_URL").await;
+}
+
+/// 上传一个文件，返回文件来源。
+fn upload(s: &Service, name: &str, content: &str) -> FileSource {
+    let (id, path) = s.tasks.begin_upload().unwrap();
+    std::fs::write(&path, content).unwrap();
+    s.tasks.finish_upload(&id, name, content.len() as u64).unwrap();
+    FileSource::Upload { upload: id }
+}
+
+/// 等后台任务结束（或进入等待确认）。
+async fn wait_task(s: &Service, id: &str) -> TaskStatus {
+    for _ in 0..6000 {
+        let st = s.tasks.status(id).unwrap();
+        if st.state != TaskState::Running {
+            return st;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("任务没有结束");
+}
+
+/// 导入（M2b）：导入到已有表（追加、按主键更新、清空后导入、整体事务回滚、分批跳过并生成出错报告），
+/// 导入到新表（建表、写入；整体事务失败时删除新建的表）。
+async fn import_flow(env: &str) {
+    let Some(live) = setup(env).await else { return };
+    let live = &live;
+    let s = &live.service;
+    let id = s.open_session(&live.profile_id).await.unwrap().id;
+    let upper = matches!(live.driver, DriverId::Oracle | DriverId::Dameng);
+    let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
+    let drop = match live.driver {
+        DriverId::Oracle => vec![
+            "BEGIN EXECUTE IMMEDIATE 'DROP TABLE m2b_t'; EXCEPTION WHEN OTHERS THEN NULL; END;",
+            "BEGIN EXECUTE IMMEDIATE 'DROP TABLE m2b_new'; EXCEPTION WHEN OTHERS THEN NULL; END;",
+        ],
+        _ => vec!["DROP TABLE IF EXISTS m2b_t", "DROP TABLE IF EXISTS m2b_new"],
+    };
+    for sql in &drop {
+        live.submit(id, ExecRequest::new(*sql)).await;
+    }
+    let create = match live.driver {
+        DriverId::Oracle => {
+            "CREATE TABLE m2b_t (id NUMBER(10) PRIMARY KEY, name VARCHAR2(40), price NUMBER(10, 2), on_day DATE, note VARCHAR2(40))"
+        }
+        _ => {
+            "CREATE TABLE m2b_t (id INT PRIMARY KEY, name VARCHAR(40), price DECIMAL(10, 2), on_day DATE, note VARCHAR(40))"
+        }
+    };
+    live.run(id, create).await;
+    let one = |sql: String| async move { text(&first_value(&live.run(id, &sql).await)) };
+    let count = |table: &'static str| one(format!("SELECT COUNT(*) FROM {table}"));
+    let mapping = |cols: &[&str]| -> Vec<ColumnMapping> {
+        cols.iter().enumerate().map(|(k, c)| ColumnMapping { source: k, target: n(c) }).collect()
+    };
+    let request = |source: FileSource, mode: WriteMode| ImportRequest {
+        profile_id: live.profile_id.clone(),
+        source,
+        file: FileOptions::csv(),
+        schema: live.schema.clone(),
+        table: n("m2b_t"),
+        create: None,
+        mapping: mapping(&["id", "name", "price", "on_day", "note"]),
+        mode,
+        transaction: Transaction::Batch,
+        batch_size: DEFAULT_BATCH,
+        on_error: OnError::Stop,
+        empty_as_string: false,
+    };
+    let csv = |rows: std::ops::RangeInclusive<usize>, name: &dyn Fn(usize) -> String| {
+        let mut t = String::from("编号,名称,价格,日期,备注\n");
+        for k in rows {
+            let price = if k % 7 == 0 { String::new() } else { format!("{k}.25") };
+            t += &format!("{k},{},{price},2026/1/{},\"含,逗号\"\n", name(k), k % 28 + 1);
+        }
+        t
+    };
+    let run = |req: ImportRequest| async move {
+        let task = s.start_import(req, false).await.unwrap();
+        wait_task(s, &task).await
+    };
+
+    // 追加 2500 行（含中文、NULL、精确小数、日期），每批 1000 行
+    let st = run(request(upload(s, "a.csv", &csv(1..=2500, &|k| format!("名{k}"))), WriteMode::Append)).await;
+    assert_eq!((st.state, st.progress.rows_written), (TaskState::Done, 2500), "{env}：{st:?}");
+    assert_eq!(count("m2b_t").await.as_deref(), Some("2500"), "{env}");
+    assert_eq!(
+        one("SELECT name FROM m2b_t WHERE id = 1234".into()).await.as_deref(),
+        Some("名1234"),
+        "{env}"
+    );
+    assert_eq!(
+        one("SELECT price FROM m2b_t WHERE id = 1234".into()).await.as_deref(),
+        Some("1234.25"),
+        "{env}"
+    );
+    assert_eq!(one("SELECT price FROM m2b_t WHERE id = 7".into()).await, None, "{env}：空单元格为 NULL");
+    assert_eq!(one("SELECT note FROM m2b_t WHERE id = 1".into()).await.as_deref(), Some("含,逗号"), "{env}");
+
+    // 按主键更新：2401–2600，一半已存在
+    let st =
+        run(request(upload(s, "u.csv", &csv(2401..=2600, &|k| format!("更新{k}"))), WriteMode::Upsert)).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    assert_eq!(count("m2b_t").await.as_deref(), Some("2600"), "{env}");
+    assert_eq!(
+        one("SELECT name FROM m2b_t WHERE id = 2401".into()).await.as_deref(),
+        Some("更新2401"),
+        "{env}"
+    );
+    assert_eq!(
+        one("SELECT name FROM m2b_t WHERE id = 2400".into()).await.as_deref(),
+        Some("名2400"),
+        "{env}"
+    );
+
+    // 清空后导入
+    let st = run(request(upload(s, "r.csv", &csv(1..=3, &|k| format!("新{k}"))), WriteMode::Replace)).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    assert_eq!(count("m2b_t").await.as_deref(), Some("3"), "{env}");
+
+    // 整体一个事务：第 2000 行主键重复，全部回滚
+    let dup = csv(4..=2500, &|k| format!("名{k}")).replace("\n2000,", "\n1,");
+    let req = ImportRequest {
+        transaction: Transaction::Whole,
+        ..request(upload(s, "d.csv", &dup), WriteMode::Append)
+    };
+    let st = run(req).await;
+    assert_eq!(st.state, TaskState::Failed, "{env}：{st:?}");
+    assert!(matches!(st.error, Some(Error::Sql { .. })), "{env}：{:?}", st.error);
+    assert_eq!(count("m2b_t").await.as_deref(), Some("3"), "{env}：回滚");
+
+    // 分批 + 跳过：一行编号不是整数（转换失败），一行主键重复（写入失败）
+    let bad = csv(4..=1500, &|k| format!("名{k}")).replace("\n100,", "\nabc,").replace("\n1200,", "\n1,");
+    let req = ImportRequest {
+        on_error: OnError::Skip,
+        ..request(upload(s, "订单.csv", &bad), WriteMode::Append)
+    };
+    let st = run(req).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    assert_eq!((st.progress.rows_written, st.progress.rows_skipped), (1495, 2), "{env}");
+    // 文件行号：列名行为第 1 行，编号 k 在第 k - 2 行
+    assert_eq!(st.failures.iter().map(|f| f.line).collect::<Vec<_>>(), [98, 1198], "{env}");
+    let (report, _) = s.tasks.report(&st.id).unwrap();
+    // 报告是 CSV：错误信息可能有多行（Oracle），按记录数检查
+    let records = csv::Reader::from_path(report).unwrap().records().count();
+    assert_eq!(records, 2, "{env}：表头之外两行");
+    assert_eq!(count("m2b_t").await.as_deref(), Some("1498"), "{env}");
+
+    // 导入到新表：建表、写入
+    let new = |cols: Vec<(&str, LogicalType)>| NewTable {
+        columns: cols
+            .into_iter()
+            .map(|(c, l)| NewColumn { name: n(c), logical: l, nullable: true })
+            .collect(),
+        primary_key: vec![n("id")],
+    };
+    let def = new(vec![
+        ("id", LogicalType::Int { bits: 64 }),
+        ("name", LogicalType::VarChar { len: Some(50) }),
+        ("price", LogicalType::Decimal { precision: Some(10), scale: Some(2) }),
+        ("on_day", LogicalType::Date),
+        ("note", LogicalType::VarChar { len: Some(50) }),
+    ]);
+    let new_req = |source: FileSource| ImportRequest {
+        table: n("m2b_new"),
+        create: Some(def.clone()),
+        transaction: Transaction::Whole,
+        ..request(source, WriteMode::Append)
+    };
+    let st = run(new_req(upload(s, "n.csv", &csv(1..=10, &|k| format!("新表{k}"))))).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    assert_eq!(count("m2b_new").await.as_deref(), Some("10"), "{env}");
+    assert_eq!(one("SELECT name FROM m2b_new WHERE id = 3".into()).await.as_deref(), Some("新表3"), "{env}");
+    let tables =
+        s.metadata.tables(&s.profile(&live.profile_id).unwrap(), &live.schema, Some(&n("m2b_new"))).await;
+    assert_eq!(tables.unwrap().len(), 1, "{env}：元数据缓存已失效");
+    for sql in &drop[1..] {
+        live.submit(id, ExecRequest::new(*sql)).await;
+    }
+    // 整体事务失败：删掉新建的表
+    let st =
+        run(new_req(upload(s, "n.csv", &csv(1..=10, &|k| format!("新表{k}")).replace("\n5,", "\n1,")))).await;
+    assert_eq!(st.state, TaskState::Failed, "{env}：{st:?}");
+    let gone = live.submit(id, ExecRequest::new("SELECT COUNT(*) FROM m2b_new")).await;
+    assert!(gone.iter().any(|e| matches!(e, SessionEvent::Failed { .. })), "{env}：新建的表应已删除");
+
+    for sql in &drop {
+        live.submit(id, ExecRequest::new(*sql)).await;
+    }
+    s.sessions.close(id, false).await.unwrap();
+}
+
+#[tokio::test]
+async fn mysql_import() {
+    import_flow("DBLENS_TEST_MYSQL_URL").await;
+}
+
+#[tokio::test]
+async fn mariadb_import() {
+    import_flow("DBLENS_TEST_MARIADB_URL").await;
+}
+
+#[tokio::test]
+async fn postgres_import() {
+    import_flow("DBLENS_TEST_PG_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_import() {
+    import_flow("DBLENS_TEST_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_import() {
+    import_flow("DBLENS_TEST_DM_URL").await;
+}
+
+/// 执行 SQL 文件（M2b）：各方言的程序体写法（MySQL 的 DELIMITER、PG 的 $$、Oracle/达梦的 PL/SQL 块加 `/`），
+/// 出错时停止和继续。
+async fn sql_file_flow(env: &str) {
+    let Some(live) = setup(env).await else { return };
+    let s = &live.service;
+    let script = match live.driver {
+        DriverId::Mysql => {
+            "DROP TABLE IF EXISTS m2b_f;\nDROP PROCEDURE IF EXISTS m2b_p;\nCREATE TABLE m2b_f (a INT);\n\
+             DELIMITER $$\nCREATE PROCEDURE m2b_p() BEGIN INSERT INTO m2b_f VALUES (1); INSERT INTO m2b_f VALUES (2); END$$\n\
+             DELIMITER ;\nCALL m2b_p();\nINSERT INTO m2b_f VALUES (3);\nDROP PROCEDURE m2b_p;\n"
+        }
+        DriverId::Postgres => {
+            "DROP TABLE IF EXISTS m2b_f;\nCREATE TABLE m2b_f (a INT);\n\
+             CREATE OR REPLACE FUNCTION m2b_p() RETURNS void AS $$ BEGIN INSERT INTO m2b_f VALUES (1); INSERT INTO m2b_f VALUES (2); END; $$ LANGUAGE plpgsql;\n\
+             SELECT m2b_p();\nINSERT INTO m2b_f VALUES (3);\nDROP FUNCTION m2b_p();\n"
+        }
+        DriverId::Oracle | DriverId::Dameng => {
+            "BEGIN EXECUTE IMMEDIATE 'DROP TABLE m2b_f'; EXCEPTION WHEN OTHERS THEN NULL; END;\n/\n\
+             CREATE TABLE m2b_f (a INT);\n\
+             CREATE OR REPLACE PROCEDURE m2b_p IS\nBEGIN\n  INSERT INTO m2b_f VALUES (1);\n  INSERT INTO m2b_f VALUES (2);\nEND;\n/\n\
+             BEGIN m2b_p; END;\n/\nINSERT INTO m2b_f VALUES (3);\nDROP PROCEDURE m2b_p;\n"
+        }
+    };
+    let request = |sql: &str, continue_on_error: bool| SqlFileRequest {
+        profile_id: live.profile_id.clone(),
+        source: upload(s, "脚本.sql", sql),
+        encoding: Default::default(),
+        schema: Some(live.schema.clone()),
+        continue_on_error,
+        transaction: false,
+    };
+    let task = s.start_sql_file(request(script, false), false).await.unwrap();
+    let st = wait_task(s, &task).await;
+    assert_eq!((st.state, st.progress.statements_failed), (TaskState::Done, 0), "{env}：{st:?}");
+    assert_eq!(st.progress.statements_done, st.progress.statements_total, "{env}");
+    let id = s.open_session(&live.profile_id).await.unwrap().id;
+    assert_eq!(
+        text(&first_value(&live.run(id, "SELECT COUNT(*) FROM m2b_f").await)).as_deref(),
+        Some("3"),
+        "{env}"
+    );
+
+    // 出错时继续：失败的一条记下行号，其余照常执行
+    let script =
+        "INSERT INTO m2b_f VALUES (4);\nINSERT INTO m2b_nope VALUES (1);\nINSERT INTO m2b_f VALUES (5);\n";
+    let st = wait_task(s, &s.start_sql_file(request(script, true), false).await.unwrap()).await;
+    assert_eq!((st.state, st.progress.statements_failed), (TaskState::Done, 1), "{env}：{st:?}");
+    assert_eq!(st.failures[0].line, 2, "{env}");
+    // 出错时停止
+    let st = wait_task(s, &s.start_sql_file(request(script, false), false).await.unwrap()).await;
+    assert_eq!((st.state, st.progress.statements_done), (TaskState::Failed, 2), "{env}：{st:?}");
+    assert_eq!(
+        text(&first_value(&live.run(id, "SELECT COUNT(*) FROM m2b_f").await)).as_deref(),
+        Some("6"),
+        "{env}"
+    );
+    let drop = match live.driver {
+        DriverId::Oracle => {
+            "BEGIN EXECUTE IMMEDIATE 'DROP TABLE m2b_f'; EXCEPTION WHEN OTHERS THEN NULL; END;"
+        }
+        _ => "DROP TABLE IF EXISTS m2b_f",
+    };
+    live.submit(id, ExecRequest::new(drop)).await;
+    s.sessions.close(id, false).await.unwrap();
+}
+
+#[tokio::test]
+async fn mysql_sql_file() {
+    sql_file_flow("DBLENS_TEST_MYSQL_URL").await;
+}
+
+#[tokio::test]
+async fn mariadb_sql_file() {
+    sql_file_flow("DBLENS_TEST_MARIADB_URL").await;
+}
+
+#[tokio::test]
+async fn postgres_sql_file() {
+    sql_file_flow("DBLENS_TEST_PG_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_sql_file() {
+    sql_file_flow("DBLENS_TEST_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_sql_file() {
+    sql_file_flow("DBLENS_TEST_DM_URL").await;
 }

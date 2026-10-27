@@ -16,7 +16,9 @@ mod registry;
 mod secret;
 mod service;
 mod session;
+mod sqlfile;
 mod store;
+mod task;
 
 pub use changes::ChangeSet;
 pub use export::{
@@ -29,8 +31,9 @@ pub use history::{
     HistoryQuery, NewHistory,
 };
 pub use import::{
-    EmptyAs, FileFormat, FileOptions, FilePreview, FileReader, FileRow, ReadWarnings, TextEncoding, convert,
-    infer_type, preview_file,
+    ColumnMapping, DEFAULT_BATCH, EmptyAs, FileFormat, FileOptions, FilePreview, FileReader, FileRow,
+    ImportRequest, NewColumn, NewTable, OnError, ReadWarnings, TextEncoding, Transaction, convert,
+    infer_type, new_table, preview_file,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
 pub use objects::{DataOrder, GenerateKind, ObjectKind};
@@ -45,4 +48,9 @@ pub use session::{
     ApplyFailure, ApplyOutcome, ExecRequest, SessionEvent, SessionId, SessionInfo, SessionManager,
     statement_at,
 };
+pub use sqlfile::SqlFileRequest;
 pub use store::{Store, default_data_dir};
+pub use task::{
+    ConfirmItem, FileSource, MAX_FAILURES, MAX_RUNNING_TASKS, TaskConfirm, TaskFailure, TaskKind,
+    TaskManager, TaskPhase, TaskProgress, TaskState, TaskStatus, UploadInfo,
+};

@@ -213,6 +213,49 @@ pub(crate) fn excel_value(d: &Data, warnings: &mut ReadWarnings) -> Value {
     }
 }
 
+/// 打开的文本文件：转码为 UTF-8 的读取器（BOM 优先于选择的编码，无法转码的字节替换为 U+FFFD）。
+pub(crate) struct TextFile {
+    pub reader: Box<dyn Read + Send>,
+    /// 实际使用的编码：`UTF-8`、`GBK`、`UTF-16`。
+    pub label: &'static str,
+    /// 已读字节数和文件大小。
+    pub bytes: Arc<AtomicU64>,
+    pub total: u64,
+    /// 开头至多 64 KB 转码后的文本（判断分隔符用）。
+    pub sample: String,
+}
+
+/// 打开文本文件，按选项或自动判断编码。
+pub(crate) fn open_text(path: &Path, encoding: TextEncoding) -> Result<TextFile> {
+    let mut file = File::open(path).map_err(read_error)?;
+    let total = file.metadata().map_err(read_error)?.len();
+    let mut head = vec![0u8; SNIFF_BYTES];
+    let mut n = 0;
+    while n < head.len() {
+        match file.read(&mut head[n..]).map_err(read_error)? {
+            0 => break,
+            k => n += k,
+        }
+    }
+    head.truncate(n);
+    let encoding = match encoding {
+        TextEncoding::Auto => detect_encoding(&head),
+        TextEncoding::Utf8 => UTF_8,
+        TextEncoding::Gbk => GB18030,
+    };
+    let (sample, _, _) = encoding.decode(&head);
+    let sample = sample.into_owned();
+    let bytes = Arc::new(AtomicU64::new(0));
+    let raw = Counting { inner: std::io::Cursor::new(head).chain(file), read: bytes.clone() };
+    let decoded = DecodeReaderBytesBuilder::new().encoding(Some(encoding)).bom_override(true).build(raw);
+    let label = match encoding {
+        e if e == UTF_16LE || e == UTF_16BE => "UTF-16",
+        e if e == GB18030 => "GBK",
+        _ => "UTF-8",
+    };
+    Ok(TextFile { reader: Box::new(BufReader::new(decoded)), label, bytes, total, sample })
+}
+
 impl FileReader {
     /// 打开文件，读取列名。`name` 是原文件名（判断 `.tsv` 用）。
     pub fn open(path: &Path, name: &str, opts: &FileOptions) -> Result<Self> {
@@ -223,48 +266,21 @@ impl FileReader {
     }
 
     fn open_csv(path: &Path, name: &str, opts: &FileOptions) -> Result<Self> {
-        let mut file = File::open(path).map_err(read_error)?;
-        let total = file.metadata().map_err(read_error)?.len();
-        let mut head = vec![0u8; SNIFF_BYTES];
-        let mut n = 0;
-        while n < head.len() {
-            match file.read(&mut head[n..]).map_err(read_error)? {
-                0 => break,
-                k => n += k,
-            }
-        }
-        head.truncate(n);
-        let encoding = match opts.encoding {
-            TextEncoding::Auto => detect_encoding(&head),
-            TextEncoding::Utf8 => UTF_8,
-            TextEncoding::Gbk => GB18030,
-        };
+        let text = open_text(path, opts.encoding)?;
         let delimiter = match opts.delimiter {
             Some(d) => d,
             None if name.to_ascii_lowercase().ends_with(".tsv") => '\t',
-            None => {
-                let (sample, _, _) = encoding.decode(&head);
-                detect_delimiter(&sample)
-            }
+            None => detect_delimiter(&text.sample),
         };
         if !delimiter.is_ascii() {
             return Err(Error::invalid(msg!("import.bad_delimiter", delimiter = delimiter)));
         }
-        let bytes = Arc::new(AtomicU64::new(0));
-        let raw = Counting { inner: std::io::Cursor::new(head).chain(file), read: bytes.clone() };
-        // BOM 优先于选择的编码；输出为 UTF-8，无法转码的字节替换为 U+FFFD
-        let decoded = DecodeReaderBytesBuilder::new().encoding(Some(encoding)).bom_override(true).build(raw);
-        let reader: Box<dyn Read + Send> = Box::new(BufReader::new(decoded));
         let reader = csv::ReaderBuilder::new()
             .has_headers(false)
             .flexible(true)
             .delimiter(delimiter as u8)
-            .from_reader(reader);
-        let label = match encoding {
-            e if e == UTF_16LE || e == UTF_16BE => "UTF-16",
-            e if e == GB18030 => "GBK",
-            _ => "UTF-8",
-        };
+            .from_reader(text.reader);
+        let (bytes, total, label) = (text.bytes, text.total, text.label);
         let mut me = Self {
             columns: Vec::new(),
             inner: Inner::Csv { reader, record: csv::StringRecord::new(), line: 0 },
