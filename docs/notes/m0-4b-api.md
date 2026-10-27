@@ -99,6 +99,7 @@
 | GET | `…/schemas/{schema}/relations?table=` | 表的外键关系（M1c2 加入）：`[{direction: out\|in, name, schema, table, local_columns, other_columns}]`，`in` 只含同一 schema 中引用它的表 |
 | POST | `…/schemas/{schema}/data-sql` | 数据标签的 SQL（M1c2 加入），`{"object", "filter"?, "order"?: {"column", "desc"}, "count"?}` → `{"sql": "…"}`；`filter` 为空白时不加 WHERE，`count` 为 true 时生成 `SELECT COUNT(*)` |
 | POST | `/profiles/{id}/refresh` | 刷新元数据缓存，`{"schema": "…" \| null}` |
+| GET | `/profiles/{id}/ops` | 运维查询（M1c3）：`[{key, name, category, sql}]`，`name` 按请求的语言，`category` 为 `session` / `lock` / `storage` / `sql`。按连接上次识别出的变体选模板，没连接过时按驱动；不连接数据库 |
 
 ### 会话
 
@@ -137,6 +138,21 @@
 | DELETE | `/favorites/{id}` | 删除，文件夹连同其下内容；返回 204 |
 
 每条：`{id, parent_id, kind, name, sql, note, driver, variant, position, created_at, updated_at}`。收藏必须有 SQL，文件夹没有；上级必须是文件夹；不能把文件夹移到它自己或它的下级中（都返回 `invalid`）。
+
+### 导出（M1c3 加入）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/exports` | 提交导出任务，返回 201 和 `{"id"}`。请求体：`{profile_id, source, format, options?, path?, file_name}` |
+| GET | `/exports/{id}` | `{id, state, rows, warnings: {lob_truncated, cell_truncated}, error, file_name, path}`；`state` 为 `running` / `done` / `failed` / `cancelled`，`error` 是错误对象 |
+| DELETE | `/exports/{id}` | 进行中时取消；已结束时删除任务记录和临时文件。204 |
+| GET | `/exports/{id}/file?token=…` | 浏览器模式下载（`Content-Disposition` 带文件名）。下载后删除临时文件，任务不再存在 |
+
+- `source`：`{"sql": "…"}`（必须是单条查询语句，否则 400）或 `{"data": {schema, object, filter?, order?}}`（由数据标签的 SQL 生成）。
+- `format`：`csv` / `xlsx` / `insert` / `json`。`options`：`delimiter`（`,` / `	` / `;`）、`header`、`bom`、`null_text`、`table`（INSERT 的目标表）、`rows_per_insert`。
+- `path`：只有桌面程序的本机服务（`ApiConfig::local_files`）接受，必须是绝对路径且所在目录存在；浏览器模式给出时 400。不给时写到数据目录的 `exports/` 下，完成后下载。
+- 同时进行的任务最多 4 个，超出时 409（`busy`）。已结束的任务保留 1 小时。
+- 导出另开一个连接执行，大字段每个值最多读 256 MB；照常记入执行历史。
 
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 

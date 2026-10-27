@@ -53,10 +53,15 @@ fn run(data_dir: PathBuf) -> Result<(), String> {
         .invoke_handler(tauri::generate_handler![
             shell::shell_info,
             shell::window_action,
-            shell::set_auto_check_update
+            shell::set_auto_check_update,
+            shell::save_dialog,
+            shell::reveal_in_folder
         ])
         .setup(move |app| {
-            let mut api = router(service, ApiConfig { token: token.clone(), allowed_origins: Vec::new() });
+            let mut api = router(
+                service,
+                ApiConfig { token: token.clone(), allowed_origins: Vec::new(), local_files: true },
+            );
             match web_dir(app.path().resource_dir().ok()) {
                 Some(dir) => {
                     tracing::info!("前端页面目录 {}", dir.display());

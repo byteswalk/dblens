@@ -132,7 +132,8 @@ async fn run(args: Args) -> Result<(), String> {
             }
         });
     }
-    let mut app = router(service, ApiConfig { token, allowed_origins: args.allowed_origins });
+    let mut app =
+        router(service, ApiConfig { token, allowed_origins: args.allowed_origins, local_files: false });
     if let Some(dir) = web_dir {
         app = with_web(app, dir);
     }

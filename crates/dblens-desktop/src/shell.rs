@@ -1,14 +1,17 @@
 //! 页面可以调用的原生能力（M1 设计文档 2.2 节）。
 //!
 //! 业务仍然只走 HTTP 和 WebSocket；自绘标题栏需要的窗口操作，以及原本在原生菜单里的几项（置顶、恢复默认位置、
-//! 检查更新、关于、退出），通过这里的三个命令提供。`capabilities/main.json` 只放行这三个命令和事件监听，
-//! 且只对 `http://127.0.0.1:*` 上的本地页面生效。
+//! 检查更新、关于、退出），通过这里的三个命令提供；导出（M1c3）另有"另存为"对话框和"在文件夹中显示"两个命令。
+//! `capabilities/main.json` 只放行这五个命令和事件监听，且只对 `http://127.0.0.1:*` 上的本地页面生效。
 //!
 //! 窗口状态变化（最大化、置顶、自动检查更新）后，通过事件 [`EVENT`] 把新的 [`ShellInfo`] 推给页面。
+
+use std::path::Path;
 
 use dblens_core::msg;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::{update, window};
 
@@ -102,6 +105,51 @@ pub fn window_action(app: AppHandle, action: WindowAction) -> Result<(), String>
 pub fn set_auto_check_update(app: AppHandle, on: bool) {
     update::set_auto_check(&app, on);
     notify(&app);
+}
+
+/// "另存为"对话框的文件类型。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct FileFilter {
+    pub name: String,
+    pub extensions: Vec<String>,
+}
+
+/// 系统"另存为"对话框（导出时选择保存位置）。用户取消时返回 None。
+#[tauri::command]
+pub async fn save_dialog(app: AppHandle, default_name: String, filters: Vec<FileFilter>) -> Option<String> {
+    let mut dialog = app.dialog().file().set_file_name(default_name);
+    for f in &filters {
+        let exts: Vec<&str> = f.extensions.iter().map(String::as_str).collect();
+        dialog = dialog.add_filter(&f.name, &exts);
+    }
+    // 在异步命令的线程上等待对话框，不阻塞主线程
+    dialog.blocking_save_file().and_then(|p| p.into_path().ok()).map(|p| p.display().to_string())
+}
+
+/// 在系统的文件管理器中显示文件（导出完成后"打开所在文件夹"）。
+#[tauri::command]
+pub fn reveal_in_folder(path: String) -> Result<(), String> {
+    reveal(Path::new(&path)).map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn reveal(path: &Path) -> std::io::Result<()> {
+    use std::os::windows::process::CommandExt;
+    // explorer 要求 /select, 后面的路径自己加引号，不能交给标准库按参数转义
+    std::process::Command::new("explorer").raw_arg(format!("/select,\"{}\"", path.display())).spawn()?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn reveal(path: &Path) -> std::io::Result<()> {
+    std::process::Command::new("open").arg("-R").arg(path).spawn()?;
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn reveal(path: &Path) -> std::io::Result<()> {
+    std::process::Command::new("xdg-open").arg(path.parent().unwrap_or(path)).spawn()?;
+    Ok(())
 }
 
 #[cfg(test)]

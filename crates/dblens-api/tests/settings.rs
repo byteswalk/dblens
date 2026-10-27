@@ -20,7 +20,7 @@ fn app() -> Router {
         vec![Box::new(FakeDriver { log: Arc::default() })],
     ));
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
-    router(service, ApiConfig { token: "t".into(), allowed_origins: vec![] })
+    router(service, ApiConfig { token: "t".into(), allowed_origins: vec![], local_files: false })
 }
 
 async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
@@ -61,7 +61,7 @@ async fn only_ui_settings_are_visible() {
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
     let registry = Arc::new(DriverRegistry::with_drivers(store.clone(), vec![]));
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
-    let app = router(service, ApiConfig { token: "t".into(), allowed_origins: vec![] });
+    let app = router(service, ApiConfig { token: "t".into(), allowed_origins: vec![], local_files: false });
     assert_eq!(call(&app, "GET", "/api/settings", None).await.1, json!({ "ui.theme": "dark" }));
 }
 

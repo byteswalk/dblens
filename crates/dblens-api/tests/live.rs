@@ -51,7 +51,7 @@ async fn flow(env: &str) {
     secrets.init_vault("主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
-    let app = router(service, ApiConfig { token: TOKEN.into(), allowed_origins: vec![] });
+    let app = router(service, ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files: false });
 
     for option in LIB_OPTIONS {
         if let Some(lib) = params.options.get(option) {

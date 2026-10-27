@@ -3,6 +3,7 @@
 
 mod auth;
 mod error;
+mod exports;
 mod lang;
 mod routes;
 mod web;
@@ -27,6 +28,9 @@ pub struct ApiConfig {
     pub token: String,
     /// 除同源外还允许的 Origin，如桌面模式的 `tauri://localhost`、前端开发服务器 `http://localhost:5173`。
     pub allowed_origins: Vec<String>,
+    /// 页面和服务在同一台机器上（桌面程序）：导出可以直接写到页面给出的路径。
+    /// 浏览器模式（`dblens-server`）页面可能在另一台机器上，为 false，导出一律写临时文件后下载。
+    pub local_files: bool,
 }
 
 /// 生成随机访问令牌（64 个十六进制字符）。
@@ -76,6 +80,10 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/profiles/{id}/schemas/{schema}/generate", get(routes::generate))
         .route("/profiles/{id}/schemas/{schema}/relations", get(routes::relations))
         .route("/profiles/{id}/schemas/{schema}/data-sql", post(routes::data_sql))
+        .route("/profiles/{id}/ops", get(exports::ops))
+        .route("/exports", post(exports::create))
+        .route("/exports/{id}", get(exports::status).delete(exports::cancel_or_remove))
+        .route("/exports/{id}/file", get(exports::file))
         .route("/sessions", get(routes::sessions).post(routes::open_session))
         .route("/sessions/{id}", get(routes::session).delete(routes::close_session))
         .route("/sessions/{id}/autocommit", post(routes::set_autocommit))

@@ -20,7 +20,7 @@ fn app() -> (Router, Arc<Store>) {
     let history = HistoryLog::inline(store.clone());
     let service =
         Arc::new(Service::with_history(store.clone(), secrets, registry, Arc::new(DefaultPolicy), history));
-    (router(service, ApiConfig { token: "t".into(), allowed_origins: vec![] }), store)
+    (router(service, ApiConfig { token: "t".into(), allowed_origins: vec![], local_files: false }), store)
 }
 
 async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {

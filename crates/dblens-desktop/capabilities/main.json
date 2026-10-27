@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "主窗口：页面来自进程内接口服务（http://127.0.0.1:随机端口）。只放行自绘标题栏需要的三个命令和事件监听，业务仍走 HTTP 和 WebSocket",
+  "description": "主窗口：页面来自进程内接口服务（http://127.0.0.1:随机端口）。只放行自绘标题栏需要的三个命令、导出用的另存为对话框和在文件夹中显示，以及事件监听，业务仍走 HTTP 和 WebSocket",
   "windows": ["main"],
   "local": false,
   "remote": {
@@ -12,6 +12,8 @@
     "core:event:allow-unlisten",
     "allow-shell-info",
     "allow-window-action",
-    "allow-set-auto-check-update"
+    "allow-set-auto-check-update",
+    "allow-save-dialog",
+    "allow-reveal-in-folder"
   ]
 }

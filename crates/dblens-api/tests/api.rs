@@ -24,7 +24,11 @@ fn app() -> (Router, Arc<Service>) {
     let log: Log = Arc::default();
     let registry = Arc::new(DriverRegistry::with_drivers(store.clone(), vec![Box::new(FakeDriver { log })]));
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
-    let config = ApiConfig { token: TOKEN.into(), allowed_origins: vec!["tauri://localhost".into()] };
+    let config = ApiConfig {
+        token: TOKEN.into(),
+        allowed_origins: vec!["tauri://localhost".into()],
+        local_files: false,
+    };
     (router(service.clone(), config), service)
 }
 
@@ -438,4 +442,80 @@ async fn websocket_events_follow_lang_param() {
         let confirm = events.iter().find(|e| e["type"] == "confirm_required").expect("应要求确认");
         assert_eq!(confirm["reason"], want);
     }
+}
+
+// ---- 导出与运维查询（M1c3） ----
+
+#[tokio::test]
+async fn export_then_download() {
+    let (app, service) = app();
+    let dir = tempfile::tempdir().unwrap();
+    service.exports.set_dir(dir.path().join("exports"));
+    let (st, p) =
+        call(&app, "POST", "/api/profiles", Some(json!({"profile": profile_json("p"), "password": "pw"})))
+            .await;
+    assert_eq!(st, StatusCode::CREATED);
+    let pid = p["id"].as_str().unwrap();
+    let body = |sql: &str, path: Option<&str>| {
+        json!({"profile_id": pid, "source": {"sql": sql}, "format": "csv", "options": {"bom": false},
+               "path": path, "file_name": "订单.csv"})
+    };
+    // 不是查询、浏览器模式给了路径：400
+    let (st, e) = call(&app, "POST", "/api/exports", Some(body("DELETE FROM t", None))).await;
+    assert_eq!((st, e["kind"].clone()), (StatusCode::BAD_REQUEST, json!("invalid")));
+    let abs = dir.path().join("x.csv");
+    let (st, _) = call(&app, "POST", "/api/exports", Some(body("SELECT ROWS 3", abs.to_str()))).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+
+    let (st, created) = call(&app, "POST", "/api/exports", Some(body("SELECT ROWS 3", None))).await;
+    assert_eq!(st, StatusCode::CREATED, "{created}");
+    let id = created["id"].as_str().unwrap().to_string();
+    let status = loop {
+        let (_, s) = call(&app, "GET", &format!("/api/exports/{id}"), None).await;
+        if s["state"] != "running" {
+            break s;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
+    assert_eq!((status["state"].clone(), status["rows"].clone()), (json!("done"), json!(3)), "{status}");
+    // 浏览器的下载链接用查询参数带令牌
+    let req = Request::get(format!("/api/exports/{id}/file?token={TOKEN}")).body(Body::empty()).unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let cd = resp.headers()[header::CONTENT_DISPOSITION].to_str().unwrap().to_string();
+    assert!(cd.ends_with("filename*=UTF-8''%E8%AE%A2%E5%8D%95.csv"), "{cd}");
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&bytes[..], b"n\n1\n2\n3\n");
+    assert_eq!(std::fs::read_dir(dir.path().join("exports")).unwrap().count(), 0, "下载后删除临时文件");
+    let (st, _) = call(&app, "GET", &format!("/api/exports/{id}"), None).await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn ops_follow_language() {
+    let (app, _) = app();
+    let (_, p) =
+        call(&app, "POST", "/api/profiles", Some(json!({"profile": profile_json("p"), "password": "pw"})))
+            .await;
+    let uri = format!("/api/profiles/{}/ops", p["id"].as_str().unwrap());
+    let get = |lang: &'static str| {
+        let req = Request::get(&uri)
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .header(header::ACCEPT_LANGUAGE, lang)
+            .body(Body::empty())
+            .unwrap();
+        let app = app.clone();
+        async move {
+            let resp = app.oneshot(req).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            serde_json::from_slice::<Value>(&resp.into_body().collect().await.unwrap().to_bytes()).unwrap()
+        }
+    };
+    let zh = get("zh-CN").await;
+    assert_eq!(
+        (zh[0]["key"].clone(), zh[0]["name"].clone(), zh[0]["category"].clone()),
+        (json!("sessions"), json!("会话列表"), json!("session"))
+    );
+    assert!(zh[0]["sql"].as_str().unwrap().contains("pg_stat_activity"), "没连接过时按驱动选 PG 的模板");
+    assert_eq!(get("en").await[0]["name"], "Sessions");
 }
