@@ -414,7 +414,7 @@ export interface SqlFileRequest {
 
 export interface TaskStatus {
   id: string
-  kind: 'import' | 'sql_file'
+  kind: 'import' | 'sql_file' | 'design'
   state: 'running' | 'confirm' | 'done' | 'failed' | 'cancelled'
   phase: 'preparing' | 'scanning' | 'creating' | 'clearing' | 'writing' | 'executing' | 'finished'
   progress: {
@@ -435,6 +435,149 @@ export interface TaskStatus {
   failures: { index: number; line: number; error: ErrorBody; text: string }[]
   confirm: { items: { line: number; text: string; reason: string }[]; more: number } | null
   report: string | null
+  /** 表设计器：失败后没有执行的语句。 */
+  remaining: string | null
+}
+
+/** 表设计器（M3）：与后端结构模型一致的完整表结构。 */
+export interface DesignColumn {
+  name: string
+  ordinal: number
+  data_type: { native: string; logical: unknown }
+  nullable: boolean
+  default: string | null
+  comment: string | null
+  auto_increment: boolean
+  generated: string | null
+}
+
+export interface DesignKey {
+  name: string | null
+  columns: string[]
+}
+
+export interface DesignCheck {
+  name: string | null
+  expression: string
+}
+
+export interface DesignForeignKey {
+  name: string | null
+  columns: string[]
+  ref_schema: string | null
+  ref_table: string
+  ref_columns: string[]
+  on_delete: string | null
+  on_update: string | null
+}
+
+export interface DesignIndex {
+  name: string
+  columns: { name: string; descending: boolean }[]
+  unique: boolean
+  method: string | null
+}
+
+export interface DesignTableModel {
+  name: string
+  comment: string | null
+  columns: DesignColumn[]
+  primary_key: DesignKey | null
+  uniques: DesignKey[]
+  foreign_keys: DesignForeignKey[]
+  checks: DesignCheck[]
+  indexes: DesignIndex[]
+  triggers: unknown[]
+  partition: string | null
+}
+
+/** 类型的参数形式：无参数、长度（也用于时间类型的小数秒精度）、精度加小数位。 */
+export type TypeParams = 'none' | 'length' | 'precision_scale'
+
+export interface TypeEntry {
+  name: string
+  params: TypeParams
+  /** 长度可选按 BYTE 还是 CHAR 计（Oracle、达梦的字符类型）。 */
+  char_unit: boolean
+}
+
+/** 方言能力：前端据此禁用库不支持的选项。 */
+export interface DesignCaps {
+  reorder: boolean
+  checks: boolean
+  descending_index: boolean
+  on_delete: string[]
+  on_update: string[]
+  index_methods: string[]
+  types: TypeEntry[]
+}
+
+export interface DesignTableResult {
+  table: DesignTableModel
+  storage: {
+    engine: string | null
+    charset: string | null
+    collation: string | null
+    tablespace: string | null
+    row_count: number | null
+  }
+  fingerprint: string
+}
+
+export interface DesignRenames {
+  columns: Record<string, string>
+  indexes: Record<string, string>
+}
+
+export interface DesignRequest {
+  schema: string
+  /** 已有表的名字；新建表时为 null。 */
+  name: string | null
+  draft: DesignTableModel
+  renames: DesignRenames
+  rebuild: boolean
+  fingerprint: string | null
+}
+
+export type TableChange =
+  | { kind: 'create_table'; table: DesignTableModel }
+  | { kind: 'set_table_comment'; comment: string | null }
+  | { kind: 'add_column'; column: DesignColumn; after: string | null }
+  | { kind: 'drop_column'; name: string }
+  | { kind: 'rename_column'; from: string; to: string; column: DesignColumn }
+  | { kind: 'alter_column'; from: DesignColumn; to: DesignColumn }
+  | { kind: 'move_column'; column: DesignColumn; after: string | null }
+  | { kind: 'drop_primary_key' | 'add_primary_key'; key: DesignKey }
+  | { kind: 'drop_unique' | 'add_unique'; unique: DesignKey }
+  | { kind: 'drop_check' | 'add_check'; check: DesignCheck }
+  | { kind: 'drop_foreign_key' | 'add_foreign_key'; key: DesignForeignKey }
+  | { kind: 'drop_index' | 'add_index'; index: DesignIndex }
+  | { kind: 'rename_index'; from: string; index: DesignIndex }
+
+export type DesignSection = 'table' | 'columns' | 'primary_key' | 'indexes' | 'foreign_keys' | 'uniques' | 'checks'
+
+export interface DesignIssue {
+  section: DesignSection
+  row: number | null
+  field: string | null
+  message: string
+}
+
+/** 预览中的一条：SQL，或由程序执行的核对行数。`changes` 是对应的变更序号。 */
+export type DesignStep =
+  | { kind: 'sql'; sql: string; changes: number[] }
+  | { kind: 'count_check'; source: string; target: string; changes: number[] }
+
+export interface DesignPreview {
+  errors: DesignIssue[]
+  changes: TableChange[]
+  statements: DesignStep[]
+  rebuild: { reasons: string[]; active: boolean; refused: string | null }
+  warnings: string[]
+  transactional: boolean
+  denied: string | null
+  confirm: string[]
+  conflict: boolean
 }
 
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
@@ -583,6 +726,12 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     /** 前 100 条失败中第 n 条的完整语句。 */
     taskStatement: async (id: string, n: number) =>
       (await request<{ sql: string }>('GET', `/tasks/${encodeURIComponent(id)}/statements/${n}`)).sql,
+    designCaps: (id: string) => request<DesignCaps>('GET', `${p(id)}/design/caps`),
+    designTable: (id: string, schema: string, name: string) =>
+      request<DesignTableResult>('GET', `${p(id)}/design/table${q({ schema, name })}`),
+    previewDesign: (id: string, req: DesignRequest) => request<DesignPreview>('POST', `${p(id)}/design/preview`, req),
+    applyDesign: async (id: string, req: DesignRequest) =>
+      (await request<{ id: string }>('POST', `${p(id)}/design/apply`, req)).id,
     openSession: (profileId: string) => request<SessionInfo>('POST', '/sessions', { profile_id: profileId }),
     session: (id: number) => request<SessionInfo>('GET', `/sessions/${id}`),
     /** 关闭会话；有未提交的修改时按 commit 提交或回滚。 */
