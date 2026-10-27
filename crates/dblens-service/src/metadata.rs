@@ -42,6 +42,13 @@ impl MetadataCache {
         }
     }
 
+    /// 丢掉一条缓存的查询结果（下次重新查询）。
+    pub fn forget(&self, profile_id: &str, key: MetaKey, args: &MetaArgs) {
+        if let Ok(mut e) = self.entries.lock() {
+            e.remove(&(profile_id.to_string(), key, args.clone()));
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.entries.lock().map(|e| e.len()).unwrap_or(0)
     }

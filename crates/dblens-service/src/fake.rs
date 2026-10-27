@@ -3,6 +3,7 @@
 //! - `ROWS n`：返回一个结果集，n 行，每行一个整数；
 //! - `FAIL`：SQL 错误；`FAILAT n`：带出错位置 n 的 SQL 错误；`DISCONNECT`：连接错误；
 //! - `SELECT current_schema()`：当前 schema（初始为 public），`SET search_path TO "x"` 切换它；
+//! - `SELECT COUNT(*) …`：一行一列的 3（表设计器重建时核对行数）；
 //! - `SLEEP`：一直等到被取消，然后返回 `Cancelled`；
 //! - 参数中有文本 `FAIL` 时报 SQL 错误，有 `SLEEP` 时同 `SLEEP`（导入测试用）；
 //! - 其他：影响 1 行。
@@ -156,6 +157,13 @@ impl Connection for FakeConn {
                 stream.events.push_back(ExecEvent::Affected(0));
             }
             "SLEEP" => stream.sleep = Some((self.cancelled.clone(), self.wake.clone())),
+            _ if sql.starts_with("SELECT COUNT(*) ") => {
+                stream
+                    .events
+                    .push_back(ExecEvent::ResultStart { columns: vec![ColumnMeta::new("n", "int8")] });
+                stream.events.push_back(ExecEvent::Rows(vec![vec![Value::Int(3)]]));
+                stream.events.push_back(ExecEvent::ResultEnd);
+            }
             // 表数据编辑的冲突：没有影响任何行
             _ if sql.contains("zero_rows") => stream.events.push_back(ExecEvent::Affected(0)),
             _ => match sql.strip_prefix("ROWS ").and_then(|n| n.parse::<i64>().ok()) {

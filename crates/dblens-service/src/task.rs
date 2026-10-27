@@ -24,6 +24,8 @@ pub const MAX_FAILURES: usize = 100;
 pub enum TaskKind {
     Import,
     SqlFile,
+    /// 表设计器执行改动（M3）。
+    Design,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -109,6 +111,8 @@ pub struct TaskStatus {
     pub confirm: Option<TaskConfirm>,
     /// 有报告文件（出错报告或执行日志）时为下载用的文件名。
     pub report: Option<String>,
+    /// 表设计器：失败后没有执行的语句（以 `;` 分隔），可在查询标签中打开手动执行。
+    pub remaining: Option<String>,
 }
 
 struct Entry {
@@ -394,6 +398,7 @@ impl TaskManager {
                 committed_line: None,
                 failures: Vec::new(),
                 confirm: None,
+                remaining: None,
                 report: None,
             }),
             cancelled: AtomicBool::new(false),
