@@ -80,7 +80,34 @@
         "date": "date (e.g. 2026-10-26)",
         "time": "time (e.g. 13:45:30)",
         "timestamp": "timestamp (e.g. 2026-10-26 13:45:30)"
-      }
+      },
+      "addRow": "Add Row",
+      "copyRow": "Copy Row",
+      "deleteRows": "Delete Rows",
+      "undo": "Undo Selected",
+      "discard": "Discard All",
+      "commit": "Commit ({{count}})",
+      "setNull": "Set NULL",
+      "undoCell": "Undo This Change",
+      "undoRow": "Undo This Row",
+      "copyCell": "Copy",
+      "ignoredColumns_one": "The pasted data has {{count}} extra column; it was ignored",
+      "ignoredColumns_other": "The pasted data has {{count}} extra columns; they were ignored",
+      "viewReadOnly": "Views are read-only",
+      "noKey": "Read-only: no primary key or non-null unique key",
+      "hasErrors": "Some cells could not be parsed (shown in red); fix them before committing",
+      "discardTitle": "Discard uncommitted changes?",
+      "discardContent": "Changes here have not been committed and will be lost.",
+      "discardOk": "Discard Changes",
+      "previewTitle_one": "Commit changes: {{count}} statement",
+      "previewTitle_other": "Commit changes: {{count}} statements",
+      "prodWarning": "This is a production connection; check these statements",
+      "openInTab": "Copy to New Query Tab",
+      "execute": "Execute",
+      "cancel": "Cancel",
+      "applied_one": "{{count}} statement committed",
+      "applied_other": "{{count}} statements committed",
+      "noSession": "The data has not been read yet; refresh first"
     }
   }
 }

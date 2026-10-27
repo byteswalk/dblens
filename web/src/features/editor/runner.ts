@@ -185,6 +185,12 @@ export class Runner {
    * 首批结果读完后服务端在等续取，执行状态一直是 running，run 会忽略新的提交。
    */
   async rerun(sql: string) {
+    await this.stop()
+    await this.run(sql, 0)
+  }
+
+  /** 停下正在执行的（包括还在等续取的结果），等它结束。数据标签提交编辑前也要先停下（M2a）。 */
+  async stop() {
     if (this.rt().running) {
       const stopped = new Promise<void>((resolve) => {
         const off = useRuntime.subscribe((s) => {
@@ -197,7 +203,6 @@ export class Runner {
       this.cancel()
       await stopped
     }
-    await this.run(sql, 0)
   }
 
   /** 用户确认后，从需要确认的那条语句接着执行。 */

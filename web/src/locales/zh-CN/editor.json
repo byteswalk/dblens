@@ -80,7 +80,31 @@
         "date": "日期（如 2026-10-26）",
         "time": "时间（如 13:45:30）",
         "timestamp": "时间戳（如 2026-10-26 13:45:30）"
-      }
+      },
+      "addRow": "新增行",
+      "copyRow": "复制行",
+      "deleteRows": "删除行",
+      "undo": "撤销所选",
+      "discard": "全部放弃",
+      "commit": "提交（{{count}}）",
+      "setNull": "设为 NULL",
+      "undoCell": "撤销这个改动",
+      "undoRow": "撤销这一行",
+      "copyCell": "复制",
+      "ignoredColumns": "粘贴的内容多出 {{count}} 列，已忽略",
+      "viewReadOnly": "视图只读",
+      "noKey": "没有主键或非空的唯一键，只读",
+      "hasErrors": "有无法解析的单元格（标红），请改正后再提交",
+      "discardTitle": "放弃未提交的修改？",
+      "discardContent": "这里的修改还没有提交，继续会丢掉它们。",
+      "discardOk": "放弃修改",
+      "previewTitle": "提交修改：{{count}} 条语句",
+      "prodWarning": "这是生产环境的连接，请确认这些语句",
+      "openInTab": "复制到新查询标签",
+      "execute": "执行",
+      "cancel": "取消",
+      "applied": "已提交 {{count}} 条语句",
+      "noSession": "数据还没有读取，请先刷新"
     }
   }
 }

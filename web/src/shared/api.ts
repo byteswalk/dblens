@@ -140,6 +140,8 @@ export interface ColumnInfo {
   nullable: boolean
   default: string | null
   comment: string | null
+  auto_increment?: boolean
+  generated?: string | null
 }
 
 /** 表明细（只列出对象树用到的字段）。 */
@@ -148,6 +150,7 @@ export interface TableInfo {
   comment: string | null
   columns: ColumnInfo[]
   primary_key: { name: string | null; columns: string[] } | null
+  uniques?: { name: string | null; columns: string[] }[]
 }
 
 /** 查看 DDL 的对象种类（M1c2）。 */

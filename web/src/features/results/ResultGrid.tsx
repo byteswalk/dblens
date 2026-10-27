@@ -24,14 +24,14 @@ import { isNumeric } from './cell'
 import { shouldFetchMore } from './results'
 
 /** 按列名和前几行的内容估计列宽。 */
-function columnWidth(r: ResultSet, col: number): number {
+export function columnWidth(r: ResultSet, col: number): number {
   let chars = r.columns[col].name.length + 2
   for (const row of r.rows.slice(0, 50)) chars = Math.max(chars, cellText(row[col]).length)
   return Math.min(420, Math.max(72, chars * 8 + 24))
 }
 
 /** 表格配色取自外壳的 CSS 变量，主题切换时重新读取。 */
-function useGridTheme(): Partial<Theme> {
+export function useGridTheme(): Partial<Theme> {
   const pref = useSetting(THEME_KEY)
   const dark = document.documentElement.dataset.theme
   return useMemo(() => {

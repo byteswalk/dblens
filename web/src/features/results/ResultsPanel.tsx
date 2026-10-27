@@ -3,10 +3,11 @@
 
 import { IconAlertCircle, IconBinaryTree, IconDownload, IconMessage, IconTable } from '@tabler/icons-react'
 import { Button, Spin } from 'antd'
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { errorText } from '../../shared/api'
+import type { ResultSet } from '../../shared/exec'
 import type { TabRuntime } from '../editor/runner'
 import type { Order } from '../data/sort'
 import ResultGrid from './ResultGrid'
@@ -20,6 +21,8 @@ export interface ResultsPanelProps {
   onSort?(column: string): void
   /** 导出第 `stmt` 条语句的结果；不给时不显示导出按钮。 */
   onExport?(stmt: number): void
+  /** 自己画结果集（数据标签的可编辑表格，M2a）；不给时用只读的结果表格。 */
+  renderResult?(result: ResultSet, waiting: boolean): ReactNode
 }
 
 function TabIcon({ tab, explain }: { tab: ResultTab; explain: boolean }) {
@@ -28,7 +31,7 @@ function TabIcon({ tab, explain }: { tab: ResultTab; explain: boolean }) {
   return explain ? <IconBinaryTree size={16} /> : <IconTable size={16} />
 }
 
-export default function ResultsPanel({ rt, onFetchMore, sort, onSort, onExport }: ResultsPanelProps) {
+export default function ResultsPanel({ rt, onFetchMore, sort, onSort, onExport, renderResult }: ResultsPanelProps) {
   const { t } = useTranslation()
   const { exec, explain, capped, running } = rt
   const tabs = resultTabs(exec, explain, capped)
@@ -72,7 +75,12 @@ export default function ResultsPanel({ rt, onFetchMore, sort, onSort, onExport }
         )}
       </div>
       <div className="results-body">
-        {current.kind === 'result' && (
+        {current.kind === 'result' &&
+          renderResult?.(
+            exec.statements[current.stmt].results[current.result],
+            exec.waitingForMore && current.stmt === lastStmt,
+          )}
+        {current.kind === 'result' && !renderResult && (
           <ResultGrid
             key={current.key}
             result={exec.statements[current.stmt].results[current.result]}

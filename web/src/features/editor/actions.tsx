@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
+import { hasPendingEdits, useEdits } from '../data/editStore'
 import { sendInsert } from './commands'
 import { disposeRunner, useRuntime } from './runner'
 import { markRun, useTabs } from './tabs'
@@ -51,12 +52,26 @@ export function useQueryActions() {
     else openSql(sql, profileId)
   }
 
-  /** 关闭标签页：有未提交的事务时先问提交还是回滚。 */
+  /** 关闭标签页：数据标签有未提交的编辑时先确认放弃；有未提交的事务时先问提交还是回滚。 */
   const closeQuery = (tabId: string) => {
     const tab = useTabs.getState().tabs.find((x) => x.id === tabId)
     if (!tab) return
+    if (tab.data && hasPendingEdits(tabId)) {
+      modal.confirm({
+        title: t('editor.data.edit.discardTitle'),
+        content: t('editor.data.edit.discardContent'),
+        okText: t('editor.data.edit.discardOk'),
+        okType: 'danger',
+        onOk: () => {
+          useEdits.getState().clear(tabId)
+          closeQuery(tabId)
+        },
+      })
+      return
+    }
     const finish = async (commit: boolean) => {
       await disposeRunner(tabId, commit)
+      useEdits.getState().clear(tabId)
       useTabs.getState().close(tabId)
     }
     if (!useRuntime.getState().tabs[tabId]?.session?.in_transaction) {
