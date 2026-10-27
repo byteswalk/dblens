@@ -112,8 +112,8 @@ export default function SqlEditor({ path, language, defaultValue, marks, sql, on
       onChange={(v) => onChange(v ?? '')}
       options={{
         fontFamily: "'JetBrains Mono', 'Cascadia Mono', Consolas, 'Noto Sans Mono CJK SC', monospace",
-        fontSize: 13,
-        lineHeight: 20,
+        fontSize: 14,
+        lineHeight: 22,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         automaticLayout: true,

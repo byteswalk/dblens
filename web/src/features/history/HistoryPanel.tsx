@@ -86,7 +86,7 @@ export default function HistoryPanel() {
         <Input
           size="small"
           allowClear
-          prefix={<IconSearch size={14} />}
+          prefix={<IconSearch size={16} />}
           placeholder={t('app.history.search')}
           value={text}
           onChange={(e) => setText(e.target.value)}

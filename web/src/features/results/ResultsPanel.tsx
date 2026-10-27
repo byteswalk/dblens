@@ -21,9 +21,9 @@ export interface ResultsPanelProps {
 }
 
 function TabIcon({ tab, explain }: { tab: ResultTab; explain: boolean }) {
-  if (tab.kind === 'error') return <IconAlertCircle size={14} />
-  if (tab.kind === 'messages') return <IconMessage size={14} />
-  return explain ? <IconBinaryTree size={14} /> : <IconTable size={14} />
+  if (tab.kind === 'error') return <IconAlertCircle size={16} />
+  if (tab.kind === 'messages') return <IconMessage size={16} />
+  return explain ? <IconBinaryTree size={16} /> : <IconTable size={16} />
 }
 
 export default function ResultsPanel({ rt, onFetchMore, sort, onSort }: ResultsPanelProps) {

@@ -28,9 +28,11 @@ function Themed() {
   }, [theme])
   const lang = resolveLang(parseLangPref(useSetting(LANG_KEY)))
   useEffect(() => applyLang(lang), [lang])
-  const algorithm = [theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm, antdTheme.compactAlgorithm]
+  const algorithm = theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm
+  // 不用 compactAlgorithm：它把字号再减 2px。正文 14px 与 shell.css 的 --fs 一致，控件高度略收紧
+  const token = { fontSize: 14, borderRadius: 4, controlHeight: 30, controlHeightSM: 26 }
   return (
-    <ConfigProvider locale={lang === 'en' ? enUS : zhCN} theme={{ algorithm, token: { fontSize: 12, borderRadius: 4 } }}>
+    <ConfigProvider locale={lang === 'en' ? enUS : zhCN} theme={{ algorithm, token }}>
       <AntApp style={{ height: '100%' }}>
         <Shell />
         <ConnectionDialog />

@@ -73,11 +73,11 @@ export default function FavoritesPanel() {
         isLeaf: fav.kind === 'item',
         icon:
           fav.kind === 'folder' ? (
-            <IconFolder size={14} />
+            <IconFolder size={16} />
           ) : fav.driver ? (
             <DbIcon driver={fav.driver} variant={fav.variant} />
           ) : (
-            <IconFileCode size={14} />
+            <IconFileCode size={16} />
           ),
         title: fav.name,
         children: fav.kind === 'folder' ? toData(children) : undefined,

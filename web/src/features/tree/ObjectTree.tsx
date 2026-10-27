@@ -79,12 +79,12 @@ const ENV_COLOR: Record<Environment, string> = {
 }
 
 const CATEGORY_ICON: Record<CategoryKind, ReactNode> = {
-  tables: <IconTable size={14} />,
-  views: <IconEye size={14} />,
-  materialized_views: <IconEye size={14} />,
-  routines: <IconFunction size={14} />,
-  sequences: <IconListNumbers size={14} />,
-  synonyms: <IconLink size={14} />,
+  tables: <IconTable size={16} />,
+  views: <IconEye size={16} />,
+  materialized_views: <IconEye size={16} />,
+  routines: <IconFunction size={16} />,
+  sequences: <IconListNumbers size={16} />,
+  synonyms: <IconLink size={16} />,
 }
 
 /** 按节点键取下一层。 */
@@ -219,7 +219,7 @@ export default function ObjectTree() {
       return items.map((i) => {
         const k = decodeKey(i.key)
         const icon =
-          k.type === 's' ? <IconSchema size={14} /> : k.type === 'g' || k.type === 'k' ? <IconFolder size={14} /> : k.type === 'o' ? CATEGORY_ICON[k.kind] : i.pk ? <IconKey size={14} color="var(--warn)" /> : <IconColumns size={14} />
+          k.type === 's' ? <IconSchema size={16} /> : k.type === 'g' || k.type === 'k' ? <IconFolder size={16} /> : k.type === 'o' ? CATEGORY_ICON[k.kind] : i.pk ? <IconKey size={16} color="var(--warn)" /> : <IconColumns size={16} />
         const label = k.type === 'k' ? categoryLabel(k.kind) : k.type === 'g' ? t('tree.node.system') : i.label
         const extra = i.routineKind ? routineKindLabel(i.routineKind) : i.extra
         const count = k.type === 'k' && loaded[i.key] && !loaded[i.key].error ? loaded[i.key].items.length : null
@@ -359,7 +359,7 @@ export default function ObjectTree() {
         <Input
           size="small"
           allowClear
-          prefix={<IconSearch size={14} className="muted" />}
+          prefix={<IconSearch size={16} className="muted" />}
           placeholder={t('tree.filterPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}

@@ -40,11 +40,11 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
       title={`${tab.title} · ${profileName}`}
     >
       {tab.data ? (
-        <IconTable size={14} />
+        <IconTable size={16} />
       ) : profile ? (
         <DbIcon driver={profile.driver} variant={rt.session?.variant ?? profile.variant} />
       ) : (
-        <IconFileCode size={14} />
+        <IconFileCode size={16} />
       )}
       <span className="tab-title">{tab.title}</span>
       {envClass === 'prod' ? <span>· {t('editor.tab.prod')}</span> : <span className="muted">{profileName}</span>}
@@ -56,7 +56,7 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
           closeQuery(tab.id)
         }}
       >
-        <IconX size={12} />
+        <IconX size={14} />
       </span>
     </div>
   )
@@ -95,7 +95,7 @@ export default function Workspace() {
           )
         })}
         <div className="tab add" title={t('editor.tab.newQuery')} onClick={() => newQuery()}>
-          <IconPlus size={14} />
+          <IconPlus size={16} />
         </div>
       </div>
       {tab &&

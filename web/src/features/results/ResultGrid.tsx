@@ -27,7 +27,7 @@ import { shouldFetchMore } from './results'
 function columnWidth(r: ResultSet, col: number): number {
   let chars = r.columns[col].name.length + 2
   for (const row of r.rows.slice(0, 50)) chars = Math.max(chars, cellText(row[col]).length)
-  return Math.min(400, Math.max(64, chars * 7 + 20))
+  return Math.min(420, Math.max(72, chars * 8 + 24))
 }
 
 /** 表格配色取自外壳的 CSS 变量，主题切换时重新读取。 */
@@ -51,8 +51,9 @@ function useGridTheme(): Partial<Theme> {
       bgHeaderHovered: v('--hover'),
       borderColor: v('--border'),
       fontFamily: v('--mono'),
-      baseFontStyle: '12px',
-      headerFontStyle: '600 12px',
+      baseFontStyle: '13px',
+      headerFontStyle: '600 13px',
+      markerFontStyle: '12px',
     }
   }, [pref, dark]) // 主题变化时重新读取
 }
@@ -110,8 +111,8 @@ export default function ResultGrid({ result, waiting, onFetchMore, sort, onSort 
         rowMarkers="number"
         smoothScrollX
         smoothScrollY
-        rowHeight={24}
-        headerHeight={28}
+        rowHeight={28}
+        headerHeight={32}
         theme={theme}
         width="100%"
         height="100%"

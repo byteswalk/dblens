@@ -50,7 +50,7 @@ function Welcome() {
   return (
     <div className="welcome">
       <IconDatabase size={48} stroke={1.2} />
-      <div style={{ fontSize: 16, color: 'var(--text)' }}>{t('common.appName')}</div>
+      <div style={{ fontSize: 18, color: 'var(--text)' }}>{t('common.appName')}</div>
       <div className="row" style={{ gap: 8 }}>
         <Button type="primary" icon={<IconPlus size={14} />} onClick={() => openConnection(null)}>
           {t('app.welcome.newConnection')}

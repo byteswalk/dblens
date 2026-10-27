@@ -23,6 +23,11 @@
   --env-none: #b4b4bb;
   --mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Noto Sans Mono CJK SC', monospace;
   --sans: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  /* 字号层级（参照桌面 AI 客户端的正文 14px）：正文、次要文字、标签和计数、等宽文字 */
+  --fs: 14px;
+  --fs-sm: 13px;
+  --fs-xs: 12px;
+  --fs-mono: 13px;
 }
 :root[data-theme='dark'] {
   --bg: #18181b;
@@ -52,7 +57,7 @@ body,
 body {
   background: var(--panel);
   color: var(--text);
-  font: 12px/1.5 var(--sans);
+  font: var(--fs)/1.5 var(--sans);
   overflow: hidden;
   user-select: none;
 }
@@ -75,7 +80,7 @@ body {
 
 /* 标题栏 */
 .titlebar {
-  height: 32px;
+  height: 38px;
   flex: none;
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
@@ -104,7 +109,7 @@ body {
 }
 .titlebar .tb-btn {
   width: 46px;
-  height: 32px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -123,7 +128,7 @@ body {
 
 /* 活动栏、侧栏 */
 .activity {
-  width: 44px;
+  width: 48px;
   flex: none;
   background: var(--panel-2);
   border-right: 1px solid var(--border);
@@ -134,8 +139,8 @@ body {
   gap: 4px;
 }
 .activity .a {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -168,7 +173,7 @@ body {
   border-right: 1px solid var(--border);
 }
 .side-h {
-  height: 32px;
+  height: 38px;
   flex: none;
   padding: 0 6px 0 12px;
   border-bottom: 1px solid var(--border);
@@ -209,7 +214,7 @@ body {
   top: 0;
   z-index: 1;
   padding: 4px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--muted);
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -223,8 +228,8 @@ body {
   background: var(--hover);
 }
 .hist-sql {
-  font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: var(--fs-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -232,7 +237,7 @@ body {
 .hist-meta {
   gap: 4px;
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--muted);
 }
 .hist-conn {
@@ -242,7 +247,7 @@ body {
 }
 .hist-err {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--danger);
   white-space: nowrap;
   overflow: hidden;
@@ -259,7 +264,7 @@ body {
   gap: 4px;
   padding: 4px 6px 4px 12px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .fav-tree {
   flex: 1;
@@ -283,8 +288,8 @@ body {
   white-space: nowrap;
 }
 .mono {
-  font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: var(--fs-mono);
 }
 .hist-preview {
   margin: 0;
@@ -292,8 +297,8 @@ body {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
-  font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: var(--fs-mono);
 }
 .splitter {
   width: 4px;
@@ -311,11 +316,11 @@ body {
   text-overflow: ellipsis;
 }
 .tree .env {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 0 5px;
   border-radius: 3px;
   margin-left: 6px;
-  line-height: 16px;
+  line-height: 18px;
 }
 .tree .env.dev {
   color: var(--env-dev);
@@ -357,8 +362,9 @@ body {
   color: var(--text-2);
 }
 .statusbar {
-  height: 24px;
+  height: 28px;
   flex: none;
+  font-size: var(--fs-sm);
   background: var(--panel-2);
   border-top: 1px solid var(--border);
   padding: 0 10px;
@@ -374,7 +380,7 @@ body {
   min-width: 0;
 }
 .tabs {
-  height: 34px;
+  height: 40px;
   flex: none;
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
@@ -386,7 +392,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-right: 1px solid var(--border);
   border-top: 2px solid transparent;
   color: var(--text-2);
@@ -440,7 +446,7 @@ body {
   flex-direction: column;
 }
 .toolbar {
-  height: 34px;
+  height: 40px;
   flex: none;
   border-bottom: 1px solid var(--border);
   padding: 0 8px;
@@ -472,7 +478,7 @@ body {
   flex-direction: column;
 }
 .rtabs {
-  height: 30px;
+  height: 36px;
   flex: none;
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
@@ -480,7 +486,7 @@ body {
   gap: 2px;
 }
 .rtab {
-  height: 30px;
+  height: 36px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -509,6 +515,7 @@ body {
   overflow: auto;
   padding: 8px 12px;
   font-family: var(--mono);
+  font-size: var(--fs-mono);
   user-select: text;
 }
 .messages .err,
@@ -522,6 +529,7 @@ body {
 .confirm-sql,
 .cell-view {
   font-family: var(--mono);
+  font-size: var(--fs-mono);
   white-space: pre-wrap;
   word-break: break-all;
   user-select: text;

@@ -9,7 +9,7 @@ import { dbIcon } from './dbIcons'
 export default function DbIcon({
   driver,
   variant,
-  size = 14,
+  size = 16,
   title,
 }: {
   driver: DriverId

@@ -108,7 +108,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           onSort={(column) => apply({ order: nextOrder(data.order, column) })}
         />
       </div>
-      <div className="row muted" style={{ padding: '2px 8px', gap: 8, fontSize: 12, borderTop: '1px solid var(--border)' }}>
+      <div className="row muted" style={{ padding: '2px 8px', gap: 8, fontSize: 'var(--fs-sm)', borderTop: '1px solid var(--border)' }}>
         <span>{t('editor.data.loaded', { count: loaded })}</span>
         <span className="grow" />
         <span>{t('editor.data.sortHint')}</span>
