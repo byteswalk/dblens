@@ -294,3 +294,66 @@ FROM v$reserved_words r
 WHERE (r.reserved = 'Y' OR r.res_semi = 'Y' OR r.res_attr = 'Y')
   AND REGEXP_LIKE(r.keyword, '^[A-Z][A-Z0-9_$#]*$')
 ORDER BY 1
+
+-- [referencing_keys]
+-- Table designer rebuild: foreign keys of OTHER tables that reference this table's PK / UNIQUE constraints.
+SELECT c.owner AS table_schema,
+       c.table_name AS table_name,
+       c.constraint_name AS constraint_name,
+       cc.column_name AS column_name,
+       cc.position AS position,
+       rc.column_name AS ref_column,
+       c.delete_rule AS on_delete,
+       CAST(NULL AS VARCHAR2(9)) AS on_update
+FROM all_constraints c
+JOIN all_constraints p ON p.owner = c.r_owner AND p.constraint_name = c.r_constraint_name
+JOIN all_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name AND cc.table_name = c.table_name
+JOIN all_cons_columns rc ON rc.owner = p.owner AND rc.constraint_name = p.constraint_name AND rc.position = cc.position
+WHERE c.constraint_type = 'R'
+  AND p.owner = {{ bind("schema") }}
+  AND p.table_name = {{ bind("table") }}
+  AND NOT (c.owner = p.owner AND c.table_name = p.table_name)
+ORDER BY c.owner, c.table_name, c.constraint_name, cc.position
+
+-- [dependent_views]
+SELECT d.owner AS schema_name,
+       d.name AS name,
+       d.type AS kind
+FROM all_dependencies d
+WHERE d.referenced_owner = {{ bind("schema") }}
+  AND d.referenced_name = {{ bind("table") }}
+  AND d.referenced_type = 'TABLE'
+  AND d.type IN ('VIEW', 'MATERIALIZED VIEW')
+ORDER BY d.owner, d.name
+
+-- [grants]
+SELECT p.grantee AS grantee,
+       p.privilege AS privilege,
+       p.grantable AS grantable
+FROM all_tab_privs p
+WHERE p.table_schema = {{ bind("schema") }}
+  AND p.table_name = {{ bind("table") }}
+ORDER BY p.grantee, p.privilege
+
+-- [table_storage]
+SELECT CAST(NULL AS VARCHAR2(1)) AS engine,
+       CAST(NULL AS VARCHAR2(1)) AS charset,
+       CAST(NULL AS VARCHAR2(1)) AS collation,
+       t.tablespace_name AS tablespace,
+       t.num_rows AS row_count
+FROM all_tables t
+WHERE t.owner = {{ bind("schema") }}
+  AND t.table_name = {{ bind("table") }}
+
+-- [trigger_ddl]
+-- Full CREATE TRIGGER rebuilt from ALL_TRIGGERS (triggers.definition holds the body only). DESCRIPTION starts with the
+-- trigger name and the ON clause as written, unqualified: run it with the table's schema as the current schema.
+SELECT t.trigger_name AS name,
+       'CREATE OR REPLACE TRIGGER ' || t.description
+         || CASE WHEN t.when_clause IS NOT NULL THEN 'WHEN (' || t.when_clause || ')' || CHR(10) END AS head,
+       t.trigger_body AS body
+FROM all_triggers t
+WHERE t.table_owner = {{ bind("schema") }}
+  AND t.table_name = {{ bind("table") }}
+  AND t.base_object_type = 'TABLE'
+ORDER BY t.trigger_name

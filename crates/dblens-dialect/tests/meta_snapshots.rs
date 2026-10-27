@@ -38,6 +38,8 @@ fn every_family_covers_the_common_keys() {
                 | MetaKey::Synonyms
                 | MetaKey::Sequences
                 | MetaKey::VariantProbe => true,
+                MetaKey::DependentViews | MetaKey::Grants => matches!(v, Variant::MySql | Variant::MariaDb),
+                MetaKey::TriggerDdl => v != Variant::Oracle,
                 MetaKey::ReservedWords => v == Variant::MariaDb,
                 _ => false,
             };

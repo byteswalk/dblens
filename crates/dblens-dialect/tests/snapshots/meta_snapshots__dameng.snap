@@ -265,3 +265,54 @@ SELECT 'VERSIONS_ENDTRXID' FROM DUAL
 UNION
 SELECT 'VERSIONS_OPERATION' FROM DUAL
 ORDER BY 1
+
+-- [referencing_keys] [String("HR"), String("EMP")]
+-- Table designer rebuild: foreign keys of OTHER tables that reference this table's PK / UNIQUE constraints.
+SELECT c.OWNER AS "table_schema",
+       c.TABLE_NAME AS "table_name",
+       c.CONSTRAINT_NAME AS "constraint_name",
+       cc.COLUMN_NAME AS "column_name",
+       CAST(cc.POSITION AS INT) AS "position",
+       rc.COLUMN_NAME AS "ref_column",
+       COALESCE(c.DELETE_RULE, 'NO ACTION') AS "on_delete",
+       'NO ACTION' AS "on_update"
+FROM ALL_CONSTRAINTS c
+JOIN ALL_CONSTRAINTS p ON p.OWNER = c.R_OWNER AND p.CONSTRAINT_NAME = c.R_CONSTRAINT_NAME
+JOIN ALL_CONS_COLUMNS cc ON cc.OWNER = c.OWNER AND cc.CONSTRAINT_NAME = c.CONSTRAINT_NAME AND cc.TABLE_NAME = c.TABLE_NAME
+JOIN ALL_CONS_COLUMNS rc ON rc.OWNER = p.OWNER AND rc.CONSTRAINT_NAME = p.CONSTRAINT_NAME
+                        AND rc.TABLE_NAME = p.TABLE_NAME AND rc.POSITION = cc.POSITION
+WHERE c.CONSTRAINT_TYPE = 'R'
+  AND p.OWNER = ?
+  AND p.TABLE_NAME = ?
+  AND NOT (c.OWNER = p.OWNER AND c.TABLE_NAME = p.TABLE_NAME)
+ORDER BY c.OWNER, c.TABLE_NAME, c.CONSTRAINT_NAME, cc.POSITION
+
+-- [dependent_views] [String("HR"), String("EMP")]
+SELECT d.OWNER AS "schema_name",
+       d.NAME AS "name",
+       d.TYPE AS "kind"
+FROM ALL_DEPENDENCIES d
+WHERE d.REFERENCED_OWNER = ?
+  AND d.REFERENCED_NAME = ?
+  AND d.REFERENCED_TYPE = 'TABLE'
+  AND d.TYPE IN ('VIEW', 'MATERIALIZED VIEW')
+ORDER BY d.OWNER, d.NAME
+
+-- [grants] [String("HR"), String("EMP")]
+SELECT p.GRANTEE AS "grantee",
+       p.PRIVILEGE AS "privilege",
+       p.GRANTABLE AS "grantable"
+FROM ALL_TAB_PRIVS p
+WHERE p.TABLE_SCHEMA = ?
+  AND p.TABLE_NAME = ?
+ORDER BY p.GRANTEE, p.PRIVILEGE
+
+-- [table_storage] [String("HR"), String("EMP")]
+SELECT CAST(NULL AS VARCHAR(1)) AS "engine",
+       CAST(NULL AS VARCHAR(1)) AS "charset",
+       CAST(NULL AS VARCHAR(1)) AS "collation",
+       t.TABLESPACE_NAME AS "tablespace",
+       t.NUM_ROWS AS "row_count"
+FROM ALL_TABLES t
+WHERE t.OWNER = ?
+  AND t.TABLE_NAME = ?

@@ -6,6 +6,7 @@ mod diff;
 mod mysql;
 mod oracle;
 mod postgres;
+mod rebuild;
 mod sql;
 
 use std::collections::BTreeMap;
@@ -18,6 +19,7 @@ use crate::Dialect;
 
 pub use catalog::{DesignCaps, TypeEntry, TypeParams};
 pub use diff::{diff_table, validate};
+pub use rebuild::{Rebuild, RebuildContext, RebuildOutcome, RebuildStep};
 pub use sql::DesignStatement;
 
 /// 草稿中改了名的项：新名 → 原名。前端用每一项的 `origin` 跟踪原来的名字，发送时整理成这个映射。

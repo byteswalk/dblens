@@ -226,3 +226,74 @@ ORDER BY line
 -- [reserved_words] []
 -- catcode R = reserved, T = reserved (can be function or type name). C (col_name) and U are not reserved.
 SELECT word FROM pg_catalog.pg_get_keywords() WHERE catcode IN ('R', 'T') ORDER BY word
+
+-- [referencing_keys] [String("HR"), String("EMP")]
+-- Table designer rebuild: foreign keys of OTHER tables that reference this table.
+SELECT n.nspname AS table_schema,
+       c.relname AS table_name,
+       con.conname AS constraint_name,
+       a.attname AS column_name,
+       k.pos::int AS position,
+       ra.attname AS ref_column,
+       CASE con.confdeltype WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT'
+                         WHEN 'r' THEN 'RESTRICT' ELSE 'NO ACTION' END AS on_delete,
+       CASE con.confupdtype WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT'
+                         WHEN 'r' THEN 'RESTRICT' ELSE 'NO ACTION' END AS on_update
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_class t ON t.oid = con.confrelid
+JOIN pg_catalog.pg_namespace tn ON tn.oid = t.relnamespace
+CROSS JOIN LATERAL pg_catalog.unnest(con.conkey) WITH ORDINALITY AS k(attnum, pos)
+JOIN pg_catalog.pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+JOIN pg_catalog.pg_attribute ra ON ra.attrelid = con.confrelid AND ra.attnum = con.confkey[k.pos]
+WHERE con.contype = 'f'
+  AND tn.nspname = $1
+  AND t.relname = $2
+  AND con.conrelid <> con.confrelid
+ORDER BY n.nspname, c.relname, con.conname, k.pos
+
+-- [dependent_views] [String("HR"), String("EMP")]
+-- Views / materialized views whose rewrite rule depends on this table (PG cannot drop the table under them).
+SELECT DISTINCT vn.nspname AS schema_name,
+       v.relname AS name,
+       CASE v.relkind WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'VIEW' END AS kind
+FROM pg_catalog.pg_depend d
+JOIN pg_catalog.pg_rewrite r ON r.oid = d.objid
+JOIN pg_catalog.pg_class v ON v.oid = r.ev_class
+JOIN pg_catalog.pg_namespace vn ON vn.oid = v.relnamespace
+JOIN pg_catalog.pg_class t ON t.oid = d.refobjid
+JOIN pg_catalog.pg_namespace tn ON tn.oid = t.relnamespace
+WHERE d.classid = 'pg_catalog.pg_rewrite'::regclass
+  AND d.refclassid = 'pg_catalog.pg_class'::regclass
+  AND tn.nspname = $1
+  AND t.relname = $2
+  AND v.oid <> t.oid
+ORDER BY 1, 2
+
+-- [grants] [String("HR"), String("EMP")]
+-- Privileges granted on the table to others (the owner's implicit privileges are skipped). grantee 0 = PUBLIC.
+SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee) END AS grantee,
+       a.privilege_type AS privilege,
+       a.is_grantable AS grantable
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+CROSS JOIN LATERAL pg_catalog.aclexplode(c.relacl) a
+WHERE n.nspname = $1
+  AND c.relname = $2
+  AND a.grantee <> c.relowner
+ORDER BY 1, 2
+
+-- [table_storage] [String("HR"), String("EMP")]
+-- reltuples is -1 (PG 14+) or 0 until the table is analyzed.
+SELECT NULL::text AS engine,
+       NULL::text AS charset,
+       NULL::text AS collation,
+       ts.spcname AS tablespace,
+       c.reltuples::bigint AS row_count
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_tablespace ts ON ts.oid = c.reltablespace
+WHERE n.nspname = $1
+  AND c.relname = $2
+  AND c.relkind IN ('r', 'p')

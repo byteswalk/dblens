@@ -322,6 +322,128 @@ pub fn reserved_words(rows: &MetaRows) -> Result<Vec<String>> {
     Ok(rows.iter().map(|r| r.name("word").trim().to_ascii_uppercase()).filter(|w| !w.is_empty()).collect())
 }
 
+/// 其他表指向某张表的外键（`referencing_keys`）：外键所在的 schema、表和外键本身。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ReferencingKey {
+    pub schema: String,
+    pub table: String,
+    pub key: ForeignKey,
+}
+
+/// 依赖某张表的视图（`dependent_views`）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DependentView {
+    pub schema: String,
+    pub name: String,
+    pub materialized: bool,
+}
+
+/// 表上的一项授权（`grants`）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Grant {
+    pub grantee: String,
+    pub privilege: String,
+    pub grantable: bool,
+}
+
+/// 存储属性和行数估计（`table_storage`）。统计信息没有收集时行数为 None。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct TableStorage {
+    pub engine: Option<String>,
+    pub charset: Option<String>,
+    pub collation: Option<String>,
+    pub tablespace: Option<String>,
+    pub row_count: Option<i64>,
+}
+
+/// `referencing_keys` 的结果：`ref_schema` / `ref_table` 是被引用的这张表。
+pub fn referencing_keys(rows: &MetaRows, ref_schema: &str, ref_table: &str) -> Result<Vec<ReferencingKey>> {
+    rows.require(
+        "referencing_keys",
+        &[
+            "table_schema",
+            "table_name",
+            "constraint_name",
+            "column_name",
+            "position",
+            "ref_column",
+            "on_delete",
+        ],
+    )?;
+    let mut out: Vec<ReferencingKey> = Vec::new();
+    for r in rows.iter() {
+        let (schema, table, name) = (r.name("table_schema"), r.name("table_name"), r.name("constraint_name"));
+        match out.last_mut() {
+            Some(k)
+                if k.schema == schema && k.table == table && k.key.name.as_deref() == Some(name.as_str()) =>
+            {
+                k.key.columns.push(r.name("column_name"));
+                k.key.ref_columns.push(r.name("ref_column"));
+            }
+            _ => out.push(ReferencingKey {
+                schema,
+                table,
+                key: ForeignKey {
+                    name: Some(name),
+                    columns: vec![r.name("column_name")],
+                    ref_schema: Some(ref_schema.to_string()),
+                    ref_table: ref_table.to_string(),
+                    ref_columns: vec![r.name("ref_column")],
+                    on_delete: r.text("on_delete"),
+                    on_update: r.text("on_update"),
+                },
+            }),
+        }
+    }
+    Ok(out)
+}
+
+pub fn dependent_views(rows: &MetaRows) -> Result<Vec<DependentView>> {
+    rows.require("dependent_views", &["schema_name", "name", "kind"])?;
+    Ok(rows
+        .iter()
+        .map(|r| DependentView {
+            schema: r.name("schema_name"),
+            name: r.name("name"),
+            materialized: r.name("kind").to_ascii_uppercase().starts_with("MATERIALIZED"),
+        })
+        .collect())
+}
+
+pub fn grants(rows: &MetaRows) -> Result<Vec<Grant>> {
+    rows.require("grants", &["grantee", "privilege", "grantable"])?;
+    Ok(rows
+        .iter()
+        .map(|r| Grant {
+            grantee: r.name("grantee"),
+            privilege: r.name("privilege"),
+            grantable: r.flag("grantable"),
+        })
+        .collect())
+}
+
+/// 第一行；没有结果（表不存在）时为默认值。
+pub fn table_storage(rows: &MetaRows) -> Result<TableStorage> {
+    rows.require("table_storage", &["engine", "charset", "collation", "tablespace", "row_count"])?;
+    Ok(rows
+        .iter()
+        .next()
+        .map(|r| TableStorage {
+            engine: r.text("engine"),
+            charset: r.text("charset"),
+            collation: r.text("collation"),
+            tablespace: r.text("tablespace"),
+            row_count: r.int("row_count").filter(|n| *n >= 0),
+        })
+        .unwrap_or_default())
+}
+
+/// `trigger_ddl`（Oracle）：每个触发器拼成一条完整的 CREATE TRIGGER。
+pub fn trigger_ddl(rows: &MetaRows) -> Result<Vec<String>> {
+    rows.require("trigger_ddl", &["name", "head", "body"])?;
+    Ok(rows.iter().map(|r| format!("{}{}", r.name("head"), r.name("body")).trim_end().to_string()).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use dblens_core::{LogicalType, Value};

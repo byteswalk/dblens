@@ -1,0 +1,22 @@
+---
+source: crates/dblens-dialect/src/design/rebuild.rs
+expression: render(&out)
+---
+CREATE TABLE shop.orders_dblens_new (
+    amount DECIMAL(10,2) NULL DEFAULT 0 COMMENT '金额',
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    order_code VARCHAR(50) NULL,
+    PRIMARY KEY (id)
+) COMMENT = '订单' ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci
+INSERT INTO shop.orders_dblens_new (amount, id, order_code) SELECT amount, id, code FROM shop.orders
+-- COUNT shop.orders = shop.orders_dblens_new
+ALTER TABLE shop.items DROP FOREIGN KEY fk_items_order
+▶ DROP TABLE shop.orders
+ALTER TABLE shop.orders_dblens_new RENAME TO shop.orders
+ALTER TABLE shop.orders ADD CONSTRAINT uk_code UNIQUE (order_code)
+ALTER TABLE shop.orders ADD CONSTRAINT ck_amount CHECK (amount >= 0)
+ALTER TABLE shop.orders ADD INDEX ix_amount (amount DESC)
+ALTER TABLE shop.orders ADD CONSTRAINT fk_parent FOREIGN KEY (order_code) REFERENCES shop.parent (code) ON DELETE CASCADE
+CREATE TRIGGER `trg` BEFORE INSERT ON `orders` FOR EACH ROW SET NEW.amount = 0
+ALTER TABLE shop.items ADD CONSTRAINT fk_items_order FOREIGN KEY (order_code) REFERENCES shop.orders (order_code) ON DELETE CASCADE
+-- cleanup: DROP TABLE shop.orders_dblens_new

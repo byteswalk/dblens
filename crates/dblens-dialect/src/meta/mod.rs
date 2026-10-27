@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 use dblens_core::Value;
 
 pub use assemble::{
-    ObjectInfo, SchemaInfo, TableRows, objects, reserved_words, routines, schemas, sequences, source_text,
-    synonyms, tables, views,
+    DependentView, Grant, ObjectInfo, ReferencingKey, SchemaInfo, TableRows, TableStorage, dependent_views,
+    grants, objects, referencing_keys, reserved_words, routines, schemas, sequences, source_text, synonyms,
+    table_storage, tables, trigger_ddl, views,
 };
 pub use rows::{MetaRow, MetaRows};
 
@@ -44,10 +45,20 @@ pub enum MetaKey {
     VariantProbe,
     /// 由数据库给出的对象 DDL（不在模板文件中，由 `Dialect::ddl_query` 生成）。参数：schema、name、kind。
     Ddl,
+    /// 以下供表设计器重建表用，参数：schema、table。其他表指向这张表的外键。
+    ReferencingKeys,
+    /// 依赖这张表的视图和物化视图（MySQL 系没有：视图按名字引用表）。
+    DependentViews,
+    /// 这张表上授予他人的权限（MySQL 系没有：授权按表名记录，重建不受影响）。
+    Grants,
+    /// 存储属性（引擎、字符集、表空间）和行数估计。
+    TableStorage,
+    /// 触发器的完整 DDL（只有 Oracle：`triggers` 的 definition 只有触发器体）。
+    TriggerDdl,
 }
 
 impl MetaKey {
-    pub const ALL: [MetaKey; 16] = [
+    pub const ALL: [MetaKey; 21] = [
         MetaKey::Schemas,
         MetaKey::Tables,
         MetaKey::Views,
@@ -64,6 +75,11 @@ impl MetaKey {
         MetaKey::RoutineSource,
         MetaKey::ReservedWords,
         MetaKey::VariantProbe,
+        MetaKey::ReferencingKeys,
+        MetaKey::DependentViews,
+        MetaKey::Grants,
+        MetaKey::TableStorage,
+        MetaKey::TriggerDdl,
     ];
 
     /// 取一张表或整个 schema 明细时要执行的查询，结果按同样的顺序填进 `TableRows`。
@@ -95,6 +111,11 @@ impl MetaKey {
             MetaKey::ReservedWords => "reserved_words",
             MetaKey::VariantProbe => "variant_probe",
             MetaKey::Ddl => "ddl",
+            MetaKey::ReferencingKeys => "referencing_keys",
+            MetaKey::DependentViews => "dependent_views",
+            MetaKey::Grants => "grants",
+            MetaKey::TableStorage => "table_storage",
+            MetaKey::TriggerDdl => "trigger_ddl",
         }
     }
 }

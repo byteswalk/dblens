@@ -179,3 +179,35 @@ ORDER BY k.WORD
 
 -- [variant_probe] []
 SHOW VARIABLES LIKE 'polardb_version'
+
+-- [referencing_keys] [String("HR"), String("EMP")]
+-- Table designer rebuild: foreign keys of OTHER tables that reference this table (dropped and recreated around the swap).
+SELECT k.TABLE_SCHEMA AS table_schema,
+       k.TABLE_NAME AS table_name,
+       k.CONSTRAINT_NAME AS constraint_name,
+       k.COLUMN_NAME AS column_name,
+       k.ORDINAL_POSITION AS position,
+       k.REFERENCED_COLUMN_NAME AS ref_column,
+       rc.DELETE_RULE AS on_delete,
+       rc.UPDATE_RULE AS on_update
+FROM information_schema.KEY_COLUMN_USAGE k
+JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+  ON rc.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
+ AND rc.TABLE_NAME = k.TABLE_NAME
+ AND rc.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+WHERE k.REFERENCED_TABLE_SCHEMA = ?
+  AND k.REFERENCED_TABLE_NAME = ?
+  AND NOT (k.TABLE_SCHEMA = k.REFERENCED_TABLE_SCHEMA AND k.TABLE_NAME = k.REFERENCED_TABLE_NAME)
+ORDER BY k.TABLE_SCHEMA, k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION
+
+-- [table_storage] [String("HR"), String("EMP")]
+-- Table designer: engine / charset / collation kept by a rebuild, and the row estimate shown in the designer.
+SELECT t.ENGINE AS engine,
+       (SELECT MAX(c.CHARACTER_SET_NAME) FROM information_schema.COLLATION_CHARACTER_SET_APPLICABILITY c
+         WHERE c.COLLATION_NAME = t.TABLE_COLLATION) AS charset,
+       t.TABLE_COLLATION AS collation,
+       NULL AS tablespace,
+       t.TABLE_ROWS AS row_count
+FROM information_schema.TABLES t
+WHERE t.TABLE_SCHEMA = ?
+  AND t.TABLE_NAME = ?
