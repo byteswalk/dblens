@@ -1,6 +1,7 @@
 //! 表设计器（M3 设计文档第 3–5 节）：前端编辑一份草稿表，这里校验草稿、与原表比对出变更列表，
 //! 再按方言生成 DDL；库不支持的改动改用重建表的脚本。不做任何 IO。
 
+mod catalog;
 mod diff;
 
 use std::collections::BTreeMap;
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Dialect;
 
+pub use catalog::{DesignCaps, TypeEntry, TypeParams};
 pub use diff::{diff_table, validate};
 
 /// 草稿中改了名的项：新名 → 原名。前端用每一项的 `origin` 跟踪原来的名字，发送时整理成这个映射。
