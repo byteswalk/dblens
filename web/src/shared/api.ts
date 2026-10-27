@@ -1,6 +1,7 @@
 // REST 接口客户端。接口说明见 docs/notes/m0-4b-api.md；页面与接口同源，路径都以 /api 开头。
 // 请求都带上当前界面语言（REST 用 Accept-Language，WebSocket 用 lang 参数），后端按它输出错误和提示。
 
+import type { CellValue } from './exec'
 import { currentLang, t } from './i18n'
 
 export type DriverId = 'mysql' | 'postgres' | 'oracle' | 'dameng'
@@ -229,6 +230,24 @@ export interface ExportStatus {
   path: string | null
 }
 
+/** 表数据编辑的一个改动（M2a）；值的格式同结果集。 */
+export type RowChange =
+  | { kind: 'update'; key: Record<string, CellValue>; original: Record<string, CellValue>; values: Record<string, CellValue> }
+  | { kind: 'insert'; values: Record<string, CellValue> }
+  | { kind: 'delete'; key: Record<string, CellValue> }
+
+export interface ChangeSet {
+  schema: string
+  table: string
+  changes: RowChange[]
+}
+
+/** 改动集的执行结果：失败时已整体回滚，`failed.index` 是失败的改动序号。 */
+export interface ApplyOutcome {
+  applied: number
+  failed: { index: number; error: ErrorBody } | null
+}
+
 /** 一条运维查询（M1c3）。 */
 export interface OpsQuery {
   key: string
@@ -411,6 +430,10 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
       request<Favorite>('PUT', `/favorites/${encodeURIComponent(id)}`, patch),
     deleteFavorite: (id: string) => request<null>('DELETE', `/favorites/${encodeURIComponent(id)}`),
     ops: (id: string) => request<OpsQuery[]>('GET', `${p(id)}/ops`),
+    previewChanges: (id: string, set: ChangeSet) =>
+      request<{ index: number; sql: string }[]>('POST', `${p(id)}/changes/preview`, set),
+    applyChanges: (sessionId: number, set: ChangeSet) =>
+      request<ApplyOutcome>('POST', `/sessions/${sessionId}/changes`, set),
     startExport: async (req: ExportRequest) => (await request<{ id: string }>('POST', '/exports', req)).id,
     exportStatus: (id: string) => request<ExportStatus>('GET', `/exports/${encodeURIComponent(id)}`),
     /** 进行中的导出取消；已结束的删除记录。 */

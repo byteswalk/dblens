@@ -69,6 +69,18 @@
     "count": "Count Rows",
     "total": "{{count}} rows in total",
     "loaded": "{{count}} rows loaded",
-    "sortHint": "Click a column header to sort: ascending, descending, none"
+    "sortHint": "Click a column header to sort: ascending, descending, none",
+    "edit": {
+      "bad": "Not a valid {{kind}}",
+      "outOfRange": "Out of range for this column",
+      "kind": {
+        "bool": "boolean (true / false / 1 / 0)",
+        "int": "integer",
+        "number": "number",
+        "date": "date (e.g. 2026-10-26)",
+        "time": "time (e.g. 13:45:30)",
+        "timestamp": "timestamp (e.g. 2026-10-26 13:45:30)"
+      }
+    }
   }
 }
