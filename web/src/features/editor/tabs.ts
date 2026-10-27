@@ -1,6 +1,7 @@
 // 查询标签页（M1 设计文档 1 节）：每个标签绑定一个连接，有自己的 SQL。打开的标签和其中的 SQL 存进设置
 // （ui.tabs），下次启动时恢复；会话不恢复，第一次执行时再打开。
 // 数据标签（M1c2 设计文档第 5 节）：带 data 的标签，只读地浏览一张表 / 视图 / 物化视图，同一对象只开一个。
+// 设计器标签（M3 设计文档 7.1 节）：带 design 的标签，设计一张已有的表（同一张表只开一个）或新建表；草稿不保存。
 
 import { create } from 'zustand'
 
@@ -20,6 +21,12 @@ export interface DataTarget {
   order?: { column: string; desc: boolean } | null
 }
 
+/** 设计器标签设计的表：`table` 为 null 时是新建表（`schema` 为空串时由用户在"选项"中选）。 */
+export interface DesignTarget {
+  schema: string
+  table: string | null
+}
+
 export interface QueryTab {
   id: string
   /** 「查询1」这样的标题：新建时按界面语言生成，之后是数据，不随语言变化。数据标签为对象名。 */
@@ -28,6 +35,8 @@ export interface QueryTab {
   sql: string
   /** 有值时是数据标签。 */
   data?: DataTarget
+  /** 有值时是设计器标签。 */
+  design?: DesignTarget
 }
 
 const TARGET_KINDS: readonly unknown[] = ['table', 'view', 'materialized_view'] satisfies TargetKind[]
@@ -42,6 +51,11 @@ function isDataTarget(v: unknown): v is DataTarget {
     (d.filter === undefined || typeof d.filter === 'string') &&
     (o === undefined || o === null || (typeof o.column === 'string' && typeof o.desc === 'boolean'))
   )
+}
+
+function isDesignTarget(v: unknown): v is DesignTarget {
+  const d = v as DesignTarget | null
+  return typeof d?.schema === 'string' && (d.table === null || typeof d.table === 'string')
 }
 
 /** 是否同一个对象的数据标签。 */
@@ -73,7 +87,8 @@ export function parseTabs(raw: string | undefined): Persisted {
         typeof t.title === 'string' &&
         typeof t.profileId === 'string' &&
         typeof t.sql === 'string' &&
-        (t.data === undefined || isDataTarget(t.data)),
+        (t.data === undefined || isDataTarget(t.data)) &&
+        (t.design === undefined || isDesignTarget(t.design)),
     )
     const active = tabs.some((t) => t.id === v.active) ? (v.active as string) : (tabs[0]?.id ?? null)
     return { tabs, active, seq: typeof v.seq === 'number' && v.seq > 0 ? v.seq : tabs.length + 1 }
@@ -87,6 +102,10 @@ interface TabsState extends Persisted {
   open(profileId: string, sql?: string): string
   /** 打开对象的数据标签：已经打开过时切换过去。返回标签的 id。 */
   openData(profileId: string, target: DataTarget): string
+  /** 打开表设计器：已有的表已经打开过时切换过去；新建表每次开一个新标签。返回标签的 id。 */
+  openDesign(profileId: string, target: DesignTarget): string
+  /** 新建的表保存后，标签转为设计这张表。 */
+  setDesign(id: string, target: DesignTarget): void
   /** 修改数据标签的过滤条件和排序。 */
   setData(id: string, patch: Pick<DataTarget, 'filter' | 'order'>): void
   close(id: string): void
@@ -121,6 +140,24 @@ export const useTabs = create<TabsState>()((set, get) => ({
     set({ tabs: [...tabs, tab], active: tab.id })
     return tab.id
   },
+  openDesign: (profileId, target) => {
+    const { tabs } = get()
+    const same =
+      target.table !== null &&
+      tabs.find((x) => x.profileId === profileId && x.design?.schema === target.schema && x.design.table === target.table)
+    if (same) {
+      set({ active: same.id })
+      return same.id
+    }
+    const title = target.table ?? t('design.newTable')
+    const tab: QueryTab = { id: newId(), title, profileId, sql: '', design: { ...target } }
+    set({ tabs: [...tabs, tab], active: tab.id })
+    return tab.id
+  },
+  setDesign: (id, target) =>
+    set({
+      tabs: get().tabs.map((x) => (x.id === id ? { ...x, design: { ...target }, title: target.table ?? x.title } : x)),
+    }),
   setData: (id, patch) =>
     set({ tabs: get().tabs.map((x) => (x.id === id && x.data ? { ...x, data: { ...x.data, ...patch } } : x)) }),
   close: (id) => {

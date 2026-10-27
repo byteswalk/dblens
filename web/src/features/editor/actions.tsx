@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import { hasPendingEdits, useEdits } from '../data/editStore'
+import { hasDesignChanges, useDesigns } from '../design/designStore'
 import { sendInsert } from './commands'
 import { disposeRunner, useRuntime } from './runner'
 import { markRun, useTabs } from './tabs'
@@ -44,19 +45,33 @@ export function useQueryActions() {
     } else useUi.getState().openConnection(null)
   }
 
-  /** 插入到当前编辑器的光标处；当前不是查询标签（没有标签或是数据标签）时新开一个。 */
+  /** 插入到当前编辑器的光标处；当前不是查询标签（没有标签，或是数据标签、设计器标签）时新开一个。 */
   const insertSql = (sql: string, profileId?: string) => {
     const { tabs, active } = useTabs.getState()
     const tab = tabs.find((x) => x.id === active)
-    if (tab && !tab.data) sendInsert(sql)
+    if (tab && !tab.data && !tab.design) sendInsert(sql)
     else openSql(sql, profileId)
   }
 
-  /** 关闭标签页：数据标签有未提交的编辑时先确认放弃；有未提交的事务时先问提交还是回滚。对话框结束（关闭或取消）后完成。 */
+  /** 关闭标签页：设计器有未保存的改动、数据标签有未提交的编辑时先确认放弃；有未提交的事务时先问提交还是回滚。对话框结束（关闭或取消）后完成。 */
   const closeQuery = (tabId: string): Promise<void> =>
     new Promise((done) => {
       const tab = useTabs.getState().tabs.find((x) => x.id === tabId)
       if (!tab) return done()
+      if (tab.design && hasDesignChanges(tabId)) {
+        modal.confirm({
+          title: t('design.close.title', { title: tab.title }),
+          content: t('design.close.content'),
+          okText: t('design.close.ok'),
+          okType: 'danger',
+          onOk: () => {
+            useDesigns.getState().clear(tabId)
+            void closeQuery(tabId).then(done)
+          },
+          onCancel: () => done(),
+        })
+        return
+      }
       if (tab.data && hasPendingEdits(tabId)) {
         modal.confirm({
           title: t('editor.data.edit.discardTitle'),
@@ -74,6 +89,7 @@ export function useQueryActions() {
       const finish = async (commit: boolean) => {
         await disposeRunner(tabId, commit)
         useEdits.getState().clear(tabId)
+        useDesigns.getState().clear(tabId)
         useTabs.getState().close(tabId)
         done()
       }
@@ -109,7 +125,8 @@ export function useQueryActions() {
   /** 依次关闭多个标签；要确认的标签先切过去再问，取消的留下，接着处理下一个。 */
   const closeMany = async (ids: string[]) => {
     for (const id of ids) {
-      const needsAsk = hasPendingEdits(id) || useRuntime.getState().tabs[id]?.session?.in_transaction
+      const needsAsk =
+        hasPendingEdits(id) || hasDesignChanges(id) || useRuntime.getState().tabs[id]?.session?.in_transaction
       if (needsAsk) useTabs.getState().activate(id)
       await closeQuery(id)
     }

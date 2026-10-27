@@ -114,6 +114,7 @@
       "applied_other": "{{count}} statements committed",
       "noSession": "The data has not been read yet; refresh first"
     },
-    "import": "Import"
+    "import": "Import",
+    "design": "Design"
   }
 }

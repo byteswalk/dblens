@@ -293,22 +293,24 @@ export default function ObjectTree() {
           ]
         : []
 
-  /** schema 节点：导入到新表、执行 SQL 文件，后面接分隔线。 */
+  /** schema 节点：新建表、导入到新表、执行 SQL 文件，后面接分隔线。 */
   function schemaItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 's') return []
     return [
+      { key: 'new-table', label: t('tree.menu.newTable') },
       { key: 'import-new', label: t('tree.menu.importNew') },
       { key: 'sql-file', label: t('tree.menu.sqlFile') },
       { type: 'divider' },
     ]
   }
 
-  /** 对象节点的查看数据、导入导出、查看 DDL、生成 SQL，后面接分隔线；其他节点没有。 */
+  /** 对象节点的查看数据、设计表、导入导出、查看 DDL、生成 SQL，后面接分隔线；其他节点没有。 */
   function objectItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 'o') return []
     const items: NonNullable<MenuProps['items']> = []
     const target = targetKind(k.kind)
     if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
+    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design') })
     if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import') })
     if (target) items.push({ key: 'export-data', label: t('tree.menu.exportData') })
     if (ddlKind(k.kind, k.routineKind)) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
@@ -342,6 +344,8 @@ export default function ObjectTree() {
         })
         insertSql(sql, k.profileId)
       } else if (key === 'view-data') openData(k)
+      else if (key === 'design' && k.type === 'o') useTabs.getState().openDesign(k.profileId, { schema: k.schema, table: k.name })
+      else if (key === 'new-table' && k.type === 's') useTabs.getState().openDesign(k.profileId, { schema: k.schema, table: null })
       else if (key === 'import' && k.type === 'o') {
         useImportDialogs.getState().openImport({ profileId: k.profileId, schema: k.schema, table: k.name, create: false })
       } else if (key === 'import-new' && k.type === 's') {

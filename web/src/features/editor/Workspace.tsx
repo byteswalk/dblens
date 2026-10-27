@@ -3,9 +3,10 @@
 // 标签多时先缩窄（悬停看全名），再放不下就用滚轮横向滚动，不显示滚动条；右端 ▾ 列出全部标签；右键菜单批量关闭。
 
 import { Dropdown, type MenuProps } from 'antd'
-import { IconChevronDown, IconFileCode, IconPlus, IconTable, IconX } from '@tabler/icons-react'
+import { IconChevronDown, IconFileCode, IconPlus, IconTable, IconTableOptions, IconX } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
-import { type WheelEvent, useEffect, useRef } from 'react'
+import { Spin } from 'antd'
+import { Suspense, type WheelEvent, lazy, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
@@ -17,6 +18,9 @@ import { disposeModel } from './SqlEditor'
 import { useQueryActions } from './actions'
 import { useTabRuntime } from './runner'
 import { type QueryTab, useTabs } from './tabs'
+
+// 设计器带 Monaco 的 SQL 预览，打开第一个设计器标签时才加载
+const DesignView = lazy(() => import('../design/DesignView'))
 
 function TabTitle({ tab, active, envClass, profileName, profile }: {
   tab: QueryTab
@@ -58,7 +62,9 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
         }}
         title={`${tab.title} · ${profileName}`}
       >
-        {tab.data ? (
+        {tab.design ? (
+          <IconTableOptions size={16} />
+        ) : tab.data ? (
           <IconTable size={16} />
         ) : profile ? (
           <DbIcon driver={profile.driver} variant={rt.session?.variant ?? profile.variant} />
@@ -152,7 +158,15 @@ export default function Workspace() {
         )}
       </div>
       {tab &&
-        (tab.data ? <DataView key={tab.id} tab={tab} profiles={profiles} /> : <QueryView tab={tab} profiles={profiles} />)}
+        (tab.design ? (
+          <Suspense fallback={<Spin style={{ margin: 48 }} />}>
+            <DesignView key={tab.id} tab={tab} profiles={profiles} />
+          </Suspense>
+        ) : tab.data ? (
+          <DataView key={tab.id} tab={tab} profiles={profiles} />
+        ) : (
+          <QueryView tab={tab} profiles={profiles} />
+        ))}
     </div>
   )
 }

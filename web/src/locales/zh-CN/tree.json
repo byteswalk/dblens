@@ -30,6 +30,7 @@
     "copyName": "复制名称",
     "refresh": "刷新",
     "viewData": "查看数据",
+    "design": "设计表",
     "viewDdl": "查看 DDL",
     "generate": "生成 SQL",
     "join": "关联查询",
@@ -39,7 +40,8 @@
     "import": "导入数据…",
     "importNew": "导入到新表…",
     "sqlFile": "执行 SQL 文件…",
-    "exportData": "导出数据…"
+    "exportData": "导出数据…",
+    "newTable": "新建表"
   },
   "duplicate": {
     "name": "{{name}} 副本",

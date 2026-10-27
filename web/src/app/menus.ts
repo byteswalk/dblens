@@ -28,6 +28,7 @@ export function buildMenus(s: MenuState): MenuGroup[] {
     { key: 'new-query', label: t('app.menu.file.newQuery'), shortcut: 'Ctrl+T' },
     { key: 'close-tab', label: t('app.menu.file.closeTab'), shortcut: 'Ctrl+W' },
     'divider',
+    { key: 'new-table', label: t('app.menu.file.newTable') },
     { key: 'import', label: t('app.menu.file.import') },
     { key: 'sql-file', label: t('app.menu.file.sqlFile') },
     'divider',

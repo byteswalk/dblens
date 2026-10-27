@@ -4,6 +4,7 @@
 import enApp from './en/app.json'
 import enCommon from './en/common.json'
 import enConnections from './en/connections.json'
+import enDesign from './en/design.json'
 import enEditor from './en/editor.json'
 import enImport from './en/import.json'
 import enResults from './en/results.json'
@@ -11,6 +12,7 @@ import enTree from './en/tree.json'
 import zhApp from './zh-CN/app.json'
 import zhCommon from './zh-CN/common.json'
 import zhConnections from './zh-CN/connections.json'
+import zhDesign from './zh-CN/design.json'
 import zhEditor from './zh-CN/editor.json'
 import zhImport from './zh-CN/import.json'
 import zhResults from './zh-CN/results.json'
@@ -24,6 +26,7 @@ export const zhCN = {
   editor: zhEditor,
   results: zhResults,
   import: zhImport,
+  design: zhDesign,
 }
 
 export const en = {
@@ -34,4 +37,5 @@ export const en = {
   editor: enEditor,
   results: enResults,
   import: enImport,
+  design: enDesign,
 }

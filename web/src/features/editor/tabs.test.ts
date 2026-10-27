@@ -109,6 +109,24 @@ describe('数据标签', () => {
 })
 
 describe('打开后执行', () => {
+  it('设计器标签：同一张表只开一个，新建表每次一个；保存新表后转为编辑这张表', () => {
+    useTabs.getState().restore(undefined)
+    const { openDesign, setDesign } = useTabs.getState()
+    const a = openDesign('p', { schema: 'public', table: 'orders' })
+    expect(openDesign('p', { schema: 'public', table: 'orders' })).toBe(a)
+    const n1 = openDesign('p', { schema: 'public', table: null })
+    const n2 = openDesign('p', { schema: 'public', table: null })
+    expect(n1).not.toBe(n2)
+    const tabs = useTabs.getState().tabs
+    expect(tabs.map((x) => x.title)).toEqual(['orders', '新表', '新表'])
+    setDesign(n1, { schema: 'public', table: 'items' })
+    expect(useTabs.getState().tabs[1]).toMatchObject({ title: 'items', design: { schema: 'public', table: 'items' } })
+    // 保存再恢复
+    const raw = JSON.stringify({ tabs: useTabs.getState().tabs, active: a, seq: 1 })
+    expect(parseTabs(raw).tabs).toHaveLength(3)
+    expect(parseTabs(JSON.stringify({ tabs: [{ id: 'x', title: 't', profileId: 'p', sql: '', design: { schema: 1 } }] })).tabs).toEqual([])
+  })
+
   it('标记只取走一次，不随标签保存', () => {
     const id = useTabs.getState().open('p', 'SELECT 1')
     markRun(id)

@@ -607,3 +607,114 @@ body {
   border-radius: 4px;
   white-space: pre-wrap;
 }
+
+/* 表设计器（M3） */
+.design-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  outline: none;
+}
+.design-tabs {
+  min-height: 0;
+  padding: 0 10px;
+}
+.design-tabs .ant-tabs-content,
+.design-tabs .ant-tabs-tabpane {
+  height: 100%;
+}
+.design-pane,
+.design-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  outline: none;
+}
+.design-pane h4 {
+  margin: 8px 0 0;
+}
+.design-table .ant-table-cell {
+  padding: 2px 6px !important;
+}
+.design-table tr.design-new > td {
+  background: var(--ok-bg);
+}
+.design-table tr.design-changed > td {
+  background: var(--warn-bg);
+}
+.design-table tr.design-deleted > td {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.design-table tr.design-selected > td {
+  box-shadow: inset 0 0 0 9999px var(--sel);
+}
+.design-cell-error {
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--danger);
+  background: var(--danger-bg);
+}
+.design-changed-text {
+  color: var(--warn);
+}
+.design-props {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 6px 2px;
+  border-top: 1px solid var(--border);
+}
+.design-props label,
+.design-options label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.design-props label .ant-input {
+  width: 320px;
+}
+.design-options {
+  max-width: 640px;
+  gap: 10px;
+}
+.design-options label > :first-child {
+  flex: none;
+}
+.design-options label {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+}
+.design-pk .row {
+  gap: 4px;
+}
+.design-sql {
+  gap: 8px;
+}
+.design-run {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+}
+.design-failed-sql {
+  display: block;
+  margin-top: 4px;
+  white-space: pre-wrap;
+  font-family: var(--mono);
+}
+.design-save {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.design-save h4 {
+  margin: 4px 0 0;
+}
+.design-changes {
+  margin: 0;
+  padding-left: 20px;
+  max-height: 160px;
+  overflow: auto;
+}

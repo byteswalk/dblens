@@ -1,5 +1,5 @@
 // 数据标签（M1c2 设计文档第 5 节）：浏览一张表 / 视图 / 物化视图。
-// 工具栏：连接和 schema（只显示）、WHERE 过滤、刷新、停止、统计行数、导出；表格沿用查询标签的结果面板，点列头排序。
+// 工具栏：连接和 schema（只显示）、WHERE 过滤、刷新、停止、统计行数、导出、导入、设计表；表格沿用查询标签的结果面板，点列头排序。
 // SELECT 由后端按方言生成（data-sql），经这个标签自己的会话执行（沿用 runner：续取、取消、行数上限）。
 // 表的数据可以编辑（M2a 设计文档第 6 节）：改动暂存在 editStore，提交前预览，经同一个会话在事务里执行。
 
@@ -12,6 +12,7 @@ import {
   IconRowInsertBottom,
   IconRowRemove,
   IconSum,
+  IconTableOptions,
   IconTrashX,
   IconUpload,
 } from '@tabler/icons-react'
@@ -244,6 +245,16 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
             }
           >
             {t('editor.data.import')}
+          </Button>
+        )}
+        {isTable && (
+          <Button
+            size="small"
+            icon={<IconTableOptions size={14} />}
+            disabled={!profile}
+            onClick={() => useTabs.getState().openDesign(tab.profileId, { schema: data.schema, table: data.object })}
+          >
+            {t('editor.data.design')}
           </Button>
         )}
         {total !== null && <span className="muted">{t('editor.data.total', { count: Number(total) })}</span>}

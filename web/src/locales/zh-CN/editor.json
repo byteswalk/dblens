@@ -111,6 +111,7 @@
       "applied": "已提交 {{count}} 条语句",
       "noSession": "数据还没有读取，请先刷新"
     },
-    "import": "导入"
+    "import": "导入",
+    "design": "设计表"
   }
 }

@@ -69,6 +69,13 @@ export default function TitleBar() {
     if (key === 'new-connection') ui.openConnection(null)
     else if (key === 'new-query') newQuery()
     else if (key === 'close-tab') closeActive()
+    else if (key === 'new-table') {
+      // 连接同"导入"；schema 用当前数据标签或设计器标签的，没有时在设计器的"选项"中选
+      const id = ui.selectedProfile ?? tab?.profileId ?? profiles?.[0]?.id
+      const schema = (tab?.profileId === id && (tab?.data?.schema ?? tab?.design?.schema)) || ''
+      if (!id) ui.openConnection(null)
+      else useTabs.getState().openDesign(id, { schema, table: null })
+    }
     else if (key === 'import' || key === 'sql-file') {
       // 用对象树中选中的连接，没有时用当前标签的、第一个连接；一个都没有时新建连接
       const id = ui.selectedProfile ?? tab?.profileId ?? profiles?.[0]?.id

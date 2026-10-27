@@ -3,6 +3,8 @@
 
 import type {
   DesignCheck,
+  DesignIssue,
+  DesignSection,
   DesignColumn,
   DesignForeignKey,
   DesignIndex,
@@ -205,6 +207,43 @@ export function togglePrimaryKey(d: Draft, column: string): Draft {
   return { ...d, primaryKey, columns }
 }
 
+// —— 索引、约束等列表的编辑 ——
+
+export type ListName = 'uniques' | 'checks' | 'foreignKeys' | 'indexes'
+
+export function updateItem<K extends ListName>(d: Draft, list: K, key: string, patch: Partial<Draft[K][number]>): Draft {
+  return { ...d, [list]: (d[list] as Row[]).map((r) => (r.key === key ? { ...r, ...patch } : r)) }
+}
+
+export function addItem<K extends ListName>(d: Draft, list: K, item: Draft[K][number]): Draft {
+  return { ...d, [list]: [...d[list], item] }
+}
+
+/** 删除一项：新增的直接去掉，原有的标记删除。 */
+export function removeItem(d: Draft, list: ListName, key: string): Draft {
+  const rows = d[list] as Row[]
+  const row = rows.find((r) => r.key === key)
+  if (!row) return d
+  return {
+    ...d,
+    [list]: row.origin === null ? rows.filter((r) => r.key !== key) : rows.map((r) => (r.key === key ? { ...r, deleted: true } : r)),
+  }
+}
+
+/** 还原一项为原表中的内容。 */
+export function restoreItem(d: Draft, list: ListName, key: string, original: Draft): Draft {
+  const rows = d[list] as Row[]
+  const row = rows.find((r) => r.key === key)
+  const orig = (original[list] as Row[]).find((o) => o.origin === row?.origin)
+  if (!row || !orig) return d
+  return { ...d, [list]: rows.map((r) => (r.key === key ? { ...orig, key } : r)) }
+}
+
+/** 草稿中没有标为删除的行的序号：后端校验错误的行号是按整理后的列表算的，用它换回草稿中的行。 */
+export function liveKeys(rows: Row[]): string[] {
+  return rows.filter((r) => !r.deleted).map((r) => r.key)
+}
+
 /** 在列表中挪动一项（主键列的顺序等）。 */
 export function moveItem<T>(list: T[], i: number, delta: -1 | 1): T[] {
   const j = i + delta
@@ -297,3 +336,48 @@ export function columnState(c: DraftColumn, original: Draft | null): RowState {
 
 /** 去掉行标识后比较内容。 */
 export const sameContent = <T extends Row>(a: T, b: T) => JSON.stringify(strip(a)) === JSON.stringify(strip(b))
+
+// —— 校验错误 ——
+
+/** 设计器的子标签。 */
+export type Pane = 'columns' | 'indexes' | 'foreignKeys' | 'constraints' | 'options'
+
+const PANE: Record<DesignSection, Pane> = {
+  table: 'options',
+  columns: 'columns',
+  primary_key: 'options',
+  indexes: 'indexes',
+  foreign_keys: 'foreignKeys',
+  uniques: 'constraints',
+  checks: 'constraints',
+}
+
+const LIST: Partial<Record<DesignSection, keyof Draft>> = {
+  columns: 'columns',
+  indexes: 'indexes',
+  foreign_keys: 'foreignKeys',
+  uniques: 'uniques',
+  checks: 'checks',
+}
+
+export interface Issues {
+  /** 各子标签的错误数。 */
+  counts: Partial<Record<Pane, number>>
+  /** 某一行某个字段的错误；`key` 为行的 key（表和主键的错误用 section 名）。 */
+  at(key: string, field: string): string | undefined
+}
+
+/** 把后端的校验错误（行号按整理后的列表）换成草稿中的行。 */
+export function issuesOf(errors: DesignIssue[], d: Draft): Issues {
+  const counts: Partial<Record<Pane, number>> = {}
+  const map = new Map<string, string>()
+  for (const e of errors) {
+    const pane = PANE[e.section]
+    counts[pane] = (counts[pane] ?? 0) + 1
+    const list = LIST[e.section]
+    const key = list && e.row !== null ? liveKeys(d[list] as Row[])[e.row] : e.section
+    const id = `${key}|${e.field ?? ''}`
+    if (!map.has(id)) map.set(id, e.message)
+  }
+  return { counts, at: (key, field) => map.get(`${key}|${field}`) ?? map.get(`${key}|`) }
+}
