@@ -1,5 +1,7 @@
 //! 方言层：不做任何 IO，只负责各数据库的语法差异——标识符与字面量、语句拆分、类型映射、SQL 生成。
 
+mod browse;
+mod ddl;
 mod dml;
 pub mod ident;
 pub mod literal;
@@ -13,6 +15,8 @@ mod version;
 use dblens_core::{LogicalType, Result, Value};
 use dblens_driver::{DriverId, ServerInfo};
 
+pub use browse::{Direction, Relation, relations};
+pub use ddl::{DdlKind, ddl_text, normalize_ddl};
 pub use dml::DmlTemplate;
 pub use session::may_change_schema;
 pub use split::{SqlStatement, split_statements};

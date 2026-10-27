@@ -42,6 +42,8 @@ pub enum MetaKey {
     ReservedWords,
     /// 识别兼容库用的附加查询（如 PolarDB），见 `Dialect::refine`。无参数。
     VariantProbe,
+    /// 由数据库给出的对象 DDL（不在模板文件中，由 `Dialect::ddl_query` 生成）。参数：schema、name、kind。
+    Ddl,
 }
 
 impl MetaKey {
@@ -92,6 +94,7 @@ impl MetaKey {
             MetaKey::RoutineSource => "routine_source",
             MetaKey::ReservedWords => "reserved_words",
             MetaKey::VariantProbe => "variant_probe",
+            MetaKey::Ddl => "ddl",
         }
     }
 }

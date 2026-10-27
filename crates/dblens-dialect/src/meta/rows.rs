@@ -62,6 +62,11 @@ pub struct MetaRow<'a> {
 }
 
 impl MetaRow<'_> {
+    /// 列名（已转小写）。
+    pub fn columns(&self) -> &[String] {
+        self.columns
+    }
+
     pub fn get(&self, name: &str) -> &Value {
         const NULL: Value = Value::Null;
         self.columns.iter().position(|c| c == name).and_then(|i| self.row.get(i)).unwrap_or(&NULL)

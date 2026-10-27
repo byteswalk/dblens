@@ -8,6 +8,8 @@
   "api.setting_too_large": {"zh-CN": "设置项 %{key} 的值超过 64 KiB", "en": "The value of setting %{key} exceeds 64 KiB"},
   "api.still_running": {"zh-CN": "上一段 SQL 还没有执行完", "en": "The previous SQL has not finished yet"},
   "app.name": {"zh-CN": "DBLens 数洞", "en": "DBLens"},
+  "ddl.truncated": {"zh-CN": "DDL 超过 64 KB，以上只是开头部分", "en": "The DDL exceeds 64 KB; only the beginning is shown above"},
+  "ddl.unsupported": {"zh-CN": "该数据库不支持查看 %{kind} 的 DDL", "en": "This database does not support viewing the DDL of %{kind}"},
   "desktop.bind_failed": {"zh-CN": "无法监听本机端口：%{error}", "en": "Cannot listen on a local port: %{error}"},
   "desktop.log_dir_failed": {"zh-CN": "无法创建日志目录 %{dir}：%{error}", "en": "Cannot create the log directory %{dir}: %{error}"},
   "desktop.no_main_window": {"zh-CN": "主窗口不存在", "en": "The main window does not exist"},
