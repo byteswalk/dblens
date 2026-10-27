@@ -3,6 +3,10 @@
 
 mod catalog;
 mod diff;
+mod mysql;
+mod oracle;
+mod postgres;
+mod sql;
 
 use std::collections::BTreeMap;
 
@@ -14,6 +18,7 @@ use crate::Dialect;
 
 pub use catalog::{DesignCaps, TypeEntry, TypeParams};
 pub use diff::{diff_table, validate};
+pub use sql::DesignStatement;
 
 /// 草稿中改了名的项：新名 → 原名。前端用每一项的 `origin` 跟踪原来的名字，发送时整理成这个映射。
 /// 约束改名一律先删后建，不需要映射。
@@ -44,9 +49,11 @@ pub enum TableChange {
     DropColumn {
         name: String,
     },
+    /// `column` 是草稿中的完整定义（旧版 MySQL 只能用 `CHANGE` 带上定义改名）。
     RenameColumn {
         from: String,
         to: String,
+        column: Column,
     },
     AlterColumn {
         from: Column,
@@ -87,9 +94,10 @@ pub enum TableChange {
     AddIndex {
         index: Index,
     },
+    /// `index` 是草稿中的索引（不支持改名的旧版本先删后建）。
     RenameIndex {
         from: String,
-        to: String,
+        index: Index,
     },
 }
 

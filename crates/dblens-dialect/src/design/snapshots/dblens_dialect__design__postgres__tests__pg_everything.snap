@@ -1,0 +1,18 @@
+---
+source: crates/dblens-dialect/src/design/postgres.rs
+expression: "render(&d.design_sql(\"public\", \"orders\", &diff).unwrap())"
+---
+[0] ALTER TABLE public.orders DROP CONSTRAINT fk_parent
+[1] ALTER TABLE public.orders DROP CONSTRAINT pk_orders
+[2] ALTER TABLE public.orders DROP CONSTRAINT ck_amount
+[3] DROP INDEX public.ix_amount
+[4] ALTER TABLE public.orders DROP COLUMN amount
+[5] ALTER TABLE public.orders RENAME COLUMN code TO order_code
+[6] ALTER TABLE public.orders ALTER COLUMN order_code TYPE varchar(50) USING order_code::varchar(50)
+[6] ALTER TABLE public.orders ALTER COLUMN order_code SET NOT NULL
+[7] ALTER TABLE public.orders ADD COLUMN note varchar(50)
+[8] ALTER TABLE public.orders ADD CONSTRAINT pk_orders PRIMARY KEY (id, order_code)
+[9] ALTER TABLE public.orders ADD CONSTRAINT uk_note UNIQUE (note)
+[10] CREATE INDEX ix_note ON public.orders (note)
+[11] ALTER TABLE public.orders ADD CONSTRAINT fk_parent FOREIGN KEY (order_code) REFERENCES public.parent (code)
+[12] COMMENT ON TABLE public.orders IS '订单表'

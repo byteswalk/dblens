@@ -1,0 +1,16 @@
+---
+source: crates/dblens-dialect/src/design/mysql.rs
+expression: "render(&d.design_sql(\"shop\", \"orders\",\n&everything(&orig, \"VARCHAR(50)\")).unwrap())"
+---
+[0] ALTER TABLE shop.orders DROP FOREIGN KEY fk_parent
+[2] ALTER TABLE shop.orders DROP CHECK ck_amount
+[3] ALTER TABLE shop.orders DROP INDEX ix_amount
+[4] ALTER TABLE shop.orders DROP COLUMN amount
+[5] ALTER TABLE shop.orders RENAME COLUMN code TO order_code
+[6] ALTER TABLE shop.orders MODIFY COLUMN order_code VARCHAR(50) NOT NULL
+[7] ALTER TABLE shop.orders ADD COLUMN note VARCHAR(50) NULL AFTER id
+[1, 8] ALTER TABLE shop.orders DROP PRIMARY KEY, ADD PRIMARY KEY (id, order_code)
+[9] ALTER TABLE shop.orders ADD CONSTRAINT uk_note UNIQUE (note)
+[10] ALTER TABLE shop.orders ADD INDEX ix_note (note)
+[11] ALTER TABLE shop.orders ADD CONSTRAINT fk_parent FOREIGN KEY (order_code) REFERENCES shop.parent (code)
+[12] ALTER TABLE shop.orders COMMENT = '订单表'

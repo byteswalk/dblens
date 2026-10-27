@@ -1,0 +1,6 @@
+---
+source: crates/dblens-dialect/src/design/mysql.rs
+expression: "render(&d.design_sql(\"shop\", \"orders\",\n&alter_only(&orig, \"DECIMAL(12,2)\")).unwrap())"
+---
+[0] ALTER TABLE shop.orders MODIFY COLUMN code VARCHAR(20) NULL DEFAULT 'x' COMMENT '编号'
+[1] ALTER TABLE shop.orders MODIFY COLUMN amount DECIMAL(12,2) NOT NULL

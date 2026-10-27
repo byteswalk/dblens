@@ -1,0 +1,6 @@
+---
+source: crates/dblens-dialect/src/design/mysql.rs
+expression: "render(&d.design_sql(\"shop\", \"orders\", &move_first(&orig)).unwrap())"
+---
+[0] ALTER TABLE shop.orders MODIFY COLUMN amount DECIMAL(10,2) NULL DEFAULT 0 COMMENT '金额' FIRST
+[1] ALTER TABLE shop.orders RENAME INDEX ix_amount TO ix_amount2

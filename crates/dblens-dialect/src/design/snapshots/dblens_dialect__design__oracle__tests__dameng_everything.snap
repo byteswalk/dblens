@@ -1,0 +1,18 @@
+---
+source: crates/dblens-dialect/src/design/oracle.rs
+expression: "render(&d.design_sql(\"HR\", \"orders\", &diff).unwrap())"
+---
+[0] ALTER TABLE HR."orders" DROP CONSTRAINT "fk_parent"
+[1] ALTER TABLE HR."orders" DROP CONSTRAINT "pk_orders"
+[2] ALTER TABLE HR."orders" DROP CONSTRAINT "ck_amount"
+[3] DROP INDEX HR."ix_amount"
+[4] ALTER TABLE HR."orders" DROP COLUMN "amount"
+[5] ALTER TABLE HR."orders" RENAME COLUMN "code" TO "order_code"
+[6] ALTER TABLE HR."orders" MODIFY "order_code" VARCHAR(50)
+[6] ALTER TABLE HR."orders" ALTER COLUMN "order_code" SET NOT NULL
+[7] ALTER TABLE HR."orders" ADD COLUMN "note" VARCHAR(50)
+[8] ALTER TABLE HR."orders" ADD CONSTRAINT "pk_orders" PRIMARY KEY ("id", "order_code")
+[9] ALTER TABLE HR."orders" ADD CONSTRAINT "uk_note" UNIQUE ("note")
+[10] CREATE INDEX HR."ix_note" ON HR."orders" ("note")
+[11] ALTER TABLE HR."orders" ADD CONSTRAINT "fk_parent" FOREIGN KEY ("order_code") REFERENCES HR."parent" ("code")
+[12] COMMENT ON TABLE HR."orders" IS '订单表'

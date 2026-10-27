@@ -1,0 +1,8 @@
+---
+source: crates/dblens-dialect/src/design/oracle.rs
+expression: "render(&d.design_sql(\"HR\", \"orders\",\n&alter_only(&t, \"NUMBER(12,2)\")).unwrap())"
+---
+[0] ALTER TABLE HR."orders" MODIFY ("code" DEFAULT 'x')
+[0] COMMENT ON COLUMN HR."orders"."code" IS '编号'
+[1] ALTER TABLE HR."orders" MODIFY ("amount" NUMBER(12,2) DEFAULT NULL NOT NULL)
+[1] COMMENT ON COLUMN HR."orders"."amount" IS ''

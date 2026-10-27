@@ -1,0 +1,14 @@
+---
+source: crates/dblens-dialect/src/design/mysql.rs
+expression: "render(&d.design_sql(\"shop\", \"\", &diff).unwrap())"
+---
+[0] CREATE TABLE shop.orders (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    code VARCHAR(20) NULL,
+    amount DECIMAL(10,2) NULL DEFAULT 0 COMMENT '金额',
+    PRIMARY KEY (id),
+    CONSTRAINT uk_code UNIQUE (code),
+    INDEX ix_amount (amount DESC),
+    CONSTRAINT fk_parent FOREIGN KEY (code) REFERENCES shop.parent (code) ON DELETE CASCADE,
+    CONSTRAINT ck_amount CHECK (amount >= 0)
+) COMMENT = '订单'

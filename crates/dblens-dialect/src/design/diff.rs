@@ -105,12 +105,12 @@ pub fn validate(draft: &Table) -> Vec<DesignIssue> {
 }
 
 /// 去掉首尾空白，空串当作没有。
-fn text(v: &Option<String>) -> Option<&str> {
+pub(crate) fn text(v: &Option<String>) -> Option<&str> {
     v.as_deref().map(str::trim).filter(|s| !s.is_empty())
 }
 
 /// 类型文本比较：不区分大小写，忽略多余空白和括号、逗号两侧的空白。
-fn same_type(a: &str, b: &str) -> bool {
+pub(crate) fn same_type(a: &str, b: &str) -> bool {
     let norm = |s: &str| {
         let s = s.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_uppercase();
         s.replace(" (", "(").replace("( ", "(").replace(" )", ")").replace(", ", ",").replace(" ,", ",")
@@ -201,7 +201,8 @@ pub fn diff_table(original: Option<&Table>, draft: &Table, renames: &Renames) ->
         if let Some(&n) = new_of.get(o.name.as_str())
             && n != o.name
         {
-            cols.push(C::RenameColumn { from: o.name.clone(), to: n.to_string() });
+            let column = draft.columns.iter().find(|c| c.name == n).expect("配对的列在草稿中").clone();
+            cols.push(C::RenameColumn { from: o.name.clone(), to: n.to_string(), column });
         }
     }
     for o in &orig.columns {
@@ -347,7 +348,7 @@ pub fn diff_table(original: Option<&Table>, draft: &Table, renames: &Renames) ->
                     drops.push(C::DropIndex { index: orig.indexes[i].clone() });
                     adds.push(C::AddIndex { index: x.clone() });
                 } else if old != x.name {
-                    renames_ix.push(C::RenameIndex { from: old.to_string(), to: x.name.clone() });
+                    renames_ix.push(C::RenameIndex { from: old.to_string(), index: x.clone() });
                 }
             }
             _ => adds.push(C::AddIndex { index: x.clone() }),
@@ -492,7 +493,14 @@ mod tests {
         let changes = diff(&t, &draft, &renames);
         // 检查约束的表达式是文本，改了就先删后建；其余随改名不算改动
         assert_eq!(kinds(&changes), ["drop_check", "rename_column", "rename_column", "add_check"]);
-        assert_eq!(changes[1], C::RenameColumn { from: "code".into(), to: "order_code".into() });
+        assert_eq!(
+            changes[1],
+            C::RenameColumn {
+                from: "code".into(),
+                to: "order_code".into(),
+                column: draft.columns[1].clone()
+            }
+        );
     }
 
     #[test]
@@ -557,7 +565,7 @@ mod tests {
                 "add_foreign_key"
             ]
         );
-        assert_eq!(changes[7], C::RenameIndex { from: "ix_amount".into(), to: "ix_total".into() });
+        assert_eq!(changes[7], C::RenameIndex { from: "ix_amount".into(), index: draft.indexes[0].clone() });
         // 改了索引内容：先删后建
         let mut draft = t.clone();
         draft.indexes[0].columns[0].descending = true;

@@ -1,0 +1,10 @@
+---
+source: crates/dblens-dialect/src/design/oracle.rs
+expression: "render(&d.design_sql(\"HR\", \"orders\",\n&alter_only(&t, \"DECIMAL(12,2)\")).unwrap())"
+---
+[0] ALTER TABLE HR."orders" ALTER COLUMN "code" SET DEFAULT 'x'
+[0] COMMENT ON COLUMN HR."orders"."code" IS '编号'
+[1] ALTER TABLE HR."orders" MODIFY "amount" DECIMAL(12,2)
+[1] ALTER TABLE HR."orders" ALTER COLUMN "amount" DROP DEFAULT
+[1] ALTER TABLE HR."orders" ALTER COLUMN "amount" SET NOT NULL
+[1] COMMENT ON COLUMN HR."orders"."amount" IS ''
