@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use dblens_core::schema::{Routine, Sequence, Synonym, Table, View};
 use dblens_core::{Error, Result, msg};
 use dblens_dialect::Dialect;
-use dblens_dialect::meta::{self, MetaArgs, MetaKey, MetaRows, ObjectInfo, SchemaInfo, TableRows};
+use dblens_dialect::meta::{self, MetaArgs, MetaKey, MetaQuery, MetaRows, ObjectInfo, SchemaInfo, TableRows};
 use dblens_driver::{Connection, collect_all};
 use tokio::sync::Semaphore;
 
@@ -136,6 +136,17 @@ impl MetadataService {
         key: MetaKey,
         args: &MetaArgs,
     ) -> Result<Option<Arc<MetaRows>>> {
+        self.run(profile, key, args, |d| d.meta_query(key, args)).await
+    }
+
+    /// 执行 `build` 生成的查询，按（连接配置、`key`、`args`）缓存。`build` 返回 None 时不执行，返回 None。
+    pub(crate) async fn run(
+        &self,
+        profile: &Profile,
+        key: MetaKey,
+        args: &MetaArgs,
+        build: impl FnOnce(&Dialect) -> Result<Option<MetaQuery>>,
+    ) -> Result<Option<Arc<MetaRows>>> {
         let cache_key = (profile.id.clone(), key, args.clone());
         if let Some(rows) = self.cache.get(&cache_key) {
             return Ok(Some(rows));
@@ -155,7 +166,7 @@ impl MetadataService {
                 self.registry.connect(profile, password).await?
             }
         };
-        let Some(q) = dialect.meta_query(key, args)? else {
+        let Some(q) = build(&dialect)? else {
             pool.idle
                 .lock()
                 .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pool")))?

@@ -121,8 +121,14 @@ impl Dialect {
         self.literal(&Value::String(text.into()))
     }
 
-    /// PG 系的建表语句：列、约束、分区，之后是索引、触发器和注释，每条以 `;` 结束。
+    /// PG 系的建表语句：列、约束、分区，之后是索引、触发器和注释（`table_extras`），每条以 `;` 结束。
     pub fn table_ddl(&self, schema: &str, t: &Table) -> Result<String> {
+        let mut out = self.table_create(schema, t);
+        out += &self.table_extras(schema, t, true)?;
+        Ok(out.trim_end().to_string() + "\n")
+    }
+
+    fn table_create(&self, schema: &str, t: &Table) -> String {
         let q = self.qualified(Some(schema), &t.name);
         let list = |cols: &[String]| cols.iter().map(|c| self.ident(c)).collect::<Vec<_>>().join(", ");
         let mut items: Vec<String> = Vec::new();
@@ -173,7 +179,14 @@ impl Dialect {
         if let Some(p) = &t.partition {
             out += &format!(" PARTITION BY {p}");
         }
-        out += ";\n";
+        out + ";\n"
+    }
+
+    /// 建表语句之后的部分：不属于约束的索引、触发器（`triggers` 为 true 时）、表和列的注释，每条一行、以 `;` 结束。
+    /// Oracle、达梦的 `DBMS_METADATA` 取表时不含索引和注释，也用这里补上。
+    pub fn table_extras(&self, schema: &str, t: &Table, triggers: bool) -> Result<String> {
+        let q = self.qualified(Some(schema), &t.name);
+        let mut out = String::new();
         for i in &t.indexes {
             let cols: Vec<String> = i
                 .columns
@@ -191,7 +204,8 @@ impl Dialect {
             let using = i
                 .method
                 .as_deref()
-                .filter(|m| !m.eq_ignore_ascii_case("btree"))
+                // Oracle、达梦的 NORMAL / BITMAP 等不是 USING 子句
+                .filter(|m| self.family() == Family::Postgres && !m.eq_ignore_ascii_case("btree"))
                 .map(|m| format!(" USING {}", m.to_ascii_lowercase()))
                 .unwrap_or_default();
             out += &format!(
@@ -201,7 +215,7 @@ impl Dialect {
                 cols.join(", ")
             );
         }
-        for tr in &t.triggers {
+        for tr in t.triggers.iter().filter(|_| triggers) {
             if let Some(d) = &tr.definition {
                 out += &format!("\n{};", d.trim_end_matches(';').trim());
             }
@@ -218,7 +232,7 @@ impl Dialect {
                 );
             }
         }
-        Ok(out.trim_end().to_string() + "\n")
+        Ok(out)
     }
 
     /// PG 系的视图 / 物化视图：`CREATE [MATERIALIZED] VIEW … AS 定义;`，有注释时附上。
@@ -402,6 +416,34 @@ CREATE TRIGGER trg BEFORE INSERT ON public.\"Orders\" FOR EACH ROW EXECUTE FUNCT
 COMMENT ON TABLE public.\"Orders\" IS '订单';
 COMMENT ON COLUMN public.\"Orders\".code IS '编码 ''A''';
 "
+        );
+    }
+
+    #[test]
+    fn extras_without_triggers() {
+        let mut c = col("ID", "NUMBER");
+        c.comment = Some("编号".into());
+        let t = Table {
+            name: "T".into(),
+            comment: Some("表".into()),
+            columns: vec![c],
+            indexes: vec![Index {
+                name: "T_IDX".into(),
+                columns: vec![IndexColumn { name: "ID".into(), descending: false }],
+                unique: false,
+                method: Some("NORMAL".into()),
+            }],
+            triggers: vec![Trigger {
+                name: "TRG".into(),
+                timing: None,
+                events: vec![],
+                definition: Some("x".into()),
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            Dialect::new(Variant::Oracle).table_extras("HR", &t, false).unwrap(),
+            "\nCREATE INDEX T_IDX ON HR.T (ID);\nCOMMENT ON TABLE HR.T IS '表';\nCOMMENT ON COLUMN HR.T.ID IS '编号';"
         );
     }
 

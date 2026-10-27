@@ -6,6 +6,7 @@ pub mod fake;
 mod favorite;
 mod history;
 mod metadata;
+mod objects;
 mod policy;
 mod profile;
 mod registry;
@@ -20,6 +21,7 @@ pub use history::{
     HistoryQuery, NewHistory,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
+pub use objects::{DataOrder, GenerateKind, ObjectKind};
 pub use policy::{
     Decision, DefaultPolicy, ExecContext, ObjectRef, Outcome, Policy, StatementInfo, StatementKind, classify,
 };
