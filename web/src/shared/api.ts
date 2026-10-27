@@ -339,6 +339,104 @@ export interface FavoritePatch {
   move?: { parent_id: string | null; position: number }
 }
 
+/** 逻辑类型（dblens_core::LogicalType 的 JSON，按 kind 区分）。 */
+export type LogicalType =
+  | { kind: 'bool' | 'text' | 'blob' | 'date' | 'interval' | 'json' | 'uuid' | 'other' }
+  | { kind: 'int' | 'u_int' | 'float'; bits: number }
+  | { kind: 'decimal'; precision: number | null; scale: number | null }
+  | { kind: 'char' | 'var_char' | 'binary' | 'var_binary'; len: number | null }
+  | { kind: 'time'; precision: number | null }
+  | { kind: 'timestamp'; tz: boolean; precision: number | null }
+
+/** 导入、执行 SQL 文件的文件来源（M2b）：上传的文件，或桌面版的本机路径。 */
+export type FileSource = { upload: string } | { path: string }
+
+export interface UploadInfo {
+  id: string
+  name: string
+  size: number
+}
+
+export type TextEncoding = 'auto' | 'utf8' | 'gbk'
+
+export interface FileOptions {
+  format: 'csv' | 'excel'
+  encoding?: TextEncoding
+  /** CSV 的分隔符；不给时自动判断。 */
+  delimiter?: string | null
+  header?: boolean
+  sheet?: string | null
+}
+
+export interface FilePreview {
+  columns: string[]
+  rows: CellValue[][]
+  /** 按前 1000 行推断的类型。 */
+  types: LogicalType[]
+  warnings: { ragged_rows: number; bad_encoding: number; error_cells: number }
+  sheets: string[]
+  encoding: string | null
+  delimiter: string | null
+}
+
+export interface NewTable {
+  columns: { name: string; logical: LogicalType; nullable: boolean }[]
+  primary_key: string[]
+}
+
+export type WriteMode = 'append' | 'replace' | 'upsert'
+
+export interface ImportRequest {
+  profile_id: string
+  source: FileSource
+  file: FileOptions
+  schema: string
+  table: string
+  /** 新建表；不给时导入到已有表。 */
+  create: NewTable | null
+  /** 文件第 source 列（从 0 开始）写入表的 target 列。 */
+  mapping: { source: number; target: string }[]
+  mode: WriteMode
+  transaction: 'whole' | 'batch'
+  batch_size: number
+  on_error: 'stop' | 'skip'
+  empty_as_string: boolean
+}
+
+export interface SqlFileRequest {
+  profile_id: string
+  source: FileSource
+  encoding: TextEncoding
+  schema: string | null
+  continue_on_error: boolean
+  transaction: boolean
+}
+
+export interface TaskStatus {
+  id: string
+  kind: 'import' | 'sql_file'
+  state: 'running' | 'confirm' | 'done' | 'failed' | 'cancelled'
+  phase: 'preparing' | 'scanning' | 'creating' | 'clearing' | 'writing' | 'executing' | 'finished'
+  progress: {
+    read: number
+    total: number
+    rows_read: number
+    rows_written: number
+    rows_skipped: number
+    statements_done: number
+    statements_total: number
+    statements_failed: number
+    affected: number
+  }
+  warnings: number
+  error: ErrorBody | null
+  error_line: number | null
+  committed_line: number | null
+  failures: { index: number; line: number; error: ErrorBody; text: string }[]
+  confirm: { items: { line: number; text: string; reason: string }[]; more: number } | null
+  report: string | null
+}
+
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
 export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o)) {
@@ -443,6 +541,48 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     cancelExport: (id: string) => request<null>('DELETE', `/exports/${encodeURIComponent(id)}`),
     /** 浏览器模式的下载地址：链接不能带请求头，令牌放在查询参数里。 */
     exportFileUrl: (id: string) => `/api/exports/${encodeURIComponent(id)}/file?token=${encodeURIComponent(token)}`,
+    /** 上传文件（浏览器模式的导入、执行 SQL 文件），`onProgress` 收到已传的比例（0–1）。用 XHR：fetch 不能报告上传进度。 */
+    upload: (file: File, onProgress?: (ratio: number) => void) =>
+      new Promise<UploadInfo>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', `/api/uploads?name=${encodeURIComponent(file.name)}`)
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+        xhr.setRequestHeader('Accept-Language', currentLang())
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress?.(e.loaded / e.total)
+        }
+        xhr.onload = () => {
+          let data: unknown = null
+          try {
+            data = xhr.responseText ? JSON.parse(xhr.responseText) : null
+          } catch {
+            data = null
+          }
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data as UploadInfo)
+          else reject(new ApiError(xhr.status, (data as ErrorBody | null) ?? { kind: 'internal', message: `HTTP ${xhr.status}` }))
+        }
+        xhr.onerror = () => reject(new ApiError(0, { kind: 'internal', message: t('common.networkError') }))
+        xhr.send(file)
+      }),
+    importPreview: (source: FileSource, file: FileOptions) =>
+      request<FilePreview>('POST', '/imports/preview', { source, file }),
+    /** 新建表的建表语句预览。 */
+    importDdl: async (id: string, schema: string, table: string, create: NewTable) =>
+      (await request<{ sql: string }>('POST', `${p(id)}/imports/ddl`, { schema, table, create })).sql,
+    startImport: async (req: ImportRequest) => (await request<{ id: string }>('POST', '/imports', req)).id,
+    startSqlFile: async (req: SqlFileRequest) => (await request<{ id: string }>('POST', '/sql-files', req)).id,
+    task: (id: string) => request<TaskStatus>('GET', `/tasks/${encodeURIComponent(id)}`),
+    /** 进行中的任务取消；已结束的删除记录和报告。 */
+    cancelTask: (id: string) => request<null>('DELETE', `/tasks/${encodeURIComponent(id)}`),
+    confirmTask: (id: string, yes: boolean) => request<null>('POST', `/tasks/${encodeURIComponent(id)}/confirm`, { yes }),
+    /** 报告（出错报告或执行日志）的下载地址。 */
+    taskReportUrl: (id: string) => `/api/tasks/${encodeURIComponent(id)}/report?token=${encodeURIComponent(token)}`,
+    /** 桌面版：把报告复制到"另存为"选的路径。 */
+    saveTaskReport: (id: string, path: string) =>
+      request<null>('POST', `/tasks/${encodeURIComponent(id)}/report`, { path }),
+    /** 前 100 条失败中第 n 条的完整语句。 */
+    taskStatement: async (id: string, n: number) =>
+      (await request<{ sql: string }>('GET', `/tasks/${encodeURIComponent(id)}/statements/${n}`)).sql,
     openSession: (profileId: string) => request<SessionInfo>('POST', '/sessions', { profile_id: profileId }),
     session: (id: number) => request<SessionInfo>('GET', `/sessions/${id}`),
     /** 关闭会话；有未提交的修改时按 commit 提交或回滚。 */

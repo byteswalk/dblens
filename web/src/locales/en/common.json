@@ -18,5 +18,6 @@
     "auto": "Follow system",
     "zh-CN": "中文",
     "en": "English"
-  }
+  },
+  "networkError": "Network error; check the connection to the DBLens service"
 }
