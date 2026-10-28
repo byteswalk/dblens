@@ -21,10 +21,10 @@ use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_dialect::{Compat, DdlKind, Direction, RowChange, Variant, WriteMode};
 use dblens_driver::{ConnectParams, DriverId};
 use dblens_service::{
-    ChangeSet, ColumnMapping, CompareRequest, CompareResult, CompareSideRef, DEFAULT_BATCH, DataOrder,
-    DefaultPolicy, DesignRequest, DriverRegistry, Environment, ExecRequest, ExportFormat, ExportOptions,
-    ExportRequest, ExportSource, ExportState, ExportStatus, FileOptions, FileSource, GenerateKind,
-    ImportRequest, ModelDesignRequest, NewColumn, NewTable, ObjectKind, OnError, ProfileInput,
+    ChangeSet, ColumnMapping, CompareRequest, CompareResult, CompareSideRef, DEFAULT_BATCH, DEFAULT_DIAGRAM,
+    DataOrder, DefaultPolicy, DesignRequest, DriverRegistry, Environment, ExecRequest, ExportFormat,
+    ExportOptions, ExportRequest, ExportSource, ExportState, ExportStatus, FileOptions, FileSource,
+    GenerateKind, ImportRequest, ModelDesignRequest, NewColumn, NewTable, ObjectKind, OnError, ProfileInput,
     ReverseRequest, SecretBackend, Secrets, Service, SessionEvent, SessionId, SqlFileRequest, Store,
     SyncRequest, TaskState, TaskStatus, Transaction,
 };
@@ -1616,7 +1616,24 @@ async fn model_flow(env: &str) {
     let r = s.compare(&compare(&md, &db)).await.unwrap();
     assert!(m4_items(&r).is_empty(), "{env}：{}", m4_detail(&r));
 
-    // 5. 库对库：同一个库中的第二个 schema
+    // 5. ER 图（M4b）：同步后的库再反向生成一次，默认图中外键连线的列对应
+    let req = ReverseRequest {
+        profile_id: live.profile_id.clone(),
+        schemas: vec![schema.clone()],
+        path: dir.path().join("model2").to_string_lossy().into(),
+        name: "m4b".into(),
+    };
+    let st = wait_task(s, &s.start_reverse(req).await.unwrap()).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    let m2 = st.model.unwrap();
+    let v = s.models.read_diagram(&m2, &schema, DEFAULT_DIAGRAM).unwrap();
+    assert_eq!(v.fingerprint, None, "{env}");
+    let ord = v.tables.iter().find(|t| t.table.name == n("m4_ord")).expect("m4_ord");
+    let fk = ord.table.foreign_keys.iter().find(|f| f.ref_table == n("m4_customer")).expect("外键");
+    assert_eq!((fk.columns.clone(), fk.ref_columns.clone()), (vec![n("cust_id")], vec![n("id")]), "{env}");
+    assert!(v.tables.iter().any(|t| t.table.name == n("m4_customer")), "{env}");
+
+    // 6. 库对库：同一个库中的第二个 schema
     let other: Option<&'static str> = match live.driver {
         DriverId::Postgres => Some("m4_b"),
         DriverId::Mysql => Some("dblens_test_m4b"),
