@@ -181,8 +181,12 @@ mod tests {
     fn every_label_is_used_and_exists() {
         // 模板中的 'doc.…'，Rust 代码（测试之前的部分）中的 "doc.…"
         let code = |s: &'static str| s.split("#[cfg(test)]").next().unwrap_or_default();
-        let sources =
-            [TextFormat::Html.builtin(), TextFormat::Markdown.builtin(), code(include_str!("docx.rs"))];
+        let sources = [
+            TextFormat::Html.builtin(),
+            TextFormat::Markdown.builtin(),
+            code(include_str!("docx.rs")),
+            code(include_str!("xlsx.rs")),
+        ];
         let used: std::collections::BTreeSet<String> = sources
             .iter()
             .flat_map(|s| {

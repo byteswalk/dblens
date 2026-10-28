@@ -4,6 +4,7 @@ mod content;
 mod docx;
 mod labels;
 mod template;
+mod xlsx;
 
 pub use content::{
     BuildOptions, DocColumn, DocConstraint, DocContent, DocDiagram, DocIndex, DocInfo, DocKey, DocKind,
@@ -13,3 +14,4 @@ pub use content::{
 pub use docx::{builtin_reference, check_reference, write as write_docx};
 pub use labels::label;
 pub use template::{TextFormat, check, render};
+pub use xlsx::write as write_xlsx;

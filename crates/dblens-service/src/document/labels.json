@@ -266,5 +266,17 @@
   "doc.toc_hint": {
     "zh-CN": "打开文档时按提示更新域，或右键这里选“更新域”，即可生成目录。",
     "en": "Update fields when prompted on opening, or right-click here and choose Update Field, to build the table of contents."
+  },
+  "doc.sheet.tables": {
+    "zh-CN": "表清单",
+    "en": "Tables"
+  },
+  "doc.sheet.columns": {
+    "zh-CN": "列",
+    "en": "Columns"
+  },
+  "doc.sheet.keys": {
+    "zh-CN": "索引和约束",
+    "en": "Indexes and Constraints"
   }
 }
