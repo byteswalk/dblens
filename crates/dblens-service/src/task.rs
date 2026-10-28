@@ -28,6 +28,8 @@ pub enum TaskKind {
     Design,
     /// 从库反向生成模型（M4a）。
     Reverse,
+    /// 比对后同步到库（M4a）。
+    Sync,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

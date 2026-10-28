@@ -92,6 +92,44 @@ enum Plan {
     Rebuild(Rebuild),
 }
 
+impl Plan {
+    fn parts(self) -> Vec<Part> {
+        match self {
+            Plan::Alter(statements) => statements.into_iter().map(|s| Part::Sql(s.sql)).collect(),
+            Plan::Rebuild(r) => vec![Part::Rebuild(r)],
+        }
+    }
+}
+
+/// 执行器依次执行的一段：一条语句，或一张表的重建（M4a 的同步脚本由多段组成）。
+pub(crate) enum Part {
+    Sql(String),
+    Rebuild(Rebuild),
+}
+
+impl Part {
+    /// 这一段的语句文本（核对行数写成两条 `SELECT COUNT(*)`）。
+    pub(crate) fn texts(&self) -> Vec<String> {
+        match self {
+            Part::Sql(sql) => vec![sql.clone()],
+            Part::Rebuild(r) => r
+                .steps
+                .iter()
+                .map(|s| match s {
+                    RebuildStep::Sql { sql } => sql.clone(),
+                    RebuildStep::CountCheck { source, target } => {
+                        format!("SELECT COUNT(*) FROM {source}; SELECT COUNT(*) FROM {target}")
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    pub(crate) fn len(parts: &[Part]) -> u64 {
+        parts.iter().map(|p| p.texts().len() as u64).sum()
+    }
+}
+
 struct Prepared {
     profile: Profile,
     dialect: Dialect,
@@ -130,7 +168,7 @@ impl Service {
         Ok(self.metadata.rows(profile, key, &args).await?.unwrap_or_default())
     }
 
-    async fn fresh_table(&self, profile: &Profile, schema: &str, name: &str) -> Result<Table> {
+    pub(crate) async fn fresh_table(&self, profile: &Profile, schema: &str, name: &str) -> Result<Table> {
         let args = MetaArgs { schema: Some(schema.into()), table: Some(name.into()), ..Default::default() };
         for key in MetaKey::TABLE_DETAIL {
             self.metadata.cache().forget(&profile.id, key, &args);
@@ -150,7 +188,7 @@ impl Service {
     }
 
     /// 重建脚本要用的依赖信息。
-    async fn rebuild_context(
+    pub(crate) async fn rebuild_context(
         &self,
         profile: &Profile,
         dialect: &Dialect,
@@ -253,30 +291,45 @@ impl Service {
             }
         };
         preview.warnings = warnings;
-        // 执行策略：被拒绝的语句不能执行；需要确认的列出原因（生产环境总要确认）
-        let ctx = ExecContext {
-            profile_id: prepared.profile.id.clone(),
-            environment: prepared.profile.input.environment,
-            dialect,
-        };
-        let policy = self.sessions.policy();
-        for s in &preview.statements {
-            let RebuildStep::Sql { sql } = &s.step else { continue };
-            match policy.before_execute(&ctx, &classify(&dialect, sql)).await {
-                Decision::Allow => {}
-                Decision::Confirm { reason } => {
-                    if !preview.confirm.contains(&reason) {
-                        preview.confirm.push(reason);
-                    }
-                }
-                Decision::Deny { reason } => {
-                    preview.denied.get_or_insert(reason);
-                }
-            }
-        }
+        let sqls: Vec<String> = preview
+            .statements
+            .iter()
+            .filter_map(|s| match &s.step {
+                RebuildStep::Sql { sql } => Some(sql.clone()),
+                RebuildStep::CountCheck { .. } => None,
+            })
+            .collect();
+        (preview.denied, preview.confirm) = self.check_policy(&prepared.profile, dialect, &sqls).await;
         prepared.preview = preview;
         prepared.plan = plan;
         Ok(prepared)
+    }
+
+    /// 执行策略：被拒绝的语句不能执行（返回第一个原因）；需要确认的列出原因（生产环境总要确认）。
+    pub(crate) async fn check_policy(
+        &self,
+        profile: &Profile,
+        dialect: Dialect,
+        sqls: &[String],
+    ) -> (Option<Msg>, Vec<Msg>) {
+        let ctx =
+            ExecContext { profile_id: profile.id.clone(), environment: profile.input.environment, dialect };
+        let policy = self.sessions.policy();
+        let (mut denied, mut confirm) = (None, Vec::new());
+        for sql in sqls {
+            match policy.before_execute(&ctx, &classify(&dialect, sql)).await {
+                Decision::Allow => {}
+                Decision::Confirm { reason } => {
+                    if !confirm.contains(&reason) {
+                        confirm.push(reason);
+                    }
+                }
+                Decision::Deny { reason } => {
+                    denied.get_or_insert(reason);
+                }
+            }
+        }
+        (denied, confirm)
     }
 
     /// 预览：校验错误、变更列表、生成的语句或重建脚本、提示、执行策略的结论。不执行。
@@ -306,10 +359,8 @@ impl Service {
         let password = self.secrets.get(&prepared.profile.id)?.unwrap_or_default();
         let task = self.tasks.create(TaskKind::Design)?;
         let mut id = String::new();
-        let total = match &plan {
-            Plan::Alter(s) => s.len(),
-            Plan::Rebuild(r) => r.steps.len(),
-        } as u64;
+        let parts = plan.parts();
+        let total = Part::len(&parts);
         task.update(|s| {
             id = s.id.clone();
             s.phase = TaskPhase::Executing;
@@ -321,7 +372,7 @@ impl Service {
         schemas.push(schema.clone());
         tokio::spawn(async move {
             let run = Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema };
-            let result = run.execute(plan, password).await;
+            let result = run.execute(parts, password).await;
             for s in &schemas {
                 service.metadata.cache().invalidate(&profile.id, Some(s));
             }
@@ -331,13 +382,13 @@ impl Service {
     }
 }
 
-/// 一次执行。
-struct Run<'a> {
-    service: &'a Service,
-    task: &'a TaskHandle,
-    profile: &'a Profile,
-    dialect: Dialect,
-    schema: &'a str,
+/// 一次执行：表设计器的改动、比对后的同步脚本。
+pub(crate) struct Run<'a> {
+    pub service: &'a Service,
+    pub task: &'a TaskHandle,
+    pub profile: &'a Profile,
+    pub dialect: Dialect,
+    pub schema: &'a str,
 }
 
 impl Run<'_> {
@@ -384,7 +435,8 @@ impl Run<'_> {
         self.task.update(|s| s.remaining = (!rest.is_empty()).then(|| rest + ";"));
     }
 
-    async fn execute(&self, plan: Plan, password: String) -> Result<()> {
+    /// 在新连接上依次执行各段。PG 家族在一个事务中执行；其他库失败时列出没有执行的语句。
+    pub(crate) async fn execute(&self, parts: Vec<Part>, password: String) -> Result<()> {
         let (mut conn, _) = self.service.registry.connect(self.profile, password).await?;
         self.task.set_cancel(Some(conn.cancel_handle()))?;
         let transactional = self.dialect.design_transactional();
@@ -393,23 +445,26 @@ impl Run<'_> {
             if transactional {
                 conn.set_autocommit(false).await?;
             }
-            match plan {
-                Plan::Alter(statements) => {
-                    let texts: Vec<String> = statements.iter().map(|s| s.sql.clone()).collect();
-                    for (i, sql) in texts.iter().enumerate() {
+            let texts: Vec<Vec<String>> = parts.iter().map(Part::texts).collect();
+            let mut offset = 0;
+            for (pi, part) in parts.iter().enumerate() {
+                // PG 回滚全部，没有执行的语句不必再列出
+                let later: Vec<String> = if transactional { vec![] } else { texts[pi + 1..].concat() };
+                match part {
+                    Part::Sql(sql) => {
                         if self.task.cancelled() {
                             return Err(Error::Cancelled);
                         }
                         if let Err(e) = self.sql(&mut conn, sql).await {
                             let e = if self.task.cancelled() { Error::Cancelled } else { e };
-                            // PG 回滚全部，没有执行的语句不必再列出
-                            self.failed(i, sql, &e, if transactional { &[] } else { &texts[i + 1..] });
+                            self.failed(offset, sql, &e, &later);
                             return Err(e);
                         }
                         self.task.update(|s| s.progress.statements_done += 1);
                     }
+                    Part::Rebuild(r) => self.rebuild(&mut conn, r, transactional, offset, &later).await?,
                 }
-                Plan::Rebuild(r) => self.rebuild(&mut conn, &r, transactional).await?,
+                offset += texts[pi].len();
             }
             if transactional {
                 conn.commit().await?;
@@ -424,17 +479,16 @@ impl Run<'_> {
         outcome
     }
 
-    async fn rebuild(&self, conn: &mut Box<dyn Connection>, r: &Rebuild, transactional: bool) -> Result<()> {
-        let texts: Vec<String> = r
-            .steps
-            .iter()
-            .map(|s| match s {
-                RebuildStep::Sql { sql } => sql.clone(),
-                RebuildStep::CountCheck { source, target } => {
-                    format!("SELECT COUNT(*) FROM {source}; SELECT COUNT(*) FROM {target}")
-                }
-            })
-            .collect();
+    /// 一张表的重建。`offset`：第一步在整个脚本中的序号；`later`：后面各段的语句（失败时列为没有执行）。
+    async fn rebuild(
+        &self,
+        conn: &mut Box<dyn Connection>,
+        r: &Rebuild,
+        transactional: bool,
+        offset: usize,
+        later: &[String],
+    ) -> Result<()> {
+        let texts = Part::Rebuild(r.clone()).texts();
         for (i, step) in r.steps.iter().enumerate() {
             if i == r.drop_at {
                 // 从删除旧表起不能取消
@@ -461,8 +515,13 @@ impl Run<'_> {
             };
             if let Err(e) = result {
                 let e = if before_drop && self.task.cancelled() { Error::Cancelled } else { e };
-                let rest = if transactional || before_drop { &[][..] } else { &texts[i + 1..] };
-                self.failed(i, &texts[i], &e, rest);
+                // 删除旧表之前失败时这张表的改动已撤销，只列出后面各段
+                let rest = match (transactional, before_drop) {
+                    (true, _) => vec![],
+                    (false, true) => later.to_vec(),
+                    (false, false) => [&texts[i + 1..], later].concat(),
+                };
+                self.failed(offset + i, &texts[i], &e, &rest);
                 if before_drop {
                     self.cleanup(conn, r, transactional).await;
                 }
@@ -631,7 +690,7 @@ mod tests {
                     dialect: Dialect::new(Variant::MySql),
                     schema: "shop",
                 };
-                let r = run.execute(Plan::Rebuild(plan), "pw".into()).await;
+                let r = run.execute(vec![Part::Rebuild(plan)], "pw".into()).await;
                 task.finish(r);
                 s.tasks.status(&id).unwrap()
             }
