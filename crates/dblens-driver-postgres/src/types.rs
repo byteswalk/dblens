@@ -2,7 +2,7 @@ use bytes::BytesMut;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use dblens_core::{Error, Msg, Result, Value, msg};
 use tokio_postgres::Row;
-use tokio_postgres::types::{FromSql, IsNull, ToSql, Type, to_sql_checked};
+use tokio_postgres::types::{FromSql, IsNull, Kind, ToSql, Type, to_sql_checked};
 
 type BoxError = Box<dyn std::error::Error + Sync + Send>;
 
@@ -118,6 +118,61 @@ impl<'a> FromSql<'a> for RawValue<'a> {
     }
 }
 
+/// 兼容库自定义的类型对应的标准类型：域类型取基础类型（人大金仓 Oracle 模式的 `date` 是 timestamp 上的域，
+/// `blob`、`clob` 也是域）；openGauss 的 `clob`、`nvarchar2` 等是独立的类型，二进制格式与对应的标准类型相同。
+/// `int1`、`tinyint` 没有对应的标准类型，原样返回，由 `decode_as` 单独处理。
+fn standard_type(ty: &Type) -> Option<Type> {
+    if let Kind::Domain(base) = ty.kind() {
+        return Some(standard_type(base).unwrap_or_else(|| base.clone()));
+    }
+    match ty.name() {
+        "clob" | "nclob" | "nvarchar2" | "varchar2" | "long" => Some(Type::TEXT),
+        "blob" | "raw" => Some(Type::BYTEA),
+        "number" => Some(Type::NUMERIC),
+        "smalldatetime" => Some(Type::TIMESTAMP),
+        "binary_double" => Some(Type::FLOAT8),
+        "binary_float" => Some(Type::FLOAT4),
+        "int1" | "tinyint" => Some(ty.clone()),
+        _ => None,
+    }
+}
+
+/// 按 `standard_type` 给出的类型解码二进制值。
+fn decode_as(ty: &Type, raw: &[u8]) -> std::result::Result<Value, BoxError> {
+    macro_rules! from {
+        ($t:ty, $f:expr) => {
+            <$t as FromSql>::from_sql(ty, raw).map($f)?
+        };
+    }
+    Ok(match *ty {
+        Type::BOOL => from!(bool, Value::Bool),
+        Type::INT2 => from!(i16, |v| Value::Int(v.into())),
+        Type::INT4 => from!(i32, |v| Value::Int(v.into())),
+        Type::INT8 => from!(i64, Value::Int),
+        Type::FLOAT4 => from!(f32, |v| Value::Float(v.into())),
+        Type::FLOAT8 => from!(f64, Value::Float),
+        Type::NUMERIC => Value::Decimal(decode_numeric(raw)?),
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR => from!(String, Value::String),
+        Type::BYTEA => Value::Bytes(raw.to_vec()),
+        Type::DATE => from!(NaiveDate, Value::Date),
+        Type::TIME => from!(NaiveTime, Value::Time),
+        Type::TIMESTAMP => from!(NaiveDateTime, Value::DateTime),
+        Type::TIMESTAMPTZ => from!(DateTime<Utc>, |v| Value::DateTimeTz(v.fixed_offset())),
+        // openGauss 的 int1 是 0–255，人大金仓的 tinyint 是 -128–127，都是 1 个字节
+        _ if raw.len() == 1 && ty.name() == "int1" => Value::Int(raw[0].into()),
+        _ if raw.len() == 1 && ty.name() == "tinyint" => Value::Int((raw[0] as i8).into()),
+        _ => Value::Other { type_name: ty.name().to_string(), text: other_text(raw) },
+    })
+}
+
+/// 不认识的类型：枚举、xml、citext 等类型的二进制格式就是文本，其余显示为十六进制。
+fn other_text(raw: &[u8]) -> String {
+    match std::str::from_utf8(raw) {
+        Ok(s) => s.to_string(),
+        Err(_) => format!("\\x{}", raw.iter().map(|b| format!("{b:02x}")).collect::<String>()),
+    }
+}
+
 /// 读取一行中第 `idx` 列的值。
 pub(crate) fn pg_value(row: &Row, idx: usize) -> Result<Value> {
     let ty = row.columns()[idx].type_().clone();
@@ -150,14 +205,22 @@ pub(crate) fn pg_value(row: &Row, idx: usize) -> Result<Value> {
         Type::INTERVAL => get!(PgInterval, |v| Value::Interval(v.0)),
         _ => {
             let raw = row.try_get::<_, Option<RawValue>>(idx).map_err(fail)?;
-            raw.map(|r| Value::Other {
-                type_name: ty.name().to_string(),
-                // 枚举、xml、citext 等类型的二进制格式就是文本
-                text: match std::str::from_utf8(r.0) {
-                    Ok(s) => s.to_string(),
-                    Err(_) => format!("\\x{}", r.0.iter().map(|b| format!("{b:02x}")).collect::<String>()),
-                },
-            })
+            match (raw, standard_type(&ty)) {
+                (None, _) => None,
+                (Some(r), Some(base)) => Some(decode_as(&base, r.0).map_err(|e| {
+                    let cause =
+                        e.downcast_ref::<Error>().map_or_else(|| Msg::raw(e.to_string()), Error::to_msg);
+                    Error::internal(msg!(
+                        "pg.read_column_failed",
+                        column = idx + 1,
+                        ty = ty.name(),
+                        error = cause
+                    ))
+                })?),
+                (Some(r), None) => {
+                    Some(Value::Other { type_name: ty.name().to_string(), text: other_text(r.0) })
+                }
+            }
         }
     };
     Ok(value.unwrap_or(Value::Null))

@@ -70,3 +70,14 @@ mod mariadb {
     use super::*;
     dblens_driver::conformance_tests!("DBLENS_TEST_MARIADB_URL", mariadb_fixture);
 }
+
+mod tidb {
+    use super::*;
+    dblens_driver::conformance_tests!("DBLENS_TEST_TIDB_URL", mysql_fixture);
+}
+
+/// OceanBase 的 MySQL 模式；用户名写成 `用户@租户`（URL 中 `@` 写成 `%40`）。
+mod oceanbase {
+    use super::*;
+    dblens_driver::conformance_tests!("DBLENS_TEST_OCEANBASE_URL", mysql_fixture);
+}
