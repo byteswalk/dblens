@@ -718,3 +718,63 @@ body {
   max-height: 160px;
   overflow: auto;
 }
+
+/* 模型与比对（M4a） */
+.models-panel .a {
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+}
+.models-panel .a:hover {
+  background: var(--sel);
+}
+.models-recent {
+  padding: 2px 12px;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.models-recent:hover {
+  background: var(--sel);
+}
+.compare-view {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  height: 100%;
+}
+.compare-side-label {
+  padding: 0 6px;
+  line-height: 24px;
+}
+.compare-body {
+  display: flex;
+  gap: 8px;
+  min-height: 0;
+  padding: 0 10px;
+}
+.compare-tree {
+  flex: 1;
+  overflow: auto;
+  min-width: 280px;
+}
+.compare-detail {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  overflow: auto;
+  font-family: var(--mono);
+}
+.compare-col {
+  flex: 1;
+  min-width: 0;
+}
+.compare-line {
+  white-space: pre-wrap;
+  padding: 0 4px;
+}
+.compare-line.diff {
+  background: var(--warn-bg);
+}

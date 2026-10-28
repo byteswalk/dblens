@@ -2,6 +2,8 @@
 // （ui.tabs），下次启动时恢复；会话不恢复，第一次执行时再打开。
 // 数据标签（M1c2 设计文档第 5 节）：带 data 的标签，只读地浏览一张表 / 视图 / 物化视图，同一对象只开一个。
 // 设计器标签（M3 设计文档 7.1 节）：带 design 的标签，设计一张已有的表（同一张表只开一个）或新建表；草稿不保存。
+// 设计模型中的表（M4a）时 design.model 是模型目录，标签不绑定连接（profileId 为空串）。
+// 比对标签（M4a 设计文档第 7 节）：带 compare 的标签，两边是模型或连接的一个 schema；也不绑定连接。
 
 import { create } from 'zustand'
 
@@ -21,10 +23,21 @@ export interface DataTarget {
   order?: { column: string; desc: boolean } | null
 }
 
-/** 设计器标签设计的表：`table` 为 null 时是新建表（`schema` 为空串时由用户在"选项"中选）。 */
+/** 设计器标签设计的表：`table` 为 null 时是新建表（`schema` 为空串时由用户在"选项"中选）。
+ * `model` 是模型目录：有值时设计模型中的表。 */
 export interface DesignTarget {
   schema: string
   table: string | null
+  model?: string
+}
+
+/** 比对的一边：模型（按目录）或连接的一个 schema。 */
+export type CompareSide = { kind: 'model'; path: string; schema: string } | { kind: 'database'; profile: string; schema: string }
+
+/** 比对标签的两边（还没选时为 null）。 */
+export interface CompareTarget {
+  source: CompareSide | null
+  target: CompareSide | null
 }
 
 export interface QueryTab {
@@ -37,6 +50,8 @@ export interface QueryTab {
   data?: DataTarget
   /** 有值时是设计器标签。 */
   design?: DesignTarget
+  /** 有值时是比对标签。 */
+  compare?: CompareTarget
 }
 
 const TARGET_KINDS: readonly unknown[] = ['table', 'view', 'materialized_view'] satisfies TargetKind[]
@@ -55,7 +70,23 @@ function isDataTarget(v: unknown): v is DataTarget {
 
 function isDesignTarget(v: unknown): v is DesignTarget {
   const d = v as DesignTarget | null
-  return typeof d?.schema === 'string' && (d.table === null || typeof d.table === 'string')
+  return (
+    typeof d?.schema === 'string' &&
+    (d.table === null || typeof d.table === 'string') &&
+    (d.model === undefined || typeof d.model === 'string')
+  )
+}
+
+function isCompareSide(v: unknown): v is CompareSide | null {
+  if (v === null) return true
+  const s = v as CompareSide | undefined
+  if (typeof s?.schema !== 'string') return false
+  return s.kind === 'model' ? typeof s.path === 'string' : s.kind === 'database' && typeof s.profile === 'string'
+}
+
+function isCompareTarget(v: unknown): v is CompareTarget {
+  const c = v as CompareTarget | null
+  return !!c && isCompareSide(c.source) && isCompareSide(c.target)
 }
 
 /** 是否同一个对象的数据标签。 */
@@ -88,7 +119,8 @@ export function parseTabs(raw: string | undefined): Persisted {
         typeof t.profileId === 'string' &&
         typeof t.sql === 'string' &&
         (t.data === undefined || isDataTarget(t.data)) &&
-        (t.design === undefined || isDesignTarget(t.design)),
+        (t.design === undefined || isDesignTarget(t.design)) &&
+        (t.compare === undefined || isCompareTarget(t.compare)),
     )
     const active = tabs.some((t) => t.id === v.active) ? (v.active as string) : (tabs[0]?.id ?? null)
     return { tabs, active, seq: typeof v.seq === 'number' && v.seq > 0 ? v.seq : tabs.length + 1 }
@@ -106,6 +138,10 @@ interface TabsState extends Persisted {
   openDesign(profileId: string, target: DesignTarget): string
   /** 新建的表保存后，标签转为设计这张表。 */
   setDesign(id: string, target: DesignTarget): void
+  /** 新开比对标签，返回它的 id。 */
+  openCompare(target: CompareTarget): string
+  /** 修改比对标签的两边。 */
+  setCompare(id: string, target: CompareTarget): void
   /** 修改数据标签的过滤条件和排序。 */
   setData(id: string, patch: Pick<DataTarget, 'filter' | 'order'>): void
   close(id: string): void
@@ -144,7 +180,13 @@ export const useTabs = create<TabsState>()((set, get) => ({
     const { tabs } = get()
     const same =
       target.table !== null &&
-      tabs.find((x) => x.profileId === profileId && x.design?.schema === target.schema && x.design.table === target.table)
+      tabs.find(
+        (x) =>
+          x.profileId === profileId &&
+          x.design?.schema === target.schema &&
+          x.design.table === target.table &&
+          x.design.model === target.model,
+      )
     if (same) {
       set({ active: same.id })
       return same.id
@@ -158,6 +200,13 @@ export const useTabs = create<TabsState>()((set, get) => ({
     set({
       tabs: get().tabs.map((x) => (x.id === id ? { ...x, design: { ...target }, title: target.table ?? x.title } : x)),
     }),
+  openCompare: (target) => {
+    const tab: QueryTab = { id: newId(), title: t('model.compare.title'), profileId: '', sql: '', compare: target }
+    set({ tabs: [...get().tabs, tab], active: tab.id })
+    return tab.id
+  },
+  setCompare: (id, target) =>
+    set({ tabs: get().tabs.map((x) => (x.id === id && x.compare ? { ...x, compare: target } : x)) }),
   setData: (id, patch) =>
     set({ tabs: get().tabs.map((x) => (x.id === id && x.data ? { ...x, data: { ...x.data, ...patch } } : x)) }),
   close: (id) => {

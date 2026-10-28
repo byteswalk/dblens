@@ -4,24 +4,23 @@ import { useQuery } from '@tanstack/react-query'
 import { Input, Select } from 'antd'
 import { useTranslation } from 'react-i18next'
 
-import { useApi } from '../../app/context'
 import type { DesignCaps } from '../../shared/api'
 import { Cell } from './ColumnsPane'
 import ListPane from './ListPane'
 import { type Draft, type DraftForeignKey, type Issues, newKey, updateItem } from './logic'
+import type { RefSource } from './source'
 
 /** 引用的表的列（选了表之后才查）。 */
-function RefColumns({ profileId, schema, fk, onChange }: {
-  profileId: string
+function RefColumns({ source, schema, fk, onChange }: {
+  source: RefSource
   schema: string
   fk: DraftForeignKey
   onChange(cols: string[]): void
 }) {
-  const api = useApi()
   const refSchema = fk.ref_schema || schema
   const { data } = useQuery({
-    queryKey: ['table-info', profileId, refSchema, fk.ref_table],
-    queryFn: () => api.table(profileId, refSchema, fk.ref_table),
+    queryKey: ['ref-columns', source.key, refSchema, fk.ref_table],
+    queryFn: () => source.columns(refSchema, fk.ref_table),
     enabled: !!fk.ref_table,
   })
   return (
@@ -32,14 +31,14 @@ function RefColumns({ profileId, schema, fk, onChange }: {
       style={{ width: '100%' }}
       value={fk.ref_columns}
       disabled={fk.deleted}
-      options={(data?.columns ?? []).map((c) => ({ value: c.name }))}
+      options={(data ?? []).map((c) => ({ value: c }))}
       onChange={onChange}
     />
   )
 }
 
-export default function ForeignKeysPane({ profileId, schema, draft, original, caps, issues, onChange }: {
-  profileId: string
+export default function ForeignKeysPane({ source, schema, draft, original, caps, issues, onChange }: {
+  source: RefSource
   schema: string
   draft: Draft
   original: Draft | null
@@ -48,13 +47,12 @@ export default function ForeignKeysPane({ profileId, schema, draft, original, ca
   onChange(fn: (d: Draft) => Draft): void
 }) {
   const { t } = useTranslation()
-  const api = useApi()
-  const { data: schemas = [] } = useQuery({ queryKey: ['schemas', profileId], queryFn: () => api.schemas(profileId) })
+  const { data: schemas = [] } = useQuery({ queryKey: ['ref-schemas', source.key], queryFn: () => source.schemas() })
   const refSchemas = [...new Set(draft.foreignKeys.map((f) => f.ref_schema || schema))]
   const tables = useQuery({
-    queryKey: ['design-ref-tables', profileId, refSchemas],
+    queryKey: ['design-ref-tables', source.key, refSchemas],
     queryFn: async () =>
-      Object.fromEntries(await Promise.all(refSchemas.map(async (s) => [s, (await api.objects(profileId, s, 'tables')).map((o) => o.name)] as const))),
+      Object.fromEntries(await Promise.all(refSchemas.map(async (s) => [s, await source.tables(s)] as const))),
     enabled: !!schema,
   })
   const names = draft.columns.filter((c) => !c.deleted && c.name).map((c) => ({ value: c.name }))
@@ -110,7 +108,7 @@ export default function ForeignKeysPane({ profileId, schema, draft, original, ca
               value={f.ref_schema || schema}
               disabled={f.deleted}
               showSearch
-              options={schemas.map((s) => ({ value: s.name }))}
+              options={schemas.map((s) => ({ value: s }))}
               onChange={(v: string) => set(f.key, { ref_schema: v === schema ? null : v, ref_table: '', ref_columns: [] })}
             />
           ),
@@ -138,7 +136,7 @@ export default function ForeignKeysPane({ profileId, schema, draft, original, ca
           width: 170,
           render: (_, f) => (
             <Cell error={issues.at(f.key, 'ref_columns')}>
-              <RefColumns profileId={profileId} schema={schema} fk={f} onChange={(ref_columns) => set(f.key, { ref_columns })} />
+              <RefColumns source={source} schema={schema} fk={f} onChange={(ref_columns) => set(f.key, { ref_columns })} />
             </Cell>
           ),
         },

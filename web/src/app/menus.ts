@@ -32,6 +32,10 @@ export function buildMenus(s: MenuState): MenuGroup[] {
     { key: 'import', label: t('app.menu.file.import') },
     { key: 'sql-file', label: t('app.menu.file.sqlFile') },
     'divider',
+    { key: 'open-model', label: t('app.menu.file.openModel') },
+    { key: 'new-model', label: t('app.menu.file.newModel') },
+    { key: 'compare', label: t('app.menu.file.compare') },
+    'divider',
   ]
   file.push({ key: 'settings', label: t('app.menu.file.settings') })
   if (s.desktop) file.push('divider', { key: 'quit', label: t('app.menu.file.quit') })
@@ -40,6 +44,7 @@ export function buildMenus(s: MenuState): MenuGroup[] {
   const theme = (key: ThemePref, label: string) => ({ key: `theme:${key}`, label, checked: s.theme === key })
   const view: MenuEntry[] = [
     side('db'),
+    side('models'),
     side('history'),
     side('favorites'),
     side('ops'),

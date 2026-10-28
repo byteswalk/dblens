@@ -1,8 +1,10 @@
 // 表设计器标签（M3 设计文档第 7 节）：子标签分列、索引、外键、约束、选项、SQL 预览；改动后约 300 毫秒自动预览，
 // 校验错误在子标签上显示数目、出错的单元格标红。Ctrl+S 或"保存"打开确认框，执行时进度显示在底部，可以取消。
+// 设计模型中的表（M4a 设计文档 4.3 节）：类型目录和能力按模型的数据库类型，保存只写这张表的文件、不弹确认框；
+// "SQL 预览"换成变更列表和"与库比对"的入口。
 // 引入 Monaco（SQL 预览），由工作区懒加载。
 
-import { IconDeviceFloppy, IconRefresh, IconTrashX } from '@tabler/icons-react'
+import { IconArrowsDiff, IconDeviceFloppy, IconRefresh, IconTrashX } from '@tabler/icons-react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Badge, Button, Progress, Spin, Tabs } from 'antd'
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react'
@@ -10,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
-import { type DesignRequest, type Profile, type TaskStatus, errorText } from '../../shared/api'
+import { type DesignRequest, type ModelDesignRequest, type Profile, type TaskStatus, errorText } from '../../shared/api'
 import { withVault } from '../connections/vault'
 import { useQueryActions } from '../editor/actions'
 import { type QueryTab, useTabs } from '../editor/tabs'
@@ -22,8 +24,9 @@ import IndexesPane from './IndexesPane'
 import { type Draft, type Pane, emptyDraft, fromTable, isDirty, issuesOf, renamesOf, toModel } from './logic'
 import OptionsPane from './OptionsPane'
 import SaveDialog from './SaveDialog'
+import { modelSource, profileSource } from './source'
 import SqlBox from './SqlBox'
-import { scriptOf } from './summary'
+import { describeChange, scriptOf } from './summary'
 
 const NO_ISSUES = issuesOf([], emptyDraft())
 
@@ -36,6 +39,19 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
   const profile = profiles.find((p) => p.id === tab.profileId)
   const target = tab.design!
   const isNew = target.table === null
+  const modelPath = target.model
+  // 模型按目录打开（已经打开的返回原来的编号）
+  const modelQ = useQuery({
+    queryKey: ['model-open', modelPath],
+    queryFn: () => api.openModel(modelPath!),
+    enabled: !!modelPath,
+    staleTime: Infinity,
+  })
+  const modelId = modelQ.data?.id
+  const source = useMemo(
+    () => (modelPath ? modelSource(api, modelId ?? '') : profileSource(api, tab.profileId)),
+    [api, modelPath, modelId, tab.profileId],
+  )
   const state = useDesigns((s) => s.tabs[tab.id])
   const [schema, setSchema] = useState(target.schema)
   const [pane, setPane] = useState<Pane | 'sql'>('columns')
@@ -45,9 +61,9 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const caps = useQuery({
-    queryKey: ['design-caps', tab.profileId],
-    queryFn: () => withVault(api, () => api.designCaps(tab.profileId)),
-    enabled: !!profile,
+    queryKey: ['design-caps', source.key],
+    queryFn: () => (modelPath ? api.modelCaps(modelId!) : withVault(api, () => api.designCaps(tab.profileId))),
+    enabled: modelPath ? !!modelId : !!profile,
     staleTime: Infinity,
   })
 
@@ -57,8 +73,11 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
       useDesigns.getState().set(tab.id, { original: null, fingerprint: null, storage: null, draft: emptyDraft(), rebuild: false })
       return
     }
+    if (modelPath && !modelId) return
     try {
-      const r = await withVault(api, () => api.designTable(tab.profileId, target.schema, target.table!))
+      const r = modelPath
+        ? { ...(await api.modelTable(modelId!, target.schema, target.table)), storage: null }
+        : await withVault(api, () => api.designTable(tab.profileId, target.schema, target.table!))
       useDesigns.getState().set(tab.id, {
         original: fromTable(r.table),
         fingerprint: r.fingerprint,
@@ -69,7 +88,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
     } catch (e) {
       setLoadError((e as Error).message)
     }
-  }, [api, tab.id, tab.profileId, target.schema, target.table])
+  }, [api, tab.id, tab.profileId, target.schema, target.table, modelPath, modelId])
 
   // 第一次打开、新建的表保存后转为编辑这张表时读取
   useEffect(() => {
@@ -101,13 +120,28 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
   const preview = useQuery({
     queryKey: ['design-preview', tab.id, JSON.stringify(debounced)],
     queryFn: () => api.previewDesign(tab.profileId, debounced!),
-    enabled: !!profile && !!debounced && dirty && !!debounced.schema,
+    enabled: !modelPath && !!profile && !!debounced && dirty && !!debounced.schema,
     placeholderData: keepPreviousData,
     retry: false,
   })
+  const modelRequest = (r: DesignRequest): ModelDesignRequest => ({
+    schema: r.schema,
+    name: r.name,
+    draft: r.draft,
+    renames: r.renames,
+    fingerprint: r.fingerprint,
+  })
+  const modelPreview = useQuery({
+    queryKey: ['model-design-preview', tab.id, JSON.stringify(debounced)],
+    queryFn: () => api.previewModelTable(modelId!, modelRequest(debounced!)),
+    enabled: !!modelId && !!debounced && dirty && !!debounced.schema,
+    placeholderData: keepPreviousData,
+    retry: false,
+  })
+  const errors = modelPath ? modelPreview.data?.errors : preview.data?.errors
   const issues = useMemo(
-    () => (state && preview.data && dirty ? issuesOf(preview.data.errors, state.draft) : NO_ISSUES),
-    [state, preview.data, dirty],
+    () => (state && errors && dirty ? issuesOf(errors, state.draft) : NO_ISSUES),
+    [state, errors, dirty],
   )
 
   // 执行中：轮询任务状态
@@ -138,13 +172,31 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
     } else void load()
   }, [task?.state])
 
+  /** 模型：直接写这张表的文件；新建的表保存后转为编辑这张表。 */
+  const saveModel = async (req: DesignRequest) => {
+    try {
+      await api.saveModelTable(modelId!, modelRequest(req))
+      message.success(t('model.design.saved'))
+      void qc.invalidateQueries({ queryKey: ['model-tables', modelId] })
+      void qc.invalidateQueries({ queryKey: ['design-ref-tables', source.key] })
+      void qc.invalidateQueries({ queryKey: ['ref-columns', source.key] })
+      if (isNew) {
+        useDesigns.getState().clear(tab.id)
+        useTabs.getState().setDesign(tab.id, { schema: req.schema, table: req.draft.name.trim(), model: modelPath })
+      } else void load()
+    } catch (e) {
+      message.error((e as Error).message)
+    }
+  }
+
   const save = () => {
     if (!dirty || !request || task?.state === 'running') return
     if (!request.schema) {
       setPane('options')
       return
     }
-    setSaving(true)
+    if (modelPath) void saveModel(request)
+    else setSaving(true)
   }
   const onKeyDown = (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -155,8 +207,9 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
   const confirmThen = (title: string, fn: () => void) =>
     dirty ? modal.confirm({ title, okType: 'danger', onOk: fn }) : fn()
 
+  if (modelQ.error) return <Alert type="error" style={{ margin: 12 }} message={(modelQ.error as Error).message} />
   if (loadError) return <Alert type="error" style={{ margin: 12 }} message={loadError} action={<Button onClick={() => void load()}>{t('design.toolbar.reload')}</Button>} />
-  if (!state || !profile) return <Spin style={{ margin: 48 }} />
+  if (!state || (modelPath ? !modelQ.data : !profile)) return <Spin style={{ margin: 48 }} />
 
   const count = (p: Pane) => issues.counts[p] ?? 0
   const label = (p: Pane, text: string) => (
@@ -166,11 +219,18 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
   )
   const running = task?.state === 'running'
   const p = preview.data
+  const mp = modelPreview.data
+  const compareWithDb = () =>
+    useTabs.getState().openCompare({ source: { kind: 'model', path: modelPath!, schema: request?.schema ?? target.schema }, target: null })
   return (
     <div className="design-view" onKeyDown={onKeyDown} tabIndex={-1}>
       <div className="row toolbar">
-        <b>{isNew ? t('design.newTable') : `${target.schema}.${target.table}`}</b>
-        <span className="muted">{profile.name}</span>
+        <b>
+          {modelQ.data && `${modelQ.data.info.name} / `}
+          {isNew ? t('design.newTable') : `${target.schema}.${target.table}`}
+        </b>
+        {profile && <span className="muted">{profile.name}</span>}
+        {modelQ.data?.read_only && <span className="err">{t('model.readOnly')}</span>}
         <span className="grow" />
         <Button size="small" type="text" icon={<IconTrashX size={16} />} disabled={!dirty || running} onClick={() => confirmThen(t('design.toolbar.discardConfirm'), () => void load())}>
           {t('design.toolbar.discard')}
@@ -180,7 +240,12 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
             {t('design.toolbar.reload')}
           </Button>
         )}
-        <Button size="small" type="primary" icon={<IconDeviceFloppy size={16} />} disabled={!dirty || running} onClick={save}>
+        {modelPath && !isNew && (
+          <Button size="small" type="text" icon={<IconArrowsDiff size={16} />} onClick={compareWithDb}>
+            {t('model.design.compare')}
+          </Button>
+        )}
+        <Button size="small" type="primary" icon={<IconDeviceFloppy size={16} />} disabled={!dirty || running || !!modelQ.data?.read_only} onClick={save}>
           {t('design.toolbar.save')}
         </Button>
       </div>
@@ -206,7 +271,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
             key: 'foreignKeys',
             label: label('foreignKeys', t('design.tabs.foreignKeys')),
             children: (
-              <ForeignKeysPane profileId={tab.profileId} schema={request?.schema ?? ''} draft={state.draft} original={state.original} caps={caps.data} issues={issues} onChange={edit} />
+              <ForeignKeysPane source={source} schema={request?.schema ?? ''} draft={state.draft} original={state.original} caps={caps.data} issues={issues} onChange={edit} />
             ),
           },
           {
@@ -219,7 +284,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
             label: label('options', t('design.tabs.options')),
             children: (
               <OptionsPane
-                profileId={tab.profileId}
+                source={source}
                 schema={request?.schema ?? ''}
                 isNew={isNew}
                 draft={state.draft}
@@ -230,7 +295,32 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
               />
             ),
           },
-          {
+          modelPath ? {
+            key: 'sql',
+            label: t('model.design.changes'),
+            children: (
+              <div className="design-pane design-sql">
+                {!dirty ? (
+                  <span className="muted">{t('design.sql.nothing')}</span>
+                ) : !mp ? (
+                  <Spin />
+                ) : (
+                  <>
+                    {mp.conflict && <Alert type="error" message={t('model.design.conflict')} action={<Button size="small" onClick={() => void load()}>{t('design.toolbar.reload')}</Button>} />}
+                    {mp.errors.length > 0 && <Alert type="error" message={t('design.sql.errors', { count: mp.errors.length })} />}
+                    {mp.warnings.map((w) => (
+                      <Alert key={w} type="warning" showIcon message={w} />
+                    ))}
+                    <ul className="design-changes">
+                      {mp.changes.flatMap((c) => describeChange(c)).map((line, i) => (
+                        <li key={i}>{line}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            ),
+          } : {
             key: 'sql',
             label: t('design.tabs.sql'),
             children: (
@@ -252,7 +342,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
                     {p.statements.length > 0 && (
                       <Alert type="info" showIcon message={t(p.transactional ? 'design.sql.transactional' : 'design.sql.autocommit')} />
                     )}
-                    <SqlBox sql={scriptOf(p.statements, profile.driver === 'oracle' || profile.driver === 'dameng')} driver={profile.driver} height="calc(100vh - 360px)" />
+                    <SqlBox sql={scriptOf(p.statements, profile!.driver === 'oracle' || profile!.driver === 'dameng')} driver={profile!.driver} height="calc(100vh - 360px)" />
                   </>
                 )}
               </div>
@@ -303,7 +393,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
           )}
         </div>
       )}
-      {saving && request && (
+      {saving && request && profile && (
         <SaveDialog
           profile={profile}
           request={request}

@@ -65,6 +65,15 @@ export default function StatusBar() {
   const selected = useUi((s) => s.selectedProfile)
   const active = useTabs((s) => s.tabs.find((t) => t.id === s.active))
   const { data: profiles } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
+  // 模型的设计器标签、比对标签不绑定连接：显示模型目录
+  if (active && !active.profileId) {
+    return (
+      <div className="row statusbar">
+        <span className="muted">{active.design?.model ?? t('model.compare.title')}</span>
+        <span className="grow" />
+      </div>
+    )
+  }
   if (active) {
     return (
       <div className="row statusbar">

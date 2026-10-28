@@ -5,13 +5,13 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, Input, Select } from 'antd'
 import { useTranslation } from 'react-i18next'
 
-import { useApi } from '../../app/context'
 import type { DesignTableResult } from '../../shared/api'
 import { Cell } from './ColumnsPane'
 import { type Draft, type Issues, moveItem } from './logic'
+import type { RefSource } from './source'
 
-export default function OptionsPane({ profileId, schema, isNew, draft, storage, issues, onSchema, onChange }: {
-  profileId: string
+export default function OptionsPane({ source, schema, isNew, draft, storage, issues, onSchema, onChange }: {
+  source: RefSource
   schema: string
   isNew: boolean
   draft: Draft
@@ -21,8 +21,7 @@ export default function OptionsPane({ profileId, schema, isNew, draft, storage, 
   onChange(fn: (d: Draft) => Draft): void
 }) {
   const { t } = useTranslation()
-  const api = useApi()
-  const { data: schemas = [] } = useQuery({ queryKey: ['schemas', profileId], queryFn: () => api.schemas(profileId), enabled: isNew })
+  const { data: schemas = [] } = useQuery({ queryKey: ['ref-schemas', source.key], queryFn: () => source.schemas(), enabled: isNew })
   const pk = draft.primaryKey
   const props = [
     storage?.engine && t('design.option.engine', { value: storage.engine }),
@@ -37,7 +36,7 @@ export default function OptionsPane({ profileId, schema, isNew, draft, storage, 
         {t('design.option.schema')}
         {isNew ? (
           <Cell error={schema ? undefined : t('design.option.schemaRequired')}>
-            <Select size="small" showSearch value={schema || undefined} options={schemas.map((s) => ({ value: s.name }))} onChange={onSchema} />
+            <Select size="small" showSearch value={schema || undefined} options={schemas.map((s) => ({ value: s }))} onChange={onSchema} />
           </Cell>
         ) : (
           <Input size="small" value={schema} disabled />

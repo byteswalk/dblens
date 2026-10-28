@@ -23,6 +23,8 @@
   },
   "filterPlaceholder": "按名称或注释过滤",
   "menu": {
+    "compareModel": "与模型比对…",
+    "saveAsModel": "另存为模型…",
     "newQuery": "新建查询",
     "editConnection": "编辑连接…",
     "duplicateConnection": "复制连接",

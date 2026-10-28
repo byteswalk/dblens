@@ -4,13 +4,13 @@ import { create } from 'zustand'
 
 import { useSettings } from '../shared/settings'
 
-export type SideKey = 'db' | 'history' | 'favorites' | 'ops'
+export type SideKey = 'db' | 'models' | 'history' | 'favorites' | 'ops'
 
 export const SIDE_KEY = 'ui.side'
 
 export function parseSide(v: string | undefined): SideKey | null {
   if (v === 'none') return null
-  return v === 'history' || v === 'favorites' || v === 'ops' ? v : 'db'
+  return v === 'models' || v === 'history' || v === 'favorites' || v === 'ops' ? v : 'db'
 }
 
 interface UiState {

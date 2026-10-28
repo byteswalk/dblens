@@ -27,6 +27,7 @@
   },
   "side": {
     "db": "Database",
+    "models": "Models",
     "history": "History",
     "favorites": "Favorites",
     "ops": "Ops Queries"
@@ -67,7 +68,10 @@
       "settings": "Settings…",
       "quit": "Exit",
       "import": "Import Data…",
-      "sqlFile": "Run SQL File…"
+      "sqlFile": "Run SQL File…",
+      "openModel": "Open Model…",
+      "newModel": "New Model…",
+      "compare": "Compare Schemas…"
     },
     "view": {
       "title": "View",

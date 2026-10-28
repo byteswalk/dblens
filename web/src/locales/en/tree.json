@@ -23,6 +23,8 @@
   },
   "filterPlaceholder": "Filter by name or comment",
   "menu": {
+    "compareModel": "Compare with Model…",
+    "saveAsModel": "Save as Model…",
     "newQuery": "New Query",
     "editConnection": "Edit Connection…",
     "duplicateConnection": "Duplicate Connection",

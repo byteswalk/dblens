@@ -127,6 +127,23 @@ describe('打开后执行', () => {
     expect(parseTabs(JSON.stringify({ tabs: [{ id: 'x', title: 't', profileId: 'p', sql: '', design: { schema: 1 } }] })).tabs).toEqual([])
   })
 
+  it('模型中的表与库中同名的表各开一个；比对标签保存后恢复', () => {
+    useTabs.getState().restore(undefined)
+    const { openDesign, openCompare, setCompare } = useTabs.getState()
+    const db = openDesign('p', { schema: 'public', table: 'orders' })
+    const m = openDesign('', { schema: 'public', table: 'orders', model: 'D:/m' })
+    expect(m).not.toBe(db)
+    expect(openDesign('', { schema: 'public', table: 'orders', model: 'D:/m' })).toBe(m)
+    const c = openCompare({ source: { kind: 'model', path: 'D:/m', schema: 'public' }, target: null })
+    setCompare(c, { source: null, target: { kind: 'database', profile: 'p', schema: 'shop' } })
+    const raw = JSON.stringify({ tabs: useTabs.getState().tabs, active: c, seq: 1 })
+    const back = parseTabs(raw)
+    expect(back.tabs).toHaveLength(3)
+    expect(back.tabs[2]).toMatchObject({ title: '比对', profileId: '', compare: { source: null, target: { kind: 'database', schema: 'shop' } } })
+    const bad = { id: 'x', title: 't', profileId: '', sql: '', compare: { source: { kind: 'model', schema: 's' }, target: null } }
+    expect(parseTabs(JSON.stringify({ tabs: [bad] })).tabs).toEqual([])
+  })
+
   it('标记只取走一次，不随标签保存', () => {
     const id = useTabs.getState().open('p', 'SELECT 1')
     markRun(id)

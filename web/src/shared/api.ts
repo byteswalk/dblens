@@ -425,7 +425,7 @@ export interface SqlFileRequest {
 
 export interface TaskStatus {
   id: string
-  kind: 'import' | 'sql_file' | 'design'
+  kind: 'import' | 'sql_file' | 'design' | 'reverse' | 'sync'
   state: 'running' | 'confirm' | 'done' | 'failed' | 'cancelled'
   phase: 'preparing' | 'scanning' | 'creating' | 'clearing' | 'writing' | 'executing' | 'finished'
   progress: {
@@ -448,6 +448,8 @@ export interface TaskStatus {
   report: string | null
   /** 表设计器：失败后没有执行的语句。 */
   remaining: string | null
+  /** 反向生成：生成并打开的模型的编号。 */
+  model: string | null
 }
 
 /** 表设计器（M3）：与后端结构模型一致的完整表结构。 */
@@ -593,6 +595,144 @@ export interface DesignPreview {
   conflict: boolean
 }
 
+/** 模型（M4a）：绑定的数据库类型。`version` 是编码后的版本，不写时按最新版本。 */
+export interface ModelDatabase {
+  variant: string
+  compat?: Compat
+  version?: number | null
+}
+
+export interface ModelInfo {
+  format: number
+  name: string
+  description?: string | null
+  database: ModelDatabase
+  schemas: string[]
+  renames?: Record<string, { tables?: Record<string, string>; columns?: Record<string, Record<string, string>> }>
+}
+
+export interface ModelSummary {
+  id: string
+  path: string
+  info: ModelInfo
+  read_only: boolean
+}
+
+export interface ModelFileError {
+  path: string
+  message: string
+}
+
+export interface ModelTableEntry {
+  schema: string
+  name: string
+  comment?: string | null
+  error?: ModelFileError | null
+}
+
+export interface ModelDesignRequest {
+  schema: string
+  name: string | null
+  draft: DesignTableModel
+  renames: DesignRenames
+  fingerprint: string | null
+}
+
+export interface ModelDesignPreview {
+  errors: DesignIssue[]
+  warnings: string[]
+  changes: TableChange[]
+  conflict: boolean
+}
+
+export interface ReverseRequest {
+  profile_id: string
+  schemas: string[]
+  path: string
+  name: string
+}
+
+/** 比对的一边：模型的一个 schema，或连接的一个 schema。 */
+export type CompareSideRef =
+  | { kind: 'model'; model: string; schema: string }
+  | { kind: 'database'; profile: string; schema: string }
+
+export interface CompareOptions {
+  ignore_comments: boolean
+  ignore_column_order: boolean
+  ignore_generated_names: boolean
+  case_insensitive: boolean
+}
+
+/** 采用的改名：源的名字 → 目标的名字；列按源的表名分组。 */
+export interface CompareRenames {
+  tables: Record<string, string>
+  columns: Record<string, Record<string, string>>
+}
+
+export interface CompareRequest {
+  source: CompareSideRef
+  target: CompareSideRef
+  options: CompareOptions
+  renames: CompareRenames
+}
+
+export type SchemaChange =
+  | { kind: 'drop_table'; name: string }
+  | { kind: 'rename_table'; from: string; to: string }
+  | { kind: 'table'; change: TableChange }
+
+export type TableStatus = 'added' | 'removed' | 'renamed' | 'changed' | 'same'
+
+export interface TableDiff {
+  status: TableStatus
+  source: string | null
+  target: string | null
+  items: { id: number; change: SchemaChange }[]
+  appended: boolean
+}
+
+/** 推测的改名：`table` 为 null 时是表的改名，否则是该表（源的名字）中列的改名。 */
+export interface RenameSuggestion {
+  table: string | null
+  source: string
+  target: string
+}
+
+export interface CompareResult {
+  diff: { tables: TableDiff[]; suggestions: RenameSuggestion[] }
+  renames: CompareRenames
+  source_errors: ModelFileError[]
+  target_errors: ModelFileError[]
+  source_tables: DesignTableModel[]
+  target_tables: DesignTableModel[]
+  fingerprint: string
+}
+
+export interface SyncRequest {
+  compare: CompareRequest
+  selected: number[]
+  fingerprint: string | null
+}
+
+export type SyncStep =
+  | { kind: 'sql'; sql: string; items: number[] }
+  | {
+      kind: 'rebuild'
+      table: string
+      rebuild: { steps: DesignStep[]; drop_at: number; cleanup: string; warnings: string[] }
+      items: number[]
+    }
+
+export interface SyncPreview {
+  script: { steps: SyncStep[]; refused: [string, string][]; warnings: string[]; transactional: boolean } | null
+  text: string
+  writes: { name: string; from?: string | null; delete: boolean }[]
+  denied: string | null
+  confirm: string[]
+  fingerprint: string
+}
+
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
 export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o)) {
@@ -613,6 +753,9 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
   }
 
   const p = (id: string) => `/profiles/${encodeURIComponent(id)}`
+  const m = (id: string) => `/models/${encodeURIComponent(id)}`
+  const mt = (id: string, schema: string, name: string) =>
+    `${m(id)}/tables/${encodeURIComponent(schema)}/${encodeURIComponent(name)}`
   const s = (id: string, schema: string) => `${p(id)}/schemas/${encodeURIComponent(schema)}`
   const q = (params: Record<string, string | undefined>) => {
     const entries = Object.entries(params).filter((e): e is [string, string] => e[1] !== undefined && e[1] !== '')
@@ -745,6 +888,32 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     previewDesign: (id: string, req: DesignRequest) => request<DesignPreview>('POST', `${p(id)}/design/preview`, req),
     applyDesign: async (id: string, req: DesignRequest) =>
       (await request<{ id: string }>('POST', `${p(id)}/design/apply`, req)).id,
+    models: () => request<{ open: ModelSummary[]; recent: string[] }>('GET', '/models'),
+    openModel: (path: string) => request<ModelSummary>('POST', '/models/open', { path }),
+    createModel: (path: string, name: string, database: ModelDatabase) =>
+      request<ModelSummary>('POST', '/models', { path, name, database }),
+    startReverse: async (req: ReverseRequest) => (await request<{ id: string }>('POST', '/models/reverse', req)).id,
+    /** 重新加载并返回模型信息。 */
+    model: (id: string) => request<ModelSummary>('GET', m(id)),
+    closeModel: (id: string) => request<null>('DELETE', m(id)),
+    modelCaps: (id: string) => request<DesignCaps>('GET', `${m(id)}/caps`),
+    modelTables: (id: string) => request<ModelTableEntry[]>('GET', `${m(id)}/tables`),
+    modelTable: (id: string, schema: string, name: string) =>
+      request<{ table: DesignTableModel; fingerprint: string }>('GET', mt(id, schema, name)),
+    previewModelTable: (id: string, req: ModelDesignRequest) =>
+      request<ModelDesignPreview>('POST', `${m(id)}/tables/preview`, req),
+    /** 保存设计器中的表，返回新的指纹。 */
+    saveModelTable: async (id: string, req: ModelDesignRequest) =>
+      (await request<{ fingerprint: string }>('POST', `${m(id)}/tables`, req)).fingerprint,
+    deleteModelTable: (id: string, schema: string, name: string) => request<null>('DELETE', mt(id, schema, name)),
+    renameModelTable: (id: string, schema: string, name: string, to: string) =>
+      request<null>('POST', `${mt(id, schema, name)}/rename`, { to }),
+    compare: (req: CompareRequest) => request<CompareResult>('POST', '/compare', req),
+    syncPreview: (req: SyncRequest) => request<SyncPreview>('POST', '/compare/preview', req),
+    /** 同步：目标是库时返回任务 id；目标是模型时已经写完，返回 null。 */
+    sync: async (req: SyncRequest) => (await request<{ task: string | null }>('POST', '/compare/sync', req)).task,
+    /** 桌面版：把同步脚本写到"另存为"选的 .sql 文件。 */
+    saveScript: (path: string, text: string) => request<null>('POST', '/compare/script', { path, text }),
     openSession: (profileId: string) => request<SessionInfo>('POST', '/sessions', { profile_id: profileId }),
     session: (id: number) => request<SessionInfo>('GET', `/sessions/${id}`),
     /** 关闭会话；有未提交的修改时按 commit 提交或回滚。 */

@@ -56,6 +56,7 @@ fn run(data_dir: PathBuf) -> Result<(), String> {
             shell::set_auto_check_update,
             shell::save_dialog,
             shell::open_dialog,
+            shell::folder_dialog,
             shell::reveal_in_folder
         ])
         .setup(move |app| {

@@ -3,7 +3,7 @@
 // 没有查询标签时工作区显示欢迎页；工作区（Monaco、结果表格）懒加载。
 
 import { Button, Spin } from 'antd'
-import { IconDatabase, IconFileCode, IconHistory, IconPlus, IconSettings, IconStar, IconTool } from '@tabler/icons-react'
+import { IconDatabase, IconFileCode, IconHistory, IconPlus, IconSchema, IconSettings, IconStar, IconTool } from '@tabler/icons-react'
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Group, Panel, type PanelImperativeHandle, Separator, useDefaultLayout } from 'react-resizable-panels'
@@ -17,6 +17,8 @@ import SqlFileDialog from '../features/import/SqlFileDialog'
 import FavoriteDialog from '../features/favorites/FavoriteDialog'
 import FavoritesPanel from '../features/favorites/FavoritesPanel'
 import HistoryPanel from '../features/history/HistoryPanel'
+import ModelDialogs from '../features/model/ModelDialogs'
+import ModelsPanel from '../features/model/ModelsPanel'
 import OpsPanel from '../features/ops/OpsPanel'
 import ObjectTree from '../features/tree/ObjectTree'
 import { layoutStorage } from '../shared/settings'
@@ -34,6 +36,7 @@ const Workspace = lazy(async () => {
 // 侧栏名称在渲染时按 app.side.<key> 取
 const SIDES: { key: SideKey; icon: typeof IconDatabase }[] = [
   { key: 'db', icon: IconDatabase },
+  { key: 'models', icon: IconSchema },
   { key: 'history', icon: IconHistory },
   { key: 'favorites', icon: IconStar },
   { key: 'ops', icon: IconTool },
@@ -41,6 +44,7 @@ const SIDES: { key: SideKey; icon: typeof IconDatabase }[] = [
 
 function SideContent({ side }: { side: SideKey }) {
   if (side === 'db') return <ObjectTree />
+  if (side === 'models') return <ModelsPanel />
   if (side === 'history') return <HistoryPanel />
   if (side === 'favorites') return <FavoritesPanel />
   return <OpsPanel />
@@ -161,6 +165,7 @@ export default function Shell() {
       <ExportDialog />
       <ImportDialog />
       <SqlFileDialog />
+      <ModelDialogs />
     </div>
   )
 }

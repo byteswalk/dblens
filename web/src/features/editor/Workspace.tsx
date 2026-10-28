@@ -3,7 +3,7 @@
 // 标签多时先缩窄（悬停看全名），再放不下就用滚轮横向滚动，不显示滚动条；右端 ▾ 列出全部标签；右键菜单批量关闭。
 
 import { Dropdown, type MenuProps } from 'antd'
-import { IconChevronDown, IconFileCode, IconPlus, IconTable, IconTableOptions, IconX } from '@tabler/icons-react'
+import { IconArrowsDiff, IconChevronDown, IconFileCode, IconPlus, IconSchema, IconTable, IconTableOptions, IconX } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { Spin } from 'antd'
 import { Suspense, type WheelEvent, lazy, useEffect, useRef } from 'react'
@@ -21,6 +21,8 @@ import { type QueryTab, useTabs } from './tabs'
 
 // 设计器带 Monaco 的 SQL 预览，打开第一个设计器标签时才加载
 const DesignView = lazy(() => import('../design/DesignView'))
+// 比对标签的同步预览带 Monaco，同样懒加载
+const CompareView = lazy(() => import('../compare/CompareView'))
 
 function TabTitle({ tab, active, envClass, profileName, profile }: {
   tab: QueryTab
@@ -62,7 +64,11 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
         }}
         title={`${tab.title} · ${profileName}`}
       >
-        {tab.design ? (
+        {tab.compare ? (
+          <IconArrowsDiff size={16} />
+        ) : tab.design?.model ? (
+          <IconSchema size={16} />
+        ) : tab.design ? (
           <IconTableOptions size={16} />
         ) : tab.data ? (
           <IconTable size={16} />
@@ -117,7 +123,8 @@ export default function Workspace() {
     if (strip.current && e.deltaX === 0) strip.current.scrollLeft += e.deltaY
   }
 
-  const profileName = (id: string) => profiles.find((x) => x.id === id)?.name ?? t('editor.tab.profileDeleted')
+  // 模型的设计器标签、比对标签不绑定连接
+  const profileName = (id: string) => (id ? profiles.find((x) => x.id === id)?.name ?? t('editor.tab.profileDeleted') : '')
   const list: MenuProps = {
     items: tabs.map((tb) => ({ key: tb.id, label: `${tb.title} · ${profileName(tb.profileId)}` })),
     selectable: true,
@@ -158,7 +165,11 @@ export default function Workspace() {
         )}
       </div>
       {tab &&
-        (tab.design ? (
+        (tab.compare ? (
+          <Suspense fallback={<Spin style={{ margin: 48 }} />}>
+            <CompareView key={tab.id} tab={tab} profiles={profiles} />
+          </Suspense>
+        ) : tab.design ? (
           <Suspense fallback={<Spin style={{ margin: 48 }} />}>
             <DesignView key={tab.id} tab={tab} profiles={profiles} />
           </Suspense>

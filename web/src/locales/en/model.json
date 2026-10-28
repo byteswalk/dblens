@@ -1,0 +1,113 @@
+{
+  "readOnly": "Read-only (newer file format)",
+  "localOnly": "Model directories are paths on the server's machine: models are available only in the desktop app and in browser mode listening on a local address.",
+  "empty": "No open models",
+  "recent": "Recent",
+  "toolbar": {
+    "open": "Open Model",
+    "create": "New Model",
+    "reverse": "Reverse-engineer from Database",
+    "reload": "Reload"
+  },
+  "menu": {
+    "design": "Open in Designer",
+    "compare": "Compare with Database…",
+    "rename": "Rename…",
+    "delete": "Delete",
+    "newTable": "New Table",
+    "reload": "Reload",
+    "reveal": "Show in File Manager",
+    "close": "Close Model"
+  },
+  "rename": {
+    "title": "Rename table {{name}} to"
+  },
+  "delete": {
+    "title": "Delete table {{name}}?",
+    "content": "Deletes the table's file and its rename records."
+  },
+  "dialog": {
+    "openTitle": "Open Model",
+    "createTitle": "New Model",
+    "reverseTitle": "Reverse-engineer a Model from a Database",
+    "path": "Model directory",
+    "pathHint": "A directory on the server's machine",
+    "emptyDir": "The directory must not exist or must be empty",
+    "name": "Name",
+    "product": "Database type",
+    "versionNote": "Uses the latest version; reverse-engineered models carry the database's version",
+    "compat": "Compatibility mode",
+    "compatNative": "Native",
+    "compatOracle": "Oracle compatible",
+    "profile": "Connection",
+    "schemas": "Schemas",
+    "reverseOk": "Generate",
+    "reverseDone": "Model generated",
+    "reverseFailed": "Generation failed"
+  },
+  "design": {
+    "saved": "Saved to the model file",
+    "compare": "Compare with Database",
+    "changes": "Changes",
+    "conflict": "The file has changed (for example after switching git branches); reload it"
+  },
+  "compare": {
+    "title": "Compare",
+    "source": "Source",
+    "target": "Target",
+    "swap": "Swap sides",
+    "database": "Database",
+    "model": "Model",
+    "pickModel": "Select a model",
+    "pickProfile": "Select a connection",
+    "run": "Compare",
+    "hint": "Choose both sides and click Compare. The result shows how to change the target to match the source.",
+    "onlyDiff": "Differences only",
+    "statusFilter": "Filter by status",
+    "option": {
+      "ignore_comments": "Ignore comments",
+      "ignore_column_order": "Ignore column order",
+      "ignore_generated_names": "Ignore system-generated names",
+      "case_insensitive": "Case-insensitive names"
+    },
+    "status": {
+      "added": "Added",
+      "removed": "Removed",
+      "renamed": "Renamed",
+      "changed": "Changed",
+      "same": "Same"
+    },
+    "change": {
+      "dropTable": "Drop table {{name}}",
+      "renameTable": "Rename table {{from}} to {{to}}"
+    },
+    "dep": {
+      "create": "A foreign key of {{table}} references {{ref}}, but creating {{ref}} is not selected",
+      "drop": "{{by}} still has a foreign key referencing {{table}}, which will be dropped"
+    },
+    "fileError": "File {{path}} is invalid and was not compared: {{message}}",
+    "suggestions": "Possible renames (treated as drop plus add unless accepted; data would be lost)",
+    "acceptRename": "Treat as rename",
+    "summary": "{{changed}} of {{total}} tables differ",
+    "pickTable": "Select a table to see both definitions",
+    "selected": "{{count}} selected",
+    "copy": "Copy Script",
+    "openQuery": "Open in Query Tab",
+    "saveAs": "Save As…",
+    "sync": "Sync to Target…",
+    "copied": "Copied",
+    "saved": "Saved"
+  },
+  "sync": {
+    "title": "Sync to Target",
+    "execute": "Execute",
+    "write": "Write to Model",
+    "denied": "Denied by the execution policy: {{reason}}",
+    "refused": "Table {{table}} cannot be rebuilt: {{reason}}",
+    "deleteFile": "Delete the file of {{name}}",
+    "renameFile": "Rename {{from}} to {{name}} and write it",
+    "writeFile": "Write {{name}}",
+    "done": "Sync finished",
+    "written": "Written to the model"
+  }
+}

@@ -137,6 +137,16 @@ pub async fn open_dialog(app: AppHandle, filters: Vec<FileFilter>) -> Option<Str
     dialog.blocking_pick_file().and_then(|p| p.into_path().ok()).map(|p| p.display().to_string())
 }
 
+/// 系统"选择文件夹"对话框（打开、新建模型时选目录）。用户取消时返回 None。
+#[tauri::command]
+pub async fn folder_dialog(app: AppHandle) -> Option<String> {
+    app.dialog()
+        .file()
+        .blocking_pick_folder()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string())
+}
+
 /// 在系统的文件管理器中显示文件（导出完成后"打开所在文件夹"）。
 #[tauri::command]
 pub fn reveal_in_folder(path: String) -> Result<(), String> {

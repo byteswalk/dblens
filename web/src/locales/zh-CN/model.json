@@ -1,0 +1,113 @@
+{
+  "readOnly": "只读（文件格式较新）",
+  "localOnly": "模型目录是服务所在机器上的路径：只有桌面程序和只监听本机地址的浏览器模式可以使用模型。",
+  "empty": "没有打开的模型",
+  "recent": "最近打开",
+  "toolbar": {
+    "open": "打开模型",
+    "create": "新建模型",
+    "reverse": "从库反向生成",
+    "reload": "重新加载"
+  },
+  "menu": {
+    "design": "用设计器打开",
+    "compare": "与库比对…",
+    "rename": "改名…",
+    "delete": "删除",
+    "newTable": "新建表",
+    "reload": "重新加载",
+    "reveal": "在文件管理器中显示",
+    "close": "关闭模型"
+  },
+  "rename": {
+    "title": "表 {{name}} 改名为"
+  },
+  "delete": {
+    "title": "删除表 {{name}}？",
+    "content": "删除这张表的文件，并去掉它的改名记录。"
+  },
+  "dialog": {
+    "openTitle": "打开模型",
+    "createTitle": "新建模型",
+    "reverseTitle": "从库反向生成模型",
+    "path": "模型目录",
+    "pathHint": "服务所在机器上的目录",
+    "emptyDir": "目录必须不存在或为空",
+    "name": "名称",
+    "product": "数据库类型",
+    "versionNote": "版本按最新版本；从库反向生成的模型带库的版本",
+    "compat": "兼容模式",
+    "compatNative": "原生",
+    "compatOracle": "Oracle 兼容",
+    "profile": "连接",
+    "schemas": "Schema",
+    "reverseOk": "生成",
+    "reverseDone": "模型已生成",
+    "reverseFailed": "生成失败"
+  },
+  "design": {
+    "saved": "已保存到模型文件",
+    "compare": "与库比对",
+    "changes": "变更",
+    "conflict": "文件已被修改（如在 git 中切换了分支），请重新加载"
+  },
+  "compare": {
+    "title": "比对",
+    "source": "源",
+    "target": "目标",
+    "swap": "交换两边",
+    "database": "连接",
+    "model": "模型",
+    "pickModel": "选择模型",
+    "pickProfile": "选择连接",
+    "run": "比对",
+    "hint": "选好两边后点“比对”。结果描述怎样修改目标才与源一致。",
+    "onlyDiff": "只看差异",
+    "statusFilter": "按状态过滤",
+    "option": {
+      "ignore_comments": "忽略注释",
+      "ignore_column_order": "忽略列顺序",
+      "ignore_generated_names": "忽略系统生成的名字",
+      "case_insensitive": "名字不区分大小写"
+    },
+    "status": {
+      "added": "新增",
+      "removed": "删除",
+      "renamed": "改名",
+      "changed": "修改",
+      "same": "相同"
+    },
+    "change": {
+      "dropTable": "删除表 {{name}}",
+      "renameTable": "表 {{from}} 改名为 {{to}}"
+    },
+    "dep": {
+      "create": "{{table}} 的外键引用 {{ref}}，但没有勾选新建 {{ref}}",
+      "drop": "删除 {{table}} 时 {{by}} 的外键仍引用它"
+    },
+    "fileError": "文件 {{path}} 有错，没有参与比对：{{message}}",
+    "suggestions": "疑似改名（默认按删除加新增处理，不采用会丢数据）",
+    "acceptRename": "按改名处理",
+    "summary": "{{changed}} / {{total}} 张表有差异",
+    "pickTable": "选择一张表查看两边的定义",
+    "selected": "已勾选 {{count}} 项",
+    "copy": "复制脚本",
+    "openQuery": "在查询标签中打开",
+    "saveAs": "另存为…",
+    "sync": "同步到目标…",
+    "copied": "已复制",
+    "saved": "已保存"
+  },
+  "sync": {
+    "title": "同步到目标",
+    "execute": "执行",
+    "write": "写回模型",
+    "denied": "执行策略不允许：{{reason}}",
+    "refused": "表 {{table}} 不能重建：{{reason}}",
+    "deleteFile": "删除表文件 {{name}}",
+    "renameFile": "{{from}} 改名为 {{name}} 并写入",
+    "writeFile": "写入 {{name}}",
+    "done": "同步完成",
+    "written": "已写回模型"
+  }
+}

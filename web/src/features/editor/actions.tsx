@@ -24,7 +24,7 @@ export function useQueryActions() {
     const id =
       profileId ??
       useUi.getState().selectedProfile ??
-      tabs.find((x) => x.id === active)?.profileId ??
+      (tabs.find((x) => x.id === active)?.profileId || undefined) ??
       profiles?.[0]?.id
     if (id) useTabs.getState().open(id)
     else useUi.getState().openConnection(null)
@@ -49,7 +49,7 @@ export function useQueryActions() {
   const insertSql = (sql: string, profileId?: string) => {
     const { tabs, active } = useTabs.getState()
     const tab = tabs.find((x) => x.id === active)
-    if (tab && !tab.data && !tab.design) sendInsert(sql)
+    if (tab && !tab.data && !tab.design && !tab.compare) sendInsert(sql)
     else openSql(sql, profileId)
   }
 

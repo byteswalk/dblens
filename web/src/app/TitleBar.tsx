@@ -12,6 +12,7 @@ import { useQueryActions } from '../features/editor/actions'
 import { type EditorCommand, sendCommand } from '../features/editor/commands'
 import { useTabs } from '../features/editor/tabs'
 import { useImportDialogs } from '../features/import/dialog'
+import { useModelDialogs } from '../features/model/dialogs'
 import { useSetting, useSettings } from '../shared/settings'
 import { type WindowAction, desktop, titleBarInset } from '../shared/shell'
 import { THEME_KEY, type ThemePref, parseThemePref } from '../shared/theme'
@@ -56,7 +57,8 @@ export default function TitleBar() {
   const title = tab
     ? t('app.titleBar.windowTitle', {
         tab: tab.title,
-        connection: profile?.name ?? t('app.status.connectionDeleted'),
+        // 模型的设计器标签、比对标签不绑定连接
+        connection: tab.profileId ? (profile?.name ?? t('app.status.connectionDeleted')) : t('app.side.models'),
         app: appName,
       })
     : appName
@@ -71,18 +73,21 @@ export default function TitleBar() {
     else if (key === 'close-tab') closeActive()
     else if (key === 'new-table') {
       // 连接同"导入"；schema 用当前数据标签或设计器标签的，没有时在设计器的"选项"中选
-      const id = ui.selectedProfile ?? tab?.profileId ?? profiles?.[0]?.id
+      const id = ui.selectedProfile ?? (tab?.profileId || undefined) ?? profiles?.[0]?.id
       const schema = (tab?.profileId === id && (tab?.data?.schema ?? tab?.design?.schema)) || ''
       if (!id) ui.openConnection(null)
       else useTabs.getState().openDesign(id, { schema, table: null })
     }
     else if (key === 'import' || key === 'sql-file') {
       // 用对象树中选中的连接，没有时用当前标签的、第一个连接；一个都没有时新建连接
-      const id = ui.selectedProfile ?? tab?.profileId ?? profiles?.[0]?.id
+      const id = ui.selectedProfile ?? (tab?.profileId || undefined) ?? profiles?.[0]?.id
       if (!id) ui.openConnection(null)
       else if (key === 'import') useImportDialogs.getState().openImport({ profileId: id, schema: null, table: null, create: false })
       else useImportDialogs.getState().openSqlFile({ profileId: id, schema: null })
     }
+    else if (key === 'open-model') useModelDialogs.getState().openOpen()
+    else if (key === 'new-model') useModelDialogs.getState().openCreate()
+    else if (key === 'compare') useTabs.getState().openCompare({ source: null, target: null })
     else if (kind === 'sql') sendCommand(arg as EditorCommand)
     else if (key === 'settings') ui.setSettingsOpen(true)
     else if (key === 'quit') act('quit')
