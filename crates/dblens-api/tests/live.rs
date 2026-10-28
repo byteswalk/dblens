@@ -1,7 +1,9 @@
 //! 接口的实库测试。设置对应的环境变量时运行，否则直接通过：
-//! DBLENS_TEST_MYSQL_URL、DBLENS_TEST_MARIADB_URL、DBLENS_TEST_PG_URL、DBLENS_TEST_ORACLE_URL、DBLENS_TEST_DM_URL。
+//! DBLENS_TEST_MYSQL_URL、DBLENS_TEST_MARIADB_URL、DBLENS_TEST_PG_URL、DBLENS_TEST_ORACLE_URL、DBLENS_TEST_DM_URL；
+//! 国产库第一批：DBLENS_TEST_TIDB_URL、DBLENS_TEST_OCEANBASE_URL、DBLENS_TEST_OPENGAUSS_URL、
+//! DBLENS_TEST_OPENGAUSS_A_URL、DBLENS_TEST_KINGBASE_URL、DBLENS_TEST_KINGBASE_PG_URL。
 //!
-//! 通过 REST 保存连接配置（MySQL 系和 PG 走 TLS）、测试连接、浏览元数据、打开会话，
+//! 通过 REST 保存连接配置（MySQL、MariaDB、PG 的测试库开了 TLS，要求走 TLS）、测试连接、浏览元数据、打开会话，
 //! 再通过 WebSocket 分批取回 900 行结果。
 
 use std::sync::Arc;
@@ -42,7 +44,8 @@ async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (St
     (status, body)
 }
 
-async fn flow(env: &str) {
+/// `tls`：测试库开了 TLS，连接时要求走 TLS（国产库的测试库没开）。
+async fn flow(env: &str, tls: bool) {
     let Ok(url) = std::env::var(env) else { return };
     let (driver, params) = ConnectParams::from_url(&url).unwrap();
     let dir = tempfile::tempdir().unwrap();
@@ -69,7 +72,7 @@ async fn flow(env: &str) {
         .filter(|(k, _)| !LIB_OPTIONS.contains(&k.as_str()))
         .map(|(k, v)| (k.clone(), json!(v)))
         .collect();
-    if matches!(driver, DriverId::Mysql | DriverId::Postgres) {
+    if tls {
         options.insert("tls".into(), json!("require"));
     }
     let profile = json!({
@@ -178,25 +181,55 @@ async fn flow(env: &str) {
 
 #[tokio::test]
 async fn mysql() {
-    flow("DBLENS_TEST_MYSQL_URL").await;
+    flow("DBLENS_TEST_MYSQL_URL", true).await;
 }
 
 #[tokio::test]
 async fn mariadb() {
-    flow("DBLENS_TEST_MARIADB_URL").await;
+    flow("DBLENS_TEST_MARIADB_URL", true).await;
 }
 
 #[tokio::test]
 async fn postgres() {
-    flow("DBLENS_TEST_PG_URL").await;
+    flow("DBLENS_TEST_PG_URL", true).await;
 }
 
 #[tokio::test]
 async fn oracle() {
-    flow("DBLENS_TEST_ORACLE_URL").await;
+    flow("DBLENS_TEST_ORACLE_URL", false).await;
 }
 
 #[tokio::test]
 async fn dameng() {
-    flow("DBLENS_TEST_DM_URL").await;
+    flow("DBLENS_TEST_DM_URL", false).await;
+}
+
+#[tokio::test]
+async fn tidb() {
+    flow("DBLENS_TEST_TIDB_URL", false).await;
+}
+
+#[tokio::test]
+async fn oceanbase() {
+    flow("DBLENS_TEST_OCEANBASE_URL", false).await;
+}
+
+#[tokio::test]
+async fn opengauss() {
+    flow("DBLENS_TEST_OPENGAUSS_URL", false).await;
+}
+
+#[tokio::test]
+async fn opengauss_a() {
+    flow("DBLENS_TEST_OPENGAUSS_A_URL", false).await;
+}
+
+#[tokio::test]
+async fn kingbase() {
+    flow("DBLENS_TEST_KINGBASE_URL", false).await;
+}
+
+#[tokio::test]
+async fn kingbase_pg() {
+    flow("DBLENS_TEST_KINGBASE_PG_URL", false).await;
 }
