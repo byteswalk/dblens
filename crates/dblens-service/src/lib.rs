@@ -10,6 +10,7 @@ mod favorite;
 mod history;
 mod import;
 mod metadata;
+mod model;
 mod objects;
 mod policy;
 mod profile;
@@ -38,6 +39,10 @@ pub use import::{
     infer_type, new_table, preview_file,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
+pub use model::{
+    FileError, ModelDatabase, ModelInfo, ModelStore, ModelSummary, ModelTableView, ModelWrite, SchemaRenames,
+    SchemaTables, TableEntry,
+};
 pub use objects::{DataOrder, GenerateKind, ObjectKind};
 pub use policy::{
     Decision, DefaultPolicy, ExecContext, ObjectRef, Outcome, Policy, StatementInfo, StatementKind, classify,

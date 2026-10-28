@@ -1,0 +1,44 @@
+---
+source: crates/dblens-service/src/model/file.rs
+expression: text
+---
+name: orders
+comment: 订单
+columns:
+- name: id
+  type: bigint
+  nullable: false
+  auto_increment: true
+- name: code
+  type: varchar(20)
+- name: amount
+  type: numeric(10,2)
+  default: "0"
+  comment: |-
+    金额
+    （含税）
+primary_key:
+  columns:
+  - id
+uniques:
+- name: uk_code
+  columns:
+  - code
+foreign_keys:
+- name: fk_cust
+  columns:
+  - code
+  ref_schema: crm
+  ref_table: customers
+  ref_columns:
+  - code
+  on_delete: CASCADE
+checks:
+- name: ck_amount
+  expression: amount >= 0
+indexes:
+- name: ix_amount
+  columns:
+  - name: amount
+    descending: true
+  - code

@@ -37,6 +37,7 @@ rusqlite.workspace = true
 rust_xlsxwriter.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde-saphyr.workspace = true
 sqlparser.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -44,4 +45,5 @@ uuid.workspace = true
 
 [dev-dependencies]
 csv.workspace = true
+insta.workspace = true
 tempfile.workspace = true

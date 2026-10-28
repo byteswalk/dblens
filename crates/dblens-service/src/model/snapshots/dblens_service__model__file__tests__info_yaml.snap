@@ -1,0 +1,20 @@
+---
+source: crates/dblens-service/src/model/file.rs
+expression: text
+---
+format: 1
+name: 订单系统
+database:
+  variant: kingbase
+  compat: oracle
+  version: 120100
+schemas:
+- shop
+- crm
+renames:
+  shop:
+    tables:
+      orders_new: orders
+    columns:
+      orders_new:
+        amount: total
