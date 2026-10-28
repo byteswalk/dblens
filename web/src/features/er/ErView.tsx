@@ -18,7 +18,6 @@ import {
   type Connection,
   Controls,
   type Edge,
-  MarkerType,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
@@ -38,15 +37,15 @@ import { desktop } from '../../shared/shell'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../../shared/theme'
 import { withVault } from '../connections/vault'
 import { type QueryTab, useTabs } from '../editor/tabs'
+import { useDocExport } from '../document/dialog'
 import { useModelDialogs } from '../model/dialogs'
 import { type ErTabState, useErTabs } from './events'
 import { type ImageFormat, dataUrlBase64, imageName, renderImage } from './export'
+import { NODE_TYPES, flowEdges, flowNodes } from './flow'
 import { type Direction, TABLE_HANDLE, buildGraph, layout, searchTables } from './graph'
-import TableNode, { type TableNodeType } from './TableNode'
+import { LARGE } from './limits'
+import type { TableNodeType } from './TableNode'
 
-const NODE_TYPES = { table: TableNode }
-/** 默认图超过这么多张表时先只显示表名。 */
-const LARGE = 300
 
 interface Loaded {
   /** 可画的表：模型为 schema 的全部表（按图中的表过滤后画出），库为整个 schema。 */
@@ -160,33 +159,11 @@ function Canvas({ tab }: { tab: QueryTab }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<TableNodeType>([])
   useEffect(() => {
     setNodes((prev) =>
-      graph.nodes.map((n) => ({
-        id: n.id,
-        type: 'table' as const,
-        position: positions[n.id] ?? { x: 0, y: 0 },
-        data: n.data,
-        selected: prev.find((p) => p.id === n.id)?.selected ?? false,
-        style: { width: n.width },
-      })),
+      flowNodes(graph, positions).map((n) => ({ ...n, selected: prev.find((p) => p.id === n.id)?.selected ?? false })),
     )
   }, [graph, positions, setNodes])
 
-  const edges: Edge[] = useMemo(
-    () =>
-      graph.edges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        sourceHandle: e.sourceHandle,
-        targetHandle: e.targetHandle,
-        type: 'smoothstep',
-        label: e.count > 1 ? t('er.columns', { count: e.count }) : undefined,
-        className: e.logical ? 'er-edge logical' : 'er-edge',
-        markerEnd: { type: MarkerType.ArrowClosed },
-        data: { title: e.title, logicalIndex: e.logicalIndex },
-      })),
-    [graph, t],
-  )
+  const edges: Edge[] = useMemo(() => flowEdges(graph, (count) => t('er.columns', { count })), [graph, t])
 
   const markDirty = () => isModel && patch({ dirty: true })
 
@@ -292,6 +269,26 @@ function Canvas({ tab }: { tab: QueryTab }) {
     }
   }
 
+  /** 导出设计文档：范围默认为当前这张图。 */
+  const openDoc = () => {
+    if (target.kind === 'database') {
+      useDocExport.getState().open({ kind: 'database', profile: target.profile, schema })
+      return
+    }
+    const m = modelQ.data
+    if (!m) return
+    useDocExport.getState().open({
+      kind: 'model',
+      model: m.id,
+      path: m.path,
+      name: m.info.name,
+      description: m.info.description ?? null,
+      schemas: m.info.schemas.includes(schema) ? m.info.schemas : [...m.info.schemas, schema],
+      schema,
+      diagram: diagramName,
+    })
+  }
+
   const [search, setSearch] = useState('')
   const locate = (name: string) => {
     const n = flow.getNode(name)
@@ -391,8 +388,14 @@ function Canvas({ tab }: { tab: QueryTab }) {
               { key: 'png', label: t('er.export.png') },
               { key: 'svg:white', label: t('er.export.svgWhite') },
               { key: 'png:white', label: t('er.export.pngWhite') },
+              { type: 'divider' },
+              { key: 'doc', label: t('er.export.designDoc') },
             ],
             onClick: ({ key }) => {
+              if (key === 'doc') {
+                openDoc()
+                return
+              }
               const [f, w] = key.split(':')
               void exportImage(f as ImageFormat, w === 'white')
             },

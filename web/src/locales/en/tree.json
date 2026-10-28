@@ -44,7 +44,8 @@
     "importNew": "Import into New Table…",
     "sqlFile": "Run SQL File…",
     "exportData": "Export Data…",
-    "newTable": "New table"
+    "newTable": "New table",
+    "exportDoc": "Export Document…"
   },
   "duplicate": {
     "name": "{{name}} copy",

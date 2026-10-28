@@ -17,7 +17,8 @@
     "newTable": "新建表",
     "reload": "重新加载",
     "reveal": "在文件管理器中显示",
-    "close": "关闭模型"
+    "close": "关闭模型",
+    "exportDoc": "导出文档…"
   },
   "rename": {
     "title": "表 {{name}} 改名为"

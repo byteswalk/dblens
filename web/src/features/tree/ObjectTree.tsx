@@ -28,6 +28,7 @@ import { useQueryActions } from '../editor/actions'
 import { useTabs } from '../editor/tabs'
 import { useExportDialog } from '../export/dialog'
 import { useImportDialogs } from '../import/dialog'
+import { useDocExport } from '../document/dialog'
 import { useModelDialogs } from '../model/dialogs'
 import type { Api, Environment, Profile, RoutineInfo } from '../../shared/api'
 import DbIcon from '../../shared/DbIcon'
@@ -304,6 +305,7 @@ export default function ObjectTree() {
       { key: 'er', label: t('tree.menu.er') },
       { key: 'compare-model', label: t('tree.menu.compareModel') },
       { key: 'save-model', label: t('tree.menu.saveAsModel') },
+      { key: 'export-doc', label: t('tree.menu.exportDoc') },
       { type: 'divider' },
     ]
   }
@@ -355,6 +357,7 @@ export default function ObjectTree() {
       } else if (key === 'compare-model' && k.type === 's') {
         useTabs.getState().openCompare({ source: null, target: { kind: 'database', profile: k.profileId, schema: k.schema } })
       } else if (key === 'save-model' && k.type === 's') useModelDialogs.getState().openReverse({ profileId: k.profileId, schema: k.schema })
+      else if (key === 'export-doc' && k.type === 's') useDocExport.getState().open({ kind: 'database', profile: k.profileId, schema: k.schema })
       else if (key === 'import' && k.type === 'o') {
         useImportDialogs.getState().openImport({ profileId: k.profileId, schema: k.schema, table: k.name, create: false })
       } else if (key === 'import-new' && k.type === 's') {
