@@ -179,10 +179,15 @@ mod tests {
 
     #[test]
     fn every_label_is_used_and_exists() {
-        let sources = [TextFormat::Html.builtin(), TextFormat::Markdown.builtin()];
+        // 模板中的 'doc.…'，Rust 代码（测试之前的部分）中的 "doc.…"
+        let code = |s: &'static str| s.split("#[cfg(test)]").next().unwrap_or_default();
+        let sources =
+            [TextFormat::Html.builtin(), TextFormat::Markdown.builtin(), code(include_str!("docx.rs"))];
         let used: std::collections::BTreeSet<String> = sources
             .iter()
-            .flat_map(|s| s.match_indices("doc.").map(move |(i, _)| &s[i..]))
+            .flat_map(|s| {
+                s.match_indices("'doc.").chain(s.match_indices("\"doc.")).map(move |(i, _)| &s[i + 1..])
+            })
             .map(|s| {
                 s.chars()
                     .take_while(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '_')

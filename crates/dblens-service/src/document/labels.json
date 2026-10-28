@@ -262,5 +262,9 @@
   "doc.no": {
     "zh-CN": "否",
     "en": "No"
+  },
+  "doc.toc_hint": {
+    "zh-CN": "打开文档时按提示更新域，或右键这里选“更新域”，即可生成目录。",
+    "en": "Update fields when prompted on opening, or right-click here and choose Update Field, to build the table of contents."
   }
 }

@@ -34,6 +34,7 @@ encoding_rs.workspace = true
 encoding_rs_io.workspace = true
 keyring.workspace = true
 minijinja = { workspace = true, features = ["serde"] }
+quick-xml.workspace = true
 rusqlite.workspace = true
 rust_xlsxwriter.workspace = true
 serde.workspace = true
@@ -43,6 +44,7 @@ sqlparser.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+zip.workspace = true
 
 [dev-dependencies]
 csv.workspace = true

@@ -61,6 +61,7 @@
   "dm.no_diagnostics": {"zh-CN": "调用 DPI 失败，且无法读取错误信息", "en": "A DPI call failed and its error information could not be read"},
   "dm.nul_in_string": {"zh-CN": "字符串中不能包含 \\0 字符", "en": "Strings cannot contain the \\0 character"},
   "dml.no_insertable_columns": {"zh-CN": "没有可插入的列：%{table}", "en": "No insertable columns: %{table}"},
+  "document.bad_reference": {"zh-CN": "样式来源不是有效的 .docx 文件：%{error}", "en": "The style reference is not a valid .docx file: %{error}"},
   "document.template_error": {"zh-CN": "模板第 %{line} 行有错：%{error}", "en": "Template error at line %{line}: %{error}"},
   "document.write_failed": {"zh-CN": "写文档失败：%{error}", "en": "Failed to write the document: %{error}"},
   "driver.connect_timeout": {"zh-CN": "连接超时（%{seconds} 秒）", "en": "Connection timed out (%{seconds} s)"},

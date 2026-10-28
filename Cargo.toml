@@ -44,6 +44,7 @@ minijinja = "3.0.3"
 mysql_async = { version = "0.37.1", default-features = false, features = ["default-rustls"] }
 oracle = { version = "0.6.3", features = ["chrono"] }
 percent-encoding = "2.3.2"
+quick-xml = "0.42.0"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
 rusqlite = { version = "0.41.0", features = ["bundled"] }
 rust_xlsxwriter = { version = "0.101.0", default-features = false, features = ["constant_memory", "chrono"] }
@@ -73,6 +74,7 @@ tracing-subscriber = "0.3.23"
 url = "2.5.8"
 uuid = { version = "1.28.0", features = ["serde", "v4"] }
 webpki-roots = "1.0.11"
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2"] }
 
 # openGauss 的 SHA256 认证：替换为 vendor/ 中打了补丁的版本（见 vendor/PATCHES.md）
 [patch.crates-io]
