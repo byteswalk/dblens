@@ -791,6 +791,12 @@ body {
   position: relative;
   min-height: 0;
 }
+.er-empty {
+  position: absolute;
+  inset: 40% 0 auto;
+  z-index: 5;
+  pointer-events: none;
+}
 .er-table {
   background: var(--panel);
   border: 1px solid var(--border);

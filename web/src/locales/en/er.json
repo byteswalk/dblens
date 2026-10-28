@@ -60,5 +60,7 @@
     "title": "Discard unsaved layout changes in {{title}}?",
     "content": "Unsaved positions, display mode and topic diagram tables will be lost.",
     "ok": "Discard and Close"
-  }
+  },
+  "empty": "No tables in this schema",
+  "emptyDiagram": "No tables in this diagram yet. Add some from the toolbar."
 }

@@ -27,7 +27,7 @@ import {
   useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Alert, App, AutoComplete, Badge, Button, Dropdown, Form, Input, Modal, Popover, Segmented, Select, Spin } from 'antd'
+import { Alert, App, AutoComplete, Badge, Button, Dropdown, Empty, Form, Input, Modal, Popover, Segmented, Select, Spin } from 'antd'
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -209,12 +209,14 @@ function Canvas({ tab }: { tab: QueryTab }) {
   }, [isModel, modelId, data, dirty, display, tableList, positions, api, schema, diagramName, fingerprint, message, t, qc, dataQ, patch, tab.id])
 
   const reload = () => {
-    const go = () => {
+    const go = async () => {
       useErTabs.getState().clear(tab.id)
+      // 库：先让服务端的元数据缓存失效，否则读到的还是缓存中的表
+      if (target.kind === 'database') await api.refresh(target.profile, schema).catch(() => {})
       void dataQ.refetch()
     }
     if (dirty) modal.confirm({ title: t('er.reloadConfirm'), okType: 'danger', onOk: go })
-    else go()
+    else void go()
   }
 
 
@@ -412,6 +414,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
         )}
       </div>
       <div className="er-canvas grow">
+        {data && !data.tables.length && <Empty className="er-empty" description={t(tableList === 'all' ? 'er.empty' : 'er.emptyDiagram')} />}
         <ReactFlow
           nodes={nodes}
           edges={edges}
