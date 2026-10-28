@@ -62,6 +62,10 @@ pub struct ProfileInput {
     pub color: Option<String>,
     #[serde(default = "default_timeout")]
     pub connect_timeout_secs: u64,
+    /// 新建连接时选的产品（如人大金仓），只用于显示和默认值；连上后以识别出的变体为准。
+    /// 没有时按驱动显示。
+    #[serde(default)]
+    pub product: Option<Variant>,
 }
 
 fn default_timeout() -> u64 {
@@ -145,6 +149,9 @@ fn from_row(r: &Row) -> rusqlite::Result<Profile> {
     let options: String = r.get(7)?;
     let environment: String = r.get(8)?;
     let variant: Option<String> = r.get(11)?;
+    let product: Option<String> = r.get(12)?;
+    let parse =
+        |code: Option<String>| code.and_then(|v| serde_json::from_value(serde_json::Value::String(v)).ok());
     Ok(Profile {
         id: r.get(0)?,
         input: ProfileInput {
@@ -158,8 +165,9 @@ fn from_row(r: &Row) -> rusqlite::Result<Profile> {
             environment: Environment::parse(&environment),
             color: r.get(9)?,
             connect_timeout_secs: u64::try_from(r.get::<_, i64>(10)?).unwrap_or(0),
+            product: parse(product),
         },
-        variant: variant.and_then(|v| serde_json::from_value(serde_json::Value::String(v)).ok()),
+        variant: parse(variant),
     })
 }
 
@@ -170,7 +178,8 @@ fn now() -> String {
 impl Store {
     pub fn list_profiles(&self) -> Result<Vec<Profile>> {
         self.with(|c| {
-            let mut st = c.prepare(&format!("SELECT {COLUMNS}, variant FROM profiles ORDER BY name, id"))?;
+            let mut st =
+                c.prepare(&format!("SELECT {COLUMNS}, variant, product FROM profiles ORDER BY name, id"))?;
             st.query_map([], from_row)?.collect()
         })
     }
@@ -178,7 +187,7 @@ impl Store {
     pub fn profile(&self, id: &str) -> Result<Profile> {
         self.with(|c| {
             c.query_row(
-                &format!("SELECT {COLUMNS}, variant FROM profiles WHERE id = ?1"),
+                &format!("SELECT {COLUMNS}, variant, product FROM profiles WHERE id = ?1"),
                 params![id],
                 from_row,
             )
@@ -196,8 +205,8 @@ impl Store {
         self.with(|c| {
             c.execute(
                 &format!(
-                    "INSERT INTO profiles ({COLUMNS}, created_at, updated_at)
-                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)"
+                    "INSERT INTO profiles ({COLUMNS}, product, created_at, updated_at)
+                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?13, ?12, ?12)"
                 ),
                 params![
                     p.id,
@@ -211,7 +220,8 @@ impl Store {
                     i.environment.as_str(),
                     i.color,
                     i.connect_timeout_secs as i64,
-                    ts
+                    ts,
+                    i.product.map(variant_code)
                 ],
             )
         })?;
@@ -227,6 +237,7 @@ impl Store {
                 // SET 中引用的列是修改前的值：驱动、主机、端口都没变才保留识别出的变体
                 "UPDATE profiles SET name = ?2, driver = ?3, host = ?4, port = ?5, user = ?6, database = ?7,
                         options = ?8, environment = ?9, color = ?10, connect_timeout_secs = ?11, updated_at = ?12,
+                        product = ?13,
                         variant = CASE WHEN driver = ?3 AND host = ?4 AND port = ?5 THEN variant END
                  WHERE id = ?1",
                 params![
@@ -241,7 +252,8 @@ impl Store {
                     i.environment.as_str(),
                     i.color,
                     i.connect_timeout_secs as i64,
-                    now()
+                    now(),
+                    i.product.map(variant_code)
                 ],
             )
         })?;
@@ -289,6 +301,7 @@ pub(crate) mod tests {
             environment: Environment::Prod,
             color: Some("#d4380d".into()),
             connect_timeout_secs: 5,
+            product: None,
         }
     }
 
@@ -313,6 +326,21 @@ pub(crate) mod tests {
         assert!(matches!(s.profile(&a.id), Err(Error::NotFound { .. })));
         assert!(matches!(s.delete_profile(&a.id), Err(Error::NotFound { .. })));
         assert!(matches!(s.update_profile(&a.id, input("x")), Err(Error::NotFound { .. })));
+    }
+
+    #[test]
+    fn product_is_stored_and_updated() {
+        let s = Store::open_in_memory().unwrap();
+        let p = s.create_profile(ProfileInput { product: Some(Variant::OpenGauss), ..input("p") }).unwrap();
+        assert_eq!(s.profile(&p.id).unwrap().input.product, Some(Variant::OpenGauss));
+        let q =
+            s.update_profile(&p.id, ProfileInput { product: Some(Variant::Kingbase), ..input("p") }).unwrap();
+        assert_eq!(q.input.product, Some(Variant::Kingbase));
+        assert_eq!(s.update_profile(&p.id, input("p")).unwrap().input.product, None);
+        // 请求中没有 product 时按没有处理
+        let json =
+            serde_json::json!({"name": "x", "driver": "postgres", "host": "h", "port": 5432, "user": "u"});
+        assert_eq!(serde_json::from_value::<ProfileInput>(json).unwrap().product, None);
     }
 
     #[test]

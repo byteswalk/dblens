@@ -66,6 +66,7 @@ async fn setup(env: &str) -> Option<Live> {
         environment: Environment::Test,
         color: None,
         connect_timeout_secs: 10,
+        product: None,
     };
     let summary = service.test_connection(input.clone(), &params.password).await.unwrap();
     eprintln!("{env}：{} {:?} {:?}", summary.variant_name.current(), summary.version_code, summary.version);

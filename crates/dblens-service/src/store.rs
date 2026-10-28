@@ -73,6 +73,8 @@ const MIGRATIONS: &[&str] = &[
         updated_at INTEGER NOT NULL
     );
     CREATE INDEX favorites_parent ON favorites(parent_id, position);",
+    // 版本 4：新建连接时选的产品（国产库第一批），没有时按驱动显示
+    "ALTER TABLE profiles ADD COLUMN product TEXT;",
 ];
 
 pub(crate) fn db_err(e: rusqlite::Error) -> Error {
