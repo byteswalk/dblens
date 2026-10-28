@@ -375,6 +375,7 @@ mod tests {
                 collation: Some("utf8mb4_0900_ai_ci".into()),
                 tablespace: None,
                 row_count: Some(10),
+                clustered: None,
             },
             triggers: vec![trigger.into()],
         }

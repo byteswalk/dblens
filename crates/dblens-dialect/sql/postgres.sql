@@ -100,25 +100,25 @@ GROUP BY p.proname, 2
 ORDER BY p.proname, 2
 
 -- [columns]
+-- No comparisons with '' anywhere: in the Oracle compatibility mode of KingbaseES / openGauss '' is NULL.
 SELECT c.relname AS table_name,
        a.attname AS name,
        (ROW_NUMBER() OVER (PARTITION BY c.oid ORDER BY a.attnum))::int AS ordinal,
        pg_catalog.format_type(a.atttypid, a.atttypmod) AS type_text,
        NOT a.attnotnull AS nullable,
 {% if version >= 120000 %}
-       CASE WHEN a.attgenerated = '' THEN pg_catalog.pg_get_expr(d.adbin, d.adrelid) END AS default_value,
+       CASE WHEN a.attgenerated <> 's' THEN pg_catalog.pg_get_expr(d.adbin, d.adrelid) END AS default_value,
 {% else %}
        pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS default_value,
 {% endif %}
        pg_catalog.col_description(c.oid, a.attnum) AS comment,
-       (a.attidentity <> ''
-        OR (d.adbin IS NOT NULL AND pg_catalog.pg_get_expr(d.adbin, d.adrelid) LIKE 'nextval(%'
+       ({% if version >= 100000 %}a.attidentity IN ('a', 'd') OR {% endif %}(d.adbin IS NOT NULL AND pg_catalog.pg_get_expr(d.adbin, d.adrelid) LIKE 'nextval(%'
             AND EXISTS (SELECT 1 FROM pg_catalog.pg_depend dp
                         WHERE dp.refclassid = 'pg_catalog.pg_class'::regclass AND dp.refobjid = c.oid
                           AND dp.refobjsubid = a.attnum AND dp.deptype = 'a'
                           AND dp.classid = 'pg_catalog.pg_class'::regclass))) AS auto_increment,
 {% if version >= 120000 %}
-       CASE WHEN a.attgenerated <> '' THEN pg_catalog.pg_get_expr(d.adbin, d.adrelid) END AS generated
+       CASE WHEN a.attgenerated = 's' THEN pg_catalog.pg_get_expr(d.adbin, d.adrelid) END AS generated
 {% else %}
        NULL::text AS generated
 {% endif %}

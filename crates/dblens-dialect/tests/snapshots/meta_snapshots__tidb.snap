@@ -1,0 +1,231 @@
+---
+source: crates/dblens-dialect/tests/meta_snapshots.rs
+expression: out
+---
+-- [schemas] []
+SELECT s.SCHEMA_NAME AS name,
+       CASE WHEN s.SCHEMA_NAME IN ('mysql', 'sys', 'information_schema', 'performance_schema') THEN 1 ELSE 0 END AS is_system
+FROM information_schema.SCHEMATA s
+ORDER BY s.SCHEMA_NAME
+
+-- [tables] [String("HR"), String("EMP"), String("%员工%"), String("%员工%")]
+-- Partition from a join: a correlated subquery over information_schema returns NULL for every row once
+-- more than one table matches (TiDB 8.5).
+SELECT t.TABLE_NAME AS name,
+       NULLIF(t.TABLE_COMMENT, '') AS comment,
+       CASE WHEN p.PARTITION_METHOD IS NOT NULL
+            THEN CONCAT(p.PARTITION_METHOD, ' (', COALESCE(p.PARTITION_EXPRESSION, ''), ')')
+       END AS `partition`
+FROM information_schema.TABLES t
+LEFT JOIN information_schema.PARTITIONS p
+  ON p.TABLE_SCHEMA = t.TABLE_SCHEMA AND p.TABLE_NAME = t.TABLE_NAME AND p.PARTITION_ORDINAL_POSITION = 1
+WHERE t.TABLE_SCHEMA = ?
+  AND t.TABLE_TYPE = 'BASE TABLE'
+  AND t.TABLE_NAME = ?
+  AND (UPPER(t.TABLE_NAME) LIKE UPPER(?) ESCAPE '!'
+       OR UPPER(COALESCE(t.TABLE_COMMENT, '')) LIKE UPPER(?) ESCAPE '!')
+ORDER BY t.TABLE_NAME
+
+-- [views] [String("HR"), String("%员工%")]
+SELECT v.TABLE_NAME AS name, NULL AS comment
+FROM information_schema.VIEWS v
+WHERE v.TABLE_SCHEMA = ?
+  AND UPPER(v.TABLE_NAME) LIKE UPPER(?) ESCAPE '!'
+ORDER BY v.TABLE_NAME
+
+-- [sequences] [String("HR"), String("%员工%")]
+-- TiDB supports CREATE SEQUENCE (MySQL has no sequences); CACHE is 1/0 and the cache size is CACHE_VALUE.
+SELECT s.SEQUENCE_NAME AS name,
+       s.START AS start_value,
+       s.INCREMENT AS increment,
+       s.MIN_VALUE AS min_value,
+       s.MAX_VALUE AS max_value,
+       s.CYCLE AS cycle,
+       CASE WHEN s.CACHE = 1 THEN s.CACHE_VALUE END AS cache
+FROM information_schema.SEQUENCES s
+WHERE s.SEQUENCE_SCHEMA = ?
+  AND UPPER(s.SEQUENCE_NAME) LIKE UPPER(?) ESCAPE '!'
+ORDER BY s.SEQUENCE_NAME
+
+-- [routines] [String("HR"), String("%员工%"), String("%员工%")]
+SELECT r.ROUTINE_NAME AS name, r.ROUTINE_TYPE AS kind, NULLIF(r.ROUTINE_COMMENT, '') AS comment
+FROM information_schema.ROUTINES r
+WHERE r.ROUTINE_SCHEMA = ?
+  AND r.ROUTINE_TYPE IN ('PROCEDURE', 'FUNCTION')
+  AND (UPPER(r.ROUTINE_NAME) LIKE UPPER(?) ESCAPE '!'
+       OR UPPER(COALESCE(r.ROUTINE_COMMENT, '')) LIKE UPPER(?) ESCAPE '!')
+ORDER BY r.ROUTINE_NAME, r.ROUTINE_TYPE
+
+-- [columns] [String("HR"), String("EMP")]
+-- As mysql.sql, plus AUTO_RANDOM: it is not in EXTRA; the table's TIDB_ROW_ID_SHARDING_INFO is
+-- PK_AUTO_RANDOM_BITS=n and the column is its (single-column, clustered) primary key.
+SELECT c.TABLE_NAME AS table_name,
+       c.COLUMN_NAME AS name,
+       c.ORDINAL_POSITION AS ordinal,
+       c.COLUMN_TYPE AS type_text,
+       CASE WHEN c.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END AS nullable,
+       CASE
+         WHEN c.COLUMN_DEFAULT IS NULL THEN NULL
+         WHEN c.GENERATION_EXPRESSION <> '' THEN NULL
+         WHEN c.EXTRA LIKE '%DEFAULT\_GENERATED%' THEN c.COLUMN_DEFAULT
+         WHEN c.DATA_TYPE IN ('tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'decimal', 'float', 'double', 'year', 'bit') THEN c.COLUMN_DEFAULT
+         ELSE CONCAT('''', REPLACE(REPLACE(c.COLUMN_DEFAULT, '\\', '\\\\'), '''', ''''''), '''')
+       END AS default_value,
+       NULLIF(c.COLUMN_COMMENT, '') AS comment,
+       CASE WHEN c.EXTRA LIKE '%auto\_increment%'
+              OR (c.COLUMN_KEY = 'PRI' AND t.TIDB_ROW_ID_SHARDING_INFO LIKE 'PK!_AUTO!_RANDOM!_BITS%' ESCAPE '!')
+            THEN 1 ELSE 0 END AS auto_increment,
+       NULLIF(c.GENERATION_EXPRESSION, '') AS `generated`
+FROM information_schema.COLUMNS c
+JOIN information_schema.TABLES t ON t.TABLE_SCHEMA = c.TABLE_SCHEMA AND t.TABLE_NAME = c.TABLE_NAME
+WHERE c.TABLE_SCHEMA = ?
+  AND c.TABLE_NAME = ?
+ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION
+
+-- [keys] [String("HR"), String("EMP")]
+SELECT tc.TABLE_NAME AS table_name,
+       tc.CONSTRAINT_NAME AS constraint_name,
+       CASE tc.CONSTRAINT_TYPE WHEN 'PRIMARY KEY' THEN 'P' WHEN 'UNIQUE' THEN 'U' ELSE 'F' END AS constraint_type,
+       k.COLUMN_NAME AS column_name,
+       k.ORDINAL_POSITION AS position,
+       k.REFERENCED_TABLE_SCHEMA AS ref_schema,
+       k.REFERENCED_TABLE_NAME AS ref_table,
+       k.REFERENCED_COLUMN_NAME AS ref_column,
+       rc.DELETE_RULE AS on_delete,
+       rc.UPDATE_RULE AS on_update
+FROM information_schema.TABLE_CONSTRAINTS tc
+JOIN information_schema.KEY_COLUMN_USAGE k
+  ON k.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+ AND k.TABLE_NAME = tc.TABLE_NAME
+ AND k.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+  ON tc.CONSTRAINT_TYPE = 'FOREIGN KEY'
+ AND rc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+ AND rc.TABLE_NAME = tc.TABLE_NAME
+ AND rc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+WHERE tc.TABLE_SCHEMA = ?
+  AND tc.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')
+  AND (tc.CONSTRAINT_TYPE <> 'UNIQUE'
+       OR NOT EXISTS (SELECT 1 FROM information_schema.STATISTICS s2
+                       WHERE s2.TABLE_SCHEMA = tc.TABLE_SCHEMA AND s2.TABLE_NAME = tc.TABLE_NAME
+                         AND s2.INDEX_NAME = tc.CONSTRAINT_NAME AND s2.EXPRESSION IS NOT NULL))
+  AND tc.TABLE_NAME = ?
+ORDER BY tc.TABLE_NAME, tc.CONSTRAINT_NAME, k.ORDINAL_POSITION
+
+-- [checks] [String("HR"), String("EMP")]
+-- CHECK constraints are kept only while tidb_enable_check_constraint is ON (7.2+; with it OFF they are
+-- parsed and dropped). They are not in TABLE_CONSTRAINTS; TIDB_CHECK_CONSTRAINTS carries the table name.
+SELECT c.TABLE_NAME AS table_name,
+       c.CONSTRAINT_NAME AS constraint_name,
+       c.CHECK_CLAUSE AS expression
+FROM information_schema.TIDB_CHECK_CONSTRAINTS c
+WHERE c.CONSTRAINT_SCHEMA = ?
+  AND c.TABLE_NAME = ?
+ORDER BY c.TABLE_NAME, c.CONSTRAINT_NAME
+
+-- [indexes] [String("HR"), String("EMP")]
+-- Non-unique indexes only: every unique index is already a UNIQUE constraint in `keys`.
+-- Exception (8.0.13+): a unique index containing a functional part has no KEY_COLUMN_USAGE rows,
+-- so it would vanish from `keys`; it is kept here instead.
+SELECT s.TABLE_NAME AS table_name,
+       s.INDEX_NAME AS index_name,
+       CASE WHEN s.NON_UNIQUE = 0 THEN 1 ELSE 0 END AS is_unique,
+       s.INDEX_TYPE AS method,
+       COALESCE(s.COLUMN_NAME, s.EXPRESSION) AS column_expr,
+       s.SEQ_IN_INDEX AS position,
+       CASE WHEN s.COLLATION = 'D' THEN 1 ELSE 0 END AS descending
+FROM information_schema.STATISTICS s
+WHERE s.TABLE_SCHEMA = ?
+  AND (s.NON_UNIQUE = 1
+       OR EXISTS (SELECT 1 FROM information_schema.STATISTICS s2
+                   WHERE s2.TABLE_SCHEMA = s.TABLE_SCHEMA AND s2.TABLE_NAME = s.TABLE_NAME
+                     AND s2.INDEX_NAME = s.INDEX_NAME AND s2.EXPRESSION IS NOT NULL))
+  AND s.TABLE_NAME = ?
+ORDER BY s.TABLE_NAME, s.INDEX_NAME, s.SEQ_IN_INDEX
+
+-- [triggers] [String("HR"), String("EMP")]
+-- definition: a CREATE TRIGGER statement rebuilt from TRIGGERS (FOLLOWS/PRECEDES order and DEFINER are not included).
+-- MySQL allows exactly one event per trigger, so events is that single event.
+SELECT t.EVENT_OBJECT_TABLE AS table_name,
+       t.TRIGGER_NAME AS name,
+       t.ACTION_TIMING AS timing,
+       t.EVENT_MANIPULATION AS events,
+       CONCAT('CREATE TRIGGER `', REPLACE(t.TRIGGER_NAME, '`', '``'), '` ', t.ACTION_TIMING, ' ', t.EVENT_MANIPULATION,
+              ' ON `', REPLACE(t.EVENT_OBJECT_TABLE, '`', '``'), '` FOR EACH ROW ', t.ACTION_STATEMENT) AS definition
+FROM information_schema.TRIGGERS t
+WHERE t.EVENT_OBJECT_SCHEMA = ?
+  AND t.EVENT_OBJECT_TABLE = ?
+ORDER BY t.EVENT_OBJECT_TABLE, t.TRIGGER_NAME
+
+-- [view_definition] [String("HR"), String("EMP")]
+SELECT v.VIEW_DEFINITION AS definition
+FROM information_schema.VIEWS v
+WHERE v.TABLE_SCHEMA = ?
+  AND v.TABLE_NAME = ?
+
+-- [routine_source] [String("HR"), String("EMP"), String("FUNCTION")]
+-- SHOW CREATE cannot take bound params, so the CREATE statement is rebuilt from ROUTINES + PARAMETERS
+-- (params, RETURNS, DETERMINISTIC, SQL SECURITY, COMMENT, body). One row, line = 1. Character-set clauses are not reproduced.
+SELECT 1 AS line,
+       CONCAT('CREATE ', r.ROUTINE_TYPE, ' `', REPLACE(r.ROUTINE_NAME, '`', '``'), '`(',
+              COALESCE((SELECT GROUP_CONCAT(
+                                 CONCAT(CASE WHEN r.ROUTINE_TYPE = 'PROCEDURE' THEN CONCAT(COALESCE(p.PARAMETER_MODE, 'IN'), ' ') ELSE '' END,
+                                        '`', REPLACE(p.PARAMETER_NAME, '`', '``'), '` ', p.DTD_IDENTIFIER)
+                                 ORDER BY p.ORDINAL_POSITION SEPARATOR ', ')
+                          FROM information_schema.PARAMETERS p
+                         WHERE p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA AND p.SPECIFIC_NAME = r.SPECIFIC_NAME
+                           AND p.ROUTINE_TYPE = r.ROUTINE_TYPE AND p.ORDINAL_POSITION > 0), ''),
+              ')',
+              CASE WHEN r.ROUTINE_TYPE = 'FUNCTION' THEN CONCAT(' RETURNS ', r.DTD_IDENTIFIER) ELSE '' END,
+              CHAR(10), '    ', r.SQL_DATA_ACCESS,
+              CASE WHEN r.IS_DETERMINISTIC = 'YES' THEN ' DETERMINISTIC' ELSE '' END,
+              ' SQL SECURITY ', r.SECURITY_TYPE,
+              CASE WHEN r.ROUTINE_COMMENT <> '' THEN CONCAT(' COMMENT ''', REPLACE(REPLACE(r.ROUTINE_COMMENT, '\\', '\\\\'), '''', ''''''), '''') ELSE '' END,
+              CHAR(10), COALESCE(r.ROUTINE_DEFINITION, '')) AS text
+FROM information_schema.ROUTINES r
+WHERE r.ROUTINE_SCHEMA = ?
+  AND r.ROUTINE_NAME = ?
+  AND r.ROUTINE_TYPE = ?
+
+-- [reserved_words] []
+SELECT k.WORD AS word
+FROM information_schema.KEYWORDS k
+WHERE k.RESERVED = 1
+ORDER BY k.WORD
+
+-- [variant_probe] []
+SHOW VARIABLES LIKE 'polardb_version'
+
+-- [referencing_keys] [String("HR"), String("EMP")]
+-- Table designer rebuild: foreign keys of OTHER tables that reference this table (dropped and recreated around the swap).
+SELECT k.TABLE_SCHEMA AS table_schema,
+       k.TABLE_NAME AS table_name,
+       k.CONSTRAINT_NAME AS constraint_name,
+       k.COLUMN_NAME AS column_name,
+       k.ORDINAL_POSITION AS position,
+       k.REFERENCED_COLUMN_NAME AS ref_column,
+       rc.DELETE_RULE AS on_delete,
+       rc.UPDATE_RULE AS on_update
+FROM information_schema.KEY_COLUMN_USAGE k
+JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+  ON rc.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
+ AND rc.TABLE_NAME = k.TABLE_NAME
+ AND rc.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+WHERE k.REFERENCED_TABLE_SCHEMA = ?
+  AND k.REFERENCED_TABLE_NAME = ?
+  AND NOT (k.TABLE_SCHEMA = k.REFERENCED_TABLE_SCHEMA AND k.TABLE_NAME = k.REFERENCED_TABLE_NAME)
+ORDER BY k.TABLE_SCHEMA, k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION
+
+-- [table_storage] [String("HR"), String("EMP")]
+-- As mysql.sql, plus whether the primary key is clustered (TIDB_PK_TYPE): a clustered primary key cannot
+-- be dropped or changed in place, the table designer rebuilds the table instead.
+SELECT t.ENGINE AS engine,
+       (SELECT MAX(c.CHARACTER_SET_NAME) FROM information_schema.COLLATION_CHARACTER_SET_APPLICABILITY c
+         WHERE c.COLLATION_NAME = t.TABLE_COLLATION) AS charset,
+       t.TABLE_COLLATION AS collation,
+       NULL AS tablespace,
+       t.TABLE_ROWS AS row_count,
+       CASE WHEN t.TIDB_PK_TYPE = 'CLUSTERED' THEN 1 ELSE 0 END AS clustered
+FROM information_schema.TABLES t
+WHERE t.TABLE_SCHEMA = ?
+  AND t.TABLE_NAME = ?

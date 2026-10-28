@@ -21,6 +21,8 @@ const ORACLE: &str = include_str!("../../sql/oracle.sql");
 const DAMENG: &str = include_str!("../../sql/dameng.sql");
 const KINGBASE: &str = include_str!("../../sql/kingbase.sql");
 const OPENGAUSS: &str = include_str!("../../sql/opengauss.sql");
+const TIDB: &str = include_str!("../../sql/tidb.sql");
+const OCEANBASE: &str = include_str!("../../sql/oceanbase.sql");
 
 pub(crate) const ALL_VARIANTS: [Variant; 12] = [
     Variant::MySql,
@@ -71,6 +73,8 @@ fn base_file(family: Family) -> &'static str {
 fn override_file(variant: Variant) -> Option<&'static str> {
     match variant {
         Variant::MariaDb => Some(MARIADB),
+        Variant::TiDb => Some(TIDB),
+        Variant::OceanBase => Some(OCEANBASE),
         Variant::Kingbase => Some(KINGBASE),
         Variant::OpenGauss => Some(OPENGAUSS),
         _ => None,

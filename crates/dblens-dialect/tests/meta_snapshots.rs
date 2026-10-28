@@ -2,10 +2,20 @@
 //! 改动模板时在快照差异里审查生成的 SQL。新增或改动快照后用 `INSTA_UPDATE=always cargo test` 重新生成并审查。
 
 use dblens_dialect::meta::{MetaArgs, MetaKey};
-use dblens_dialect::{Dialect, Variant};
+use dblens_dialect::{Dialect, Family, Variant};
 
-const VARIANTS: [Variant; 5] =
-    [Variant::MySql, Variant::MariaDb, Variant::Postgres, Variant::Oracle, Variant::Dameng];
+/// 有自己的模板覆盖文件的变体（PolarDB、GaussDB、HighGo 沿用家族模板）。
+const VARIANTS: [Variant; 9] = [
+    Variant::MySql,
+    Variant::MariaDb,
+    Variant::TiDb,
+    Variant::OceanBase,
+    Variant::Postgres,
+    Variant::Kingbase,
+    Variant::OpenGauss,
+    Variant::Oracle,
+    Variant::Dameng,
+];
 
 #[test]
 fn rendered_metadata_queries() {
@@ -38,9 +48,10 @@ fn every_family_covers_the_common_keys() {
                 | MetaKey::Synonyms
                 | MetaKey::Sequences
                 | MetaKey::VariantProbe => true,
-                MetaKey::DependentViews | MetaKey::Grants => matches!(v, Variant::MySql | Variant::MariaDb),
+                MetaKey::DependentViews | MetaKey::Grants => v.family() == Family::MySql,
                 MetaKey::TriggerDdl => v != Variant::Oracle,
-                MetaKey::ReservedWords => v == Variant::MariaDb,
+                // OceanBase 没有 information_schema.KEYWORDS
+                MetaKey::ReservedWords => matches!(v, Variant::MariaDb | Variant::OceanBase),
                 _ => false,
             };
             assert!(optional || d.has_meta(key), "{v:?} 缺少 {key:?} 模板");
@@ -61,6 +72,8 @@ fn legacy_version_branches_render() {
     for (v, old) in [
         (Variant::MySql, 50744),
         (Variant::Postgres, 100000),
+        (Variant::Kingbase, 120100),
+        (Variant::OpenGauss, 90204),
         (Variant::Oracle, 110204),
         (Variant::Dameng, 80000),
     ] {

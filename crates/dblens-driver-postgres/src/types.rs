@@ -120,7 +120,8 @@ impl<'a> FromSql<'a> for RawValue<'a> {
 
 /// 兼容库自定义的类型对应的标准类型：域类型取基础类型（人大金仓 Oracle 模式的 `date` 是 timestamp 上的域，
 /// `blob`、`clob` 也是域）；openGauss 的 `clob`、`nvarchar2` 等是独立的类型，二进制格式与对应的标准类型相同。
-/// `int1`、`tinyint` 没有对应的标准类型，原样返回，由 `decode_as` 单独处理。
+/// `int1`、`tinyint`、`int16`（16 字节整数，openGauss 的序列参数用它）没有对应的标准类型，原样返回，
+/// 由 `decode_as` 单独处理。
 fn standard_type(ty: &Type) -> Option<Type> {
     if let Kind::Domain(base) = ty.kind() {
         return Some(standard_type(base).unwrap_or_else(|| base.clone()));
@@ -132,7 +133,7 @@ fn standard_type(ty: &Type) -> Option<Type> {
         "smalldatetime" => Some(Type::TIMESTAMP),
         "binary_double" => Some(Type::FLOAT8),
         "binary_float" => Some(Type::FLOAT4),
-        "int1" | "tinyint" => Some(ty.clone()),
+        "int1" | "tinyint" | "int16" => Some(ty.clone()),
         _ => None,
     }
 }
@@ -161,6 +162,13 @@ fn decode_as(ty: &Type, raw: &[u8]) -> std::result::Result<Value, BoxError> {
         // openGauss 的 int1 是 0–255，人大金仓的 tinyint 是 -128–127，都是 1 个字节
         _ if raw.len() == 1 && ty.name() == "int1" => Value::Int(raw[0].into()),
         _ if raw.len() == 1 && ty.name() == "tinyint" => Value::Int((raw[0] as i8).into()),
+        _ if ty.name() == "int16" => match <[u8; 16]>::try_from(raw) {
+            Ok(b) => match i64::try_from(i128::from_be_bytes(b)) {
+                Ok(v) => Value::Int(v),
+                Err(_) => Value::Decimal(i128::from_be_bytes(b).to_string()),
+            },
+            Err(_) => Value::Other { type_name: ty.name().to_string(), text: other_text(raw) },
+        },
         _ => Value::Other { type_name: ty.name().to_string(), text: other_text(raw) },
     })
 }

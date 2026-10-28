@@ -354,6 +354,8 @@ pub struct TableStorage {
     pub collation: Option<String>,
     pub tablespace: Option<String>,
     pub row_count: Option<i64>,
+    /// 主键是否聚簇（只有 TiDB 报告）：聚簇主键不能直接删除或更换，表设计器改为重建。
+    pub clustered: Option<bool>,
 }
 
 /// `referencing_keys` 的结果：`ref_schema` / `ref_table` 是被引用的这张表。
@@ -434,6 +436,7 @@ pub fn table_storage(rows: &MetaRows) -> Result<TableStorage> {
             collation: r.text("collation"),
             tablespace: r.text("tablespace"),
             row_count: r.int("row_count").filter(|n| *n >= 0),
+            clustered: r.columns().iter().any(|c| c == "clustered").then(|| r.flag("clustered")),
         })
         .unwrap_or_default())
 }

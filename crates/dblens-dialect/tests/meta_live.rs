@@ -1,7 +1,10 @@
 //! 元数据查询的实库测试。设置对应的环境变量时运行，否则直接通过（与驱动一致性测试相同的约定）：
-//! DBLENS_TEST_MYSQL_URL、DBLENS_TEST_MARIADB_URL、DBLENS_TEST_PG_URL、DBLENS_TEST_ORACLE_URL、DBLENS_TEST_DM_URL。
+//! DBLENS_TEST_MYSQL_URL、DBLENS_TEST_MARIADB_URL、DBLENS_TEST_PG_URL、DBLENS_TEST_ORACLE_URL、DBLENS_TEST_DM_URL；
+//! 国产库第一批：DBLENS_TEST_TIDB_URL、DBLENS_TEST_OCEANBASE_URL、DBLENS_TEST_OPENGAUSS_URL、
+//! DBLENS_TEST_OPENGAUSS_A_URL、DBLENS_TEST_KINGBASE_URL、DBLENS_TEST_KINGBASE_PG_URL。
 //!
 //! 每个家族先执行 `tests/fixtures/<家族>.sql` 建测试对象，再用全部元数据查询读回来逐项核对。
+//! 兼容库沿用所属家族的脚本，跳过不支持的段、替换写法不同的段（`run_script_with`）。
 
 use std::time::Instant;
 
@@ -57,17 +60,25 @@ impl Live {
 
     /// 按 `-- @@ 标签` 分段逐条执行建测试对象的脚本。
     async fn run_script(&mut self, text: &str) {
-        let mut sections: Vec<String> = Vec::new();
+        self.run_script_with(text, &[], &[]).await;
+    }
+
+    /// 同 `run_script`，但跳过 `skip` 中的段，`replace` 中的段改为执行给出的语句。
+    async fn run_script_with(&mut self, text: &str, skip: &[&str], replace: &[(&str, &str)]) {
+        let mut sections: Vec<(String, String)> = Vec::new();
         for line in text.lines() {
-            if line.starts_with("-- @@") {
-                sections.push(String::new());
-            } else if let Some(last) = sections.last_mut() {
+            if let Some(label) = line.strip_prefix("-- @@") {
+                sections.push((label.trim().to_string(), String::new()));
+            } else if let Some((_, last)) = sections.last_mut() {
                 last.push_str(line);
                 last.push('\n');
             }
         }
-        for sql in sections {
-            let sql = sql.trim();
+        for (label, sql) in sections {
+            if skip.contains(&label.as_str()) {
+                continue;
+            }
+            let sql = replace.iter().find(|(l, _)| *l == label).map_or(sql.trim(), |(_, r)| r.trim());
             if sql.is_empty() {
                 continue;
             }
@@ -126,13 +137,26 @@ fn has(text: &str, needle: &str) -> bool {
 }
 
 /// 测试对象的命名：MySQL/PG 用小写原名；Oracle/达梦用大写并加 `META_` 前缀（列名只转大写）。
+/// `triggers`、`routines` 为 false 时该库没有这类对象（TiDB），不检查；`descending` 为 false 时
+/// 该库建索引时忽略 DESC（TiDB、OceanBase）。
 #[derive(Clone, Copy)]
 struct Fx {
     schema: &'static str,
     upper: bool,
+    triggers: bool,
+    routines: bool,
+    descending: bool,
 }
 
 impl Fx {
+    fn lower(schema: &'static str) -> Fx {
+        Fx { schema, upper: false, triggers: true, routines: true, descending: true }
+    }
+
+    fn upper(schema: &'static str) -> Fx {
+        Fx { schema, upper: true, triggers: true, routines: true, descending: true }
+    }
+
     fn obj(&self, name: &str) -> String {
         if self.upper { format!("META_{}", name.to_ascii_uppercase()) } else { name.to_string() }
     }
@@ -190,16 +214,19 @@ async fn check_common(live: &mut Live, fx: Fx) -> Vec<Table> {
     assert!(emp.checks.iter().any(|c| has(&c.expression, "salary")), "{:?}", emp.checks);
     let created =
         emp.indexes.iter().find(|i| i.columns[0].name == fx.col("created")).expect("created 上的索引");
-    assert!(created.columns[0].descending);
-    let trg = emp.triggers.iter().find(|t| t.timing.as_deref() == Some("BEFORE")).expect("BEFORE 触发器");
-    assert!(trg.events.contains(&"INSERT".to_string()), "{trg:?}");
+    assert_eq!(created.columns[0].descending, fx.descending);
+    if fx.triggers {
+        let trg = emp.triggers.iter().find(|t| t.timing.as_deref() == Some("BEFORE")).expect("BEFORE 触发器");
+        assert!(trg.events.contains(&"INSERT".to_string()), "{trg:?}");
+    }
 
     // 单表明细与整个 schema 中的同一张表一致
     let one = live.tables(s, Some(&emp_name)).await;
     assert_eq!(one.len(), 1);
     assert_eq!(&one[0], emp);
 
-    let mixed = all.iter().find(|t| t.name.ends_with("Mixed Case")).expect("表 Mixed Case");
+    // OceanBase 默认 lower_case_table_names = 1，表名存成小写
+    let mixed = all.iter().find(|t| has(&t.name, "Mixed Case")).expect("表 Mixed Case");
     assert!(live.d.qualified(Some(s), &mixed.name).ends_with(&live.d.quote_ident(&mixed.name)));
     assert!(mixed.columns.iter().any(|c| c.name == "数洞"));
     assert!(mixed.columns.iter().any(|c| c.name == "select") && mixed.primary_key.is_some());
@@ -216,20 +243,22 @@ async fn check_common(live: &mut Live, fx: Fx) -> Vec<Table> {
         .unwrap();
     assert!(has(&text, "dept"), "{text}");
 
-    let routines = meta::routines(&live.rows(MetaKey::Routines, &args(s)).await).unwrap();
-    assert!(
-        routines.iter().any(|r| r.name == fx.obj("p_meta") && r.kind == RoutineKind::Procedure),
-        "{routines:?}"
-    );
-    assert!(
-        routines.iter().any(|r| r.name == fx.obj("f_meta") && r.kind == RoutineKind::Function),
-        "{routines:?}"
-    );
-    let src = MetaArgs { name: Some(fx.obj("f_meta")), kind: Some("FUNCTION".into()), ..args(s) };
-    let text = meta::source_text(MetaKey::RoutineSource, &live.rows(MetaKey::RoutineSource, &src).await)
-        .unwrap()
-        .unwrap();
-    assert!(has(&text, "function"), "{text}");
+    if fx.routines {
+        let routines = meta::routines(&live.rows(MetaKey::Routines, &args(s)).await).unwrap();
+        assert!(
+            routines.iter().any(|r| r.name == fx.obj("p_meta") && r.kind == RoutineKind::Procedure),
+            "{routines:?}"
+        );
+        assert!(
+            routines.iter().any(|r| r.name == fx.obj("f_meta") && r.kind == RoutineKind::Function),
+            "{routines:?}"
+        );
+        let src = MetaArgs { name: Some(fx.obj("f_meta")), kind: Some("FUNCTION".into()), ..args(s) };
+        let text = meta::source_text(MetaKey::RoutineSource, &live.rows(MetaKey::RoutineSource, &src).await)
+            .unwrap()
+            .unwrap();
+        assert!(has(&text, "function"), "{text}");
+    }
 
     if live.d.has_meta(MetaKey::ReservedWords) {
         live.check_reserved_words().await;
@@ -237,8 +266,7 @@ async fn check_common(live: &mut Live, fx: Fx) -> Vec<Table> {
     all
 }
 
-async fn check_mysql_family(live: &mut Live) -> Vec<Table> {
-    let fx = Fx { schema: "dblens_meta", upper: false };
+async fn check_mysql_family(live: &mut Live, fx: Fx) -> Vec<Table> {
     let all = check_common(live, fx).await;
     let emp = table(&all, "emp");
     assert_eq!(emp.columns.iter().find(|c| c.name == "name").unwrap().default.as_deref(), Some("'无名'"));
@@ -258,7 +286,7 @@ async fn mysql_metadata() {
     assert_eq!(live.d.variant(), Variant::MySql, "不是 PolarDB");
     live.run_script(include_str!("fixtures/mysql.sql")).await;
     live.run_script(include_str!("fixtures/mysql_only.sql")).await;
-    let all = check_mysql_family(&mut live).await;
+    let all = check_mysql_family(&mut live, Fx::lower("dblens_meta")).await;
     let func = table(&all, "emp").indexes.iter().find(|i| i.name == "idx_emp_upper_name").unwrap();
     assert!(has(&func.columns[0].name, "upper"), "{func:?}");
     assert_eq!(logical(table(&all, "ds_t"), "c_json"), LogicalType::Json);
@@ -271,7 +299,7 @@ async fn mariadb_metadata() {
     assert_eq!(live.d.variant(), Variant::MariaDb);
     live.run_script(include_str!("fixtures/mysql.sql")).await;
     live.run_script(include_str!("fixtures/mariadb_only.sql")).await;
-    let all = check_mysql_family(&mut live).await;
+    let all = check_mysql_family(&mut live, Fx::lower("dblens_meta")).await;
     // MariaDB 的 JSON 是带检查约束的 longtext，这条隐式检查约束不应出现在 checks 中
     assert!(table(&all, "ds_t").checks.is_empty(), "{:?}", table(&all, "ds_t").checks);
     assert!(!live.d.has_meta(MetaKey::ReservedWords), "MariaDB 的 KEYWORDS 不区分是否保留");
@@ -283,8 +311,32 @@ async fn mariadb_metadata() {
 async fn postgres_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_PG_URL").await else { return };
     live.run_script(include_str!("fixtures/postgres.sql")).await;
-    let fx = Fx { schema: "dblens_meta", upper: false };
-    let all = check_common(&mut live, fx).await;
+    check_pg_family(&mut live, PgFx::FULL).await;
+}
+
+/// PG 家族各库支持的程度：物化视图（人大金仓开发版的授权不允许建）、序列的缓存大小（openGauss 读不到）。
+#[derive(Clone, Copy)]
+struct PgFx {
+    materialized_views: bool,
+    sequence_cache: bool,
+}
+
+impl PgFx {
+    const FULL: PgFx = PgFx { materialized_views: true, sequence_cache: true };
+}
+
+/// PG 家族的检查：先做共有的检查，再核对 PG 特有的对象。
+async fn check_pg_family(live: &mut Live, pg: PgFx) {
+    let schemas = meta::schemas(&live.rows(MetaKey::Schemas, &MetaArgs::default()).await).unwrap();
+    let builtin = match live.d.variant() {
+        Variant::Kingbase => "sys_catalog",
+        Variant::OpenGauss => "dbe_perf",
+        _ => "pg_catalog",
+    };
+    assert!(schemas.iter().any(|x| x.name == builtin && x.is_system), "{schemas:?}");
+    assert!(schemas.iter().any(|x| x.name == "public" && !x.is_system), "{schemas:?}");
+    let fx = Fx::lower("dblens_meta");
+    let all = check_common(live, fx).await;
     let s = fx.schema;
 
     assert!(
@@ -310,16 +362,20 @@ async fn postgres_metadata() {
     let views =
         meta::views(&d, MetaKey::Views, &live.rows(MetaKey::Views, &args(s)).await, &columns).unwrap();
     assert_eq!(views.iter().find(|v| v.name == "v_emp").unwrap().comment.as_deref(), Some("员工视图"));
-    let mv_rows = live.rows(MetaKey::MaterializedViews, &args(s)).await;
-    let mv = meta::views(&d, MetaKey::MaterializedViews, &mv_rows, &columns).unwrap();
-    assert_eq!(mv[0].columns.iter().find(|c| c.name == "cnt").unwrap().comment.as_deref(), Some("员工数"));
+    if pg.materialized_views {
+        let mv_rows = live.rows(MetaKey::MaterializedViews, &args(s)).await;
+        let mv = meta::views(&d, MetaKey::MaterializedViews, &mv_rows, &columns).unwrap();
+        let cnt = mv[0].columns.iter().find(|c| c.name == "cnt").unwrap();
+        assert_eq!(cnt.comment.as_deref(), Some("员工数"));
+    }
 
     let seq = meta::sequences(&live.rows(MetaKey::Sequences, &args(s)).await).unwrap();
     assert_eq!(seq.len(), 1, "serial/identity 自带的序列不列出：{seq:?}");
     let q = &seq[0];
+    let cache = pg.sequence_cache.then_some(10);
     assert_eq!(
         (q.start.as_deref(), q.increment.as_deref(), q.cycle, q.cache),
-        (Some("100"), Some("5"), true, Some(10))
+        (Some("100"), Some("5"), true, cache)
     );
 
     let routines = meta::routines(&live.rows(MetaKey::Routines, &args(s)).await).unwrap();
@@ -329,14 +385,15 @@ async fn postgres_metadata() {
         .unwrap()
         .unwrap();
     assert_eq!(text.matches("CREATE OR REPLACE FUNCTION").count(), 2, "两个重载：{text}");
-    assert!(!live.d.has_meta(MetaKey::Synonyms));
+    // 人大金仓、openGauss 有同义词（check_oracle_mode_objects）
+    assert_eq!(live.d.has_meta(MetaKey::Synonyms), live.d.variant() != Variant::Postgres);
 }
 
 #[tokio::test]
 async fn oracle_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_ORACLE_URL").await else { return };
     live.run_script(include_str!("fixtures/oracle.sql")).await;
-    let fx = Fx { schema: "DBLENS_TEST", upper: true };
+    let fx = Fx::upper("DBLENS_TEST");
     let all = check_common(&mut live, fx).await;
     let s = fx.schema;
 
@@ -369,7 +426,7 @@ async fn oracle_metadata() {
 async fn dameng_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_DM_URL").await else { return };
     live.run_script(include_str!("fixtures/dameng.sql")).await;
-    let fx = Fx { schema: "DBLENS_TEST", upper: true };
+    let fx = Fx::upper("DBLENS_TEST");
     let all = check_common(&mut live, fx).await;
     let s = fx.schema;
 
@@ -398,4 +455,152 @@ async fn dameng_metadata() {
     let mv_rows = live.rows(MetaKey::MaterializedViews, &args(s)).await;
     let mv = meta::views(&d, MetaKey::MaterializedViews, &mv_rows, &columns).unwrap();
     assert_eq!(mv.iter().find(|v| v.name == "META_MV_DEPT").unwrap().columns.len(), 2);
+}
+
+/// MySQL 脚本里 TiDB 不支持的段：触发器、存储过程和函数、全文索引；ds_t 去掉 GEOMETRY 列。
+const TIDB_SKIP: [&str; 4] = ["trg", "proc", "func", "idx_fulltext"];
+
+fn without_geometry(script: &str) -> String {
+    let ds = script.lines().find(|l| l.starts_with("CREATE TABLE dblens_meta.ds_t")).unwrap();
+    ds.replace(", c_geometry GEOMETRY", "")
+}
+
+#[tokio::test]
+async fn tidb_metadata() {
+    let Some(mut live) = connect("DBLENS_TEST_TIDB_URL").await else { return };
+    assert_eq!(live.d.variant(), Variant::TiDb);
+    // CHECK 约束默认只解析不保存，打开后才能读回
+    live.run_script(
+        "-- @@ check_on
+SET GLOBAL tidb_enable_check_constraint = ON",
+    )
+    .await;
+    let script = include_str!("fixtures/mysql.sql");
+    let ds = without_geometry(script);
+    live.run_script_with(script, &TIDB_SKIP, &[("ds_t", &ds)]).await;
+    let fx = Fx { triggers: false, routines: false, descending: false, ..Fx::lower("dblens_meta") };
+    live.run_script(TIDB_ONLY).await;
+    let all = check_mysql_family(&mut live, fx).await;
+    assert!(table(&all, "emp").triggers.is_empty());
+
+    let ar = table(&all, "ar_t");
+    assert!(ar.columns[0].auto_increment && !ar.columns[1].auto_increment, "AUTO_RANDOM：{ar:?}");
+    let seq = meta::sequences(&live.rows(MetaKey::Sequences, &args("dblens_meta")).await).unwrap();
+    let q = seq.iter().find(|q| q.name == "seq_meta").unwrap();
+    assert_eq!(
+        (q.start.as_deref(), q.increment.as_deref(), q.cycle, q.cache),
+        (Some("100"), Some("5"), true, Some(10))
+    );
+    for (t, clustered) in [("ar_t", true), ("nc_t", false)] {
+        let a = MetaArgs { table: Some(t.into()), ..args("dblens_meta") };
+        let storage = meta::table_storage(&live.rows(MetaKey::TableStorage, &a).await).unwrap();
+        assert_eq!(storage.clustered, Some(clustered), "{t}");
+    }
+}
+
+/// 只在 TiDB 上建的对象：AUTO_RANDOM 主键、非聚簇主键、序列。
+const TIDB_ONLY: &str = "-- @@ ar_t
+CREATE TABLE dblens_meta.ar_t (id BIGINT AUTO_RANDOM PRIMARY KEY, v INT)
+-- @@ nc_t
+CREATE TABLE dblens_meta.nc_t (id INT PRIMARY KEY NONCLUSTERED, v INT)
+-- @@ seq
+CREATE SEQUENCE dblens_meta.seq_meta START 100 INCREMENT 5 CACHE 10 CYCLE
+";
+
+#[tokio::test]
+async fn oceanbase_metadata() {
+    let Some(mut live) = connect("DBLENS_TEST_OCEANBASE_URL").await else { return };
+    assert_eq!(live.d.variant(), Variant::OceanBase);
+    let script = include_str!("fixtures/mysql.sql");
+    let ds = without_geometry(script);
+    live.run_script_with(script, &[], &[("ds_t", &ds)]).await;
+    let all = check_mysql_family(&mut live, Fx { descending: false, ..Fx::lower("dblens_meta") }).await;
+    // 全文索引在 STATISTICS 中只有隐藏列（__doc_id_*、__word_segment_*），去掉后不列出
+    let emp = table(&all, "emp");
+    assert!(emp.indexes.iter().all(|i| i.columns.iter().all(|c| !c.name.starts_with("__"))), "{emp:?}");
+}
+
+#[tokio::test]
+async fn opengauss_metadata() {
+    let Some(mut live) = connect("DBLENS_TEST_OPENGAUSS_URL").await else { return };
+    assert_eq!((live.d.variant(), live.d.oracle_mode()), (Variant::OpenGauss, false));
+    live.run_script(include_str!("fixtures/opengauss.sql")).await;
+    check_pg_family(&mut live, PgFx { sequence_cache: false, ..PgFx::FULL }).await;
+}
+
+#[tokio::test]
+async fn opengauss_a_metadata() {
+    let Some(mut live) = connect("DBLENS_TEST_OPENGAUSS_A_URL").await else { return };
+    assert_eq!((live.d.variant(), live.d.oracle_mode()), (Variant::OpenGauss, true));
+    live.run_script(include_str!("fixtures/opengauss.sql")).await;
+    check_pg_family(&mut live, PgFx { sequence_cache: false, ..PgFx::FULL }).await;
+    check_oracle_mode_objects(&mut live).await;
+}
+
+/// 人大金仓沿用 PG 的脚本：开发版授权不允许建物化视图；PG 模式不接受负的小数位。
+async fn kingbase_metadata(env: &str, oracle_mode: bool) {
+    let Some(mut live) = connect(env).await else { return };
+    assert_eq!((live.d.variant(), live.d.oracle_mode()), (Variant::Kingbase, oracle_mode));
+    let script = include_str!("fixtures/postgres.sql");
+    let ds =
+        script.lines().skip_while(|l| !l.starts_with("CREATE TABLE dblens_meta.ds_t")).collect::<Vec<_>>();
+    let ds = ds
+        .join(
+            "
+",
+        )
+        .replace(", c_numeric_neg numeric(5,-2)", "");
+    let skip = ["mv_dept", "mv_dept_c", "mv_dept_cc"];
+    live.run_script_with(script, &skip, &[("ds_t", &ds)]).await;
+    check_pg_family(&mut live, PgFx { materialized_views: false, ..PgFx::FULL }).await;
+    if oracle_mode {
+        check_oracle_mode_objects(&mut live).await;
+    }
+}
+
+#[tokio::test]
+async fn kingbase_oracle_metadata() {
+    kingbase_metadata("DBLENS_TEST_KINGBASE_URL", true).await;
+}
+
+#[tokio::test]
+async fn kingbase_pg_metadata() {
+    kingbase_metadata("DBLENS_TEST_KINGBASE_PG_URL", false).await;
+}
+
+/// Oracle 兼容模式（人大金仓、openGauss 的 A 模式）：同义词与包。
+const ORACLE_MODE_ONLY: &str = "-- @@ syn
+CREATE OR REPLACE SYNONYM dblens_meta.syn_emp FOR dblens_meta.emp
+-- @@ pkg
+CREATE OR REPLACE PACKAGE dblens_meta.pkg_meta AS FUNCTION f(a integer) RETURN integer; END pkg_meta;
+-- @@ pkg_body
+CREATE OR REPLACE PACKAGE BODY dblens_meta.pkg_meta AS FUNCTION f(a integer) RETURN integer IS BEGIN RETURN a + 1; END; END pkg_meta;
+";
+
+async fn check_oracle_mode_objects(live: &mut Live) {
+    live.run_script(ORACLE_MODE_ONLY).await;
+    let s = "dblens_meta";
+    let syn = meta::synonyms(&live.rows(MetaKey::Synonyms, &args(s)).await).unwrap();
+    assert!(
+        syn.iter()
+            .any(|x| x.name == "syn_emp" && x.target_schema.as_deref() == Some(s) && x.target_name == "emp"),
+        "{syn:?}"
+    );
+    let routines = meta::routines(&live.rows(MetaKey::Routines, &args(s)).await).unwrap();
+    for kind in [RoutineKind::Package, RoutineKind::PackageBody] {
+        assert!(routines.iter().any(|r| r.name == "pkg_meta" && r.kind == kind), "{routines:?}");
+    }
+    assert!(!routines.iter().any(|r| r.name == "f"), "包里的函数不单独列出：{routines:?}");
+    for (kind, head) in
+        [("PACKAGE", "CREATE OR REPLACE PACKAGE "), ("PACKAGE BODY", "CREATE OR REPLACE PACKAGE BODY ")]
+    {
+        let a = MetaArgs { name: Some("pkg_meta".into()), kind: Some(kind.into()), ..args(s) };
+        let text = meta::source_text(MetaKey::RoutineSource, &live.rows(MetaKey::RoutineSource, &a).await)
+            .unwrap()
+            .unwrap_or_else(|| panic!("没有 {kind} 的源码"));
+        assert!(
+            text.starts_with(head) && has(&text, "RETURN integer") && text.trim_end().ends_with(';'),
+            "{text}"
+        );
+    }
 }
