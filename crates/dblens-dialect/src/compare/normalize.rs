@@ -44,6 +44,8 @@ pub(super) fn align(
     let mut t = target.clone();
     own_schema_refs(&mut s, source_schema);
     own_schema_refs(&mut t, target_schema);
+    default_actions(d, &mut s);
+    default_actions(d, &mut t);
     t.name = s.name.clone();
     for f in &mut t.foreign_keys {
         if f.ref_schema.is_none()
@@ -93,6 +95,24 @@ pub(super) fn align(
         align_names(d, &mut s, &t);
     }
     (s, t)
+}
+
+/// 外键的默认动作写成"没有"：库读回 `NO ACTION`（MySQL 家族的 `RESTRICT` 与之相同），模型中通常不写。
+fn default_actions(d: &Dialect, t: &mut Table) {
+    let default = |a: &Option<String>| {
+        a.as_deref().is_some_and(|a| {
+            a.eq_ignore_ascii_case("NO ACTION")
+                || (d.family() == Family::MySql && a.eq_ignore_ascii_case("RESTRICT"))
+        })
+    };
+    for f in &mut t.foreign_keys {
+        if default(&f.on_delete) {
+            f.on_delete = None;
+        }
+        if default(&f.on_update) {
+            f.on_update = None;
+        }
+    }
 }
 
 /// 去掉库加的类型转换（`'abc'::character varying`）和多余的括号后比较默认值。

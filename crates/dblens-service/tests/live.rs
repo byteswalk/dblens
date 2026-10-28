@@ -6,22 +6,27 @@
 //! 走一遍完整流程：保存连接配置（密码放本地密码库）→ 测试连接 → 打开会话执行 → 浏览元数据 →
 //! 会话中执行 DDL 后元数据缓存失效 → 取消长查询；查询工作台用到的执行计划、出错位置、切换 schema。
 
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use dblens_core::schema::{CheckConstraint, Column, Index, IndexColumn, PrimaryKey, Table, UniqueConstraint};
+use dblens_core::schema::{
+    CheckConstraint, Column, ForeignKey, Index, IndexColumn, PrimaryKey, Table, UniqueConstraint,
+};
 use dblens_core::{ColumnType, Error, LogicalType, Value};
+use dblens_dialect::compare::{CompareOptions, CompareRenames, SchemaChange, TableStatus};
 use dblens_dialect::design::{Renames, TableChange, diff_table};
 use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_dialect::{Compat, DdlKind, Direction, RowChange, Variant, WriteMode};
 use dblens_driver::{ConnectParams, DriverId};
 use dblens_service::{
-    ChangeSet, ColumnMapping, DEFAULT_BATCH, DataOrder, DefaultPolicy, DesignRequest, DriverRegistry,
-    Environment, ExecRequest, ExportFormat, ExportOptions, ExportRequest, ExportSource, ExportState,
-    ExportStatus, FileOptions, FileSource, GenerateKind, ImportRequest, NewColumn, NewTable, ObjectKind,
-    OnError, ProfileInput, SecretBackend, Secrets, Service, SessionEvent, SessionId, SqlFileRequest, Store,
-    TaskState, TaskStatus, Transaction,
+    ChangeSet, ColumnMapping, CompareRequest, CompareResult, CompareSideRef, DEFAULT_BATCH, DataOrder,
+    DefaultPolicy, DesignRequest, DriverRegistry, Environment, ExecRequest, ExportFormat, ExportOptions,
+    ExportRequest, ExportSource, ExportState, ExportStatus, FileOptions, FileSource, GenerateKind,
+    ImportRequest, ModelDesignRequest, NewColumn, NewTable, ObjectKind, OnError, ProfileInput,
+    ReverseRequest, SecretBackend, Secrets, Service, SessionEvent, SessionId, SqlFileRequest, Store,
+    SyncRequest, TaskState, TaskStatus, Transaction,
 };
 
 struct Live {
@@ -1437,6 +1442,241 @@ async fn dameng_design() {
 }
 
 /// MySQL 驱动的取消测试用的耗时查询（SLEEP() 被 KILL QUERY 打断时返回 1 而不报错）。
+/// 只看 `m4_` 开头的表（同一 schema 中其他测试的表会并发变化）。
+fn m4_items(r: &CompareResult) -> BTreeSet<u32> {
+    let mine = |n: &Option<String>| n.as_deref().is_some_and(|n| n.to_lowercase().starts_with("m4_"));
+    r.diff
+        .tables
+        .iter()
+        .filter(|t| mine(&t.source) || mine(&t.target))
+        .flat_map(|t| t.items.iter().map(|i| i.id))
+        .collect()
+}
+
+/// `m4_` 表的差异明细（断言失败时输出）。
+fn m4_detail(r: &CompareResult) -> String {
+    let mine = |n: &Option<String>| n.as_deref().is_some_and(|n| n.to_lowercase().starts_with("m4_"));
+    let tables: Vec<_> = r.diff.tables.iter().filter(|t| mine(&t.source) || mine(&t.target)).collect();
+    format!("{tables:#?}")
+}
+
+fn m4_status(r: &CompareResult) -> Vec<(String, TableStatus)> {
+    r.diff
+        .tables
+        .iter()
+        .filter_map(|t| {
+            let name = t.source.clone().or_else(|| t.target.clone())?;
+            name.to_lowercase().starts_with("m4_").then_some((name.to_lowercase(), t.status))
+        })
+        .collect()
+}
+
+/// 模型（M4a）：反向生成 → 在模型中改表（表改名、列改名、加列、换索引、加外键）→ 与库比对 → 同步到库 →
+/// 再比对没有差异；库中加列后写回模型；同一个库中两个 schema 的库对库比对（Oracle、达梦没有第二个 schema，跳过）。
+async fn model_flow(env: &str) {
+    let Some(live) = setup(env).await else { return };
+    let live = &live;
+    let s = &live.service;
+    let id = s.open_session(&live.profile_id).await.unwrap().id;
+    let upper = matches!(live.driver, DriverId::Oracle | DriverId::Dameng);
+    let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
+    let varchar = if live.driver == DriverId::Oracle { "VARCHAR2" } else { "VARCHAR" };
+    let drop_sql = &|schema: Option<&str>, table: &str| {
+        let q = schema.map_or(table.to_string(), |s| format!("{s}.{table}"));
+        match live.driver {
+            DriverId::Oracle => {
+                format!(
+                    "BEGIN EXECUTE IMMEDIATE 'DROP TABLE {q} CASCADE CONSTRAINTS'; EXCEPTION WHEN OTHERS THEN NULL; END;"
+                )
+            }
+            DriverId::Dameng => format!("DROP TABLE IF EXISTS {q} CASCADE"),
+            _ => format!("DROP TABLE IF EXISTS {q}"),
+        }
+    };
+    let cleanup = |schema: Option<&'static str>| async move {
+        for t in ["m4_ord", "m4_cust", "m4_customer"] {
+            live.submit(id, ExecRequest::new(drop_sql(schema, t))).await;
+        }
+    };
+    cleanup(None).await;
+    live.run(id, &format!("CREATE TABLE m4_cust (id INT PRIMARY KEY, name {varchar}(20))")).await;
+    live.run(id, &format!("CREATE TABLE m4_ord (id INT PRIMARY KEY, cust_id INT, note {varchar}(20))")).await;
+    live.run(id, "CREATE INDEX ix_m4_note ON m4_ord (note)").await;
+
+    // 1. 反向生成
+    let dir = tempfile::tempdir().unwrap();
+    let req = ReverseRequest {
+        profile_id: live.profile_id.clone(),
+        schemas: vec![live.schema.clone()],
+        path: dir.path().join("model").to_string_lossy().into(),
+        name: "m4".into(),
+    };
+    let st = wait_task(s, &s.start_reverse(req).await.unwrap()).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    let m = st.model.unwrap();
+    let info = s.models.summary_of(&m).unwrap().info;
+    assert_eq!((info.database.variant, info.database.compat), (live.variant, live.compat), "{env}");
+    let schema = live.schema.clone();
+    let ord = s.models.read_table(&m, &schema, &n("m4_ord")).unwrap();
+    assert_eq!(ord.table.columns.len(), 3, "{env}：{:?}", ord.table);
+
+    // 2. 在模型中改表：note 改名为 remark，加列 extra，换索引，加外键；m4_cust 改名为 m4_customer
+    let mut d = ord.table.clone();
+    let text_type = d.columns[2].data_type.native.clone();
+    d.columns[2].name = n("remark");
+    let mut extra = d.columns[2].clone();
+    extra.name = n("extra");
+    d.columns.push(extra);
+    let ix = |name: &str, col: &str| Index {
+        name: n(name),
+        columns: vec![IndexColumn { name: n(col), descending: false }],
+        unique: false,
+        method: None,
+    };
+    // 外键列另建索引：MySQL 家族不再自动建一个
+    d.indexes = vec![ix("ix_m4_remark", "remark"), ix("ix_m4_cust", "cust_id")];
+    d.foreign_keys = vec![ForeignKey {
+        name: Some(n("fk_m4_cust")),
+        columns: vec![n("cust_id")],
+        ref_schema: None,
+        ref_table: n("m4_cust"),
+        ref_columns: vec![n("id")],
+        on_delete: None,
+        on_update: None,
+    }];
+    let req = ModelDesignRequest {
+        schema: schema.clone(),
+        name: Some(n("m4_ord")),
+        draft: d,
+        renames: Renames { columns: [(n("remark"), n("note"))].into(), ..Default::default() },
+        fingerprint: Some(ord.fingerprint),
+    };
+    let p = s.preview_model_design(&m, &req).await.unwrap();
+    assert!(p.errors.is_empty() && !p.conflict, "{env}：{p:?}");
+    s.save_model_design(&m, req).await.unwrap();
+    s.models.rename_table(&m, &schema, &n("m4_cust"), &n("m4_customer")).unwrap();
+    let fk = &s.models.read_table(&m, &schema, &n("m4_ord")).unwrap().table.foreign_keys[0];
+    assert_eq!(fk.ref_table, n("m4_customer"), "{env}");
+    assert_eq!(
+        text_type,
+        s.models.read_table(&m, &schema, &n("m4_ord")).unwrap().table.columns[3].data_type.native
+    );
+
+    // 3. 模型 → 库：按记下的改名配对
+    let db = CompareSideRef::Database { profile: live.profile_id.clone(), schema: schema.clone() };
+    let md = CompareSideRef::Model { model: m.clone(), schema: schema.clone() };
+    let compare = |source: &CompareSideRef, target: &CompareSideRef| CompareRequest {
+        source: source.clone(),
+        target: target.clone(),
+        options: CompareOptions::default(),
+        renames: CompareRenames::default(),
+    };
+    let r = s.compare(&compare(&md, &db)).await.unwrap();
+    let status = m4_status(&r);
+    assert!(status.contains(&("m4_customer".into(), TableStatus::Renamed)), "{env}：{status:?}");
+    assert!(status.contains(&("m4_ord".into(), TableStatus::Changed)), "{env}：{status:?}");
+    let ord_items = &r.diff.tables.iter().find(|t| t.source.as_deref() == Some(&n("m4_ord"))).unwrap().items;
+    assert!(
+        ord_items.iter().any(|i| matches!(&i.change, SchemaChange::Table { change } if matches!(change.as_ref(), TableChange::RenameColumn { .. }))),
+        "{env}：{ord_items:?}"
+    );
+    // 其他测试会并发改动同一个 schema，不核对比对结果的指纹
+    let sync = SyncRequest { compare: compare(&md, &db), selected: m4_items(&r), fingerprint: None };
+    let p = s.preview_sync(&sync).await.unwrap();
+    let script = p.script.as_ref().unwrap();
+    assert!(script.refused.is_empty() && p.denied.is_none(), "{env}：{p:?}");
+    eprintln!("{env} 同步脚本：\n{}", p.text);
+    let started = s.start_sync(sync).await.unwrap();
+    let st = wait_task(s, &started.task.unwrap()).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}\n{}", p.text);
+    assert!(s.models.renames(&m, &schema).unwrap().is_empty(), "{env}");
+    let r = s.compare(&compare(&md, &db)).await.unwrap();
+    assert!(m4_items(&r).is_empty(), "{env}：{}", m4_detail(&r));
+
+    // 4. 库中加列 → 写回模型 → 两边一致
+    let z = match live.driver {
+        DriverId::Oracle => "z VARCHAR2(5)",
+        _ => "z VARCHAR(5)",
+    };
+    live.run(id, &format!("ALTER TABLE m4_ord ADD {z}")).await;
+    let r = s.compare(&compare(&db, &md)).await.unwrap();
+    let status = m4_status(&r);
+    assert!(status.contains(&("m4_customer".into(), TableStatus::Same)), "{env}：{status:?}");
+    assert!(status.contains(&("m4_ord".into(), TableStatus::Changed)), "{env}：{status:?}");
+    let sync = SyncRequest {
+        compare: compare(&db, &md),
+        selected: m4_items(&r),
+        fingerprint: Some(r.fingerprint.clone()),
+    };
+    let p = s.preview_sync(&sync).await.unwrap();
+    assert_eq!(p.writes.len(), 1, "{env}：{p:?}");
+    assert_eq!(s.start_sync(sync).await.unwrap().task, None);
+    let cols = s.models.read_table(&m, &schema, &n("m4_ord")).unwrap().table.columns;
+    assert_eq!(cols.last().unwrap().name, n("z"), "{env}");
+    let r = s.compare(&compare(&md, &db)).await.unwrap();
+    assert!(m4_items(&r).is_empty(), "{env}：{}", m4_detail(&r));
+
+    // 5. 库对库：同一个库中的第二个 schema
+    let other: Option<&'static str> = match live.driver {
+        DriverId::Postgres => Some("m4_b"),
+        DriverId::Mysql => Some("dblens_test_m4b"),
+        DriverId::Oracle | DriverId::Dameng => None,
+    };
+    let created = match other {
+        Some(o) => {
+            let sql = match live.driver {
+                DriverId::Mysql => format!("CREATE DATABASE IF NOT EXISTS {o}"),
+                _ => format!("CREATE SCHEMA IF NOT EXISTS {o}"),
+            };
+            let ev = live.submit(id, ExecRequest::new(sql)).await;
+            !ev.iter().any(|e| matches!(e, SessionEvent::Failed { .. }))
+        }
+        None => false,
+    };
+    if created {
+        let o = other.unwrap();
+        cleanup(Some(o)).await;
+        let b = CompareSideRef::Database { profile: live.profile_id.clone(), schema: o.into() };
+        let r = s.compare(&compare(&db, &b)).await.unwrap();
+        assert!(m4_status(&r).iter().all(|(_, st)| *st == TableStatus::Added), "{env}：{:?}", m4_status(&r));
+        let sync = SyncRequest { compare: compare(&db, &b), selected: m4_items(&r), fingerprint: None };
+        let p = s.preview_sync(&sync).await.unwrap();
+        let st = wait_task(s, &s.start_sync(sync).await.unwrap().task.unwrap()).await;
+        assert_eq!(st.state, TaskState::Done, "{env}：{st:?}\n{}", p.text);
+        let r = s.compare(&compare(&db, &b)).await.unwrap();
+        assert!(m4_items(&r).is_empty(), "{env}：{}", m4_detail(&r));
+        cleanup(Some(o)).await;
+    } else {
+        eprintln!("{env}：没有第二个 schema，跳过库对库比对");
+    }
+    cleanup(None).await;
+}
+
+#[tokio::test]
+async fn mysql_model() {
+    model_flow("DBLENS_TEST_MYSQL_URL").await;
+}
+
+#[tokio::test]
+async fn mariadb_model() {
+    model_flow("DBLENS_TEST_MARIADB_URL").await;
+}
+
+#[tokio::test]
+async fn postgres_model() {
+    model_flow("DBLENS_TEST_PG_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_model() {
+    model_flow("DBLENS_TEST_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_model() {
+    model_flow("DBLENS_TEST_DM_URL").await;
+}
+
 const MYSQL_SLOW: &str = "SELECT COUNT(*) FROM information_schema.columns a, information_schema.columns b, information_schema.columns c";
 
 /// 国产库第一批：与 MySQL、PostgreSQL 走同样的流程。`$ops` 是允许失败的运维查询。
@@ -1484,6 +1724,10 @@ macro_rules! domestic_flows {
             #[tokio::test]
             async fn design() {
                 design_flow($env).await;
+            }
+            #[tokio::test]
+            async fn model() {
+                model_flow($env).await;
             }
         }
     )*};

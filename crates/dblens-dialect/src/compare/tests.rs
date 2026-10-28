@@ -101,6 +101,7 @@ fn options_and_equivalent_spellings() {
     target.primary_key.as_mut().unwrap().name = Some("orders_pkey".into());
     target.uniques[0].name = Some("orders_code_key".into());
     target.foreign_keys[0].ref_schema = Some("live".into());
+    target.foreign_keys[0].on_update = Some("NO ACTION".into());
     target.checks[0].expression = "(amount >= (0)::numeric)".into();
     let mut source = base.clone();
     source.columns[1].default = Some("'x'".into());
