@@ -244,6 +244,27 @@
 - `script`（目标是库）：`{steps: [{kind: "sql", sql, items} | {kind: "rebuild", table, rebuild, items}], refused: [[表, 原因]], warnings, transactional}`；
   `writes`（目标是模型）：`[{name, from?, delete}]`。
 
+### ER 图与逻辑外键（M4b 加入）
+
+同样只在页面和服务在同一台机器上时可用，否则 403。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/models/{id}/diagrams?schema=` | 图列表 `[{schema, name, tables}]`，默认图 `_all` 在前（没有文件时也列出）；`tables` 为 `"all"` 或表名数组 |
+| POST | `/models/{id}/diagrams` | 新建主题图 `{schema, name, tables}`，201 和 `{fingerprint}`；名字不能为空或 `_all` |
+| GET | `/models/{id}/diagrams/{schema}/{name}` | `{diagram, tables: [{table, logical_keys, error?}], fingerprint, warnings}`；默认图没有文件时 `fingerprint` 为 null |
+| PUT | `/models/{id}/diagrams/{schema}/{name}` | 保存 `{diagram, fingerprint}`，返回 `{fingerprint}`；文件已被修改时 400 |
+| DELETE | `/models/{id}/diagrams/{schema}/{name}` | 删除主题图（默认图不能删） |
+| POST | `/models/{id}/diagrams/{schema}/{name}/rename` | 主题图改名 `{to}` |
+| POST | `/models/{id}/tables/{schema}/{name}/logical-keys` | 加逻辑外键 `{key, fingerprint?}`，返回表文件的 `{fingerprint}` |
+| DELETE | `/models/{id}/tables/{schema}/{name}/logical-keys/{序号}?fingerprint=` | 删除逻辑外键（序号从 0 开始） |
+| POST | `/files/image` | `{path, data}`（`data` 为 base64），把导出的 ER 图写到 `.svg` 或 `.png` 文件 |
+
+- `diagram`：`{name, tables, display, positions}`，`display` 为 `columns` / `keys` / `names`，`positions` 为表名 → `{x, y}`（整数）。
+- `key`：`{name?, columns, ref_schema?, ref_table, ref_columns, comment?}`；两边的列都要存在、列数一致，名字不能与本表的外键、逻辑外键重复。
+- `warnings`：`[{kind: "missing_table", name} | {kind: "broken_logical_key", table, index, name}]`。
+- 库的 ER 图用 `GET /profiles/{id}/schemas/{schema}/tables`（不给 `table` 时返回整个 schema 的表明细）。
+
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 
 `lang` 可选，决定事件中文字的语言（见"语言"一节）。
