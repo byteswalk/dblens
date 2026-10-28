@@ -122,6 +122,8 @@ function Canvas({ tab }: { tab: QueryTab }) {
   const patch = useCallback((p: Partial<ErTabState>) => useErTabs.getState().patch(tab.id, p), [tab.id])
   const setPositions = (p: Record<string, ErPosition>) => patch({ positions: p })
   const [exporting, setExporting] = useState(false)
+  // 白底导出时画布临时换成浅色主题
+  const [lightExport, setLightExport] = useState(false)
   const [pending, setPending] = useState<PendingKey | null>(null)
   const [adding, setAdding] = useState(false)
 
@@ -259,6 +261,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
 
   const exportImage = async (format: ImageFormat, white: boolean) => {
     setExporting(true)
+    setLightExport(white)
     // 去掉选中的标记；关掉"只渲染可见区域"，等全部节点画出来
     setNodes((ns) => ns.map((x) => ({ ...x, selected: false })))
     await new Promise((r) => setTimeout(r, 150))
@@ -285,6 +288,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
       message.error((e as Error).message)
     } finally {
       setExporting(false)
+      setLightExport(false)
     }
   }
 
@@ -413,7 +417,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
           </Button>
         )}
       </div>
-      <div className="er-canvas grow">
+      <div className="er-canvas grow" data-theme={lightExport ? 'light' : undefined}>
         {data && !data.tables.length && <Empty className="er-empty" description={t(tableList === 'all' ? 'er.empty' : 'er.emptyDiagram')} />}
         <ReactFlow
           nodes={nodes}
@@ -471,7 +475,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
           onEdgeMouseEnter={(e, edge) => setHover({ x: e.clientX, y: e.clientY, text: (edge.data as { title: string }).title })}
           onEdgeMouseLeave={() => setHover(null)}
           onlyRenderVisibleElements={!exporting}
-          colorMode={theme}
+          colorMode={lightExport ? 'light' : theme}
           fitView
           minZoom={0.05}
           maxZoom={2}

@@ -1,5 +1,7 @@
-/* 外壳的颜色和尺寸，取自设计稿 docs/design/m1-workbench.html。<html data-theme> 由 App 按主题设置。 */
-:root {
+/* 外壳的颜色和尺寸，取自设计稿 docs/design/m1-workbench.html。<html data-theme> 由 App 按主题设置。
+   ER 图按白底导出时，画布临时带上 data-theme='light'，画布内用浅色的变量。 */
+:root,
+.er-canvas[data-theme='light'] {
   --bg: #f3f3f4;
   --panel: #ffffff;
   --panel-2: #f7f7f8;
@@ -796,6 +798,9 @@ body {
   inset: 40% 0 auto;
   z-index: 5;
   pointer-events: none;
+}
+.er-canvas[data-theme='light'] .er-table {
+  color: var(--text);
 }
 .er-table {
   background: var(--panel);
