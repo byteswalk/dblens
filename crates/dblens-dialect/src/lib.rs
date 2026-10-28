@@ -26,6 +26,7 @@ pub use dml::DmlTemplate;
 pub use import::{ImportStatement, MAX_PARAMS_PER_STATEMENT, MAX_ROWS_PER_STATEMENT, WriteMode};
 pub use ops::{OpsCategory, OpsQuery};
 pub use session::may_change_schema;
+use split::split_with;
 pub use split::{SqlStatement, StreamSplitter, split_statements};
 pub use variant::{Compat, Family, Variant};
 pub use version::parse_version;
@@ -138,7 +139,13 @@ impl Dialect {
     }
 
     pub fn split(&self, sql: &str) -> Vec<SqlStatement> {
-        split_statements(sql, self.family())
+        split_with(self.splitter(), sql)
+    }
+
+    /// 分块拆分用的拆分器：人大金仓、openGauss 的 Oracle 兼容模式另外识别 PL/SQL 块。
+    pub fn splitter(&self) -> StreamSplitter {
+        let s = StreamSplitter::new(self.family());
+        if self.oracle_mode() { s.with_oracle_blocks() } else { s }
     }
 
     /// 生成执行计划要依次执行的语句，最后一条的结果集是计划（见 `session::explain`）。
@@ -315,6 +322,14 @@ mod tests {
         let pg = Dialect::new(Variant::Postgres).with_version(Some(180000));
         assert_eq!(pg.refine(&probe("oracle", "120001")), pg);
         assert_eq!(pg.with_compat(Compat::Oracle).compat(), Compat::Native);
+    }
+
+    #[test]
+    fn split_follows_compat_mode() {
+        let sql = "CREATE PROCEDURE p AS BEGIN NULL; END;\n/\nSELECT 1";
+        let kb = Dialect::new(Variant::Kingbase);
+        assert_eq!(kb.with_compat(Compat::Oracle).split(sql).len(), 2);
+        assert_eq!(kb.split(sql).len(), 3);
     }
 
     #[test]

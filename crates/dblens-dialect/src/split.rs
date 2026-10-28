@@ -34,7 +34,11 @@ pub struct SqlStatement {
 
 /// 按家族的语法规则拆分多条语句。
 pub fn split_statements(sql: &str, family: Family) -> Vec<SqlStatement> {
-    let mut s = StreamSplitter::new(family);
+    split_with(StreamSplitter::new(family), sql)
+}
+
+/// 用给定的拆分器拆分整段文本（`Dialect::split` 用它带上兼容模式）。
+pub(crate) fn split_with(mut s: StreamSplitter, sql: &str) -> Vec<SqlStatement> {
     let mut out = s.feed(sql);
     out.extend(s.finish());
     out
@@ -44,6 +48,8 @@ pub fn split_statements(sql: &str, family: Family) -> Vec<SqlStatement> {
 /// 语句的位置和行号是在全部已喂入文本中的。
 pub struct StreamSplitter {
     family: Family,
+    /// PG 家族的 Oracle 兼容模式（人大金仓、openGauss）：另外识别 PL/SQL 块和独占一行的 `/`。
+    oracle_blocks: bool,
     /// 尚未拆完的文本，从全文的 `base` 处开始：比当前语句的开头多留几个字节，供向前查看（标识符、行首）。
     buf: String,
     base: usize,
@@ -81,6 +87,7 @@ impl StreamSplitter {
     pub fn new(family: Family) -> Self {
         Self {
             family,
+            oracle_blocks: false,
             buf: String::new(),
             base: 0,
             i: 0,
@@ -110,8 +117,14 @@ impl StreamSplitter {
         self.out
     }
 
+    /// PG 家族在 Oracle 兼容模式下的拆分器：PL/SQL 块（`CREATE PROCEDURE … END;` 后跟独占一行的 `/`）
+    /// 与 `$$` 引号都识别。块中出现 `$$` 时按 PG 的写法处理，语句在 `;` 处结束。
+    pub fn with_oracle_blocks(self) -> Self {
+        Self { oracle_blocks: self.family == Family::Postgres, ..self }
+    }
+
     fn plsql(&self) -> bool {
-        matches!(self.family, Family::Oracle | Family::Dameng)
+        matches!(self.family, Family::Oracle | Family::Dameng) || self.oracle_blocks
     }
 
     /// 丢掉当前语句之前的文本（留几个字节供向前查看），内存只与当前语句的长度有关。
@@ -251,7 +264,7 @@ impl StreamSplitter {
                 }
                 Step::No
             }
-            Family::Oracle | Family::Dameng => {
+            _ if self.plsql() => {
                 if !complete {
                     let maybe = head.first().is_none_or(|&c| c == b'/')
                         && head.iter().skip(1).all(u8::is_ascii_whitespace);
@@ -365,7 +378,11 @@ impl StreamSplitter {
             match dollar_tag_len(b, i, eof) {
                 Tag::Wait => return Step::Wait,
                 Tag::No => return Step::No,
-                Tag::Len(len) => scan_dollar(b, i, len, eof),
+                Tag::Len(len) => {
+                    // Oracle 兼容模式下 `CREATE FUNCTION … AS $$ … $$` 是 PG 的写法，不按 PL/SQL 块等 `/`
+                    self.block = false;
+                    scan_dollar(b, i, len, eof)
+                }
             }
         } else {
             return Step::No;
@@ -579,6 +596,28 @@ mod tests {
             texts("SELECT a,\n  delimiter AS d FROM t", Family::MySql),
             ["SELECT a,\n  delimiter AS d FROM t"]
         );
+    }
+
+    /// 人大金仓、openGauss 的 Oracle 兼容模式：PL/SQL 块以独占一行的 `/` 结束，`$$` 写法仍在 `;` 处结束。
+    #[test]
+    fn postgres_oracle_blocks() {
+        let oracle = |sql: &str| -> Vec<String> {
+            split_with(StreamSplitter::new(Family::Postgres).with_oracle_blocks(), sql)
+                .into_iter()
+                .map(|s| s.text)
+                .collect()
+        };
+        let proc = "CREATE OR REPLACE PROCEDURE p AS BEGIN INSERT INTO t VALUES (1); END;";
+        let sql = format!("{proc}\n/\nSELECT 1;\nSELECT 2");
+        assert_eq!(oracle(&sql), [proc, "SELECT 1", "SELECT 2"]);
+        assert!(texts(&sql, Family::Postgres).len() > 3, "PG 模式不认 PL/SQL 块");
+        let func = "CREATE FUNCTION f() RETURNS int AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql";
+        assert_eq!(oracle(&format!("{func};\nSELECT 2;")), [func, "SELECT 2"]);
+        let block = "DECLARE n int; BEGIN n := 1; END;";
+        assert_eq!(oracle(&format!("{block}\n/\n")), [block]);
+        // 只在 PG 家族上生效
+        let my = StreamSplitter::new(Family::MySql).with_oracle_blocks();
+        assert!(!my.plsql());
     }
 
     #[test]

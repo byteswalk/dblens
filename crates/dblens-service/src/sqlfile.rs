@@ -113,7 +113,7 @@ impl Statements {
     fn open(file: &SourceFile, encoding: TextEncoding, dialect: Dialect) -> Self {
         Self {
             rx: spawn_text(file.path.clone(), encoding),
-            splitter: Some(StreamSplitter::new(dialect.family())),
+            splitter: Some(dialect.splitter()),
             ready: VecDeque::new(),
         }
     }
