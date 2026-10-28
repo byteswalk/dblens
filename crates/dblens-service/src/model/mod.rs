@@ -10,5 +10,7 @@ pub use diagram::{
     DiagramWarning, Position,
 };
 pub use file::{LogicalKey, ModelDatabase, ModelInfo, SchemaRenames};
+#[cfg(test)]
+pub(crate) use ops::tests;
 pub use ops::{ModelDesignPreview, ModelDesignRequest, NewModel, RECENT_MODELS_SETTING, ReverseRequest};
 pub use store::{FileError, ModelStore, ModelSummary, ModelTableView, ModelWrite, SchemaTables, TableEntry};

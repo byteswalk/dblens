@@ -65,6 +65,20 @@ async fn models_need_local_files() {
     let (st, _) =
         call(&app, "POST", "/api/files/image", Some(json!({ "path": "/tmp/x.png", "data": "" }))).await;
     assert_eq!(st, StatusCode::FORBIDDEN);
+    let (st, _) = call(
+        &app,
+        "POST",
+        "/api/documents/templates/export",
+        Some(json!({ "format": "html", "path": "/tmp/t.html" })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+    // 浏览器模式：本机路径作为检查出的问题
+    let req = json!({ "source": { "kind": "database", "profile": "p", "schema": "s" }, "kind": "dictionary",
+                      "format": "html", "template": "/tmp/t.html" });
+    let (st, v) = call(&app, "POST", "/api/documents/check", Some(req)).await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(v["problems"][0]["field"], "template", "{v}");
 }
 
 /// ER 图与逻辑外键（M4b）。
@@ -241,4 +255,57 @@ async fn edit_compare_and_write_back() {
     assert_eq!(st, StatusCode::NO_CONTENT);
     let (st, _) = call(&app, "GET", &format!("/api/models/{b}"), None).await;
     assert_eq!(st, StatusCode::NOT_FOUND);
+}
+
+/// 文档导出（M4c）：检查、导出内置模板、模型导出数据字典后下载。
+#[tokio::test]
+async fn documents() {
+    let app = app(true);
+    let dir = tempfile::tempdir().unwrap();
+    let m = new_model(&app, dir.path(), "m").await;
+    let save = json!({ "schema": "public", "name": null, "draft": draft("orders", &["id", "x"]), "fingerprint": null });
+    let (st, v) = call(&app, "POST", &format!("/api/models/{m}/tables"), Some(save)).await;
+    assert_eq!(st, StatusCode::OK, "{v}");
+    let source = json!({ "kind": "model", "model": m, "schemas": ["public"] });
+    // xlsx 只能用于数据字典
+    let req = json!({ "source": source, "kind": "design", "format": "xlsx" });
+    let (_, v) = call(&app, "POST", "/api/documents/check", Some(req.clone())).await;
+    assert_eq!(v["problems"][0]["field"], "format", "{v}");
+    let (st, _) = call(&app, "POST", "/api/documents", Some(req)).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    // 导出内置模板
+    let path = dir.path().join("t.md");
+    let (st, _) = call(
+        &app,
+        "POST",
+        "/api/documents/templates/export",
+        Some(json!({ "format": "markdown", "path": path })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    assert!(std::fs::read_to_string(&path).unwrap().contains("{{ info.title }}"));
+    // 用这份模板导出数据字典，写到本机路径
+    let out = dir.path().join("dict.md");
+    let req = json!({ "source": source, "kind": "dictionary", "format": "markdown", "template": path,
+                      "info": { "title": "订单库" }, "output": out });
+    let (st, v) = call(&app, "POST", "/api/documents", Some(req)).await;
+    assert_eq!(st, StatusCode::CREATED, "{v}");
+    let id = v["id"].as_str().unwrap().to_string();
+    for _ in 0..500 {
+        let (_, t) = call(&app, "GET", &format!("/api/tasks/{id}"), None).await;
+        if t["state"] != "running" {
+            assert_eq!(t["state"], "done", "{t}");
+            assert_eq!(t["kind"], "document");
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let md = std::fs::read_to_string(&out).unwrap();
+    assert!(
+        md.starts_with(
+            "# 订单库
+"
+        ) && md.contains("public.orders"),
+        "{md}"
+    );
 }

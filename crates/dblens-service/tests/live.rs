@@ -20,6 +20,7 @@ use dblens_dialect::design::{Renames, TableChange, diff_table};
 use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_dialect::{Compat, DdlKind, Direction, RowChange, Variant, WriteMode};
 use dblens_driver::{ConnectParams, DriverId};
+use dblens_service::document::{DocFormat, DocInfo, DocKind, DocSource, DocumentRequest};
 use dblens_service::{
     ChangeSet, ColumnMapping, CompareRequest, CompareResult, CompareSideRef, DEFAULT_BATCH, DEFAULT_DIAGRAM,
     DataOrder, DefaultPolicy, DesignRequest, DriverRegistry, Environment, ExecRequest, ExportFormat,
@@ -1632,6 +1633,26 @@ async fn model_flow(env: &str) {
     let fk = ord.table.foreign_keys.iter().find(|f| f.ref_table == n("m4_customer")).expect("外键");
     assert_eq!((fk.columns.clone(), fk.ref_columns.clone()), (vec![n("cust_id")], vec![n("id")]), "{env}");
     assert!(v.tables.iter().any(|t| t.table.name == n("m4_customer")), "{env}");
+
+    // 文档导出（M4c）：库的这个 schema 导出 markdown 数据字典，表和外键（链接到被引用的表）都在
+    let out = dir.path().join("dict.md");
+    let req = DocumentRequest {
+        source: DocSource::Database { profile: live.profile_id.clone(), schema: schema.clone() },
+        tables: None,
+        kind: DocKind::Dictionary,
+        format: DocFormat::Markdown,
+        info: DocInfo::default(),
+        template: None,
+        reference: None,
+        view_definitions: true,
+        diagrams: vec![],
+        output: Some(out.clone()),
+    };
+    let st = wait_task(s, &s.start_document(req, true).await.unwrap()).await;
+    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+    let md = std::fs::read_to_string(&out).unwrap();
+    assert!(md.contains(&format!("</a>{schema}.{}", n("m4_ord"))), "{env}：{md}");
+    assert!(md.contains(&format!("[{schema}.{}](#t", n("m4_customer"))), "{env}：{md}");
 
     // 6. 库对库：同一个库中的第二个 schema
     let other: Option<&'static str> = match live.driver {

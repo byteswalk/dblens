@@ -2,6 +2,7 @@
 
 mod content;
 mod docx;
+mod job;
 mod labels;
 mod template;
 mod xlsx;
@@ -12,6 +13,7 @@ pub use content::{
     SourceSchema, SourceTable, build, png_size,
 };
 pub use docx::{builtin_reference, check_reference, write as write_docx};
+pub use job::{DiagramImage, DocFormat, DocSource, DocumentProblem, DocumentRequest};
 pub use labels::label;
 pub use template::{TextFormat, check, render};
 pub use xlsx::write as write_xlsx;
