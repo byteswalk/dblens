@@ -1,5 +1,5 @@
--- PostgreSQL ops queries (M1c3). Also used by KingbaseES, openGauss, GaussDB and HighGo, which may name
--- some columns differently: the database's own error is shown in that case.
+-- PostgreSQL ops queries (M1c3). Also used by KingbaseES, GaussDB and HighGo; openGauss overrides what it
+-- names differently (opengauss.sql). A database that still lacks a view shows its own error.
 -- slow_sql needs the pg_stat_statements extension (PostgreSQL 13+ column names).
 
 -- [sessions]

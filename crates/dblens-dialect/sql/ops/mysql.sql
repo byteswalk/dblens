@@ -1,5 +1,5 @@
--- MySQL ops queries (M1c3). Also used by TiDB, OceanBase and PolarDB, which may lack some of the views:
--- the database's own error is shown in that case. Timers in performance_schema are picoseconds.
+-- MySQL ops queries (M1c3). Also used by PolarDB; TiDB and OceanBase override what they lack (tidb.sql,
+-- oceanbase.sql). A database that still lacks a view shows its own error. Timers in performance_schema are picoseconds.
 
 -- [sessions]
 -- name.zh-CN: 会话列表

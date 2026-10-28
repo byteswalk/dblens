@@ -22,6 +22,9 @@ const MARIADB: &str = include_str!("../sql/ops/mariadb.sql");
 const POSTGRES: &str = include_str!("../sql/ops/postgres.sql");
 const ORACLE: &str = include_str!("../sql/ops/oracle.sql");
 const DAMENG: &str = include_str!("../sql/ops/dameng.sql");
+const TIDB: &str = include_str!("../sql/ops/tidb.sql");
+const OCEANBASE: &str = include_str!("../sql/ops/oceanbase.sql");
+const OPENGAUSS: &str = include_str!("../sql/ops/opengauss.sql");
 
 /// 运维查询的分类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -118,6 +121,9 @@ fn base_file(family: Family) -> &'static str {
 fn override_file(variant: Variant) -> Option<&'static str> {
     match variant {
         Variant::MariaDb => Some(MARIADB),
+        Variant::TiDb => Some(TIDB),
+        Variant::OceanBase => Some(OCEANBASE),
+        Variant::OpenGauss => Some(OPENGAUSS),
         _ => None,
     }
 }
@@ -187,11 +193,19 @@ mod tests {
         let locks = |qs: &[OpsQuery]| qs.iter().find(|q| q.key == "locks").unwrap().sql.clone();
         assert_ne!(locks(my), locks(maria));
         assert_eq!(maria[2].key, "locks");
-        // 兼容库用所属家族的模板
-        assert_eq!(Dialect::new(Variant::TiDb).ops_queries(), my);
+        // 没有覆盖文件的兼容库用所属家族的模板；有覆盖文件的只替换其中的查询，顺序不变
+        assert_eq!(Dialect::new(Variant::PolarDb).ops_queries(), my);
         assert_eq!(
             Dialect::new(Variant::Kingbase).ops_queries(),
             Dialect::new(Variant::Postgres).ops_queries()
         );
+        let keys = |qs: &[OpsQuery]| qs.iter().map(|q| q.key.clone()).collect::<Vec<_>>();
+        for v in [Variant::TiDb, Variant::OceanBase] {
+            assert_eq!(keys(Dialect::new(v).ops_queries()), keys(my), "{v:?}");
+            assert_ne!(locks(Dialect::new(v).ops_queries()), locks(my), "{v:?}");
+        }
+        let og = Dialect::new(Variant::OpenGauss).ops_queries();
+        assert_eq!(keys(og), keys(Dialect::new(Variant::Postgres).ops_queries()));
+        assert!(og.iter().all(|q| !q.sql.contains("backend_type") && !q.sql.contains("pg_blocking_pids")));
     }
 }
