@@ -163,6 +163,8 @@ struct TableFile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     foreign_keys: Vec<ForeignKeyFile>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    logical_keys: Vec<LogicalKey>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     checks: Vec<CheckFile>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     indexes: Vec<IndexFile>,
@@ -172,13 +174,35 @@ struct TableFile {
     extra: Extra,
 }
 
-/// 读出的一张表：结构、文件中不认识的字段（保存时写回）。
+/// 逻辑外键（M4b）：库中没有建的关系，只在模型中记录，不参与比对和同步。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogicalKey {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub columns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ref_schema: Option<String>,
+    pub ref_table: String,
+    pub ref_columns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+}
+
+/// 读出的一张表：结构、逻辑外键、文件中不认识的字段（保存时写回）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModelTable {
     pub table: Table,
+    pub logical_keys: Vec<LogicalKey>,
     pub extra: Extra,
     /// 每列不认识的字段，按列名。
     pub column_extra: BTreeMap<String, Extra>,
+}
+
+impl ModelTable {
+    /// 新表：没有逻辑外键和扩展字段。
+    pub fn new(table: Table) -> Self {
+        Self { table, logical_keys: vec![], extra: Extra::new(), column_extra: BTreeMap::new() }
+    }
 }
 
 fn to_file(t: &ModelTable) -> TableFile {
@@ -243,6 +267,7 @@ fn to_file(t: &ModelTable) -> TableFile {
             })
             .collect(),
         partition: tab.partition.clone(),
+        logical_keys: t.logical_keys.clone(),
         extra: t.extra.clone(),
     }
 }
@@ -317,7 +342,7 @@ fn from_file(f: TableFile, d: &Dialect) -> ModelTable {
         triggers: vec![],
         partition: f.partition,
     };
-    ModelTable { table, extra: f.extra, column_extra }
+    ModelTable { table, logical_keys: f.logical_keys, extra: f.extra, column_extra }
 }
 
 fn yaml_options() -> serde_saphyr::SerializerOptions {
@@ -477,7 +502,16 @@ mod tests {
             }],
             ..Default::default()
         };
-        ModelTable { table, extra: Extra::new(), column_extra: BTreeMap::new() }
+        let mut t = ModelTable::new(table);
+        t.logical_keys = vec![LogicalKey {
+            name: Some("lk_cust".into()),
+            columns: vec!["code".into()],
+            ref_schema: None,
+            ref_table: "customers".into(),
+            ref_columns: vec!["code".into()],
+            comment: Some("历史原因没建外键".into()),
+        }];
+        t
     }
 
     #[test]

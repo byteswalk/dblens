@@ -12,7 +12,7 @@ use dblens_dialect::Dialect;
 use serde::Serialize;
 
 use super::file::{
-    FORMAT, ModelDatabase, ModelInfo, ModelTable, SchemaRenames, fingerprint, info_path, info_yaml, io_err,
+    FORMAT, LogicalKey, ModelDatabase, ModelInfo, ModelTable, SchemaRenames, fingerprint, info_path, info_yaml, io_err,
     parse_info, parse_table, table_path, table_yaml, unescape_name, write_atomic,
 };
 
@@ -265,12 +265,13 @@ impl OpenModel {
         Ok(fingerprint(text.as_bytes()))
     }
 
-    /// 其他表中引用本 schema 的外键交给 `fix` 修改（返回是否改了），改过的表写回文件。
+    /// 其他表中引用本 schema 的外键和逻辑外键交给 `fix` 修改（参数为引用的表名、列，返回是否改了），
+    /// 改过的表写回文件。
     fn update_refs(
         &mut self,
         schema: &str,
         skip: Option<&Path>,
-        mut fix: impl FnMut(&mut dblens_core::schema::ForeignKey) -> bool,
+        mut fix: impl FnMut(&mut String, &mut Vec<String>) -> bool,
     ) -> Result<()> {
         let mut changed = Vec::new();
         for (p, c) in &self.files {
@@ -283,7 +284,13 @@ impl OpenModel {
             let mut hit = false;
             for f in &mut t.table.foreign_keys {
                 let ref_schema = f.ref_schema.clone().unwrap_or_else(|| own.clone());
-                if ref_schema == schema && fix(f) {
+                if ref_schema == schema && fix(&mut f.ref_table, &mut f.ref_columns) {
+                    hit = true;
+                }
+            }
+            for k in &mut t.logical_keys {
+                let ref_schema = k.ref_schema.clone().unwrap_or_else(|| own.clone());
+                if ref_schema == schema && fix(&mut k.ref_table, &mut k.ref_columns) {
                     hit = true;
                 }
             }
@@ -382,7 +389,7 @@ impl ModelStore {
         for (schema, list) in tables {
             for t in list {
                 let mt =
-                    ModelTable { table: t.clone(), extra: BTreeMap::new(), column_extra: BTreeMap::new() };
+                    ModelTable::new(t.clone());
                 write_atomic(&table_path(&root, schema, &t.name), &table_yaml(&mt)?)?;
             }
         }
@@ -509,11 +516,7 @@ impl ModelStore {
                             name = format!("{schema}.{}", table.name)
                         )));
                     }
-                    let mt = ModelTable {
-                        table: table.clone(),
-                        extra: BTreeMap::new(),
-                        column_extra: BTreeMap::new(),
-                    };
+                    let mt = ModelTable::new(table.clone());
                     (table_path(&m.root, schema, &table.name), mt)
                 }
             };
@@ -525,13 +528,20 @@ impl ModelStore {
                     mt.column_extra.insert(to.clone(), x);
                 }
                 let (tn, from_c, to_c) = (tname.clone(), from.clone(), to.clone());
-                m.update_refs(schema, Some(&path), |f| {
-                    let hit = f.ref_table == tn && f.ref_columns.contains(&from_c);
+                m.update_refs(schema, Some(&path), |ref_table, ref_columns| {
+                    let hit = *ref_table == tn && ref_columns.contains(&from_c);
                     if hit {
-                        f.ref_columns.iter_mut().filter(|c| **c == from_c).for_each(|c| *c = to_c.clone());
+                        ref_columns.iter_mut().filter(|c| **c == from_c).for_each(|c| *c = to_c.clone());
                     }
                     hit
                 })?;
+                // 本表的逻辑外键：本表的列、自引用的列
+                for k in &mut mt.logical_keys {
+                    k.columns.iter_mut().filter(|c| **c == from_c).for_each(|c| *c = to_c.clone());
+                    if k.ref_table == tn && k.ref_schema.as_deref().is_none_or(|s| s == schema) {
+                        k.ref_columns.iter_mut().filter(|c| **c == from_c).for_each(|c| *c = to_c.clone());
+                    }
+                }
                 let cols = m.renames(schema).columns.entry(tname.clone()).or_default();
                 record_rename(cols, from, to);
             }
@@ -561,10 +571,15 @@ impl ModelStore {
             }
             let (old, mut mt, _) = m.read(schema, from)?;
             mt.table.name = to.to_string();
-            // 自引用的外键
+            // 自引用的外键和逻辑外键
             for f in &mut mt.table.foreign_keys {
                 if f.ref_table == from && f.ref_schema.as_deref().is_none_or(|s| s == schema) {
                     f.ref_table = to.to_string();
+                }
+            }
+            for k in &mut mt.logical_keys {
+                if k.ref_table == from && k.ref_schema.as_deref().is_none_or(|s| s == schema) {
+                    k.ref_table = to.to_string();
                 }
             }
             let new = table_path(&m.root, schema, to);
@@ -572,10 +587,10 @@ impl ModelStore {
             if new != old {
                 std::fs::remove_file(&old).map_err(|e| io_err(&old, e))?;
             }
-            m.update_refs(schema, Some(&new), |f| {
-                let hit = f.ref_table == from;
+            m.update_refs(schema, Some(&new), |ref_table, _| {
+                let hit = ref_table == from;
                 if hit {
-                    f.ref_table = to.to_string();
+                    *ref_table = to.to_string();
                 }
                 hit
             })?;
@@ -587,6 +602,78 @@ impl ModelStore {
             m.prune_renames();
             m.write_info()?;
             m.refresh()
+        })
+    }
+
+    /// 加一个逻辑外键：两边的列存在、列数一致、名字在本表中不重复。返回表文件的新指纹。
+    pub fn add_logical_key(
+        &self,
+        id: &str,
+        schema: &str,
+        table: &str,
+        key: LogicalKey,
+        expected: Option<&str>,
+    ) -> Result<String> {
+        self.with(id, |m| {
+            m.writable()?;
+            m.refresh()?;
+            m.check_fingerprint(schema, table, expected)?;
+            let (path, mut mt, _) = m.read(schema, table)?;
+            let missing = |name: &str| Error::invalid(msg!("model.lk_column_missing", name = name));
+            if key.columns.is_empty() || key.columns.len() != key.ref_columns.len() {
+                return Err(Error::invalid(msg!("model.lk_count_mismatch")));
+            }
+            for c in &key.columns {
+                if !mt.table.columns.iter().any(|x| &x.name == c) {
+                    return Err(missing(&format!("{table}.{c}")));
+                }
+            }
+            let ref_schema = key.ref_schema.clone().unwrap_or_else(|| schema.to_string());
+            let target = if ref_schema == schema && key.ref_table == table {
+                mt.table.clone()
+            } else {
+                m.read(&ref_schema, &key.ref_table)?.1.table
+            };
+            for c in &key.ref_columns {
+                if !target.columns.iter().any(|x| &x.name == c) {
+                    return Err(missing(&format!("{}.{c}", key.ref_table)));
+                }
+            }
+            if let Some(n) = &key.name {
+                let taken = mt.logical_keys.iter().any(|k| k.name.as_ref() == Some(n))
+                    || mt.table.foreign_keys.iter().any(|k| k.name.as_ref() == Some(n));
+                if taken {
+                    return Err(Error::invalid(msg!("model.lk_name_exists", name = n)));
+                }
+            }
+            mt.logical_keys.push(key);
+            let fp = m.write_table(schema, &path, &mt)?;
+            m.refresh()?;
+            Ok(fp)
+        })
+    }
+
+    /// 删除第 `index` 个逻辑外键（从 0 开始）。返回表文件的新指纹。
+    pub fn delete_logical_key(
+        &self,
+        id: &str,
+        schema: &str,
+        table: &str,
+        index: usize,
+        expected: Option<&str>,
+    ) -> Result<String> {
+        self.with(id, |m| {
+            m.writable()?;
+            m.refresh()?;
+            m.check_fingerprint(schema, table, expected)?;
+            let (path, mut mt, _) = m.read(schema, table)?;
+            if index >= mt.logical_keys.len() {
+                return Err(Error::not_found(msg!("model.lk_not_found", index = index)));
+            }
+            mt.logical_keys.remove(index);
+            let fp = m.write_table(schema, &path, &mt)?;
+            m.refresh()?;
+            Ok(fp)
         })
     }
 
@@ -647,11 +734,7 @@ impl ModelStore {
                             }
                             None => (
                                 None,
-                                ModelTable {
-                                    table: Table::default(),
-                                    extra: BTreeMap::new(),
-                                    column_extra: BTreeMap::new(),
-                                },
+                                ModelTable::new(Table::default()),
                             ),
                         };
                         let new = match &old {
@@ -890,6 +973,61 @@ mod tests {
         let t = table("orders", &["id", "cust_id", "total"]);
         store.save_table(&id, "public", Some("orders"), t, &none, None).unwrap();
         assert!(std::fs::read_to_string(&path).unwrap().contains("layout:"));
+    }
+
+    fn lk(columns: &str, ref_table: &str, ref_columns: &str) -> LogicalKey {
+        LogicalKey {
+            name: Some(format!("lk_{columns}")),
+            columns: vec![columns.into()],
+            ref_schema: None,
+            ref_table: ref_table.into(),
+            ref_columns: vec![ref_columns.into()],
+            comment: None,
+        }
+    }
+
+    /// 逻辑外键：校验、设计器保存后保留、表和列改名时引用跟着改、删除。
+    #[test]
+    fn logical_keys_follow_renames() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("m");
+        let (store, id) = sample(&root);
+        let bad = [
+            lk("nope", "customers", "id"),
+            lk("cust_id", "customers", "nope"),
+            LogicalKey { ref_columns: vec![], ..lk("cust_id", "customers", "id") },
+        ];
+        for k in bad {
+            assert!(store.add_logical_key(&id, "public", "orders", k, None).is_err());
+        }
+        let fp = store.add_logical_key(&id, "public", "orders", lk("cust_id", "customers", "id"), None).unwrap();
+        let err = store.add_logical_key(&id, "public", "orders", lk("cust_id", "customers", "id"), None).unwrap_err();
+        assert!(err.to_string().contains("already used"), "{err}");
+        // 设计器保存（草稿中没有逻辑外键）后还在
+        let t = store.read_table(&id, "public", "orders").unwrap().table;
+        store.save_table(&id, "public", Some("orders"), t, &BTreeMap::new(), Some(&fp)).unwrap();
+        let text = std::fs::read_to_string(root.join("tables/public/orders.yaml")).unwrap();
+        assert!(text.contains("logical_keys:") && text.contains("ref_table: customers"), "{text}");
+        // 被引用的表、列改名
+        store.rename_table(&id, "public", "customers", "clients").unwrap();
+        let mut c = store.read_table(&id, "public", "clients").unwrap().table;
+        c.columns[0].name = "client_id".into();
+        c.primary_key = Some(PrimaryKey { name: None, columns: vec!["client_id".into()] });
+        store.save_table(&id, "public", Some("clients"), c, &[("client_id".into(), "id".into())].into(), None).unwrap();
+        // 本表的列改名
+        let mut o = store.read_table(&id, "public", "orders").unwrap().table;
+        o.columns[1].name = "client_ref".into();
+        o.foreign_keys[0].columns = vec!["client_ref".into()];
+        store.save_table(&id, "public", Some("orders"), o, &[("client_ref".into(), "cust_id".into())].into(), None).unwrap();
+        let text = std::fs::read_to_string(root.join("tables/public/orders.yaml")).unwrap();
+        let mt = super::super::file::parse_table(&text, &Dialect::new(Variant::Postgres)).unwrap();
+        assert_eq!(mt.logical_keys[0].columns, ["client_ref"]);
+        assert_eq!((mt.logical_keys[0].ref_table.as_str(), mt.logical_keys[0].ref_columns.as_slice()), ("clients", &["client_id".to_string()][..]));
+        // 比对用的表结构中没有逻辑外键
+        assert!(store.schema_tables(&id, "public").unwrap().tables.iter().all(|(t, _)| t.foreign_keys.len() <= 1));
+        store.delete_logical_key(&id, "public", "orders", 0, None).unwrap();
+        assert!(store.delete_logical_key(&id, "public", "orders", 0, None).is_err());
+        assert!(!std::fs::read_to_string(root.join("tables/public/orders.yaml")).unwrap().contains("logical_keys"));
     }
 
     #[test]

@@ -44,7 +44,7 @@ pub use import::{
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
 pub use model::{
-    FileError, ModelDatabase, ModelDesignPreview, ModelDesignRequest, ModelInfo, ModelStore, ModelSummary,
+    FileError, LogicalKey, ModelDatabase, ModelDesignPreview, ModelDesignRequest, ModelInfo, ModelStore, ModelSummary,
     ModelTableView, ModelWrite, NewModel, RECENT_MODELS_SETTING, ReverseRequest, SchemaRenames, SchemaTables,
     TableEntry,
 };

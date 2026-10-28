@@ -33,6 +33,14 @@ foreign_keys:
   ref_columns:
   - code
   on_delete: CASCADE
+logical_keys:
+- name: lk_cust
+  columns:
+  - code
+  ref_table: customers
+  ref_columns:
+  - code
+  comment: 历史原因没建外键
 checks:
 - name: ck_amount
   expression: amount >= 0
