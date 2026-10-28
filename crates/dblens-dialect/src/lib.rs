@@ -27,27 +27,36 @@ pub use import::{ImportStatement, MAX_PARAMS_PER_STATEMENT, MAX_ROWS_PER_STATEME
 pub use ops::{OpsCategory, OpsQuery};
 pub use session::may_change_schema;
 pub use split::{SqlStatement, StreamSplitter, split_statements};
-pub use variant::{Family, Variant};
+pub use variant::{Compat, Family, Variant};
 pub use version::parse_version;
 
 use meta::{MetaArgs, MetaKey, MetaQuery, MetaRows};
 
-/// 某个具体数据库的方言：变体和服务器版本。可以随意复制；所有方法都是纯计算。
+/// 某个具体数据库的方言：变体、服务器版本和兼容模式。可以随意复制；所有方法都是纯计算。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Dialect {
     variant: Variant,
-    /// 编码后的服务器版本（见 `parse_version`），未知时为 None。
+    /// 编码后的服务器版本（见 `parse_version`），未知时为 None。人大金仓、openGauss 是所基于的 PG 版本。
     version: Option<u32>,
+    compat: Compat,
 }
 
 impl Dialect {
     /// 版本未知的方言：元数据模板按最新版本渲染。
     pub fn new(variant: Variant) -> Self {
-        Self { variant, version: None }
+        Self { variant, version: None, compat: Compat::Native }
     }
 
     pub fn with_version(self, version: Option<u32>) -> Self {
         Self { version, ..self }
+    }
+
+    /// 指定兼容模式；只有人大金仓、openGauss 会是 `Oracle`，其他变体忽略。
+    pub fn with_compat(self, compat: Compat) -> Self {
+        match self.variant {
+            Variant::Kingbase | Variant::OpenGauss => Self { compat, ..self },
+            _ => self,
+        }
     }
 
     /// 根据驱动和服务器版本识别兼容库和版本号。
@@ -60,13 +69,32 @@ impl Dialect {
         Self::new(Variant::base(driver))
     }
 
-    /// 用 `MetaKey::VariantProbe` 的查询结果细化变体：目前只用于从 MySQL 中识别出 PolarDB
-    /// （`SHOW VARIABLES LIKE 'polardb_version'` 有结果）。
+    /// 用 `MetaKey::VariantProbe` 的查询结果细化方言：
+    /// - MySQL：`SHOW VARIABLES LIKE 'polardb_version'` 有结果即为 PolarDB；
+    /// - 人大金仓、openGauss：`mode` 列给出兼容模式，`version_num` 列（`server_version_num`）给出所基于的
+    ///   PG 版本，替换由产品版本号解析出的版本（人大金仓的 `V009R002` 会被解析成 9.2）。
     pub fn refine(self, probe: &MetaRows) -> Self {
         match self.variant {
             Variant::MySql if !probe.is_empty() => Self { variant: Variant::PolarDb, ..self },
+            Variant::Kingbase | Variant::OpenGauss => match probe.iter().next() {
+                Some(row) => {
+                    let compat = Compat::from_mode(&row.str("mode").unwrap_or_default());
+                    let version = row.int("version_num").and_then(pg_version_num).or(self.version);
+                    Self { version, compat, ..self }
+                }
+                None => self,
+            },
             _ => self,
         }
+    }
+
+    pub fn compat(&self) -> Compat {
+        self.compat
+    }
+
+    /// 人大金仓、openGauss 的 Oracle 兼容模式。
+    pub fn oracle_mode(&self) -> bool {
+        self.compat == Compat::Oracle
     }
 
     pub fn version(&self) -> Option<u32> {
@@ -145,9 +173,20 @@ impl Dialect {
     pub fn meta_query(&self, key: MetaKey, args: &MetaArgs) -> Result<Option<MetaQuery>> {
         match meta::sections(self.variant).get(key.as_str()) {
             None => Ok(None),
-            Some(t) => meta::render(key, t, self.family(), self.version.unwrap_or(u32::MAX), args).map(Some),
+            Some(t) => {
+                let version = self.version.unwrap_or(u32::MAX);
+                meta::render(key, t, self.family(), version, self.oracle_mode(), args).map(Some)
+            }
         }
     }
+}
+
+/// 把 PG 的 `server_version_num`（10 起为 `major*10000 + minor`，之前为 `major*10000 + minor*100 + patch`）
+/// 换成 `parse_version` 的编码。
+fn pg_version_num(n: i64) -> Option<u32> {
+    let n = u32::try_from(n).ok()?;
+    let major = n / 10000;
+    Some(if major >= 10 { major * 10000 + (n % 10000).min(99) * 100 } else { n })
 }
 
 /// 跨模块回归：各模块生成的 SQL 经 `Dialect::split` 必须仍是原样的一条语句。
@@ -249,6 +288,48 @@ mod tests {
         assert_eq!(d.refine(&probe).version(), Some(80016));
         assert_eq!(d.refine(&MetaRows::default()).variant(), Variant::MySql);
         assert_eq!(Dialect::new(Variant::MariaDb).refine(&probe).variant(), Variant::MariaDb);
+    }
+
+    fn probe(mode: &str, version_num: &str) -> MetaRows {
+        MetaRows::new(
+            vec!["mode".into(), "version_num".into()],
+            vec![vec![Value::String(mode.into()), Value::String(version_num.into())]],
+        )
+    }
+
+    #[test]
+    fn refine_reads_compat_mode_and_pg_version() {
+        let kb = Dialect::new(Variant::Kingbase).with_version(Some(90200));
+        let d = kb.refine(&probe("oracle", "120001"));
+        assert_eq!((d.compat(), d.version()), (Compat::Oracle, Some(120100)));
+        assert!(d.oracle_mode());
+        assert_eq!(kb.refine(&probe("pg", "120001")).compat(), Compat::Native);
+        let og = Dialect::new(Variant::OpenGauss).with_version(Some(70000));
+        let d = og.refine(&probe("A", "90204"));
+        assert_eq!((d.compat(), d.version()), (Compat::Oracle, Some(90204)));
+        assert_eq!(og.refine(&probe("PG", "90204")).compat(), Compat::Native);
+        // 未适配的模式按原生处理；没有探测结果时保持原样
+        assert_eq!(og.refine(&probe("B", "90204")).compat(), Compat::Native);
+        assert_eq!(og.refine(&MetaRows::default()), og);
+        // 其他变体不受探测结果影响
+        let pg = Dialect::new(Variant::Postgres).with_version(Some(180000));
+        assert_eq!(pg.refine(&probe("oracle", "120001")), pg);
+        assert_eq!(pg.with_compat(Compat::Oracle).compat(), Compat::Native);
+    }
+
+    #[test]
+    fn compat_modes() {
+        assert!(
+            Compat::is_adapted_mode("A")
+                && Compat::is_adapted_mode("pg")
+                && Compat::is_adapted_mode("ORACLE")
+        );
+        assert!(!Compat::is_adapted_mode("B") && !Compat::is_adapted_mode("mysql"));
+        assert_eq!(pg_version_num(120001), Some(120100));
+        assert_eq!(pg_version_num(180006), Some(180600));
+        assert_eq!(pg_version_num(90204), Some(90204));
+        assert!(Dialect::new(Variant::Kingbase).has_meta(MetaKey::VariantProbe));
+        assert!(Dialect::new(Variant::OpenGauss).has_meta(MetaKey::VariantProbe));
     }
 
     #[test]

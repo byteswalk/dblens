@@ -17,6 +17,35 @@ pub enum Family {
     Dameng,
 }
 
+/// 兼容模式：人大金仓、openGauss 可以按 Oracle 的规则解释 SQL（空串即 NULL、`NUMBER`、`VARCHAR2`、
+/// 带时间的 `DATE`、Oracle 风格的过程块）。其他变体恒为 `Native`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum Compat {
+    /// 产品自己的语法（人大金仓、openGauss 的 PG 模式也算）。
+    #[default]
+    #[serde(rename = "native")]
+    Native,
+    /// 人大金仓的 `database_mode = oracle`、openGauss 的 `DBCOMPATIBILITY 'A'`。
+    #[serde(rename = "oracle")]
+    Oracle,
+}
+
+impl Compat {
+    /// 由探测到的模式名得出兼容模式：人大金仓的 `oracle`、openGauss 的 `A` 是 Oracle 模式，其余按原生处理。
+    pub fn from_mode(mode: &str) -> Compat {
+        if mode.eq_ignore_ascii_case("oracle") || mode.eq_ignore_ascii_case("a") {
+            Compat::Oracle
+        } else {
+            Compat::Native
+        }
+    }
+
+    /// 已适配的模式名：openGauss 的 B、C 和人大金仓的 mysql、sqlserver 等返回 false。
+    pub fn is_adapted_mode(mode: &str) -> bool {
+        ["oracle", "a", "pg"].iter().any(|m| mode.eq_ignore_ascii_case(m))
+    }
+}
+
 /// 具体的数据库产品。兼容库复用所属家族的规则，只在个别地方覆盖。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Variant {

@@ -19,6 +19,8 @@ const MARIADB: &str = include_str!("../../sql/mariadb.sql");
 const POSTGRES: &str = include_str!("../../sql/postgres.sql");
 const ORACLE: &str = include_str!("../../sql/oracle.sql");
 const DAMENG: &str = include_str!("../../sql/dameng.sql");
+const KINGBASE: &str = include_str!("../../sql/kingbase.sql");
+const OPENGAUSS: &str = include_str!("../../sql/opengauss.sql");
 
 pub(crate) const ALL_VARIANTS: [Variant; 12] = [
     Variant::MySql,
@@ -69,6 +71,8 @@ fn base_file(family: Family) -> &'static str {
 fn override_file(variant: Variant) -> Option<&'static str> {
     match variant {
         Variant::MariaDb => Some(MARIADB),
+        Variant::Kingbase => Some(KINGBASE),
+        Variant::OpenGauss => Some(OPENGAUSS),
         _ => None,
     }
 }
@@ -106,12 +110,14 @@ pub(crate) fn like_pattern(filter: &str) -> String {
     p
 }
 
-/// 渲染一个模板。`version` 是编码后的版本号，未知时传 `u32::MAX`（按最新版本处理）。
+/// 渲染一个模板。`version` 是编码后的版本号，未知时传 `u32::MAX`（按最新版本处理）；
+/// `oracle_mode` 是人大金仓、openGauss 的 Oracle 兼容模式。
 pub(crate) fn render(
     key: MetaKey,
     template: &str,
     family: Family,
     version: u32,
+    oracle_mode: bool,
     args: &MetaArgs,
 ) -> Result<MetaQuery> {
     let names: Arc<Mutex<Vec<String>>> = Arc::default();
@@ -140,6 +146,7 @@ pub(crate) fn render(
             kind => args.kind.is_some(),
             filter => args.filter.is_some(),
             version => version,
+            oracle_mode => oracle_mode,
         })
         .map_err(|e| Error::internal(msg!("meta.template_render", key = k, error = e)))?;
     let params = names
@@ -193,16 +200,17 @@ mod tests {
 
     #[test]
     fn renders_placeholders_per_family_and_binds_in_order() {
-        let q = render(MetaKey::Tables, T, Family::Postgres, 90000, &args()).unwrap();
+        let q = render(MetaKey::Tables, T, Family::Postgres, 90000, false, &args()).unwrap();
         assert_eq!(q.sql, "SELECT x FROM t WHERE s = $1\n  AND n = $2\n  AND new = 1");
         assert_eq!(q.params, vec![Value::String("hr".into()), Value::String("emp".into())]);
-        let q = render(MetaKey::Tables, T, Family::Oracle, 80000, &args()).unwrap();
+        let q = render(MetaKey::Tables, T, Family::Oracle, 80000, false, &args()).unwrap();
         assert_eq!(q.sql, "SELECT x FROM t WHERE s = :1\n  AND n = :2");
         let q = render(
             MetaKey::Tables,
             T,
             Family::MySql,
             80000,
+            false,
             &MetaArgs { schema: Some("hr".into()), ..Default::default() },
         )
         .unwrap();
@@ -218,23 +226,25 @@ mod tests {
             "WHERE x LIKE {{ bind(\"filter\") }} OR y LIKE {{ bind(\"filter\") }}",
             Family::Oracle,
             0,
+            false,
             &a,
         )
         .unwrap();
         assert_eq!(q.sql, "WHERE x LIKE :1 OR y LIKE :2");
         assert_eq!(q.params, vec![Value::String("%a!_b%".into()), Value::String("%a!_b%".into())]);
         // 上下文里的 table 只是布尔值，模板不能借它把参数值拼进 SQL
-        let q = render(MetaKey::Tables, "{{ table }}", Family::MySql, 0, &args()).unwrap();
+        let q = render(MetaKey::Tables, "{{ table }}", Family::MySql, 0, false, &args()).unwrap();
         assert_eq!(q.sql, "True");
         // 未定义的变量直接报错，而不是悄悄渲染成空串
-        assert!(render(MetaKey::Tables, "{{ schema_name }}", Family::MySql, 0, &args()).is_err());
-        assert!(render(MetaKey::Tables, "{{ bind(\"owner\") }}", Family::MySql, 0, &args()).is_err());
+        assert!(render(MetaKey::Tables, "{{ schema_name }}", Family::MySql, 0, false, &args()).is_err());
+        assert!(render(MetaKey::Tables, "{{ bind(\"owner\") }}", Family::MySql, 0, false, &args()).is_err());
     }
 
     #[test]
     fn missing_arguments_bind_null() {
         let q =
-            render(MetaKey::Tables, "{{ bind(\"table\") }}", Family::MySql, 0, &MetaArgs::default()).unwrap();
+            render(MetaKey::Tables, "{{ bind(\"table\") }}", Family::MySql, 0, false, &MetaArgs::default())
+                .unwrap();
         assert_eq!(q.params, vec![Value::Null]);
     }
 }

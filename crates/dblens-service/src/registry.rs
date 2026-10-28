@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use dblens_core::{Error, Msg, Result, msg};
 use dblens_dialect::meta::{MetaArgs, MetaKey, MetaRows};
-use dblens_dialect::{Dialect, Variant};
+use dblens_dialect::{Compat, Dialect, Variant};
 use dblens_driver::native::{self, NativeLib};
 use dblens_driver::{ConnectParams, Connection, Driver, DriverId, collect_all};
 use serde::{Deserialize, Serialize};
@@ -42,8 +42,14 @@ pub struct ServerSummary {
     pub version: String,
     pub variant: Variant,
     pub variant_name: Msg,
-    /// 编码后的版本号（见 `dblens_dialect::parse_version`）。
+    /// 编码后的版本号（见 `dblens_dialect::parse_version`）。人大金仓、openGauss 是所基于的 PG 版本。
     pub version_code: Option<u32>,
+    /// 兼容模式（人大金仓、openGauss 可能是 Oracle 模式）。
+    pub compat: Compat,
+    /// 探测到的兼容模式名（人大金仓的 `database_mode`、openGauss 当前库的 `datcompatibility`）。
+    pub mode: Option<String>,
+    /// 模式名不在已适配的范围内（如 openGauss 的 B 模式），界面据此提示。
+    pub unadapted_mode: bool,
 }
 
 fn native_lib(id: DriverId) -> Option<(NativeLib, &'static str)> {
@@ -187,33 +193,47 @@ impl DriverRegistry {
         Ok(params)
     }
 
-    /// 连接并识别方言：`server_info` 识别兼容库和版本，再用 `variant_probe` 细化（如 PolarDB）。
+    /// 连接并识别方言：`server_info` 识别兼容库和版本，再用 `variant_probe` 细化
+    /// （PolarDB；人大金仓、openGauss 的兼容模式和所基于的 PG 版本）。
     pub async fn connect(
         &self,
         profile: &Profile,
         password: String,
     ) -> Result<(Box<dyn Connection>, Dialect)> {
+        self.connect_probed(profile, password).await.map(|(conn, dialect, _)| (conn, dialect))
+    }
+
+    /// 同 `connect`，另外返回探测到的兼容模式名（只有人大金仓、openGauss 有）。
+    async fn connect_probed(
+        &self,
+        profile: &Profile,
+        password: String,
+    ) -> Result<(Box<dyn Connection>, Dialect, Option<String>)> {
         let params = self.connect_params(profile, password)?;
         let driver = self.driver(profile.input.driver)?;
         let mut conn = driver.connect(&params).await?;
         let info = conn.server_info().await?;
         let mut dialect = Dialect::detect(driver.id(), &info);
+        let mut mode = None;
         if let Some(q) = dialect.meta_query(MetaKey::VariantProbe, &MetaArgs::default())? {
             let mut stream = conn.execute(&q.sql, &q.params).await?;
             let rows = MetaRows::from_events(collect_all(stream.as_mut(), 100).await?)?;
             drop(stream);
+            if matches!(dialect.variant(), Variant::Kingbase | Variant::OpenGauss) {
+                mode = rows.iter().next().and_then(|r| r.str("mode"));
+            }
             dialect = dialect.refine(&rows);
         }
         // 记下识别结果供界面显示图标；写不进去不影响连接
         if let Err(e) = self.store.set_profile_variant(&profile.id, dialect.variant()) {
             tracing::warn!("记录连接 {} 的数据库变体失败：{e}", profile.id);
         }
-        Ok((conn, dialect))
+        Ok((conn, dialect, mode))
     }
 
     /// 测试连接：连上、读出服务器信息后立即断开。
     pub async fn test_connection(&self, profile: &Profile, password: String) -> Result<ServerSummary> {
-        let (mut conn, dialect) = self.connect(profile, password).await?;
+        let (mut conn, dialect, mode) = self.connect_probed(profile, password).await?;
         let info = conn.server_info().await?;
         conn.close().await?;
         Ok(ServerSummary {
@@ -222,6 +242,9 @@ impl DriverRegistry {
             variant: dialect.variant(),
             variant_name: dialect.variant().display_name(),
             version_code: dialect.version(),
+            compat: dialect.compat(),
+            unadapted_mode: mode.as_deref().is_some_and(|m| !Compat::is_adapted_mode(m)),
+            mode,
         })
     }
 }
