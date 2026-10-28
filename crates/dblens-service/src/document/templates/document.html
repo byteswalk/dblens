@@ -1,0 +1,227 @@
+{#- DBLens 文档的 html 模板。上下文见 M4c 设计文档第 4 节（DocContent）；
+    t('键') 取固定文字，|v 把空值写成空。输出自动做 HTML 转义（图片的 data URL 由程序生成，用 |safe）。 -#}
+{% macro keys_table(keys) %}
+<table>
+<thead><tr><th>{{ t('doc.col.name') }}</th><th>{{ t('doc.col.index_columns') }}</th><th>{{ t('doc.col.references') }}</th><th>{{ t('doc.col.on_delete') }}</th><th>{{ t('doc.col.on_update') }}</th><th>{{ t('doc.col.comment') }}</th></tr></thead>
+<tbody>
+{% for k in keys %}
+<tr><td>{{ k.name|v }}</td><td>{{ k.columns }}</td><td>{% if k.ref_anchor %}<a href="#{{ k.ref_anchor }}">{{ k.ref_schema }}.{{ k.ref_table }}</a>{% else %}{{ k.ref_schema }}.{{ k.ref_table }}{% endif %} ({{ k.ref_columns }})</td><td>{{ k.on_delete|v }}</td><td>{{ k.on_update|v }}</td><td>{{ k.comment|v }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endmacro %}
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="DBLens">
+<title>{{ info.title }}</title>
+<style>
+body { font: 14px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f1f23; margin: 0 auto; max-width: 1100px; padding: 24px 32px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 20px; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-top: 36px; }
+h3 { font-size: 16px; margin-top: 28px; }
+h4 { font-size: 14px; margin: 16px 0 6px; color: #444; }
+.kind { color: #666; margin-bottom: 12px; }
+.meta td:first-child { color: #666; padding-right: 16px; }
+table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; }
+th, td { border: 1px solid #d9d9de; padding: 4px 8px; text-align: left; vertical-align: top; }
+th { background: #f4f4f6; font-weight: 600; }
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; }
+table.meta, table.meta td { border: none; width: auto; padding: 1px 0; }
+td.num, th.num { text-align: right; width: 4em; }
+code, pre { font-family: Consolas, "JetBrains Mono", monospace; font-size: 13px; }
+pre { background: #f6f6f8; padding: 8px 12px; overflow-x: auto; white-space: pre-wrap; }
+.toc ul { margin: 4px 0; }
+figure { margin: 12px 0; }
+figure img { max-width: 100%; border: 1px solid #e4e4e8; }
+.note { color: #8a6d00; }
+a { color: #1f5fbf; text-decoration: none; }
+@media print { body { padding: 0; } h2 { page-break-before: auto; } a { color: inherit; } }
+</style>
+</head>
+<body>
+<h1>{{ info.title }}</h1>
+<div class="kind">{{ t('doc.dictionary') if kind == 'dictionary' else t('doc.design') }}</div>
+<table class="meta">
+{% if info.version %}<tr><td>{{ t('doc.version') }}</td><td>{{ info.version }}</td></tr>{% endif %}
+{% if info.author %}<tr><td>{{ t('doc.author') }}</td><td>{{ info.author }}</td></tr>{% endif %}
+<tr><td>{{ t('doc.generated') }}</td><td>{{ info.generated }}</td></tr>
+<tr><td>{{ t('doc.source') }}</td><td>{{ info.source }}</td></tr>
+</table>
+{% if kind == 'dictionary' and info.description %}
+<p>{{ info.description }}</p>
+{% endif %}
+
+<nav class="toc">
+<h2>{{ t('doc.contents') }}</h2>
+<ul>
+{% if kind == 'design' %}
+<li><a href="#overview">{{ t('doc.overview') }}</a></li>
+{% if diagrams %}<li><a href="#diagrams">{{ t('doc.diagrams') }}</a></li>{% endif %}
+{% if relations %}<li><a href="#relations">{{ t('doc.relations') }}</a></li>{% endif %}
+{% endif %}
+<li><a href="#tables">{{ t('doc.tables') }}</a></li>
+{% if stats.views %}<li><a href="#views">{{ t('doc.views') }}</a></li>{% endif %}
+<li><a href="#details">{{ t('doc.details') }}</a></li>
+{% if unreadable %}<li><a href="#unreadable">{{ t('doc.unreadable') }}</a></li>{% endif %}
+</ul>
+</nav>
+{% if kind == 'design' %}
+
+<h2 id="overview">{{ t('doc.overview') }}</h2>
+{% if info.description %}<p>{{ info.description }}</p>{% endif %}
+<table style="width:auto">
+<thead><tr><th colspan="2">{{ t('doc.stats') }}</th></tr></thead>
+<tbody>
+<tr><td>{{ t('doc.stat.schemas') }}</td><td class="num">{{ stats.schemas }}</td></tr>
+<tr><td>{{ t('doc.stat.tables') }}</td><td class="num">{{ stats.tables }}</td></tr>
+<tr><td>{{ t('doc.stat.columns') }}</td><td class="num">{{ stats.columns }}</td></tr>
+<tr><td>{{ t('doc.stat.foreign_keys') }}</td><td class="num">{{ stats.foreign_keys }}</td></tr>
+<tr><td>{{ t('doc.stat.logical_keys') }}</td><td class="num">{{ stats.logical_keys }}</td></tr>
+{% if stats.views %}<tr><td>{{ t('doc.stat.views') }}</td><td class="num">{{ stats.views }}</td></tr>{% endif %}
+</tbody>
+</table>
+{% if diagrams %}
+
+<h2 id="diagrams">{{ t('doc.diagrams') }}</h2>
+{% for d in diagrams %}
+<h3>{{ d.title }}</h3>
+{% if d.description %}<p>{{ d.description }}</p>{% endif %}
+<figure><img src="{{ d.src|safe }}" alt="{{ d.title }}" width="{{ d.width }}"></figure>
+{% if d.names_only %}<p class="note">{{ t('doc.names_only') }}</p>{% endif %}
+{% endfor %}
+{% endif %}
+{% if relations %}
+
+<h2 id="relations">{{ t('doc.relations') }}</h2>
+<table>
+<thead><tr><th>{{ t('doc.col.from') }}</th><th>{{ t('doc.col.index_columns') }}</th><th>{{ t('doc.col.to') }}</th><th>{{ t('doc.col.index_columns') }}</th><th>{{ t('doc.col.kind') }}</th><th>{{ t('doc.col.name') }}</th></tr></thead>
+<tbody>
+{% for r in relations %}
+<tr><td>{% if r.from_anchor %}<a href="#{{ r.from_anchor }}">{{ r.from_schema }}.{{ r.from_table }}</a>{% else %}{{ r.from_schema }}.{{ r.from_table }}{% endif %}</td><td>{{ r.from_columns }}</td><td>{% if r.to_anchor %}<a href="#{{ r.to_anchor }}">{{ r.to_schema }}.{{ r.to_table }}</a>{% else %}{{ r.to_schema }}.{{ r.to_table }}{% endif %}</td><td>{{ r.to_columns }}</td><td>{{ t('doc.kind.' ~ r.kind) }}</td><td>{{ r.name|v }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% endif %}
+
+<h2 id="tables">{{ t('doc.tables') }}</h2>
+{% for s in schemas %}
+<h3>{{ s.name }}</h3>
+<table>
+<thead><tr><th class="num">{{ t('doc.col.no') }}</th><th>{{ t('doc.col.table') }}</th><th>{{ t('doc.col.comment') }}</th><th class="num">{{ t('doc.col.columns') }}</th></tr></thead>
+<tbody>
+{% for tb in s.tables %}
+<tr><td class="num">{{ loop.index }}</td><td><a href="#{{ tb.anchor }}">{{ tb.name }}</a></td><td>{{ tb.comment|v }}</td><td class="num">{{ tb.columns|length }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endfor %}
+{% if stats.views %}
+
+<h2 id="views">{{ t('doc.views') }}</h2>
+{% for s in schemas %}
+{% for vw in s.views %}
+<h3 id="{{ vw.anchor }}">{{ s.name }}.{{ vw.name }}</h3>
+{% if vw.comment %}<p>{{ vw.comment }}</p>{% endif %}
+<table>
+<thead><tr><th class="num">{{ t('doc.col.no') }}</th><th>{{ t('doc.col.column') }}</th><th>{{ t('doc.col.type') }}</th><th>{{ t('doc.col.comment') }}</th></tr></thead>
+<tbody>
+{% for c in vw.columns %}
+<tr><td class="num">{{ c.ordinal }}</td><td>{{ c.name }}</td><td><code>{{ c.data_type }}</code></td><td>{{ c.comment|v }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% if vw.definition %}
+<h4>{{ t('doc.sec.definition') }}</h4>
+<pre><code>{{ vw.definition }}</code></pre>
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% endif %}
+
+<h2 id="details">{{ t('doc.details') }}</h2>
+{% for s in schemas %}
+{% for tb in s.tables %}
+<h3 id="{{ tb.anchor }}">{{ s.name }}.{{ tb.name }}</h3>
+{% if tb.comment %}<p>{{ tb.comment }}</p>{% endif %}
+{% if tb.partition %}<p>{{ t('doc.partition') }}: <code>{{ tb.partition }}</code></p>{% endif %}
+<table>
+<thead><tr><th class="num">{{ t('doc.col.no') }}</th><th>{{ t('doc.col.column') }}</th><th>{{ t('doc.col.type') }}</th><th>{{ t('doc.col.nullable') }}</th><th>{{ t('doc.col.default') }}</th><th>{{ t('doc.col.flags') }}</th><th>{{ t('doc.col.comment') }}</th></tr></thead>
+<tbody>
+{% for c in tb.columns %}
+<tr><td class="num">{{ c.ordinal }}</td><td>{{ c.name }}</td><td><code>{{ c.data_type }}</code></td><td>{{ t('doc.yes') if c.nullable else t('doc.no') }}</td><td>{{ c.default|v }}</td><td>{% for f in c.flags %}{{ t('doc.flag.' ~ f) }}{{ ', ' if not loop.last }}{% endfor %}</td><td>{{ c.comment|v }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% if tb.indexes %}
+<h4>{{ t('doc.sec.indexes') }}</h4>
+<table>
+<thead><tr><th>{{ t('doc.col.name') }}</th><th>{{ t('doc.col.index_columns') }}</th><th>{{ t('doc.col.unique') }}</th><th>{{ t('doc.col.method') }}</th></tr></thead>
+<tbody>
+{% for i in tb.indexes %}
+<tr><td>{{ i.name }}</td><td>{{ i.columns }}</td><td>{{ t('doc.yes') if i.unique else t('doc.no') }}</td><td>{{ i.method|v }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% if tb.constraints %}
+<h4>{{ t('doc.sec.constraints') }}</h4>
+<table>
+<thead><tr><th>{{ t('doc.col.kind') }}</th><th>{{ t('doc.col.name') }}</th><th>{{ t('doc.col.detail') }}</th></tr></thead>
+<tbody>
+{% for k in tb.constraints %}
+<tr><td>{{ t('doc.kind.' ~ k.kind) }}</td><td>{{ k.name|v }}</td><td><code>{{ k.detail }}</code></td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% if tb.foreign_keys %}
+<h4>{{ t('doc.sec.foreign_keys') }}</h4>
+{{ keys_table(tb.foreign_keys) }}
+{% endif %}
+{% if tb.logical_keys %}
+<h4>{{ t('doc.sec.logical_keys') }}</h4>
+{{ keys_table(tb.logical_keys) }}
+{% endif %}
+{% if tb.triggers %}
+<h4>{{ t('doc.sec.triggers') }}</h4>
+<table>
+<thead><tr><th>{{ t('doc.col.name') }}</th><th>{{ t('doc.col.timing') }}</th><th>{{ t('doc.col.events') }}</th></tr></thead>
+<tbody>
+{% for g in tb.triggers %}
+<tr><td>{{ g.name }}</td><td>{{ g.timing|v }}</td><td>{{ g.events }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% if tb.referenced_by %}
+<h4>{{ t('doc.sec.referenced_by') }}</h4>
+<table>
+<thead><tr><th>{{ t('doc.col.table') }}</th><th>{{ t('doc.col.index_columns') }}</th><th>{{ t('doc.col.references') }}</th><th>{{ t('doc.col.kind') }}</th><th>{{ t('doc.col.name') }}</th></tr></thead>
+<tbody>
+{% for r in tb.referenced_by %}
+<tr><td>{% if r.anchor %}<a href="#{{ r.anchor }}">{{ r.schema }}.{{ r.table }}</a>{% else %}{{ r.schema }}.{{ r.table }}{% endif %}</td><td>{{ r.columns }}</td><td>{{ r.ref_columns }}</td><td>{{ t('doc.kind.' ~ r.kind) }}</td><td>{{ r.name|v }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% if unreadable %}
+
+<h2 id="unreadable">{{ t('doc.unreadable') }}</h2>
+<table>
+<thead><tr><th>{{ t('doc.col.schema') }}</th><th>{{ t('doc.col.table') }}</th><th>{{ t('doc.col.file') }}</th><th>{{ t('doc.col.error') }}</th></tr></thead>
+<tbody>
+{% for u in unreadable %}
+<tr><td>{{ u.schema }}</td><td>{{ u.name }}</td><td><code>{{ u.path }}</code></td><td>{{ u.message }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+</body>
+</html>

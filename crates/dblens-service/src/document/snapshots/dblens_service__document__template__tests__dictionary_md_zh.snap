@@ -1,0 +1,141 @@
+---
+source: crates/dblens-service/src/document/template.rs
+expression: "render(&c, TextFormat::Markdown, None, Lang::ZhCn, \"x\").unwrap()"
+---
+# 商城
+
+数据字典
+
+- 版本: 1.0
+- 作者: 张三
+- 生成时间: 2026-10-28 10:00
+- 来源: shop-model
+
+测试模型
+
+## 表清单
+
+### shop
+
+| 序号 | 表名 | 注释 | 列数 |
+|---:|---|---|---:|
+| 1 | [customers](#t1) | 客户 | 3 |
+| 2 | [items](#t2) |  | 3 |
+| 3 | [orders](#t3) |  | 5 |
+
+### crm
+
+| 序号 | 表名 | 注释 | 列数 |
+|---:|---|---|---:|
+| 1 | [regions](#t4) |  | 2 |
+
+## 表明细
+
+### <a id="t1"></a>shop.customers
+
+客户
+
+| 序号 | 列名 | 类型 | 可空 | 默认值 | 标记 | 注释 |
+|---:|---|---|---|---|---|---|
+| 1 | id | int | 否 |  | 主键, 自增 |  |
+| 2 | code | varchar(20) | 否 |  |  | 编号 |
+| 3 | region_id | int | 是 |  |  |  |
+
+#### 索引
+
+| 名称 | 列 | 唯一 | 方法 |
+|---|---|---|---|
+| ix_code | code DESC | 否 | BTREE |
+
+#### 约束
+
+| 类别 | 名称 | 内容 |
+|---|---|---|
+| 主键 | pk_customers | id |
+| 唯一 | uq_code | code |
+
+#### 外键
+
+| 名称 | 列 | 引用 | 删除时 | 更新时 | 注释 |
+|---|---|---|---|---|---|
+| fk_region | region_id | [crm.regions](#t4) (id) | CASCADE |  |  |
+
+#### 被引用
+
+| 表名 | 列 | 引用 | 类别 | 名称 |
+|---|---|---|---|---|
+| [shop.orders](#t3) | cust_id, cust_code | id, code | 外键 | fk_cust |
+
+### <a id="t2"></a>shop.items
+
+| 序号 | 列名 | 类型 | 可空 | 默认值 | 标记 | 注释 |
+|---:|---|---|---|---|---|---|
+| 1 | id | int | 是 |  |  |  |
+| 2 | order_id | int | 是 |  |  |  |
+| 3 | sku | varchar(30) | 是 |  |  |  |
+
+#### 逻辑外键
+
+| 名称 | 列 | 引用 | 删除时 | 更新时 | 注释 |
+|---|---|---|---|---|---|
+| lk_order | order_id | [shop.orders](#t3) (id) |  |  | 没有建外键 |
+
+### <a id="t3"></a>shop.orders
+
+| 序号 | 列名 | 类型 | 可空 | 默认值 | 标记 | 注释 |
+|---:|---|---|---|---|---|---|
+| 1 | id | int | 否 |  | 主键 |  |
+| 2 | cust_id | int | 是 |  |  |  |
+| 3 | cust_code | varchar(20) | 是 |  |  |  |
+| 4 | amount | decimal(10,2) | 是 | 0 |  |  |
+| 5 | double_amount | decimal(10,2) | 是 | amount * 2 | 生成列 |  |
+
+#### 约束
+
+| 类别 | 名称 | 内容 |
+|---|---|---|
+| 主键 |  | id |
+| 检查 | ck_amount | amount >= 0 |
+
+#### 外键
+
+| 名称 | 列 | 引用 | 删除时 | 更新时 | 注释 |
+|---|---|---|---|---|---|
+| fk_cust | cust_id, cust_code | [shop.customers](#t1) (id, code) | CASCADE |  |  |
+
+#### 触发器
+
+| 名称 | 时机 | 事件 |
+|---|---|---|
+| trg_orders | BEFORE | INSERT, UPDATE |
+
+#### 被引用
+
+| 表名 | 列 | 引用 | 类别 | 名称 |
+|---|---|---|---|---|
+| [shop.items](#t2) | order_id | id | 逻辑外键 | lk_order |
+
+### <a id="t4"></a>crm.regions
+
+| 序号 | 列名 | 类型 | 可空 | 默认值 | 标记 | 注释 |
+|---:|---|---|---|---|---|---|
+| 1 | id | int | 是 |  | 主键 |  |
+| 2 | name | varchar(50) | 是 |  |  |  |
+
+#### 约束
+
+| 类别 | 名称 | 内容 |
+|---|---|---|
+| 主键 |  | id |
+
+#### 被引用
+
+| 表名 | 列 | 引用 | 类别 | 名称 |
+|---|---|---|---|---|
+| [shop.customers](#t1) | region_id | id | 外键 | fk_region |
+
+## 无法读取的表
+
+| Schema | 表名 | 文件 | 原因 |
+|---|---|---|---|
+| shop | broken | tables/shop/broken.yaml | line 3: bad |

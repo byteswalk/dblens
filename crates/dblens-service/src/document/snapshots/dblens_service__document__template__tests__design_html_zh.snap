@@ -1,0 +1,238 @@
+---
+source: crates/dblens-service/src/document/template.rs
+expression: html
+---
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="DBLens">
+<title>&lt;商城&gt; &amp; 订单</title>
+<style>
+body { font: 14px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f1f23; margin: 0 auto; max-width: 1100px; padding: 24px 32px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 20px; border-bottom: 1px solid #ddd; padding-bottom: 4px; margin-top: 36px; }
+h3 { font-size: 16px; margin-top: 28px; }
+h4 { font-size: 14px; margin: 16px 0 6px; color: #444; }
+.kind { color: #666; margin-bottom: 12px; }
+.meta td:first-child { color: #666; padding-right: 16px; }
+table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; }
+th, td { border: 1px solid #d9d9de; padding: 4px 8px; text-align: left; vertical-align: top; }
+th { background: #f4f4f6; font-weight: 600; }
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; }
+table.meta, table.meta td { border: none; width: auto; padding: 1px 0; }
+td.num, th.num { text-align: right; width: 4em; }
+code, pre { font-family: Consolas, "JetBrains Mono", monospace; font-size: 13px; }
+pre { background: #f6f6f8; padding: 8px 12px; overflow-x: auto; white-space: pre-wrap; }
+.toc ul { margin: 4px 0; }
+figure { margin: 12px 0; }
+figure img { max-width: 100%; border: 1px solid #e4e4e8; }
+.note { color: #8a6d00; }
+a { color: #1f5fbf; text-decoration: none; }
+@media print { body { padding: 0; } h2 { page-break-before: auto; } a { color: inherit; } }
+</style>
+</head>
+<body>
+<h1>&lt;商城&gt; &amp; 订单</h1>
+<div class="kind">设计文档</div>
+<table class="meta">
+<tr><td>版本</td><td>1.0</td></tr><tr><td>作者</td><td>张三</td></tr><tr><td>生成时间</td><td>2026-10-28 10:00</td></tr>
+<tr><td>来源</td><td>shop-model</td></tr>
+</table>
+
+<nav class="toc">
+<h2>目录</h2>
+<ul>
+<li><a href="#overview">概述</a></li>
+<li><a href="#diagrams">ER 图</a></li><li><a href="#relations">表间关系</a></li><li><a href="#tables">表清单</a></li>
+<li><a href="#views">视图</a></li><li><a href="#details">表明细</a></li>
+<li><a href="#unreadable">无法读取的表</a></li></ul>
+</nav>
+
+<h2 id="overview">概述</h2>
+<p>测试模型</p><table style="width:auto">
+<thead><tr><th colspan="2">统计</th></tr></thead>
+<tbody>
+<tr><td>Schema 数</td><td class="num">2</td></tr>
+<tr><td>表数</td><td class="num">4</td></tr>
+<tr><td>列数</td><td class="num">13</td></tr>
+<tr><td>外键数</td><td class="num">2</td></tr>
+<tr><td>逻辑外键数</td><td class="num">1</td></tr>
+<tr><td>视图数</td><td class="num">1</td></tr></tbody>
+</table>
+
+<h2 id="diagrams">ER 图</h2>
+<h3>shop</h3>
+<p>全部表</p><figure><img src="data:image/png;base64,AQID" alt="shop" width="2"></figure>
+<p class="note">表较多，图中只显示表名；明细见各表。</p>
+<h2 id="relations">表间关系</h2>
+<table>
+<thead><tr><th>从</th><th>列</th><th>到</th><th>列</th><th>类别</th><th>名称</th></tr></thead>
+<tbody>
+<tr><td><a href="#t1">shop.customers</a></td><td>region_id</td><td><a href="#t4">crm.regions</a></td><td>id</td><td>外键</td><td>fk_region</td></tr>
+<tr><td><a href="#t2">shop.items</a></td><td>order_id</td><td><a href="#t3">shop.orders</a></td><td>id</td><td>逻辑外键</td><td>lk_order</td></tr>
+<tr><td><a href="#t3">shop.orders</a></td><td>cust_id, cust_code</td><td><a href="#t1">shop.customers</a></td><td>id, code</td><td>外键</td><td>fk_cust</td></tr>
+</tbody>
+</table>
+
+<h2 id="tables">表清单</h2>
+<h3>shop</h3>
+<table>
+<thead><tr><th class="num">序号</th><th>表名</th><th>注释</th><th class="num">列数</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td><a href="#t1">customers</a></td><td>客户</td><td class="num">3</td></tr>
+<tr><td class="num">2</td><td><a href="#t2">items</a></td><td></td><td class="num">3</td></tr>
+<tr><td class="num">3</td><td><a href="#t3">orders</a></td><td></td><td class="num">5</td></tr>
+</tbody>
+</table>
+<h3>crm</h3>
+<table>
+<thead><tr><th class="num">序号</th><th>表名</th><th>注释</th><th class="num">列数</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td><a href="#t4">regions</a></td><td></td><td class="num">2</td></tr>
+</tbody>
+</table>
+
+<h2 id="views">视图</h2>
+<h3 id="v1">shop.v_orders</h3>
+<p>订单视图</p><table>
+<thead><tr><th class="num">序号</th><th>列名</th><th>类型</th><th>注释</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>id</td><td><code>int</code></td><td></td></tr>
+</tbody>
+</table>
+<h4>定义</h4>
+<pre><code>SELECT id FROM orders</code></pre>
+
+<h2 id="details">表明细</h2>
+<h3 id="t1">shop.customers</h3>
+<p>客户</p><table>
+<thead><tr><th class="num">序号</th><th>列名</th><th>类型</th><th>可空</th><th>默认值</th><th>标记</th><th>注释</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>id</td><td><code>int</code></td><td>否</td><td></td><td>主键, 自增</td><td></td></tr>
+<tr><td class="num">2</td><td>code</td><td><code>varchar(20)</code></td><td>否</td><td></td><td></td><td>编号</td></tr>
+<tr><td class="num">3</td><td>region_id</td><td><code>int</code></td><td>是</td><td></td><td></td><td></td></tr>
+</tbody>
+</table>
+<h4>索引</h4>
+<table>
+<thead><tr><th>名称</th><th>列</th><th>唯一</th><th>方法</th></tr></thead>
+<tbody>
+<tr><td>ix_code</td><td>code DESC</td><td>否</td><td>BTREE</td></tr>
+</tbody>
+</table>
+<h4>约束</h4>
+<table>
+<thead><tr><th>类别</th><th>名称</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>主键</td><td>pk_customers</td><td><code>id</code></td></tr>
+<tr><td>唯一</td><td>uq_code</td><td><code>code</code></td></tr>
+</tbody>
+</table>
+<h4>外键</h4>
+<table>
+<thead><tr><th>名称</th><th>列</th><th>引用</th><th>删除时</th><th>更新时</th><th>注释</th></tr></thead>
+<tbody>
+<tr><td>fk_region</td><td>region_id</td><td><a href="#t4">crm.regions</a> (id)</td><td>CASCADE</td><td></td><td></td></tr>
+</tbody>
+</table>
+
+<h4>被引用</h4>
+<table>
+<thead><tr><th>表名</th><th>列</th><th>引用</th><th>类别</th><th>名称</th></tr></thead>
+<tbody>
+<tr><td><a href="#t3">shop.orders</a></td><td>cust_id, cust_code</td><td>id, code</td><td>外键</td><td>fk_cust</td></tr>
+</tbody>
+</table>
+<h3 id="t2">shop.items</h3>
+<table>
+<thead><tr><th class="num">序号</th><th>列名</th><th>类型</th><th>可空</th><th>默认值</th><th>标记</th><th>注释</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>id</td><td><code>int</code></td><td>是</td><td></td><td></td><td></td></tr>
+<tr><td class="num">2</td><td>order_id</td><td><code>int</code></td><td>是</td><td></td><td></td><td></td></tr>
+<tr><td class="num">3</td><td>sku</td><td><code>varchar(30)</code></td><td>是</td><td></td><td></td><td></td></tr>
+</tbody>
+</table>
+<h4>逻辑外键</h4>
+<table>
+<thead><tr><th>名称</th><th>列</th><th>引用</th><th>删除时</th><th>更新时</th><th>注释</th></tr></thead>
+<tbody>
+<tr><td>lk_order</td><td>order_id</td><td><a href="#t3">shop.orders</a> (id)</td><td></td><td></td><td>没有建外键</td></tr>
+</tbody>
+</table>
+
+<h3 id="t3">shop.orders</h3>
+<table>
+<thead><tr><th class="num">序号</th><th>列名</th><th>类型</th><th>可空</th><th>默认值</th><th>标记</th><th>注释</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>id</td><td><code>int</code></td><td>否</td><td></td><td>主键</td><td></td></tr>
+<tr><td class="num">2</td><td>cust_id</td><td><code>int</code></td><td>是</td><td></td><td></td><td></td></tr>
+<tr><td class="num">3</td><td>cust_code</td><td><code>varchar(20)</code></td><td>是</td><td></td><td></td><td></td></tr>
+<tr><td class="num">4</td><td>amount</td><td><code>decimal(10,2)</code></td><td>是</td><td>0</td><td></td><td></td></tr>
+<tr><td class="num">5</td><td>double_amount</td><td><code>decimal(10,2)</code></td><td>是</td><td>amount * 2</td><td>生成列</td><td></td></tr>
+</tbody>
+</table>
+<h4>约束</h4>
+<table>
+<thead><tr><th>类别</th><th>名称</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>主键</td><td></td><td><code>id</code></td></tr>
+<tr><td>检查</td><td>ck_amount</td><td><code>amount &gt;= 0</code></td></tr>
+</tbody>
+</table>
+<h4>外键</h4>
+<table>
+<thead><tr><th>名称</th><th>列</th><th>引用</th><th>删除时</th><th>更新时</th><th>注释</th></tr></thead>
+<tbody>
+<tr><td>fk_cust</td><td>cust_id, cust_code</td><td><a href="#t1">shop.customers</a> (id, code)</td><td>CASCADE</td><td></td><td></td></tr>
+</tbody>
+</table>
+
+<h4>触发器</h4>
+<table>
+<thead><tr><th>名称</th><th>时机</th><th>事件</th></tr></thead>
+<tbody>
+<tr><td>trg_orders</td><td>BEFORE</td><td>INSERT, UPDATE</td></tr>
+</tbody>
+</table>
+<h4>被引用</h4>
+<table>
+<thead><tr><th>表名</th><th>列</th><th>引用</th><th>类别</th><th>名称</th></tr></thead>
+<tbody>
+<tr><td><a href="#t2">shop.items</a></td><td>order_id</td><td>id</td><td>逻辑外键</td><td>lk_order</td></tr>
+</tbody>
+</table>
+<h3 id="t4">crm.regions</h3>
+<table>
+<thead><tr><th class="num">序号</th><th>列名</th><th>类型</th><th>可空</th><th>默认值</th><th>标记</th><th>注释</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>id</td><td><code>int</code></td><td>是</td><td></td><td>主键</td><td></td></tr>
+<tr><td class="num">2</td><td>name</td><td><code>varchar(50)</code></td><td>是</td><td></td><td></td><td></td></tr>
+</tbody>
+</table>
+<h4>约束</h4>
+<table>
+<thead><tr><th>类别</th><th>名称</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td>主键</td><td></td><td><code>id</code></td></tr>
+</tbody>
+</table>
+<h4>被引用</h4>
+<table>
+<thead><tr><th>表名</th><th>列</th><th>引用</th><th>类别</th><th>名称</th></tr></thead>
+<tbody>
+<tr><td><a href="#t1">shop.customers</a></td><td>region_id</td><td>id</td><td>外键</td><td>fk_region</td></tr>
+</tbody>
+</table>
+
+<h2 id="unreadable">无法读取的表</h2>
+<table>
+<thead><tr><th>Schema</th><th>表名</th><th>文件</th><th>原因</th></tr></thead>
+<tbody>
+<tr><td>shop</td><td>broken</td><td><code>tables&#x2f;shop&#x2f;broken.yaml</code></td><td>line 3: bad</td></tr>
+</tbody>
+</table>
+</body>
+</html>

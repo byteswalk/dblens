@@ -1,0 +1,184 @@
+---
+source: crates/dblens-service/src/document/template.rs
+expression: "render(&c, TextFormat::Markdown, None, Lang::En, \"shop_images\").unwrap()"
+---
+# 商城
+
+Design Document
+
+- Version: 1.0
+- Author: 张三
+- Generated: 2026-10-28 10:00
+- Source: shop-model
+
+## Overview
+
+测试模型
+
+| Statistics | |
+|---|---:|
+| Schemas | 2 |
+| Tables | 4 |
+| Columns | 13 |
+| Foreign keys | 2 |
+| Logical keys | 1 |
+| Views | 1 |
+
+## ER Diagrams
+
+### shop
+
+全部表
+
+![shop](shop_images/01-shop-_all.png)
+
+> This diagram has many tables, so only table names are shown; see each table for details.
+
+## Relationships
+
+| From | Columns | To | Columns | Kind | Name |
+|---|---|---|---|---|---|
+| shop.customers | region_id | crm.regions | id | Foreign key | fk_region |
+| shop.items | order_id | shop.orders | id | Logical key | lk_order |
+| shop.orders | cust_id, cust_code | shop.customers | id, code | Foreign key | fk_cust |
+
+## Tables
+
+### shop
+
+| No. | Table | Comment | Columns |
+|---:|---|---|---:|
+| 1 | [customers](#t1) | 客户 | 3 |
+| 2 | [items](#t2) |  | 3 |
+| 3 | [orders](#t3) |  | 5 |
+
+### crm
+
+| No. | Table | Comment | Columns |
+|---:|---|---|---:|
+| 1 | [regions](#t4) |  | 2 |
+
+## Views
+
+### <a id="v1"></a>shop.v_orders
+
+订单视图
+
+| No. | Column | Type | Comment |
+|---:|---|---|---|
+| 1 | id | int |  |
+
+```sql
+SELECT id FROM orders
+```
+
+## Table Details
+
+### <a id="t1"></a>shop.customers
+
+客户
+
+| No. | Column | Type | Nullable | Default | Flags | Comment |
+|---:|---|---|---|---|---|---|
+| 1 | id | int | No |  | PK, Auto |  |
+| 2 | code | varchar(20) | No |  |  | 编号 |
+| 3 | region_id | int | Yes |  |  |  |
+
+#### Indexes
+
+| Name | Columns | Unique | Method |
+|---|---|---|---|
+| ix_code | code DESC | No | BTREE |
+
+#### Constraints
+
+| Kind | Name | Detail |
+|---|---|---|
+| Primary key | pk_customers | id |
+| Unique | uq_code | code |
+
+#### Foreign Keys
+
+| Name | Columns | References | On delete | On update | Comment |
+|---|---|---|---|---|---|
+| fk_region | region_id | [crm.regions](#t4) (id) | CASCADE |  |  |
+
+#### Referenced By
+
+| Table | Columns | References | Kind | Name |
+|---|---|---|---|---|
+| [shop.orders](#t3) | cust_id, cust_code | id, code | Foreign key | fk_cust |
+
+### <a id="t2"></a>shop.items
+
+| No. | Column | Type | Nullable | Default | Flags | Comment |
+|---:|---|---|---|---|---|---|
+| 1 | id | int | Yes |  |  |  |
+| 2 | order_id | int | Yes |  |  |  |
+| 3 | sku | varchar(30) | Yes |  |  |  |
+
+#### Logical Keys
+
+| Name | Columns | References | On delete | On update | Comment |
+|---|---|---|---|---|---|
+| lk_order | order_id | [shop.orders](#t3) (id) |  |  | 没有建外键 |
+
+### <a id="t3"></a>shop.orders
+
+| No. | Column | Type | Nullable | Default | Flags | Comment |
+|---:|---|---|---|---|---|---|
+| 1 | id | int | No |  | PK |  |
+| 2 | cust_id | int | Yes |  |  |  |
+| 3 | cust_code | varchar(20) | Yes |  |  |  |
+| 4 | amount | decimal(10,2) | Yes | 0 |  |  |
+| 5 | double_amount | decimal(10,2) | Yes | amount * 2 | Generated |  |
+
+#### Constraints
+
+| Kind | Name | Detail |
+|---|---|---|
+| Primary key |  | id |
+| Check | ck_amount | amount >= 0 |
+
+#### Foreign Keys
+
+| Name | Columns | References | On delete | On update | Comment |
+|---|---|---|---|---|---|
+| fk_cust | cust_id, cust_code | [shop.customers](#t1) (id, code) | CASCADE |  |  |
+
+#### Triggers
+
+| Name | Timing | Events |
+|---|---|---|
+| trg_orders | BEFORE | INSERT, UPDATE |
+
+#### Referenced By
+
+| Table | Columns | References | Kind | Name |
+|---|---|---|---|---|
+| [shop.items](#t2) | order_id | id | Logical key | lk_order |
+
+### <a id="t4"></a>crm.regions
+
+| No. | Column | Type | Nullable | Default | Flags | Comment |
+|---:|---|---|---|---|---|---|
+| 1 | id | int | Yes |  | PK |  |
+| 2 | name | varchar(50) | Yes |  |  |  |
+
+#### Constraints
+
+| Kind | Name | Detail |
+|---|---|---|
+| Primary key |  | id |
+
+#### Referenced By
+
+| Table | Columns | References | Kind | Name |
+|---|---|---|---|---|
+| [shop.customers](#t1) | region_id | id | Foreign key | fk_region |
+
+## Unreadable Tables
+
+| Schema | Table | File | Reason |
+|---|---|---|---|
+| shop | broken | tables/shop/broken.yaml | line 3: bad |

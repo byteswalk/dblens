@@ -1367,6 +1367,7 @@ dependencies = [
  "encoding_rs_io",
  "insta",
  "keyring",
+ "minijinja",
  "rusqlite",
  "rust_xlsxwriter",
  "serde",
@@ -3248,6 +3249,9 @@ name = "minijinja"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90086695417a271bc96e6cb50618555614ca48fa3bb0d9aa96e3468b0f84431e"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "minisign-verify"

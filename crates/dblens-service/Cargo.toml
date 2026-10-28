@@ -33,6 +33,7 @@ directories.workspace = true
 encoding_rs.workspace = true
 encoding_rs_io.workspace = true
 keyring.workspace = true
+minijinja = { workspace = true, features = ["serde"] }
 rusqlite.workspace = true
 rust_xlsxwriter.workspace = true
 serde.workspace = true
