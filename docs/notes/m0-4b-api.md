@@ -212,6 +212,38 @@
 - `statements`：`[{kind: "sql", sql, changes} | {kind: "count_check", source, target, changes}]`；`count_check` 是重建时由程序执行的核对行数。
 - 任务失败时 `remaining` 为没有执行的语句（以 `;` 分隔），PG 家族整体回滚时为 null。
 
+### 模型与比对（M4a 加入）
+
+模型目录是服务所在机器上的路径：`/models` 下的接口和 `/compare/script` 只在页面和服务在同一台机器上（桌面程序、只监听本机地址的 `dblens-server`）时可用，否则 403。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/models` | `{open: [模型], recent: [目录]}`；模型为 `{id, path, info, read_only}`，`info` 是 `model.yaml` 的内容 |
+| POST | `/models/open` | `{path}`，打开模型目录；已经打开的返回原来的编号 |
+| POST | `/models` | `{path, name, database: {variant, compat?, version?}}`，新建空模型（目录必须不存在或为空），201 |
+| POST | `/models/reverse` | `{profile_id, schemas, path, name}`，反向生成，返回 201 和 `{"id"}`（任务，`kind` 为 `reverse`；结束后 `model` 为打开的模型的编号） |
+| GET / PUT / DELETE | `/models/{id}` | 重新加载并返回模型 / 改 `{name, description, schemas}` / 关闭 |
+| GET | `/models/{id}/caps` | 设计器的能力和类型目录（按模型的数据库类型），格式同 `/profiles/{id}/design/caps` |
+| GET | `/models/{id}/tables` | `[{schema, name, comment?, error?: {path, message}}]`；`error` 是解析失败的文件 |
+| GET / DELETE | `/models/{id}/tables/{schema}/{name}` | `{table, fingerprint}` / 删除表文件（`?fingerprint=` 时核对） |
+| POST | `/models/{id}/tables/{schema}/{name}/rename` | `{to}`，表改名：改文件名、更新其他表外键的引用、记入改名记录 |
+| POST | `/models/{id}/tables/preview` | 设计器的检查：`{errors, warnings, changes, conflict}` |
+| POST | `/models/{id}/tables` | 保存设计器中的表，返回 `{fingerprint}`；有校验错误、文件已被修改时 400 |
+| POST | `/compare` | 比对：`{source, target, options, renames}` → `{diff: {tables, suggestions}, renames, source_errors, target_errors, source_tables, target_tables, fingerprint}` |
+| POST | `/compare/preview` | 同步的预览：`{compare, selected, fingerprint}` → `{script, text, writes, denied, confirm, fingerprint}` |
+| POST | `/compare/sync` | 同步：目标是库时 201 和 `{task}`（任务，`kind` 为 `sync`），目标是模型时 200 和 `{task: null}`（已写回）。比对结果与预览时不同时 400 |
+| POST | `/compare/script` | `{path, text}`，把同步脚本写到 `.sql` 文件（桌面程序的"另存为"） |
+
+- 设计器请求体：`{schema, name, draft, renames, fingerprint}`，含义同 `/profiles/{id}/design/preview`（没有 `rebuild`）。
+- 比对的一边：`{kind: "model", model, schema}` 或 `{kind: "database", profile, schema}`；结果描述"怎样修改目标才与源一致"。
+- `options`：`{ignore_comments, ignore_column_order, ignore_generated_names, case_insensitive}`，`ignore_generated_names` 默认为 true。
+- `renames`：采用的改名，`{tables: {源: 目标}, columns: {源表: {源列: 目标列}}}`；模型中记下的改名自动采用。
+- `diff.tables`：`[{status, source, target, items: [{id, change}], appended}]`，`status` 为 `added` / `removed` / `renamed` / `changed` / `same`；
+  `change` 为 `{kind: "drop_table", name}`、`{kind: "rename_table", from, to}` 或 `{kind: "table", change: 表设计器的变更}`。勾选和同步按 `id`。
+- `diff.suggestions`：推测的改名 `[{table, source, target}]`，`table` 为 null 时是表的改名。
+- `script`（目标是库）：`{steps: [{kind: "sql", sql, items} | {kind: "rebuild", table, rebuild, items}], refused: [[表, 原因]], warnings, transactional}`；
+  `writes`（目标是模型）：`[{name, from?, delete}]`。
+
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 
 `lang` 可选，决定事件中文字的语言（见"语言"一节）。
