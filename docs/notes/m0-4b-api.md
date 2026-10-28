@@ -265,6 +265,22 @@
 - `warnings`：`[{kind: "missing_table", name} | {kind: "broken_logical_key", table, index, name}]`。
 - 库的 ER 图用 `GET /profiles/{id}/schemas/{schema}/tables`（不给 `table` 时返回整个 schema 的表明细）。
 
+### 文档导出（M4c 加入）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/documents` | 开始导出，201 和 `{id}`（任务 id，进度和取消用 `/tasks/{id}`）；浏览器模式完成后从 `/tasks/{id}/report` 下载 |
+| POST | `/documents/check` | 开始前检查，返回 `{problems: [{field, error}]}`，`field` 为 `format` / `template` / `reference` / `output` |
+| POST | `/documents/templates/export` | `{format: "html" \| "markdown", path}`，把内置模板写到本机路径（只在页面和服务在同一台机器上时可用，否则 403） |
+
+- 请求：`{source, tables?, kind, format, info, template?, reference?, view_definitions, diagrams, output?}`。
+  - `source`：`{kind: "model", model, schemas}` 或 `{kind: "database", profile, schema}`；`tables` 只在一个 schema 时生效。
+  - `kind`：`dictionary` / `design`；`format`：`docx` / `html` / `markdown` / `xlsx`（xlsx 只用于数据字典）。
+  - `info`：`{title, version?, author?, description?}`；标题为空时取模型名或 schema 名。
+  - `template`（html、markdown 的模板文件）、`reference`（docx 的样式来源）、`output`（写到的路径）是本机路径，只在页面和服务在同一台机器上时接受。
+  - `diagrams`：设计文档的 ER 图 `[{upload, schema, name, title, description?, names_only}]`，`upload` 为 `/uploads` 返回的编号（PNG）。
+- 任务 `kind` 为 `document`；xlsx 有截断的单元格时 `warnings` 为个数。markdown 带图片时：写到本机路径则图片在旁边的 `<文件名>_images/`，浏览器模式打包成 zip。
+
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 
 `lang` 可选，决定事件中文字的语言（见"语言"一节）。
