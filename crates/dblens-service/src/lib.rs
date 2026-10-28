@@ -40,8 +40,9 @@ pub use import::{
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
 pub use model::{
-    FileError, ModelDatabase, ModelInfo, ModelStore, ModelSummary, ModelTableView, ModelWrite, SchemaRenames,
-    SchemaTables, TableEntry,
+    FileError, ModelDatabase, ModelDesignPreview, ModelDesignRequest, ModelInfo, ModelStore, ModelSummary,
+    ModelTableView, ModelWrite, NewModel, RECENT_MODELS_SETTING, ReverseRequest, SchemaRenames, SchemaTables,
+    TableEntry,
 };
 pub use objects::{DataOrder, GenerateKind, ObjectKind};
 pub use policy::{

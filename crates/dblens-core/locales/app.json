@@ -145,6 +145,7 @@
   "model.conflict": {"zh-CN": "%{name} 的文件已被修改，请重新加载", "en": "The file for %{name} has changed; reload it"},
   "model.dir_not_empty": {"zh-CN": "目录 %{path} 不为空", "en": "Directory %{path} is not empty"},
   "model.io_failed": {"zh-CN": "读写 %{path} 失败：%{error}", "en": "Failed to access %{path}: %{error}"},
+  "model.no_schemas": {"zh-CN": "没有选择 schema", "en": "No schema selected"},
   "model.not_a_model": {"zh-CN": "%{path} 不是模型目录（没有 model.yaml）", "en": "%{path} is not a model directory (model.yaml not found)"},
   "model.read_only": {"zh-CN": "模型文件格式 %{format} 比本程序新，只能查看；请升级数洞", "en": "Model format %{format} is newer than this version supports; it is read-only. Please upgrade DBLens"},
   "model.table_exists": {"zh-CN": "表 %{name} 已存在", "en": "Table %{name} already exists"},

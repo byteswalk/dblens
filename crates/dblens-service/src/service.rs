@@ -9,6 +9,7 @@ use dblens_dialect::{Dialect, OpsQuery, Variant};
 use crate::export::ExportManager;
 use crate::history::HistoryLog;
 use crate::metadata::{MetadataCache, MetadataService};
+use crate::model::ModelStore;
 use crate::policy::{DefaultPolicy, Policy};
 use crate::profile::{Profile, ProfileInput};
 use crate::registry::{DriverRegistry, ServerSummary};
@@ -30,6 +31,8 @@ pub struct Service {
     pub exports: ExportManager,
     /// 导入和执行 SQL 文件的任务、上传的文件（M2b）。
     pub tasks: TaskManager,
+    /// 打开的模型（M4a）。
+    pub models: ModelStore,
     pub(crate) history: HistoryLog,
 }
 
@@ -78,6 +81,7 @@ impl Service {
             metadata: MetadataService::new(registry.clone(), secrets.clone(), cache),
             exports: ExportManager::default(),
             tasks: TaskManager::default(),
+            models: ModelStore::default(),
             history,
             store,
             secrets,

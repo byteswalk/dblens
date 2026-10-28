@@ -26,6 +26,8 @@ pub enum TaskKind {
     SqlFile,
     /// 表设计器执行改动（M3）。
     Design,
+    /// 从库反向生成模型（M4a）。
+    Reverse,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -113,6 +115,8 @@ pub struct TaskStatus {
     pub report: Option<String>,
     /// 表设计器：失败后没有执行的语句（以 `;` 分隔），可在查询标签中打开手动执行。
     pub remaining: Option<String>,
+    /// 反向生成：生成并打开的模型的编号。
+    pub model: Option<String>,
 }
 
 struct Entry {
@@ -399,6 +403,7 @@ impl TaskManager {
                 failures: Vec::new(),
                 confirm: None,
                 remaining: None,
+                model: None,
                 report: None,
             }),
             cancelled: AtomicBool::new(false),
