@@ -2,7 +2,7 @@
 // 工具栏打开、新建、从库反向生成、重新加载；右键新建表、用设计器打开、改名、删除、与库比对。
 // 模型目录是服务所在机器上的路径：服务不允许时（监听其他地址的浏览器模式）只显示说明。
 
-import { IconDatabaseImport, IconFolderOpen, IconPlus, IconRefresh, IconSchema, IconTable } from '@tabler/icons-react'
+import { IconAffiliate, IconDatabaseImport, IconFolderOpen, IconPlus, IconRefresh, IconSchema, IconTable } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Dropdown, Input, type MenuProps, Tree } from 'antd'
 import type { DataNode } from 'antd/es/tree'
@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import { ApiError, type ModelSummary, type ModelTableEntry } from '../../shared/api'
+import { ApiError, DEFAULT_DIAGRAM, type ModelSummary, type ModelTableEntry } from '../../shared/api'
 import { desktop } from '../../shared/shell'
 import { useTabs } from '../editor/tabs'
 import { useModelDialogs } from './dialogs'
@@ -19,12 +19,19 @@ type NodeRef =
   | { type: 'model'; model: ModelSummary }
   | { type: 'schema'; model: ModelSummary; schema: string }
   | { type: 'table'; model: ModelSummary; entry: ModelTableEntry }
+  | { type: 'diagrams'; model: ModelSummary; schema: string }
+  | { type: 'diagram'; model: ModelSummary; schema: string; name: string }
 
 function ModelTree({ model, onMenu }: { model: ModelSummary; onMenu(n: NodeRef, key: string): void }) {
   const api = useApi()
   const { t } = useTranslation()
   const { data: tables = [] } = useQuery({ queryKey: ['model-tables', model.id], queryFn: () => api.modelTables(model.id) })
   const schemas = [...new Set([...model.info.schemas, ...tables.map((x) => x.schema)])]
+  const { data: diagrams = {} } = useQuery({
+    queryKey: ['model-diagrams', model.id, schemas],
+    queryFn: async () =>
+      Object.fromEntries(await Promise.all(schemas.map(async (s) => [s, (await api.diagrams(model.id, s)).map((d) => d.name)] as const))),
+  })
   const refs = new Map<string, NodeRef>()
   const node = (key: string, ref: NodeRef, d: Omit<DataNode, 'key'>): DataNode => {
     refs.set(key, ref)
@@ -37,7 +44,18 @@ function ModelTree({ model, onMenu }: { model: ModelSummary; onMenu(n: NodeRef, 
       children: schemas.map((s) =>
         node(`${model.id}/${s}`, { type: 'schema', model, schema: s }, {
           title: s,
-          children: tables
+          children: [
+            node(`${model.id}/${s}/:er`, { type: 'diagrams', model, schema: s }, {
+              title: t('er.diagrams'),
+              icon: <IconAffiliate size={14} />,
+              children: (diagrams[s] ?? [DEFAULT_DIAGRAM]).map((d) =>
+                node(`${model.id}/${s}/:er/${d}`, { type: 'diagram', model, schema: s, name: d }, {
+                  title: d === DEFAULT_DIAGRAM ? t('er.defaultDiagram') : d,
+                  isLeaf: true,
+                }),
+              ),
+            }),
+            ...tables
             .filter((x) => x.schema === s)
             .map((e) =>
               node(`${model.id}/${s}/${e.name}`, { type: 'table', model, entry: e }, {
@@ -50,6 +68,7 @@ function ModelTree({ model, onMenu }: { model: ModelSummary; onMenu(n: NodeRef, 
                 isLeaf: true,
               }),
             ),
+          ],
         }),
       ),
     }),
@@ -58,6 +77,24 @@ function ModelTree({ model, onMenu }: { model: ModelSummary; onMenu(n: NodeRef, 
   const items = (n: NodeRef | null): MenuProps['items'] => {
     if (!n) return []
     const ro = n.model.read_only
+    if (n.type === 'diagram') {
+      const topic = n.name !== DEFAULT_DIAGRAM
+      return [
+        { key: 'er-open', label: t('er.menu.open') },
+        ...(topic
+          ? [
+              { key: 'er-rename', label: t('model.menu.rename'), disabled: ro },
+              { key: 'er-delete', label: t('model.menu.delete'), danger: true, disabled: ro },
+            ]
+          : []),
+      ]
+    }
+    if (n.type === 'diagrams') {
+      return [
+        { key: 'er-open', label: t('er.menu.openDefault') },
+        { key: 'er-new', label: t('er.menu.newDiagram'), disabled: ro },
+      ]
+    }
     if (n.type === 'table') {
       return [
         { key: 'design', label: t('model.menu.design'), disabled: !!n.entry.error },
@@ -71,7 +108,13 @@ function ModelTree({ model, onMenu }: { model: ModelSummary; onMenu(n: NodeRef, 
       { key: 'new-table', label: t('model.menu.newTable'), disabled: ro },
       { key: 'compare', label: t('model.menu.compare') },
     ]
-    if (n.type === 'schema') return common
+    if (n.type === 'schema') {
+      return [
+        ...common,
+        { key: 'er-open', label: t('er.menu.openDefault') },
+        { key: 'er-new', label: t('er.menu.newDiagram'), disabled: ro },
+      ]
+    }
     return [
       ...common,
       { type: 'divider' },
@@ -92,6 +135,7 @@ function ModelTree({ model, onMenu }: { model: ModelSummary; onMenu(n: NodeRef, 
           onDoubleClick={(_, n) => {
             const r = refs.get(String(n.key))
             if (r?.type === 'table' && !r.entry.error) onMenu(r, 'design')
+            if (r?.type === 'diagram') onMenu(r, 'er-open')
           }}
         />
       </div>
@@ -120,8 +164,61 @@ export default function ModelsPanel() {
 
   const onMenu = async (n: NodeRef, key: string) => {
     const m = n.model
-    const schema = n.type === 'schema' ? n.schema : n.type === 'table' ? n.entry.schema : (m.info.schemas[0] ?? '')
+    const schema = n.type === 'table' ? n.entry.schema : n.type === 'model' ? (m.info.schemas[0] ?? '') : n.schema
+    const openEr = (name: string) =>
+      useTabs.getState().openEr(
+        { kind: 'model', path: m.path, schema, diagram: name },
+        `${schema} · ${name === DEFAULT_DIAGRAM ? t('er.defaultDiagram') : name}`,
+      )
     try {
+      if (key === 'er-open') {
+        openEr(n.type === 'diagram' ? n.name : DEFAULT_DIAGRAM)
+        return
+      }
+      if (key === 'er-new') {
+        let name = ''
+        modal.confirm({
+          title: t('er.newDiagramTitle'),
+          content: <Input autoFocus onChange={(e) => (name = e.target.value)} />,
+          onOk: async () => {
+            if (!name.trim()) return
+            await api.createDiagram(m.id, schema, name.trim(), [])
+            await qc.invalidateQueries({ queryKey: ['model-diagrams', m.id] })
+            openEr(name.trim())
+          },
+        })
+        return
+      }
+      if (key === 'er-rename' && n.type === 'diagram') {
+        let to = n.name
+        modal.confirm({
+          title: t('er.renameTitle', { name: n.name }),
+          content: <Input defaultValue={to} onChange={(e) => (to = e.target.value)} />,
+          onOk: async () => {
+            if (!to.trim() || to === n.name) return
+            await api.renameDiagram(m.id, schema, n.name, to.trim())
+            await qc.invalidateQueries({ queryKey: ['model-diagrams', m.id] })
+            // 打开着的这张图的标签跟着改名
+            for (const x of useTabs.getState().tabs) {
+              if (x.er?.kind === 'model' && x.er.path === m.path && x.er.schema === schema && x.er.diagram === n.name) {
+                useTabs.getState().setEr(x.id, { ...x.er, diagram: to.trim() }, `${schema} · ${to.trim()}`)
+              }
+            }
+          },
+        })
+        return
+      }
+      if (key === 'er-delete' && n.type === 'diagram') {
+        modal.confirm({
+          title: t('er.deleteTitle', { name: n.name }),
+          okType: 'danger',
+          onOk: async () => {
+            await api.deleteDiagram(m.id, schema, n.name)
+            await qc.invalidateQueries({ queryKey: ['model-diagrams', m.id] })
+          },
+        })
+        return
+      }
       if (key === 'design' && n.type === 'table') useTabs.getState().openDesign('', { schema, table: n.entry.name, model: m.path })
       else if (key === 'new-table') useTabs.getState().openDesign('', { schema, table: null, model: m.path })
       else if (key === 'compare') useTabs.getState().openCompare({ source: { kind: 'model', path: m.path, schema }, target: null })

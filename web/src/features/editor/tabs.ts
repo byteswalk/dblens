@@ -4,6 +4,7 @@
 // 设计器标签（M3 设计文档 7.1 节）：带 design 的标签，设计一张已有的表（同一张表只开一个）或新建表；草稿不保存。
 // 设计模型中的表（M4a）时 design.model 是模型目录，标签不绑定连接（profileId 为空串）。
 // 比对标签（M4a 设计文档第 7 节）：带 compare 的标签，两边是模型或连接的一个 schema；也不绑定连接。
+// ER 图标签（M4b 设计文档 4.1 节）：带 er 的标签，模型的一张图（不绑定连接）或连接的一个 schema（只读）。
 
 import { create } from 'zustand'
 
@@ -34,6 +35,9 @@ export interface DesignTarget {
 /** 比对的一边：模型（按目录）或连接的一个 schema。 */
 export type CompareSide = { kind: 'model'; path: string; schema: string } | { kind: 'database'; profile: string; schema: string }
 
+/** ER 图标签画的图：模型（按目录）的一张图，或连接的一个 schema。 */
+export type ErTarget = { kind: 'model'; path: string; schema: string; diagram: string } | { kind: 'database'; profile: string; schema: string }
+
 /** 比对标签的两边（还没选时为 null）。 */
 export interface CompareTarget {
   source: CompareSide | null
@@ -52,6 +56,8 @@ export interface QueryTab {
   design?: DesignTarget
   /** 有值时是比对标签。 */
   compare?: CompareTarget
+  /** 有值时是 ER 图标签。 */
+  er?: ErTarget
 }
 
 const TARGET_KINDS: readonly unknown[] = ['table', 'view', 'materialized_view'] satisfies TargetKind[]
@@ -82,6 +88,12 @@ function isCompareSide(v: unknown): v is CompareSide | null {
   const s = v as CompareSide | undefined
   if (typeof s?.schema !== 'string') return false
   return s.kind === 'model' ? typeof s.path === 'string' : s.kind === 'database' && typeof s.profile === 'string'
+}
+
+function isErTarget(v: unknown): v is ErTarget {
+  const e = v as ErTarget | null
+  if (typeof e?.schema !== 'string') return false
+  return e.kind === 'model' ? typeof e.path === 'string' && typeof e.diagram === 'string' : e.kind === 'database' && typeof e.profile === 'string'
 }
 
 function isCompareTarget(v: unknown): v is CompareTarget {
@@ -120,7 +132,8 @@ export function parseTabs(raw: string | undefined): Persisted {
         typeof t.sql === 'string' &&
         (t.data === undefined || isDataTarget(t.data)) &&
         (t.design === undefined || isDesignTarget(t.design)) &&
-        (t.compare === undefined || isCompareTarget(t.compare)),
+        (t.compare === undefined || isCompareTarget(t.compare)) &&
+        (t.er === undefined || isErTarget(t.er)),
     )
     const active = tabs.some((t) => t.id === v.active) ? (v.active as string) : (tabs[0]?.id ?? null)
     return { tabs, active, seq: typeof v.seq === 'number' && v.seq > 0 ? v.seq : tabs.length + 1 }
@@ -142,6 +155,10 @@ interface TabsState extends Persisted {
   openCompare(target: CompareTarget): string
   /** 修改比对标签的两边。 */
   setCompare(id: string, target: CompareTarget): void
+  /** 打开 ER 图：同一张图已经打开过时切换过去。`title` 是标签标题。返回标签的 id。 */
+  openEr(target: ErTarget, title: string): string
+  /** 图改名后，标签跟着改。 */
+  setEr(id: string, target: ErTarget, title: string): void
   /** 修改数据标签的过滤条件和排序。 */
   setData(id: string, patch: Pick<DataTarget, 'filter' | 'order'>): void
   close(id: string): void
@@ -205,6 +222,25 @@ export const useTabs = create<TabsState>()((set, get) => ({
     set({ tabs: [...get().tabs, tab], active: tab.id })
     return tab.id
   },
+  openEr: (target, title) => {
+    const { tabs } = get()
+    const same = tabs.find((x) => x.er && JSON.stringify(x.er) === JSON.stringify(target))
+    if (same) {
+      set({ active: same.id })
+      return same.id
+    }
+    const tab: QueryTab = {
+      id: newId(),
+      title,
+      profileId: target.kind === 'database' ? target.profile : '',
+      sql: '',
+      er: { ...target },
+    }
+    set({ tabs: [...tabs, tab], active: tab.id })
+    return tab.id
+  },
+  setEr: (id, target, title) =>
+    set({ tabs: get().tabs.map((x) => (x.id === id && x.er ? { ...x, er: { ...target }, title } : x)) }),
   setCompare: (id, target) =>
     set({ tabs: get().tabs.map((x) => (x.id === id && x.compare ? { ...x, compare: target } : x)) }),
   setData: (id, patch) =>

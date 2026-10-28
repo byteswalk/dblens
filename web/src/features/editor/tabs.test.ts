@@ -144,6 +144,23 @@ describe('打开后执行', () => {
     expect(parseTabs(JSON.stringify({ tabs: [bad] })).tabs).toEqual([])
   })
 
+  it('ER 图标签：同一张图只开一个，改名后跟着改，保存后恢复', () => {
+    useTabs.getState().restore(undefined)
+    const { openEr, setEr } = useTabs.getState()
+    const target = { kind: 'model' as const, path: 'D:/m', schema: 'public', diagram: '_all' }
+    const a = openEr(target, 'public · 全部表')
+    expect(openEr({ ...target }, 'x')).toBe(a)
+    const t1 = openEr({ ...target, diagram: '订单' }, 'public · 订单')
+    setEr(t1, { ...target, diagram: '订单2' }, 'public · 订单2')
+    const db = openEr({ kind: 'database', profile: 'p', schema: 'shop' }, 'shop · ER')
+    const tabs = useTabs.getState().tabs
+    expect(tabs.map((x) => [x.title, x.profileId])).toEqual([['public · 全部表', ''], ['public · 订单2', ''], ['shop · ER', 'p']])
+    const back = parseTabs(JSON.stringify({ tabs, active: db, seq: 1 }))
+    expect(back.tabs[1].er).toEqual({ ...target, diagram: '订单2' })
+    const bad = { id: 'x', title: 't', profileId: '', sql: '', er: { kind: 'model', path: 'D:/m', schema: 's' } }
+    expect(parseTabs(JSON.stringify({ tabs: [bad] })).tabs).toEqual([])
+  })
+
   it('标记只取走一次，不随标签保存', () => {
     const id = useTabs.getState().open('p', 'SELECT 1')
     markRun(id)

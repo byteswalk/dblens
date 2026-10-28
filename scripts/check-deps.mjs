@@ -15,6 +15,11 @@ const days = daysArg > 0 ? Number(process.argv[daysArg + 1]) : 7
 const cutoff = Date.now() - days * 86_400_000
 const npmRegistry = (process.env.NPM_REGISTRY ?? 'https://registry.npmjs.org').replace(/\/$/, '')
 
+/** 有意停在某个版本的依赖：名字 → 原因。复查时列出，不算可升级。 */
+const HOLD = {
+  'html-to-image': 'React Flow 文档的导出示例固定 1.11.11，更新的版本导出图片有问题（M4b）',
+}
+
 const isStable = (v) => /^\d+\.\d+\.\d+$/.test(v)
 const cmp = (a, b) => {
   const x = a.split('.').map(Number)
@@ -83,7 +88,9 @@ for (const r of rows) {
     console.log(`${r.eco}\t${r.name}\t${r.current}\t查询失败：${r.error}`)
     continue
   }
-  if (r.eligible && cmp(r.eligible[0], r.current) > 0) {
+  if (HOLD[r.name] && r.newest && cmp(r.newest[0], r.current) > 0) {
+    console.log(`${r.eco}\t${r.name}\t${r.current}\t${r.newest[0]} 有意不升级：${HOLD[r.name]}`)
+  } else if (r.eligible && cmp(r.eligible[0], r.current) > 0) {
     pending++
     console.log(`${r.eco}\t${r.name}\t${r.current} -> ${r.eligible[0]}\t（${r.eligible[1].slice(0, 10)} 发布）`)
   } else if (r.newest && cmp(r.newest[0], r.current) > 0) {

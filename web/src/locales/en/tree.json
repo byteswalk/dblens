@@ -24,6 +24,7 @@
   "filterPlaceholder": "Filter by name or comment",
   "menu": {
     "compareModel": "Compare with Model…",
+    "er": "View ER Diagram",
     "saveAsModel": "Save as Model…",
     "newQuery": "New Query",
     "editConnection": "Edit Connection…",

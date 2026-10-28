@@ -733,6 +733,52 @@ export interface SyncPreview {
   fingerprint: string
 }
 
+/** 逻辑外键（M4b）：只在模型中记录，不参与比对和同步。 */
+export interface LogicalKey {
+  name?: string | null
+  columns: string[]
+  ref_schema?: string | null
+  ref_table: string
+  ref_columns: string[]
+  comment?: string | null
+}
+
+export type ErDisplay = 'columns' | 'keys' | 'names'
+
+export interface ErPosition {
+  x: number
+  y: number
+}
+
+/** 图文件：`tables` 为 'all'（默认图）或表名列表。 */
+export interface ErDiagram {
+  name: string
+  tables: 'all' | string[]
+  display: ErDisplay
+  positions?: Record<string, ErPosition>
+  [extra: string]: unknown
+}
+
+export interface ErTable {
+  table: DesignTableModel
+  logical_keys: LogicalKey[]
+  error?: ModelFileError | null
+}
+
+export type ErWarning =
+  | { kind: 'broken_logical_key'; table: string; index: number; name: string | null }
+  | { kind: 'missing_table'; name: string }
+
+export interface DiagramView {
+  diagram: ErDiagram
+  tables: ErTable[]
+  fingerprint: string | null
+  warnings: ErWarning[]
+}
+
+/** 默认图的名字。 */
+export const DEFAULT_DIAGRAM = '_all'
+
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
 export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o)) {
@@ -754,6 +800,8 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
 
   const p = (id: string) => `/profiles/${encodeURIComponent(id)}`
   const m = (id: string) => `/models/${encodeURIComponent(id)}`
+  const md = (id: string, schema: string, name: string) =>
+    `${m(id)}/diagrams/${encodeURIComponent(schema)}/${encodeURIComponent(name)}`
   const mt = (id: string, schema: string, name: string) =>
     `${m(id)}/tables/${encodeURIComponent(schema)}/${encodeURIComponent(name)}`
   const s = (id: string, schema: string) => `${p(id)}/schemas/${encodeURIComponent(schema)}`
@@ -908,6 +956,25 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     deleteModelTable: (id: string, schema: string, name: string) => request<null>('DELETE', mt(id, schema, name)),
     renameModelTable: (id: string, schema: string, name: string, to: string) =>
       request<null>('POST', `${mt(id, schema, name)}/rename`, { to }),
+    diagrams: (id: string, schema: string) =>
+      request<{ schema: string; name: string; tables: 'all' | string[] }[]>('GET', `${m(id)}/diagrams${q({ schema })}`),
+    createDiagram: async (id: string, schema: string, name: string, tables: string[]) =>
+      (await request<{ fingerprint: string }>('POST', `${m(id)}/diagrams`, { schema, name, tables })).fingerprint,
+    diagram: (id: string, schema: string, name: string) => request<DiagramView>('GET', md(id, schema, name)),
+    /** 保存图，返回新的指纹。 */
+    saveDiagram: async (id: string, schema: string, name: string, diagram: ErDiagram, fingerprint: string | null) =>
+      (await request<{ fingerprint: string }>('PUT', md(id, schema, name), { diagram, fingerprint })).fingerprint,
+    deleteDiagram: (id: string, schema: string, name: string) => request<null>('DELETE', md(id, schema, name)),
+    renameDiagram: (id: string, schema: string, name: string, to: string) =>
+      request<null>('POST', `${md(id, schema, name)}/rename`, { to }),
+    addLogicalKey: (id: string, schema: string, table: string, key: LogicalKey) =>
+      request<{ fingerprint: string }>('POST', `${mt(id, schema, table)}/logical-keys`, { key }),
+    deleteLogicalKey: (id: string, schema: string, table: string, index: number) =>
+      request<{ fingerprint: string }>('DELETE', `${mt(id, schema, table)}/logical-keys/${index}`),
+    /** 桌面版：把导出的图片（base64）写到"另存为"选的 .svg、.png 文件。 */
+    saveImage: (path: string, data: string) => request<null>('POST', '/files/image', { path, data }),
+    /** 整个 schema 的表明细（库的 ER 图）。 */
+    schemaTables: (id: string, schema: string) => request<DesignTableModel[]>('GET', `${s(id, schema)}/tables`),
     compare: (req: CompareRequest) => request<CompareResult>('POST', '/compare', req),
     syncPreview: (req: SyncRequest) => request<SyncPreview>('POST', '/compare/preview', req),
     /** 同步：目标是库时返回任务 id；目标是模型时已经写完，返回 null。 */

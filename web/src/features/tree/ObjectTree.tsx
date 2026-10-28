@@ -301,6 +301,7 @@ export default function ObjectTree() {
       { key: 'import-new', label: t('tree.menu.importNew') },
       { key: 'sql-file', label: t('tree.menu.sqlFile') },
       { type: 'divider' },
+      { key: 'er', label: t('tree.menu.er') },
       { key: 'compare-model', label: t('tree.menu.compareModel') },
       { key: 'save-model', label: t('tree.menu.saveAsModel') },
       { type: 'divider' },
@@ -349,7 +350,9 @@ export default function ObjectTree() {
       } else if (key === 'view-data') openData(k)
       else if (key === 'design' && k.type === 'o') useTabs.getState().openDesign(k.profileId, { schema: k.schema, table: k.name })
       else if (key === 'new-table' && k.type === 's') useTabs.getState().openDesign(k.profileId, { schema: k.schema, table: null })
-      else if (key === 'compare-model' && k.type === 's') {
+      else if (key === 'er' && k.type === 's') {
+        useTabs.getState().openEr({ kind: 'database', profile: k.profileId, schema: k.schema }, `${k.schema} · ER`)
+      } else if (key === 'compare-model' && k.type === 's') {
         useTabs.getState().openCompare({ source: null, target: { kind: 'database', profile: k.profileId, schema: k.schema } })
       } else if (key === 'save-model' && k.type === 's') useModelDialogs.getState().openReverse({ profileId: k.profileId, schema: k.schema })
       else if (key === 'import' && k.type === 'o') {

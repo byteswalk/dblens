@@ -24,6 +24,7 @@
   "filterPlaceholder": "按名称或注释过滤",
   "menu": {
     "compareModel": "与模型比对…",
+    "er": "查看 ER 图",
     "saveAsModel": "另存为模型…",
     "newQuery": "新建查询",
     "editConnection": "编辑连接…",

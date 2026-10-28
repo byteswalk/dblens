@@ -49,7 +49,7 @@ export function useQueryActions() {
   const insertSql = (sql: string, profileId?: string) => {
     const { tabs, active } = useTabs.getState()
     const tab = tabs.find((x) => x.id === active)
-    if (tab && !tab.data && !tab.design && !tab.compare) sendInsert(sql)
+    if (tab && !tab.data && !tab.design && !tab.compare && !tab.er) sendInsert(sql)
     else openSql(sql, profileId)
   }
 

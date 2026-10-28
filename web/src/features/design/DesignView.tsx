@@ -24,6 +24,7 @@ import IndexesPane from './IndexesPane'
 import { type Draft, type Pane, emptyDraft, fromTable, isDirty, issuesOf, renamesOf, toModel } from './logic'
 import OptionsPane from './OptionsPane'
 import SaveDialog from './SaveDialog'
+import { useErEvents } from '../er/events'
 import { modelSource, profileSource } from './source'
 import SqlBox from './SqlBox'
 import { describeChange, scriptOf } from './summary'
@@ -183,6 +184,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
       if (isNew) {
         useDesigns.getState().clear(tab.id)
         useTabs.getState().setDesign(tab.id, { schema: req.schema, table: req.draft.name.trim(), model: modelPath })
+        useErEvents.getState().tableCreated(tab.id, modelPath!, req.schema, req.draft.name.trim())
       } else void load()
     } catch (e) {
       message.error((e as Error).message)

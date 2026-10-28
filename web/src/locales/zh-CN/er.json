@@ -1,0 +1,58 @@
+{
+  "diagrams": "ER 图",
+  "defaultDiagram": "全部表",
+  "readOnly": "只读",
+  "unsaved": "未保存",
+  "saved": "已保存 ER 图",
+  "save": "保存",
+  "reload": "重新加载",
+  "reloadConfirm": "放弃未保存的布局改动并重新加载？",
+  "saveAsModel": "另存为模型…",
+  "search": "搜索表",
+  "fit": "适应窗口",
+  "addTables": "添加表…",
+  "exported": "已导出",
+  "columns": "{{count}} 列",
+  "display": {
+    "columns": "全部列",
+    "keys": "键列",
+    "names": "表名"
+  },
+  "layout": {
+    "title": "自动布局",
+    "horizontal": "横向重排",
+    "vertical": "纵向重排"
+  },
+  "export": {
+    "title": "导出",
+    "svg": "导出 SVG",
+    "png": "导出 PNG",
+    "svgWhite": "导出 SVG（白底）",
+    "pngWhite": "导出 PNG（白底）"
+  },
+  "menu": {
+    "open": "打开",
+    "openDefault": "打开 ER 图",
+    "newDiagram": "新建主题图…",
+    "design": "用设计器打开",
+    "remove": "从图中移除",
+    "data": "查看数据",
+    "newTable": "新建表"
+  },
+  "newDiagramTitle": "新建主题图",
+  "renameTitle": "图 {{name}} 改名为",
+  "deleteTitle": "删除图 {{name}}？",
+  "key": {
+    "title": "新建逻辑外键",
+    "name": "名称",
+    "comment": "注释",
+    "delete": "删除逻辑外键",
+    "deleteTitle": "删除这个逻辑外键？",
+    "needColumns": "请从列拖到列（只显示表名时不能建逻辑外键）"
+  },
+  "warning": {
+    "missingTable": "表 {{name}} 已不存在",
+    "brokenKey": "{{table}} 的逻辑外键 {{name}} 引用的表或列不存在",
+    "badFile": "表 {{name}} 的文件有错：{{message}}"
+  }
+}

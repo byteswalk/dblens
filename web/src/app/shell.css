@@ -778,3 +778,101 @@ body {
 .compare-line.diff {
   background: var(--warn-bg);
 }
+
+/* ER 图（M4b） */
+.er-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  outline: none;
+}
+.er-canvas {
+  position: relative;
+  min-height: 0;
+}
+.er-table {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  overflow: hidden;
+}
+.er-table.selected {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.er-table.error .er-table-h {
+  background: var(--danger-bg);
+}
+.er-table-h {
+  position: relative;
+  height: 30px;
+  line-height: 30px;
+  padding: 0 8px;
+  font-weight: 600;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.er-col {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  height: 22px;
+  line-height: 22px;
+  padding: 0 8px;
+}
+.er-col-icon {
+  width: 12px;
+  flex: none;
+}
+.er-pk {
+  color: var(--warn);
+}
+.er-fk {
+  color: var(--accent);
+}
+.er-col-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.er-col-type {
+  color: var(--muted);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.er-external {
+  height: 20px;
+  line-height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.er-handle {
+  width: 6px !important;
+  height: 6px !important;
+  min-width: 0 !important;
+  opacity: 0.4;
+}
+.er-edge.logical path {
+  stroke-dasharray: 6 4;
+}
+.er-tip {
+  position: fixed;
+  z-index: 10;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  pointer-events: none;
+}
+.er-warnings {
+  margin: 0;
+  padding-left: 18px;
+  max-width: 420px;
+}
