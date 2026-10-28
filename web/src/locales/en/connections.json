@@ -17,6 +17,41 @@
       "note": "Requires the DM DPI client library"
     }
   },
+  "product": {
+    "mysql": {
+      "label": "MySQL"
+    },
+    "mariadb": {
+      "label": "MariaDB"
+    },
+    "tidb": {
+      "label": "TiDB",
+      "note": "Default port 4000; no stored procedures or triggers"
+    },
+    "oceanbase": {
+      "label": "OceanBase",
+      "note": "MySQL mode; user name is user@tenant (e.g. root@sys); through OBProxy the port is usually 2883"
+    },
+    "postgres": {
+      "label": "PostgreSQL"
+    },
+    "kingbase": {
+      "label": "KingbaseES",
+      "note": "Default port 54321; Oracle and PG compatibility modes are detected on connect"
+    },
+    "opengauss": {
+      "label": "openGauss",
+      "note": "SHA256 authentication supported; A (Oracle) and PG compatibility are detected per database"
+    },
+    "oracle": {
+      "label": "Oracle",
+      "note": "Requires Oracle Instant Client"
+    },
+    "dameng": {
+      "label": "Dameng DM",
+      "note": "Requires the Dameng DPI client library"
+    }
+  },
   "databaseLabel": {
     "mysql": "Database",
     "postgres": "Database",
@@ -50,12 +85,16 @@
     "test": "Test Connection",
     "cancel": "Cancel",
     "save": "Save",
-    "driverType": "Database Type",
+    "driverType": "Database",
     "created": "Connection created",
     "saved": "Connection saved",
     "testOk": "Connected: {{server}}, detected as {{variant}}",
     "tabGeneral": "General",
-    "tabAdvanced": "Advanced"
+    "tabAdvanced": "Advanced",
+    "modeOracle": "Compatibility mode: {{mode}} (Oracle rules: empty string is NULL, DATE has a time)",
+    "modeNative": "Compatibility mode: {{mode}}",
+    "modeUnadapted": "Compatibility mode {{mode}} is not supported yet; native rules are used and some features may fail",
+    "productMismatch": "{{chosen}} was selected but the server is {{detected}}; DBLens follows the detected server"
   },
   "general": {
     "name": "Name",

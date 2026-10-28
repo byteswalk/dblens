@@ -3,11 +3,12 @@
 
 import { type FormatOptionsWithLanguage, format } from 'sql-formatter'
 
-import type { DriverId } from '../../shared/api'
+import type { Compat, DriverId } from '../../shared/api'
 import { t } from '../../shared/i18n'
 
-/** Monaco 的语言：MySQL 系、PG 系用 Monaco 自带的规则，Oracle 和达梦用 plsql（monaco.ts 注册）。 */
-export function editorLanguage(driver: DriverId): 'mysql' | 'pgsql' | 'plsql' {
+/** Monaco 的语言：MySQL 系、PG 系用 Monaco 自带的规则，Oracle、达梦和 PG 系的 Oracle 兼容模式用 plsql（monaco.ts 注册）。 */
+export function editorLanguage(driver: DriverId, compat?: Compat | null): 'mysql' | 'pgsql' | 'plsql' {
+  if (driver === 'postgres' && compat === 'oracle') return 'plsql'
   switch (driver) {
     case 'mysql':
       return 'mysql'

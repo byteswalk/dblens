@@ -29,6 +29,7 @@ export default function OptionsPane({ profileId, schema, isNew, draft, storage, 
     storage?.charset && t('design.option.charset', { value: storage.charset }),
     storage?.collation && t('design.option.collation', { value: storage.collation }),
     storage?.tablespace && t('design.option.tablespace', { value: storage.tablespace }),
+    storage?.clustered && t('design.option.clustered'),
   ].filter(Boolean)
   return (
     <div className="design-pane design-options">

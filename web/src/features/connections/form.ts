@@ -2,11 +2,14 @@
 
 import type { DriverId, Environment, Profile, ProfileInput, ServerSummary } from '../../shared/api'
 import { t } from '../../shared/i18n'
+import { type ProductId, product, productLabel, productOf } from './products'
 
 export type TlsMode = 'disable' | 'require' | 'verify'
 
 export interface ConnectionForm {
   name: string
+  /** 选的产品；驱动由产品决定。 */
+  product: ProductId
   driver: DriverId
   host: string
   port: number
@@ -52,12 +55,14 @@ export function supportsTls(driver: DriverId): boolean {
   return driver === 'mysql' || driver === 'postgres'
 }
 
-export function emptyForm(driver: DriverId = 'mysql'): ConnectionForm {
+export function emptyForm(id: ProductId = 'mysql'): ConnectionForm {
+  const p = product(id)
   return {
     name: '',
-    driver,
+    product: id,
+    driver: p.driver,
     host: '127.0.0.1',
-    port: DEFAULT_PORTS[driver],
+    port: p.port,
     user: '',
     password: '',
     savePassword: true,
@@ -78,6 +83,13 @@ export function switchDriver(f: ConnectionForm, driver: DriverId): ConnectionFor
   return { ...f, driver, port, tls: supportsTls(driver) ? f.tls : 'disable', tlsCa: supportsTls(driver) ? f.tlsCa : '' }
 }
 
+/** 换产品：驱动跟着换；端口还是上一个产品的默认值，就换成新产品的默认值。 */
+export function switchProduct(f: ConnectionForm, id: ProductId): ConnectionForm {
+  const next = product(id)
+  const port = f.port === product(f.product).port ? next.port : f.port
+  return { ...switchDriver(f, next.driver), product: id, port }
+}
+
 const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid']
 
 export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
@@ -89,6 +101,7 @@ export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
   const tls = opts.tls === 'require' || opts.tls === 'verify' ? opts.tls : 'disable'
   return {
     name: p.name,
+    product: productOf(p.driver, p.product),
     driver: p.driver,
     host: p.host,
     port: p.port,
@@ -128,6 +141,7 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     environment: f.environment,
     color: f.color.trim() || null,
     connect_timeout_secs: f.timeoutSecs,
+    product: f.product,
   }
 }
 
@@ -156,4 +170,19 @@ export function validate(f: ConnectionForm): Partial<Record<keyof ConnectionForm
 /** 测试连接成功后显示的服务器版本：有的数据库（如 PostgreSQL）返回的版本字符串已经带产品名，不再重复。 */
 export function serverText(s: ServerSummary): string {
   return s.version.startsWith(s.product) ? s.version : `${s.product} ${s.version}`
+}
+
+/** 测试连接成功后另外显示的说明：兼容模式、未适配的模式、所选产品与识别结果不一致。 */
+export function serverNotes(s: ServerSummary, chosen: ProductId): { text: string; warn: boolean }[] {
+  const out: { text: string; warn: boolean }[] = []
+  if (s.mode) {
+    const key = s.unadapted_mode ? 'connections.dialog.modeUnadapted' : s.compat === 'oracle' ? 'connections.dialog.modeOracle' : 'connections.dialog.modeNative'
+    out.push({ text: t(key, { mode: s.mode }), warn: s.unadapted_mode })
+  }
+  const detected = productOf(product(chosen).driver, s.variant)
+  // 选的是标准库（如 PostgreSQL）而识别出兼容库时不算不一致：较早的连接都按驱动选的
+  if (chosen !== detected && chosen !== product(chosen).driver) {
+    out.push({ text: t('connections.dialog.productMismatch', { chosen: productLabel(chosen), detected: s.variant_name }), warn: true })
+  }
+  return out
 }

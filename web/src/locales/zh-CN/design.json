@@ -88,7 +88,8 @@
     "engine": "引擎 {{value}}",
     "charset": "字符集 {{value}}",
     "collation": "排序规则 {{value}}",
-    "tablespace": "表空间 {{value}}"
+    "tablespace": "表空间 {{value}}",
+    "clustered": "主键为聚簇索引（更换主键时重建表）"
   },
   "sql": {
     "nothing": "没有改动",

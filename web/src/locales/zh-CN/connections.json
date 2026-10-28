@@ -17,6 +17,41 @@
       "note": "需要达梦 DPI 客户端库"
     }
   },
+  "product": {
+    "mysql": {
+      "label": "MySQL"
+    },
+    "mariadb": {
+      "label": "MariaDB"
+    },
+    "tidb": {
+      "label": "TiDB",
+      "note": "默认端口 4000；没有存储过程、触发器"
+    },
+    "oceanbase": {
+      "label": "OceanBase",
+      "note": "MySQL 模式；用户名写成 用户@租户（如 root@sys），经 OBProxy 连接时端口一般是 2883"
+    },
+    "postgres": {
+      "label": "PostgreSQL"
+    },
+    "kingbase": {
+      "label": "人大金仓",
+      "note": "KingbaseES，默认端口 54321；Oracle 兼容模式与 PG 模式连接后自动识别"
+    },
+    "opengauss": {
+      "label": "openGauss",
+      "note": "支持 SHA256 认证；A（Oracle 兼容）与 PG 兼容模式按库自动识别"
+    },
+    "oracle": {
+      "label": "Oracle",
+      "note": "需要 Oracle Instant Client"
+    },
+    "dameng": {
+      "label": "达梦 DM",
+      "note": "需要达梦 DPI 客户端库"
+    }
+  },
   "databaseLabel": {
     "mysql": "数据库",
     "postgres": "数据库",
@@ -50,12 +85,16 @@
     "test": "测试连接",
     "cancel": "取消",
     "save": "保存",
-    "driverType": "数据库类型",
+    "driverType": "数据库",
     "created": "连接已创建",
     "saved": "连接已保存",
     "testOk": "连接成功：{{server}}，识别为 {{variant}}",
     "tabGeneral": "常规",
-    "tabAdvanced": "高级"
+    "tabAdvanced": "高级",
+    "modeOracle": "兼容模式：{{mode}}（按 Oracle 规则：空串即 NULL，DATE 带时间）",
+    "modeNative": "兼容模式：{{mode}}",
+    "modeUnadapted": "兼容模式 {{mode}} 尚未适配，按原生规则处理，部分功能可能出错",
+    "productMismatch": "选的是 {{chosen}}，实际识别为 {{detected}}，按识别结果处理"
   },
   "general": {
     "name": "名称",

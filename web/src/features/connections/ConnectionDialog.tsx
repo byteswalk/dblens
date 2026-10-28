@@ -13,7 +13,6 @@ import DbIcon from '../../shared/DbIcon'
 import type { DriverId, Environment, ServerSummary } from '../../shared/api'
 import {
   type ConnectionForm,
-  DRIVER_IDS,
   databaseLabel,
   driverLabel,
   driverNote,
@@ -21,10 +20,12 @@ import {
   fromProfile,
   serverText,
   supportsTls,
-  switchDriver,
+  serverNotes,
+  switchProduct,
   toProfileInput,
   validate,
 } from './form'
+import { PRODUCTS, productLabel, productNote } from './products'
 import { withVault } from './vault'
 
 type Errors = ReturnType<typeof validate>
@@ -272,25 +273,25 @@ export default function ConnectionDialog() {
           <div className="muted" style={{ marginBottom: 6 }}>
             {t('connections.dialog.driverType')}
           </div>
-          {DRIVER_IDS.map((id) => (
+          {PRODUCTS.map((p) => (
             <div
-              key={id}
+              key={p.id}
               className="row"
-              onClick={() => setForm((f) => switchDriver(f, id))}
+              onClick={() => setForm((f) => switchProduct(f, p.id))}
               style={{
                 gap: 8,
-                padding: '6px 10px',
+                padding: '5px 10px',
                 borderRadius: 4,
                 cursor: 'pointer',
-                background: form.driver === id ? 'var(--sel)' : undefined,
+                background: form.product === p.id ? 'var(--sel)' : undefined,
               }}
             >
-              <DbIcon driver={id} size={16} />
-              {driverLabel(id)}
+              <DbIcon driver={p.driver} variant={p.id} size={16} />
+              {productLabel(p.id)}
             </div>
           ))}
           <div className="muted" style={{ marginTop: 12, lineHeight: 1.5 }}>
-            {driverNote(form.driver)}
+            {productNote(form.product) || driverNote(form.driver)}
           </div>
         </div>
         <Form className="grow" layout="horizontal" labelCol={{ flex: '100px' }} labelAlign="left">
@@ -309,6 +310,14 @@ export default function ConnectionDialog() {
                 showIcon
                 icon={<IconCircleCheck size={16} />}
                 message={t('connections.dialog.testOk', { server: serverText(result.ok), variant: result.ok.variant_name })}
+                description={
+                  serverNotes(result.ok, form.product).length > 0 &&
+                  serverNotes(result.ok, form.product).map((n) => (
+                    <div key={n.text} style={n.warn ? { color: 'var(--warn)' } : undefined}>
+                      {n.text}
+                    </div>
+                  ))
+                }
               />
             ) : (
               <Alert type="error" showIcon message={result.error} />

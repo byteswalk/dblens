@@ -65,6 +65,8 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
   )
   const readOnly = !isTable || !info?.key
   const readOnlyReason = !isTable ? t('editor.data.edit.viewReadOnly') : info && !info.key ? t('editor.data.edit.noKey') : null
+  // 人大金仓、openGauss 的 Oracle 兼容模式：空串存进去就是 NULL
+  const emptyIsNull = rt.session?.compat === 'oracle'
   const edit = useEdits((s) => s.tabs[tab.id]) ?? emptyEdit
   const failedRow = useEdits((s) => s.failed[tab.id] ?? null)
   const setEdit = (next: typeof edit) => useEdits.getState().set(tab.id, next)
@@ -294,6 +296,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
                 {t('editor.data.edit.discard')}
               </Button>
               <span className="grow" />
+              {emptyIsNull && <span className="muted">{t('editor.data.edit.emptyIsNull')}</span>}
               <Button size="small" type="primary" disabled={!pending || readOnly} onClick={() => void commit()}>
                 {t('editor.data.edit.commit', { count: pending })}
               </Button>

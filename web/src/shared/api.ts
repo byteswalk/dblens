@@ -84,6 +84,8 @@ export interface ProfileInput {
   environment?: Environment
   color?: string | null
   connect_timeout_secs?: number
+  /** 新建连接时选的产品（如 kingbase）；没有时按驱动显示。连上后以识别出的变体为准。 */
+  product?: string | null
 }
 
 export interface Profile extends ProfileInput {
@@ -98,7 +100,15 @@ export interface ServerSummary {
   variant: string
   variant_name: string
   version_code: number | null
+  /** 兼容模式：人大金仓、openGauss 可能是 oracle。 */
+  compat: Compat
+  /** 探测到的兼容模式名（人大金仓的 database_mode、openGauss 当前库的 DBCOMPATIBILITY）。 */
+  mode: string | null
+  /** 模式名不在已适配的范围内（如 openGauss 的 B 模式）。 */
+  unadapted_mode: boolean
 }
+
+export type Compat = 'native' | 'oracle'
 
 export interface SecretStatus {
   backend: 'keyring' | 'vault'
@@ -110,6 +120,7 @@ export interface SessionInfo {
   id: number
   profile_id: string
   variant: string
+  compat: Compat
   autocommit: boolean
   in_transaction: boolean
   busy: boolean
@@ -519,6 +530,8 @@ export interface DesignTableResult {
     charset: string | null
     collation: string | null
     tablespace: string | null
+    /** 主键是否聚簇（只有 TiDB 报告）。 */
+    clustered?: boolean | null
     row_count: number | null
   }
   fingerprint: string

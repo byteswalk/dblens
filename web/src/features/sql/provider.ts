@@ -1,7 +1,7 @@
 // Monaco 的 SQL 补全（M1b2 设计文档第 4 节）。三种语言（mysql、pgsql、plsql）共用一个补全提供者；
 // 每个编辑器模型绑定它所在标签页的上下文（连接、变体、当前 schema、元数据），提供者按模型找到上下文。
 
-import type { DriverId } from '../../shared/api'
+import type { Compat, DriverId } from '../../shared/api'
 import { monaco } from '../editor/monaco'
 import { type ItemKind, completionItems, lightSuggest } from './completion'
 import { sqlDialect } from './dialects'
@@ -11,6 +11,8 @@ import { sqlClient } from './service'
 export interface EditorSqlContext {
   driver: DriverId
   variant: string | null | undefined
+  /** 会话的兼容模式；没有会话时为空。 */
+  compat?: Compat | null
   /** 当前 schema：会话的，没有会话时按连接配置推断。 */
   schema: string | null
   meta: MetaReader
@@ -59,7 +61,7 @@ const provider: monaco.languages.CompletionItemProvider = {
   async provideCompletionItems(model, position) {
     const ctx = contextOf(model)
     if (!ctx) return { suggestions: [] }
-    const { dialect } = sqlDialect(ctx.driver, ctx.variant)
+    const { dialect } = sqlDialect(ctx.driver, ctx.variant, ctx.compat)
     const text = model.getValue()
     const offset = model.getOffsetAt(position)
     // 解析器不可用或超时：退回轻量补全

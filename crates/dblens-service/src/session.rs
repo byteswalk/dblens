@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use dblens_core::{Error, Msg, Result, Row, Value, msg};
-use dblens_dialect::{ChangeStatement, Dialect, SqlStatement, Variant, may_change_schema};
+use dblens_dialect::{ChangeStatement, Compat, Dialect, SqlStatement, Variant, may_change_schema};
 use dblens_driver::{CancelHandle, ColumnMeta, Connection, ExecEvent};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
@@ -77,6 +77,8 @@ pub struct SessionInfo {
     pub id: SessionId,
     pub profile_id: String,
     pub variant: Variant,
+    /// 兼容模式（人大金仓、openGauss 可能是 Oracle 模式），编辑器据此选语法和拆分规则。
+    pub compat: Compat,
     pub autocommit: bool,
     /// 手动提交模式下，是否有尚未提交的修改。
     pub in_transaction: bool,
@@ -275,6 +277,7 @@ impl SessionManager {
             id,
             profile_id: profile_id.to_string(),
             variant: dialect.variant(),
+            compat: dialect.compat(),
             autocommit: true,
             in_transaction: false,
             busy: false,

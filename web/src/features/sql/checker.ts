@@ -38,7 +38,7 @@ async function check(model: Model) {
   if ((timeouts.get(model) ?? 0) >= MAX_TIMEOUTS) return clear({ ...NO_SYNTAX, status: 'stopped' })
   const text = model.getValue()
   if (text.length > MAX_CHARS) return clear({ ...NO_SYNTAX, status: 'skipped' })
-  const d = sqlDialect(ctx.driver, ctx.variant)
+  const d = sqlDialect(ctx.driver, ctx.variant, ctx.compat)
   if (sqlClient.unavailable(d.dialect)) return clear(NO_SYNTAX)
 
   const version = model.getVersionId()

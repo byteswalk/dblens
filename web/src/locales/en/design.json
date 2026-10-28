@@ -88,7 +88,8 @@
     "engine": "Engine: {{value}}",
     "charset": "Charset: {{value}}",
     "collation": "Collation: {{value}}",
-    "tablespace": "Tablespace: {{value}}"
+    "tablespace": "Tablespace: {{value}}",
+    "clustered": "Clustered primary key (changing it rebuilds the table)"
   },
   "sql": {
     "nothing": "No changes",

@@ -82,7 +82,7 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
               if (!sql) {
                 const all = model.getValue()
                 const r = profile
-                  ? await sqlClient.statementAt(sqlDialect(profile.driver, variant).dialect, all, cursor)
+                  ? await sqlClient.statementAt(sqlDialect(profile.driver, variant, rt.session?.compat).dialect, all, cursor)
                   : null
                 sql = r?.ok && r.value ? all.slice(r.value.start, r.value.end) : all
               }
@@ -169,11 +169,12 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
         ? {
             driver: profile.driver,
             variant: rt.session?.variant ?? profile.variant,
+            compat: rt.session?.compat,
             schema: rt.session?.schema ?? defaultSchema(profile.driver, profile.user, profile.database),
             meta,
           }
         : null,
-    [profile, meta, rt.session?.variant, rt.session?.schema],
+    [profile, meta, rt.session?.variant, rt.session?.compat, rt.session?.schema],
   )
   const confirm = !rt.running && !rt.declined ? rt.exec.confirm : null
   const sub = rt.submission
@@ -198,7 +199,7 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
         <Panel id="editor" minSize={80}>
           <SqlEditor
             path={tab.id}
-            language={profile ? editorLanguage(profile.driver) : 'sql'}
+            language={profile ? editorLanguage(profile.driver, rt.session?.compat) : 'sql'}
             defaultValue={tab.sql}
             marks={marks}
             sql={sql}

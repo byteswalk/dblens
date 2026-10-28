@@ -28,6 +28,7 @@ const session: SessionInfo = {
   id: 7,
   profile_id: 'p',
   variant: 'postgres',
+  compat: 'native',
   autocommit: true,
   in_transaction: false,
   busy: false,

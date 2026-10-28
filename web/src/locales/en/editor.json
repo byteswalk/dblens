@@ -112,7 +112,8 @@
       "cancel": "Cancel",
       "applied_one": "{{count}} statement committed",
       "applied_other": "{{count}} statements committed",
-      "noSession": "The data has not been read yet; refresh first"
+      "noSession": "The data has not been read yet; refresh first",
+      "emptyIsNull": "This database stores empty strings as NULL"
     },
     "import": "Import",
     "design": "Design"
