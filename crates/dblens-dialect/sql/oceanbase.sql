@@ -59,3 +59,18 @@ WHERE t.TABLE_SCHEMA = {{ bind("schema") }}
        OR UPPER(COALESCE(t.TABLE_COMMENT, '')) LIKE UPPER({{ bind("filter") }}) ESCAPE '!')
 {% endif %}
 ORDER BY t.TABLE_NAME
+
+-- [triggers]
+-- ACTION_STATEMENT holds the whole statement after CREATE ("TRIGGER name BEFORE INSERT ON t FOR EACH ROW ..."),
+-- not just the body.
+SELECT t.EVENT_OBJECT_TABLE AS table_name,
+       t.TRIGGER_NAME AS name,
+       t.ACTION_TIMING AS timing,
+       t.EVENT_MANIPULATION AS events,
+       CONCAT('CREATE ', t.ACTION_STATEMENT) AS definition
+FROM information_schema.TRIGGERS t
+WHERE t.EVENT_OBJECT_SCHEMA = {{ bind("schema") }}
+{% if table %}
+  AND t.EVENT_OBJECT_TABLE = {{ bind("table") }}
+{% endif %}
+ORDER BY t.EVENT_OBJECT_TABLE, t.TRIGGER_NAME

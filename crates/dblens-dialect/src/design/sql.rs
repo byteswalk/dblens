@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use super::diff::{is_expression, text};
 use super::{Diff, TableChange as C};
-use crate::{Dialect, Family};
+use crate::{Dialect, Family, Variant};
 
 /// 一条生成的语句。`changes` 是它对应的变更序号（一项变更也可能生成几条语句）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -31,6 +31,12 @@ impl Dialect {
         let mut out = Vec::new();
         if !self.design_caps().reorder && !diff.appended {
             out.push(msg!("design.unsupported.reorder"));
+        }
+        // TiDB 的主键默认是聚簇索引，不能直接删除或更换
+        if self.variant() == Variant::TiDb
+            && diff.changes.iter().any(|c| matches!(c, C::DropPrimaryKey { .. }))
+        {
+            out.push(msg!("design.unsupported.clustered_pk"));
         }
         for ch in &diff.changes {
             let C::AlterColumn { from, to } = ch else { continue };

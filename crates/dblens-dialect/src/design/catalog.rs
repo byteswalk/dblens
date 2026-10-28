@@ -103,6 +103,10 @@ const POSTGRES_TYPES: &[TypeEntry] = &[
     t("xml", N),
 ];
 
+/// 人大金仓、openGauss 的 Oracle 兼容模式另外可选的 Oracle 风格类型（DATE 带时间）。
+const PG_ORACLE_MODE_TYPES: &[TypeEntry] =
+    &[t("NUMBER", P), t("VARCHAR2", L), t("NVARCHAR2", L), t("CLOB", N), t("BLOB", N), t("DATE", N)];
+
 const ORACLE_TYPES: &[TypeEntry] = &[
     t("NUMBER", P),
     t("INTEGER", N),
@@ -156,16 +160,27 @@ impl Dialect {
         match self.family() {
             Family::MySql => DesignCaps {
                 reorder: true,
-                // MySQL 8.0.16、MariaDB 10.2 起执行检查约束
+                // MySQL 8.0.16、MariaDB 10.2 起执行检查约束；OceanBase 报告 5.7 但执行检查约束；
+                // TiDB 默认只解析不执行（tidb_enable_check_constraint 关闭）
                 checks: match self.variant() {
                     Variant::MariaDb => v >= 100200,
+                    Variant::OceanBase => true,
+                    Variant::TiDb => false,
                     _ => v >= 80016,
                 },
-                // 8.0 起支持降序索引
-                descending_index: self.variant() == Variant::MariaDb || v >= 80000,
+                // 8.0 起支持降序索引；TiDB、OceanBase 接受 DESC 但按升序建
+                descending_index: match self.variant() {
+                    Variant::MariaDb => true,
+                    Variant::TiDb | Variant::OceanBase => false,
+                    _ => v >= 80000,
+                },
                 on_delete: vec!["RESTRICT", "CASCADE", "SET NULL", "NO ACTION"],
                 on_update: vec!["RESTRICT", "CASCADE", "SET NULL", "NO ACTION"],
-                index_methods: vec!["BTREE", "HASH", "FULLTEXT", "SPATIAL"],
+                index_methods: match self.variant() {
+                    Variant::TiDb => vec!["BTREE"],
+                    Variant::OceanBase => vec!["BTREE", "FULLTEXT"],
+                    _ => vec!["BTREE", "HASH", "FULLTEXT", "SPATIAL"],
+                },
                 types: MYSQL_TYPES.to_vec(),
             },
             Family::Postgres => DesignCaps {
@@ -174,8 +189,15 @@ impl Dialect {
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],
                 on_update: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],
-                index_methods: vec!["BTREE", "HASH", "GIN", "GIST", "BRIN", "SPGIST"],
-                types: POSTGRES_TYPES.to_vec(),
+                index_methods: match self.variant() {
+                    Variant::OpenGauss => vec!["BTREE", "HASH", "GIN", "GIST"],
+                    _ => vec!["BTREE", "HASH", "GIN", "GIST", "BRIN", "SPGIST"],
+                },
+                types: if self.oracle_mode() {
+                    POSTGRES_TYPES.iter().chain(PG_ORACLE_MODE_TYPES).cloned().collect()
+                } else {
+                    POSTGRES_TYPES.to_vec()
+                },
             },
             Family::Oracle | Family::Dameng => DesignCaps {
                 reorder: false,
@@ -194,6 +216,8 @@ impl Dialect {
 mod tests {
     use super::*;
 
+    use crate::Compat;
+
     #[test]
     fn caps_follow_family_and_version() {
         let mysql57 = Dialect::new(Variant::MySql).with_version(Some(50744)).design_caps();
@@ -209,6 +233,15 @@ mod tests {
         assert!(ora.on_update.is_empty());
         let varchar2 = ora.types.iter().find(|t| t.name == "VARCHAR2").unwrap();
         assert_eq!((varchar2.params, varchar2.char_unit), (TypeParams::Length, true));
+        let tidb = Dialect::new(Variant::TiDb).with_version(Some(80011)).design_caps();
+        assert!(tidb.reorder && !tidb.checks && !tidb.descending_index && tidb.index_methods == ["BTREE"]);
+        let ob = Dialect::new(Variant::OceanBase).with_version(Some(50725)).design_caps();
+        assert!(ob.checks && !ob.descending_index);
+        let kb = Dialect::new(Variant::Kingbase).with_compat(Compat::Oracle).design_caps();
+        assert!(kb.types.iter().any(|t| t.name == "VARCHAR2") && kb.types.iter().any(|t| t.name == "jsonb"));
+        let kb_pg = Dialect::new(Variant::Kingbase).design_caps();
+        assert!(!kb_pg.types.iter().any(|t| t.name == "VARCHAR2"));
+        assert!(!Dialect::new(Variant::OpenGauss).design_caps().index_methods.contains(&"BRIN"));
         let dm = Dialect::new(Variant::Dameng).design_caps();
         assert!(dm.types.iter().any(|t| t.name == "VARCHAR" && t.char_unit));
     }
