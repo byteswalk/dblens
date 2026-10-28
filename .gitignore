@@ -16,3 +16,4 @@ node_modules/
 
 # 单独测试 vendor/ 中的库时生成
 /vendor/*/Cargo.lock
+/vendor/*/target/
