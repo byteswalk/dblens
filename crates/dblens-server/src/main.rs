@@ -132,8 +132,9 @@ async fn run(args: Args) -> Result<(), String> {
             }
         });
     }
-    let mut app =
-        router(service, ApiConfig { token, allowed_origins: args.allowed_origins, local_files: false });
+    // 只监听本机地址时页面和服务在同一台机器上，可以使用本机路径（打开模型、导出到指定路径）
+    let local_files = addr.ip().is_loopback();
+    let mut app = router(service, ApiConfig { token, allowed_origins: args.allowed_origins, local_files });
     if let Some(dir) = web_dir {
         app = with_web(app, dir);
     }

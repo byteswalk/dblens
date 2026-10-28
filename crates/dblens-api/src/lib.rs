@@ -6,6 +6,7 @@ mod design;
 mod error;
 mod exports;
 mod lang;
+mod models;
 mod routes;
 mod tasks;
 mod web;
@@ -31,8 +32,8 @@ pub struct ApiConfig {
     pub token: String,
     /// 除同源外还允许的 Origin，如桌面模式的 `tauri://localhost`、前端开发服务器 `http://localhost:5173`。
     pub allowed_origins: Vec<String>,
-    /// 页面和服务在同一台机器上（桌面程序）：导出可以直接写到页面给出的路径。
-    /// 浏览器模式（`dblens-server`）页面可能在另一台机器上，为 false，导出一律写临时文件后下载。
+    /// 页面和服务在同一台机器上（桌面程序、只监听本机地址的浏览器模式）：导出可以直接写到页面给出的路径，
+    /// 可以打开模型目录。监听其他地址的浏览器模式页面可能在另一台机器上，为 false，导出一律写临时文件后下载。
     pub local_files: bool,
 }
 
@@ -90,6 +91,19 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/profiles/{id}/design/preview", post(design::preview))
         .route("/profiles/{id}/design/apply", post(design::apply))
         .route("/sessions/{id}/changes", post(routes::apply_changes))
+        .route("/models", get(models::list).post(models::create))
+        .route("/models/open", post(models::open))
+        .route("/models/reverse", post(models::reverse))
+        .route("/models/{id}", get(models::get).put(models::update).delete(models::close))
+        .route("/models/{id}/caps", get(models::caps))
+        .route("/models/{id}/tables", get(models::tables).post(models::save_table))
+        .route("/models/{id}/tables/preview", post(models::preview_table))
+        .route("/models/{id}/tables/{schema}/{name}", get(models::table).delete(models::delete_table))
+        .route("/models/{id}/tables/{schema}/{name}/rename", post(models::rename_table))
+        .route("/compare", post(models::compare))
+        .route("/compare/preview", post(models::sync_preview))
+        .route("/compare/sync", post(models::sync))
+        .route("/compare/script", post(models::save_script))
         .route("/exports", post(exports::create))
         .route("/exports/{id}", get(exports::status).delete(exports::cancel_or_remove))
         .route("/exports/{id}/file", get(exports::file))
