@@ -240,6 +240,10 @@ pub(crate) struct PgParam<'a>(pub &'a Value);
 
 impl ToSql for PgParam<'_> {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> std::result::Result<IsNull, BoxError> {
+        // 兼容库的域类型和自定义类型按对应的标准类型编码（人大金仓 Oracle 模式的 date 是 timestamp 上的域）
+        if let Some(base) = standard_type(ty).filter(|b| b != ty) {
+            return self.to_sql(&base, out);
+        }
         match self.0 {
             Value::Null => Ok(IsNull::Yes),
             Value::Bool(b) => b.to_sql(ty, out),
@@ -260,6 +264,7 @@ impl ToSql for PgParam<'_> {
             Value::Decimal(_) if *ty == Type::NUMERIC => Err(numeric_param_hint()),
             Value::String(s) | Value::Decimal(s) | Value::Interval(s) => s.as_str().to_sql(ty, out),
             Value::Bytes(b) => b.as_slice().to_sql(ty, out),
+            Value::Date(d) if *ty == Type::TIMESTAMP => d.and_time(chrono::NaiveTime::MIN).to_sql(ty, out),
             Value::Date(d) => d.to_sql(ty, out),
             Value::Time(t) => t.to_sql(ty, out),
             Value::DateTime(dt) => dt.to_sql(ty, out),

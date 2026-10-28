@@ -97,10 +97,12 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
-    /// `列 = 值`；值为 NULL 时 `列 IS NULL`（不占参数）。
+    /// `列 = 值`；值为 NULL 时 `列 IS NULL`（不占参数）。Oracle 兼容模式（人大金仓、openGauss）中空串就是 NULL，
+    /// 也写成 `IS NULL`。
     fn equals(&mut self, col: &str, v: &Value) -> Result<()> {
         self.text(&self.dialect.ident(col));
-        if matches!(v, Value::Null) {
+        let empty = matches!(v, Value::String(s) if s.is_empty());
+        if matches!(v, Value::Null) || (empty && self.dialect.oracle_mode()) {
             self.text(" IS NULL");
             Ok(())
         } else {
@@ -248,7 +250,7 @@ mod tests {
     use dblens_core::schema::{PrimaryKey, UniqueConstraint};
 
     use super::*;
-    use crate::Variant;
+    use crate::{Compat, Variant};
 
     fn col(name: &str, logical: LogicalType) -> Column {
         Column {
@@ -324,6 +326,22 @@ mod tests {
             "UPDATE public.orders SET name = '新', note = 'x', price = 9.90, rate = 2 \
              WHERE id = 1 AND name = '旧' AND price IS NULL"
         );
+    }
+
+    #[test]
+    fn empty_string_is_null_in_oracle_mode() {
+        // 定位行的原值中有空串（只在没有主键、按全部列定位等情况下出现）
+        let change = RowChange::Update {
+            key: map(&[("id", Value::Int(1))]),
+            original: map(&[("name", s(""))]),
+            values: map(&[("name", s("新"))]),
+        };
+        let kb = Dialect::new(Variant::Kingbase);
+        let oracle = kb.with_compat(Compat::Oracle);
+        let st = oracle.change_statements("public", &orders(), std::slice::from_ref(&change)).unwrap();
+        assert_eq!(st[0].sql, "UPDATE public.orders SET name = $1 WHERE id = $2 AND name IS NULL");
+        let st = kb.change_statements("public", &orders(), &[change]).unwrap();
+        assert_eq!(st[0].sql, "UPDATE public.orders SET name = $1 WHERE id = $2 AND name = $3");
     }
 
     #[test]
