@@ -54,5 +54,10 @@
     "missingTable": "表 {{name}} 已不存在",
     "brokenKey": "{{table}} 的逻辑外键 {{name}} 引用的表或列不存在",
     "badFile": "表 {{name}} 的文件有错：{{message}}"
+  },
+  "close": {
+    "title": "放弃 {{title}} 未保存的布局改动？",
+    "content": "关闭后，未保存的位置、显示方式和主题图中的表都会丢失。",
+    "ok": "放弃并关闭"
   }
 }

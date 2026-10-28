@@ -55,5 +55,10 @@
     "missingTable": "Table {{name}} no longer exists",
     "brokenKey": "Logical key {{name}} of {{table}} references a missing table or column",
     "badFile": "The file of table {{name}} is invalid: {{message}}"
+  },
+  "close": {
+    "title": "Discard unsaved layout changes in {{title}}?",
+    "content": "Unsaved positions, display mode and topic diagram tables will be lost.",
+    "ok": "Discard and Close"
   }
 }

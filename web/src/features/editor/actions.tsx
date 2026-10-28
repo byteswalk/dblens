@@ -8,6 +8,7 @@ import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import { hasPendingEdits, useEdits } from '../data/editStore'
 import { hasDesignChanges, useDesigns } from '../design/designStore'
+import { hasErChanges, useErTabs } from '../er/events'
 import { sendInsert } from './commands'
 import { disposeRunner, useRuntime } from './runner'
 import { markRun, useTabs } from './tabs'
@@ -66,6 +67,20 @@ export function useQueryActions() {
           okType: 'danger',
           onOk: () => {
             useDesigns.getState().clear(tabId)
+            void closeQuery(tabId).then(done)
+          },
+          onCancel: () => done(),
+        })
+        return
+      }
+      if (tab.er && hasErChanges(tabId)) {
+        modal.confirm({
+          title: t('er.close.title', { title: tab.title }),
+          content: t('er.close.content'),
+          okText: t('er.close.ok'),
+          okType: 'danger',
+          onOk: () => {
+            useErTabs.getState().clear(tabId)
             void closeQuery(tabId).then(done)
           },
           onCancel: () => done(),

@@ -28,7 +28,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Alert, App, AutoComplete, Badge, Button, Dropdown, Form, Input, Modal, Popover, Segmented, Select, Spin } from 'antd'
-import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
@@ -39,7 +39,7 @@ import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../../sh
 import { withVault } from '../connections/vault'
 import { type QueryTab, useTabs } from '../editor/tabs'
 import { useModelDialogs } from '../model/dialogs'
-import { useErEvents } from './events'
+import { type ErTabState, useErTabs } from './events'
 import { type ImageFormat, dataUrlBase64, imageName, renderImage } from './export'
 import { type Direction, TABLE_HANDLE, buildGraph, layout, searchTables } from './graph'
 import TableNode, { type TableNodeType } from './TableNode'
@@ -49,6 +49,7 @@ const NODE_TYPES = { table: TableNode }
 const LARGE = 300
 
 interface Loaded {
+  /** 可画的表：模型为 schema 的全部表（按图中的表过滤后画出），库为整个 schema。 */
   tables: ErTable[]
   diagram: ErDiagram
   fingerprint: string | null
@@ -94,7 +95,9 @@ function Canvas({ tab }: { tab: QueryTab }) {
             : t('er.warning.brokenKey', { table: w.table, name: w.name ?? `#${w.index + 1}` }),
         )
         for (const x of v.tables) if (x.error) warnings.push(t('er.warning.badFile', { name: x.table.name, message: x.error.message }))
-        return { tables: v.tables, diagram: v.diagram, fingerprint: v.fingerprint, warnings }
+        // 主题图：表从全部表中取（"添加表…"可选、加进来的表不必先保存就能画出来），按图中的表过滤
+        const all = diagramName === DEFAULT_DIAGRAM ? v : await api.diagram(modelId!, schema, DEFAULT_DIAGRAM)
+        return { tables: all.tables, diagram: v.diagram, fingerprint: v.fingerprint, warnings }
       }
       const tables = await withVault(api, () => api.schemaTables(target.profile, schema))
       return {
@@ -109,30 +112,36 @@ function Canvas({ tab }: { tab: QueryTab }) {
   const data = dataQ.data
 
   // 本地的编辑：位置、显示方式、主题图的表；dirty 时标题标"未保存"
-  const [positions, setPositions] = useState<Record<string, ErPosition>>({})
-  const [display, setDisplay] = useState<ErDisplay>('columns')
-  const [tableList, setTableList] = useState<'all' | string[]>('all')
-  const [fingerprint, setFingerprint] = useState<string | null>(null)
-  const [dirty, setDirty] = useState(false)
+  // 编辑状态放在 store 中：切换到设计器等标签再回来时保留未保存的改动
+  const st = useErTabs((s) => s.tabs[tab.id])
+  const positions = useMemo(() => st?.positions ?? {}, [st?.positions])
+  const display = st?.display ?? 'columns'
+  const tableList = st?.tables ?? 'all'
+  const fingerprint = st?.fingerprint ?? null
+  const dirty = st?.dirty ?? false
+  const patch = useCallback((p: Partial<ErTabState>) => useErTabs.getState().patch(tab.id, p), [tab.id])
+  const setPositions = (p: Record<string, ErPosition>) => patch({ positions: p })
   const [exporting, setExporting] = useState(false)
   const [pending, setPending] = useState<PendingKey | null>(null)
   const [adding, setAdding] = useState(false)
-  const loadedFor = useRef<string | null>(null)
 
-  // 第一次读到（或重新加载）时取文件中的布局；之后的刷新保留未保存的改动
+  // 第一次读到、文件变了（且没有未保存的改动）时取文件中的布局；之后的刷新保留未保存的改动
   useEffect(() => {
     if (!data) return
     const key = `${tab.id}:${data.fingerprint ?? 'none'}`
-    if (loadedFor.current === null || (!dirty && loadedFor.current !== key)) {
-      setPositions(data.diagram.positions ?? {})
+    const cur = useErTabs.getState().tabs[tab.id]
+    if (!cur || (!cur.dirty && cur.loadedKey !== key)) {
       const large = data.fingerprint === null && data.tables.length > LARGE
-      setDisplay(large ? 'names' : data.diagram.display)
-      setTableList(data.diagram.tables)
-      setFingerprint(data.fingerprint)
-      setDirty(false)
+      useErTabs.getState().set(tab.id, {
+        positions: data.diagram.positions ?? {},
+        display: large ? 'names' : data.diagram.display,
+        tables: data.diagram.tables,
+        fingerprint: data.fingerprint,
+        dirty: false,
+        loadedKey: key,
+      })
     }
-    loadedFor.current = key
-  }, [data, tab.id, dirty])
+  }, [data, tab.id])
 
   const tables = useMemo(
     () => (data?.tables ?? []).filter((x) => tableList === 'all' || tableList.includes(x.table.name)),
@@ -142,9 +151,9 @@ function Canvas({ tab }: { tab: QueryTab }) {
 
   // 没有位置的表自动排
   useEffect(() => {
-    if (!graph.nodes.length || graph.nodes.every((n) => positions[n.id])) return
-    setPositions(layout(graph, positions))
-  }, [graph, positions])
+    if (!st || !graph.nodes.length || graph.nodes.every((n) => positions[n.id])) return
+    patch({ positions: layout(graph, positions) })
+  }, [st, graph, positions, patch])
 
   const [nodes, setNodes, onNodesChange] = useNodesState<TableNodeType>([])
   useEffect(() => {
@@ -177,7 +186,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
     [graph, t],
   )
 
-  const markDirty = () => isModel && setDirty(true)
+  const markDirty = () => isModel && patch({ dirty: true })
 
   const autoLayout = (direction: Direction, all: boolean) => {
     setPositions(layout(graph, positions, { direction, all }))
@@ -190,35 +199,24 @@ function Canvas({ tab }: { tab: QueryTab }) {
     const diagram: ErDiagram = { ...data.diagram, display, tables: tableList, positions }
     try {
       const fp = await api.saveDiagram(modelId, schema, diagramName, diagram, fingerprint)
-      setFingerprint(fp)
-      setDirty(false)
+      patch({ fingerprint: fp, dirty: false, loadedKey: `${tab.id}:${fp}` })
       message.success(t('er.saved'))
       void qc.invalidateQueries({ queryKey: ['model-diagrams', modelId] })
       void dataQ.refetch()
     } catch (e) {
       message.error((e as Error).message)
     }
-  }, [isModel, modelId, data, dirty, display, tableList, positions, api, schema, diagramName, fingerprint, message, t, qc, dataQ])
+  }, [isModel, modelId, data, dirty, display, tableList, positions, api, schema, diagramName, fingerprint, message, t, qc, dataQ, patch, tab.id])
 
   const reload = () => {
     const go = () => {
-      setDirty(false)
-      loadedFor.current = null
+      useErTabs.getState().clear(tab.id)
       void dataQ.refetch()
     }
     if (dirty) modal.confirm({ title: t('er.reloadConfirm'), okType: 'danger', onOk: go })
     else go()
   }
 
-  // 设计器保存了从这张图新建的表：主题图把它加进来
-  const created = useErEvents((s) => s.created)
-  useEffect(() => {
-    if (!created || created.erTab !== tab.id || tableList === 'all') return
-    if (!tableList.includes(created.name)) {
-      setTableList([...tableList, created.name])
-      setDirty(true)
-    }
-  }, [created])
 
   const onConnect = (c: Connection) => {
     if (!isModel || !c.sourceHandle || !c.targetHandle) return
@@ -254,7 +252,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
   const newTable = () => {
     if (target.kind !== 'model') return
     const id = useTabs.getState().openDesign('', { schema, table: null, model: target.path })
-    useErEvents.getState().wait(id, tab.id)
+    useErTabs.getState().wait(id, tab.id)
   }
 
   const exportImage = async (format: ImageFormat, white: boolean) => {
@@ -334,7 +332,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
           size="small"
           value={display}
           onChange={(v) => {
-            setDisplay(v as ErDisplay)
+            patch({ display: v as ErDisplay })
             markDirty()
           }}
           options={[
@@ -420,11 +418,9 @@ function Canvas({ tab }: { tab: QueryTab }) {
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           onNodeDragStop={(_, __, dragged) => {
-            setPositions((p) => {
-              const next = { ...p }
-              for (const n of dragged) next[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }
-              return next
-            })
+            const next = { ...positions }
+            for (const n of dragged) next[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }
+            setPositions(next)
             markDirty()
           }}
           onNodeDoubleClick={(_, n) => !n.data.error && openTable(n.id)}
@@ -453,8 +449,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
                 if (key === 'design' || key === 'data') openTable(n.id)
                 else if (key === 'design-db' && target.kind === 'database') useTabs.getState().openDesign(target.profile, { schema, table: n.id })
                 else if (key === 'remove' && isTopic) {
-                  setTableList((tableList as string[]).filter((x) => x !== n.id))
-                  setDirty(true)
+                  patch({ tables: (tableList as string[]).filter((x) => x !== n.id), dirty: true })
                 }
               },
             })
@@ -531,8 +526,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
           current={tableList === 'all' ? [] : tableList}
           onCancel={() => setAdding(false)}
           onOk={(names) => {
-            setTableList([...(tableList === 'all' ? [] : tableList), ...names])
-            setDirty(true)
+            patch({ tables: [...(tableList === 'all' ? [] : tableList), ...names], dirty: true })
             setAdding(false)
           }}
         />
