@@ -2,6 +2,7 @@
 
 mod browse;
 mod changes;
+pub mod compare;
 mod ddl;
 pub mod design;
 mod dml;

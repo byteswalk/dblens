@@ -1,0 +1,17 @@
+---
+source: crates/dblens-dialect/src/compare/tests.rs
+expression: "text.join(\"\\n\")"
+---
+[1] ALTER TABLE app.orders DROP CONSTRAINT fk_old
+[8] DROP TABLE app.old
+[5] ALTER TABLE app.cust RENAME TO customers
+[2] ALTER TABLE app.orders ALTER COLUMN name TYPE varchar(80) USING name::varchar(80)
+[6, 7] rebuild moved (7 steps)
+[4] CREATE TABLE app.items (
+    id integer,
+    name varchar(50),
+    phone varchar(20),
+    PRIMARY KEY (id)
+)
+[3] ALTER TABLE app.orders ADD CONSTRAINT fk_new FOREIGN KEY (phone) REFERENCES app.customers (id)
+[4] ALTER TABLE app.items ADD CONSTRAINT fk_items_orders FOREIGN KEY (id) REFERENCES app.orders (id)

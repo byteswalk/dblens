@@ -2,7 +2,7 @@
 //! 再按方言生成 DDL；库不支持的改动改用重建表的脚本。不做任何 IO。
 
 mod catalog;
-mod diff;
+pub(crate) mod diff;
 mod mysql;
 mod oracle;
 mod postgres;
@@ -21,6 +21,8 @@ pub use catalog::{DesignCaps, TypeEntry, TypeParams};
 pub use diff::{diff_table, validate};
 pub use rebuild::{Rebuild, RebuildContext, RebuildOutcome, RebuildStep};
 pub use sql::DesignStatement;
+#[cfg(test)]
+pub(crate) use sql::fixtures;
 
 /// 草稿中改了名的项：新名 → 原名。前端用每一项的 `origin` 跟踪原来的名字，发送时整理成这个映射。
 /// 约束改名一律先删后建，不需要映射。

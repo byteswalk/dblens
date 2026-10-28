@@ -1,0 +1,16 @@
+---
+source: crates/dblens-dialect/src/compare/tests.rs
+expression: "text.join(\"\\n\")"
+---
+[1] ALTER TABLE shop.orders DROP FOREIGN KEY fk_parent
+[3] ALTER TABLE shop.orders DROP CHECK ck_amount
+[4] ALTER TABLE shop.orders DROP INDEX ix_amount
+[5] ALTER TABLE shop.orders DROP COLUMN amount
+[6] ALTER TABLE shop.orders RENAME COLUMN code TO order_code
+[7] ALTER TABLE shop.orders MODIFY COLUMN order_code VARCHAR(50) NOT NULL
+[8] ALTER TABLE shop.orders ADD COLUMN note VARCHAR(50) NULL AFTER id
+[2, 9] ALTER TABLE shop.orders DROP PRIMARY KEY, ADD PRIMARY KEY (id, order_code)
+[10] ALTER TABLE shop.orders ADD CONSTRAINT uk_note UNIQUE (note)
+[11] ALTER TABLE shop.orders ADD INDEX ix_note (note)
+[13] ALTER TABLE shop.orders COMMENT = '订单表'
+[12] ALTER TABLE shop.orders ADD CONSTRAINT fk_parent FOREIGN KEY (order_code) REFERENCES shop.parent (code)
