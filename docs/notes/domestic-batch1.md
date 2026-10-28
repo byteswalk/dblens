@@ -90,7 +90,7 @@ openGauss（7.0.0-RC1，基于 PG 9.2.4）：
 |---|---|---|
 | TiDB v8.5.8 | 4000 | tiup 镜像站的官方二进制，单个 tidb-server（`-store unistore -path /data/tidb`），systemd `tidb`，`WorkingDirectory=/data/tidb`（慢日志用相对路径） |
 | OceanBase CE 4.4.2.1 | 2881 | `quay.io/oceanbase/oceanbase-ce:4.4.2-lts`，`MODE=mini`，必须加 `OB_SERVER_IP=127.0.0.1` 和 `--ulimit nofile=65535:65535`，租户 `test` |
-| openGauss 7.0.0-RC1 | 5433 | Docker Hub 的 `opengauss/opengauss:7.0.0-RC1`（经华为云 SWR 同步副本拉取；quay.io 的 7.0.0-RC3 镜像缺动态库）；`password_encryption_type = 1`，远程认证 sha256；库 `dblens_test`（PG）、`dblens_test_a`（A）；账号 `admin`（MONADMIN）、`admin_sha`（只存 SHA256）、`admin_m5s`（pg_hba 为 md5，用于确认不支持的报错） |
+| openGauss 7.0.0-RC1 | 5433 | Docker Hub 的 `opengauss/opengauss:7.0.0-RC1`（经华为云 SWR 同步副本拉取；quay.io 的 7.0.0-RC3 镜像缺动态库）；`password_encryption_type = 1`，远程认证 sha256；库 `dblens_test`（PG）、`dblens_test_a`（A）、`dblens_test_sha`（PG，属于 `admin_sha`：一致性测试用固定的表名，与 `dblens_test` 上的测试同时跑会互相删表）；账号 `admin`（MONADMIN）、`admin_sha`（只存 SHA256）、`admin_m5s`（pg_hba 为 md5，用于确认不支持的报错） |
 | 人大金仓 V9R2C16 | 54321 / 54322 | 官方 DEB 包，开发版授权（365 天）；Oracle 模式 systemd `kingbased`，PG 模式第二个实例 `kingbased-pg`（`initdb -m pg`） |
 
 实库测试的环境变量见设计文档 9.1 节。人大金仓的测试要串行运行（`--test-threads=1`，授权限制 10 个连接）；TiDB 的元数据测试会把 `tidb_enable_check_constraint` 设为 ON。
@@ -103,3 +103,9 @@ openGauss（7.0.0-RC1，基于 PG 9.2.4）：
 - 实库（原有 5 个库与新增 7 个目标）：驱动一致性、元数据、服务层全部流程（会话、工作台、取消、对象操作、运维、导出、编辑、导入、执行 SQL 文件、表设计器）、接口层。
   - 达梦和其他测试同在一个进程里运行时偶发"网络通讯失败"，单独运行通过（与以前的记录相同）。
 - 前端：tsc、Vitest、打包通过。
+- 浏览器实测（中文界面）：
+  - 新建连接按产品切换时端口和提示正确（OceanBase 2881 与"用户@租户"、人大金仓 54321、openGauss、TiDB 4000）；测试连接接口返回的兼容模式和版本（人大金仓 oracle / pg、120100；openGauss A、90204）。
+  - 人大金仓 Oracle 模式的查询标签：编辑器切换为 PL/SQL，执行全部时 Oracle 风格的过程块按 `/` 拆分，建表、建过程、调用、查询都成功，空串存成 NULL；数据标签显示"此库空串按 NULL 存储"。
+  - 设计器能力：openGauss A 模式有 VARCHAR2，PG 模式没有；TiDB 不建降序索引、检查约束按只解析不执行；TiDB 表的存储信息带聚簇主键。
+  - 实测中发现并修正：记了产品、但没连接过的连接，对象树和状态栏仍按驱动显示（如"PostgreSQL 系"），改为按选的产品显示（`profileKind`）。
+- 未验证：桌面程序中的连接对话框和编辑器没有单独实测（并入之前延后的桌面实测）；设计器在新库上的界面操作只用接口核对，DDL 的生成和执行由实库测试覆盖。

@@ -22,4 +22,4 @@ openGauss 用认证请求码 10（与 PostgreSQL 的 SASL 相同）发它自己�
 1. 从 crates.io 下载新版本（`cargo download` 或取 `$CARGO_HOME/registry/src/*/<库>-<版本>`），替换 `vendor/<库>/` 中除 `Cargo.toml` 改动以外的全部文件；
 2. 按上表重新套用改动（`gauss.rs` 整个文件复制过去；其余是几行的插入）；
 3. 更新上表中的上游版本；
-4. 运行 `cargo test --manifest-path vendor/postgres-protocol/Cargo.toml --lib authentication`，再用 `DBLENS_TEST_OPENGAUSS_SHA_URL` 跑 PG 驱动的一致性测试。
+4. 运行 `CARGO_TARGET_DIR=target cargo test --manifest-path vendor/postgres-protocol/Cargo.toml --lib authentication`（构建目录用工作区的 `target`，不要在 vendor 下生成），再用 `DBLENS_TEST_OPENGAUSS_SHA_URL` 跑 PG 驱动的一致性测试。
