@@ -68,7 +68,7 @@
 | PUT | `/profiles/{id}` | 修改，请求体为配置本身 |
 | DELETE | `/profiles/{id}` | 删除，返回 204 |
 | PUT | `/profiles/{id}/password` | 设置或清除密码，`{"password": "…" \| null}` |
-| POST | `/profiles/test` | 测试连接，`{"profile": {…}, "password": "…"}`，返回服务器信息和识别出的方言 |
+| POST | `/profiles/test` | 测试连接，`{"profile": {…}, "password": "…"}`，返回服务器信息和识别出的方言；人大金仓、openGauss 另有 `compat`（`native` / `oracle`）、`mode`（探测到的兼容模式名）、`unadapted_mode`（国产库第一批加入） |
 
 配置的字段：
 - 必填：`name`、`driver`（`mysql` / `postgres` / `oracle` / `dameng`）、`host`、`port`、`user`；
@@ -77,7 +77,8 @@
   - `options`：键值对，如 `tls`、`tls_ca`、`sid`；
   - `environment`：`none` / `dev` / `test` / `prod`；
   - `color`；
-  - `connect_timeout_secs`。
+  - `connect_timeout_secs`；
+  - `product`：新建连接时选的产品（如 `kingbase`、`opengauss`、`tidb`），只用于显示，连上后以识别出的变体为准；没有时按驱动显示（国产库第一批加入）。
 - 只读：`variant`，上次连接成功时识别出的数据库变体（如 `kingbase`），没连接过时为 null（M1i 加入）。
   - 由服务端在连接成功时写入，修改配置时忽略请求中的值。
   - 主机、端口或驱动变了则清空。
@@ -107,7 +108,7 @@
 |---|---|---|
 | POST | `/sessions` | 打开会话，`{"profile_id": "…"}`，返回 201 和会话信息 |
 | GET | `/sessions` | 全部会话 |
-| GET | `/sessions/{id}` | `{id, profile_id, variant, autocommit, in_transaction, busy, broken, schema}`；`schema` 是当前 schema（M1b1 加入） |
+| GET | `/sessions/{id}` | `{id, profile_id, variant, compat, autocommit, in_transaction, busy, broken, schema}`；`schema` 是当前 schema（M1b1 加入）；`compat` 是兼容模式（国产库第一批加入） |
 | DELETE | `/sessions/{id}?commit=false` | 关闭；有未提交的修改时按 `commit` 提交或回滚 |
 | POST | `/sessions/{id}/autocommit` | 切换自动提交，`{"on": bool}` |
 | POST | `/sessions/{id}/commit` | 提交 |
