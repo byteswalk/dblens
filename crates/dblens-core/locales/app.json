@@ -146,6 +146,8 @@
   "model.bad_file": {"zh-CN": "文件 %{path} 有错：%{error}", "en": "File %{path} is invalid: %{error}"},
   "model.bad_path": {"zh-CN": "路径无效：%{path}", "en": "Invalid path: %{path}"},
   "model.conflict": {"zh-CN": "%{name} 的文件已被修改，请重新加载", "en": "The file for %{name} has changed; reload it"},
+  "model.diagram_bad_name": {"zh-CN": "图名 %{name} 不可用（不能为空，也不能是 _all）", "en": "The diagram name %{name} is not allowed (it must not be empty or _all)"},
+  "model.diagram_exists": {"zh-CN": "图 %{name} 已存在", "en": "Diagram %{name} already exists"},
   "model.dir_not_empty": {"zh-CN": "目录 %{path} 不为空", "en": "Directory %{path} is not empty"},
   "model.io_failed": {"zh-CN": "读写 %{path} 失败：%{error}", "en": "Failed to access %{path}: %{error}"},
   "model.lk_column_missing": {"zh-CN": "列 %{name} 不存在", "en": "Column %{name} does not exist"},

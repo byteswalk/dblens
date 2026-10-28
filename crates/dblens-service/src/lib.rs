@@ -44,9 +44,10 @@ pub use import::{
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
 pub use model::{
-    FileError, LogicalKey, ModelDatabase, ModelDesignPreview, ModelDesignRequest, ModelInfo, ModelStore, ModelSummary,
-    ModelTableView, ModelWrite, NewModel, RECENT_MODELS_SETTING, ReverseRequest, SchemaRenames, SchemaTables,
-    TableEntry,
+    DEFAULT_DIAGRAM, Diagram, DiagramDisplay, DiagramSummary, DiagramTable, DiagramTables, DiagramView,
+    DiagramWarning, FileError, LogicalKey, ModelDatabase, ModelDesignPreview, ModelDesignRequest, ModelInfo,
+    ModelStore, ModelSummary, ModelTableView, ModelWrite, NewModel, Position, RECENT_MODELS_SETTING,
+    ReverseRequest, SchemaRenames, SchemaTables, TableEntry,
 };
 pub use objects::{DataOrder, GenerateKind, ObjectKind};
 pub use policy::{

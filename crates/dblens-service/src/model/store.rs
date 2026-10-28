@@ -11,9 +11,10 @@ use dblens_core::{Error, Result, msg};
 use dblens_dialect::Dialect;
 use serde::Serialize;
 
+use super::diagram;
 use super::file::{
-    FORMAT, LogicalKey, ModelDatabase, ModelInfo, ModelTable, SchemaRenames, fingerprint, info_path, info_yaml, io_err,
-    parse_info, parse_table, table_path, table_yaml, unescape_name, write_atomic,
+    FORMAT, LogicalKey, ModelDatabase, ModelInfo, ModelTable, SchemaRenames, fingerprint, info_path,
+    info_yaml, io_err, parse_info, parse_table, table_path, table_yaml, unescape_name, write_atomic,
 };
 
 /// 打开的模型的概要。
@@ -60,8 +61,8 @@ struct Cached {
     parsed: std::result::Result<ModelTable, String>,
 }
 
-struct OpenModel {
-    root: PathBuf,
+pub(super) struct OpenModel {
+    pub(super) root: PathBuf,
     info: ModelInfo,
     read_only: bool,
     files: BTreeMap<PathBuf, Cached>,
@@ -141,7 +142,7 @@ impl OpenModel {
         self.info.database.dialect()
     }
 
-    fn writable(&self) -> Result<()> {
+    pub(super) fn writable(&self) -> Result<()> {
         if self.read_only {
             return Err(Error::invalid(msg!("model.read_only", format = self.info.format)));
         }
@@ -149,7 +150,7 @@ impl OpenModel {
     }
 
     /// 扫描 `tables/` 下的文件，修改时间或长度变了的重读，删掉的文件移出缓存。
-    fn refresh(&mut self) -> Result<()> {
+    pub(super) fn refresh(&mut self) -> Result<()> {
         let d = self.dialect();
         let dir = self.root.join("tables");
         let mut seen = Vec::new();
@@ -202,7 +203,7 @@ impl OpenModel {
             .map(|(p, _)| p.as_path())
     }
 
-    fn entries(&self) -> Vec<TableEntry> {
+    pub(super) fn entries(&self) -> Vec<TableEntry> {
         let mut out: Vec<TableEntry> = self
             .files
             .iter()
@@ -233,7 +234,7 @@ impl OpenModel {
         Ok((path, &self.files[path]))
     }
 
-    fn read(&self, schema: &str, name: &str) -> Result<(PathBuf, ModelTable, String)> {
+    pub(super) fn read(&self, schema: &str, name: &str) -> Result<(PathBuf, ModelTable, String)> {
         let (path, c) = self.cached(schema, name)?;
         match &c.parsed {
             Ok(t) => Ok((path.to_path_buf(), t.clone(), c.fingerprint.clone())),
@@ -317,7 +318,7 @@ impl OpenModel {
 }
 
 impl ModelStore {
-    fn with<T>(&self, id: &str, f: impl FnOnce(&mut OpenModel) -> Result<T>) -> Result<T> {
+    pub(super) fn with<T>(&self, id: &str, f: impl FnOnce(&mut OpenModel) -> Result<T>) -> Result<T> {
         let mut models = self.models.lock().unwrap_or_else(|e| e.into_inner());
         let m = models.get_mut(id).ok_or_else(|| not_open(id))?;
         f(m)
@@ -388,8 +389,7 @@ impl ModelStore {
         check_empty(&root)?;
         for (schema, list) in tables {
             for t in list {
-                let mt =
-                    ModelTable::new(t.clone());
+                let mt = ModelTable::new(t.clone());
                 write_atomic(&table_path(&root, schema, &t.name), &table_yaml(&mt)?)?;
             }
         }
@@ -594,6 +594,7 @@ impl ModelStore {
                 }
                 hit
             })?;
+            diagram::on_table_changed(m, schema, from, Some(to))?;
             let r = m.renames(schema);
             record_rename(&mut r.tables, from, to);
             if let Some(cols) = r.columns.remove(from) {
@@ -686,6 +687,7 @@ impl ModelStore {
             m.check_fingerprint(schema, name, expected)?;
             let path = m.find(schema, name).ok_or_else(|| table_missing(schema, name))?.to_path_buf();
             std::fs::remove_file(&path).map_err(|e| io_err(&path, e))?;
+            diagram::on_table_changed(m, schema, name, None)?;
             let r = m.renames(schema);
             r.tables.remove(name);
             r.columns.remove(name);
@@ -732,10 +734,7 @@ impl ModelStore {
                                 let (p, mt, _) = m.read(schema, n)?;
                                 (Some(p), mt)
                             }
-                            None => (
-                                None,
-                                ModelTable::new(Table::default()),
-                            ),
+                            None => (None, ModelTable::new(Table::default())),
                         };
                         let new = match &old {
                             Some(p) if path_of.as_deref() == Some(table.name.as_str()) => p.clone(),
@@ -1000,8 +999,11 @@ mod tests {
         for k in bad {
             assert!(store.add_logical_key(&id, "public", "orders", k, None).is_err());
         }
-        let fp = store.add_logical_key(&id, "public", "orders", lk("cust_id", "customers", "id"), None).unwrap();
-        let err = store.add_logical_key(&id, "public", "orders", lk("cust_id", "customers", "id"), None).unwrap_err();
+        let fp =
+            store.add_logical_key(&id, "public", "orders", lk("cust_id", "customers", "id"), None).unwrap();
+        let err = store
+            .add_logical_key(&id, "public", "orders", lk("cust_id", "customers", "id"), None)
+            .unwrap_err();
         assert!(err.to_string().contains("already used"), "{err}");
         // 设计器保存（草稿中没有逻辑外键）后还在
         let t = store.read_table(&id, "public", "orders").unwrap().table;
@@ -1013,21 +1015,41 @@ mod tests {
         let mut c = store.read_table(&id, "public", "clients").unwrap().table;
         c.columns[0].name = "client_id".into();
         c.primary_key = Some(PrimaryKey { name: None, columns: vec!["client_id".into()] });
-        store.save_table(&id, "public", Some("clients"), c, &[("client_id".into(), "id".into())].into(), None).unwrap();
+        store
+            .save_table(&id, "public", Some("clients"), c, &[("client_id".into(), "id".into())].into(), None)
+            .unwrap();
         // 本表的列改名
         let mut o = store.read_table(&id, "public", "orders").unwrap().table;
         o.columns[1].name = "client_ref".into();
         o.foreign_keys[0].columns = vec!["client_ref".into()];
-        store.save_table(&id, "public", Some("orders"), o, &[("client_ref".into(), "cust_id".into())].into(), None).unwrap();
+        store
+            .save_table(
+                &id,
+                "public",
+                Some("orders"),
+                o,
+                &[("client_ref".into(), "cust_id".into())].into(),
+                None,
+            )
+            .unwrap();
         let text = std::fs::read_to_string(root.join("tables/public/orders.yaml")).unwrap();
         let mt = super::super::file::parse_table(&text, &Dialect::new(Variant::Postgres)).unwrap();
         assert_eq!(mt.logical_keys[0].columns, ["client_ref"]);
-        assert_eq!((mt.logical_keys[0].ref_table.as_str(), mt.logical_keys[0].ref_columns.as_slice()), ("clients", &["client_id".to_string()][..]));
+        assert_eq!(
+            (mt.logical_keys[0].ref_table.as_str(), mt.logical_keys[0].ref_columns.as_slice()),
+            ("clients", &["client_id".to_string()][..])
+        );
         // 比对用的表结构中没有逻辑外键
-        assert!(store.schema_tables(&id, "public").unwrap().tables.iter().all(|(t, _)| t.foreign_keys.len() <= 1));
+        assert!(
+            store.schema_tables(&id, "public").unwrap().tables.iter().all(|(t, _)| t.foreign_keys.len() <= 1)
+        );
         store.delete_logical_key(&id, "public", "orders", 0, None).unwrap();
         assert!(store.delete_logical_key(&id, "public", "orders", 0, None).is_err());
-        assert!(!std::fs::read_to_string(root.join("tables/public/orders.yaml")).unwrap().contains("logical_keys"));
+        assert!(
+            !std::fs::read_to_string(root.join("tables/public/orders.yaml"))
+                .unwrap()
+                .contains("logical_keys")
+        );
     }
 
     #[test]
