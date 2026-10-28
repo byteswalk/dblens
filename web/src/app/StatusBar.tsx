@@ -5,7 +5,7 @@ import { IconAlertTriangle, IconPlugConnected } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
-import { driverLabel } from '../features/connections/form'
+import { driverLabel, profileKind } from '../features/connections/form'
 import { sendCommand } from '../features/editor/commands'
 import { useCursor } from '../features/editor/cursor'
 import { variantName } from '../features/editor/dialect'
@@ -77,8 +77,8 @@ export default function StatusBar() {
     <div className="row statusbar">
       {p ? (
         <span className="row" style={{ gap: 4 }}>
-          <DbIcon driver={p.driver} variant={p.variant} />
-          {p.name} · {variantName(p.variant) ?? driverLabel(p.driver)} · {p.user}@{p.host}:{p.port}
+          <DbIcon driver={p.driver} variant={profileKind(p).icon} />
+          {p.name} · {profileKind(p).label} · {p.user}@{p.host}:{p.port}
         </span>
       ) : (
         <span className="muted">{t('app.status.noConnection')}</span>

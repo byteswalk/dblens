@@ -8,6 +8,7 @@ import {
   driverLabel,
   emptyForm,
   fromProfile,
+  profileKind,
   serverNotes,
   serverText,
   switchDriver,
@@ -99,6 +100,13 @@ describe('连接表单', () => {
     expect(fromProfile(p, false).product).toBe('mysql')
     // 与驱动对不上的值按驱动处理
     expect(fromProfile({ ...p, product: 'kingbase' }, false).product).toBe('mysql')
+  })
+
+  it('连接列表中的名称：连接过按变体，没连接过按选的产品，标准库和没选时按驱动', () => {
+    expect(profileKind({ driver: 'postgres', variant: 'kingbase', product: 'opengauss' })).toEqual({ label: 'KingbaseES', icon: 'kingbase' })
+    expect(profileKind({ driver: 'postgres', product: 'kingbase' })).toEqual({ label: '人大金仓', icon: 'kingbase' })
+    expect(profileKind({ driver: 'postgres', product: 'postgres' })).toEqual({ label: 'PostgreSQL 系', icon: null })
+    expect(profileKind({ driver: 'mysql' })).toEqual({ label: 'MySQL 系', icon: null })
   })
 
   it('测试连接的说明：兼容模式、未适配的模式、所选产品与识别结果不一致', () => {

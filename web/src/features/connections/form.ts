@@ -2,7 +2,8 @@
 
 import type { DriverId, Environment, Profile, ProfileInput, ServerSummary } from '../../shared/api'
 import { t } from '../../shared/i18n'
-import { type ProductId, product, productLabel, productOf } from './products'
+import { variantName } from '../editor/dialect'
+import { type ProductId, baseProduct, product, productLabel, productOf } from './products'
 
 export type TlsMode = 'disable' | 'require' | 'verify'
 
@@ -170,6 +171,13 @@ export function validate(f: ConnectionForm): Partial<Record<keyof ConnectionForm
 /** 测试连接成功后显示的服务器版本：有的数据库（如 PostgreSQL）返回的版本字符串已经带产品名，不再重复。 */
 export function serverText(s: ServerSummary): string {
   return s.version.startsWith(s.product) ? s.version : `${s.product} ${s.version}`
+}
+
+/** 连接列表、状态栏中的数据库名称和图标：连接过时按识别出的变体；没连接过时按新建时选的产品，没有选或选的是标准库时按驱动。 */
+export function profileKind(p: Pick<Profile, 'driver' | 'variant' | 'product'>): { label: string; icon: string | null } {
+  if (p.variant) return { label: variantName(p.variant) ?? driverLabel(p.driver), icon: p.variant }
+  const id = productOf(p.driver, p.product)
+  return id === baseProduct(p.driver) ? { label: driverLabel(p.driver), icon: null } : { label: productLabel(id), icon: id }
 }
 
 /** 测试连接成功后另外显示的说明：兼容模式、未适配的模式、所选产品与识别结果不一致。 */

@@ -30,8 +30,7 @@ import { useExportDialog } from '../export/dialog'
 import { useImportDialogs } from '../import/dialog'
 import type { Api, Environment, Profile, RoutineInfo } from '../../shared/api'
 import DbIcon from '../../shared/DbIcon'
-import { driverLabel } from '../connections/form'
-import { variantName } from '../editor/dialect'
+import { profileKind } from '../connections/form'
 import { withVault } from '../connections/vault'
 import { metaKey } from '../sql/metadata'
 import type { DdlTarget } from './DdlDialog'
@@ -261,10 +260,10 @@ export default function ObjectTree() {
         title: (
           <span>
             <span className="dot" style={{ background: p.color || ENV_COLOR[env] }} />
-            <DbIcon driver={p.driver} variant={p.variant} />{' '}
+            <DbIcon driver={p.driver} variant={profileKind(p).icon} />{' '}
             <b style={env === 'prod' ? { color: 'var(--danger)' } : undefined}>{p.name}</b>
             {env !== 'none' && <span className={`env ${env}`}>{t(`tree.env.${env}`)}</span>}
-            <span className="cm">{variantName(p.variant) ?? driverLabel(p.driver)}</span>
+            <span className="cm">{profileKind(p).label}</span>
           </span>
         ),
         children: build(key, 1),
