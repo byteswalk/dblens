@@ -149,6 +149,8 @@
   "model.diagram_bad_name": {"zh-CN": "图名 %{name} 不可用（不能为空，也不能是 _all）", "en": "The diagram name %{name} is not allowed (it must not be empty or _all)"},
   "model.diagram_exists": {"zh-CN": "图 %{name} 已存在", "en": "Diagram %{name} already exists"},
   "model.dir_not_empty": {"zh-CN": "目录 %{path} 不为空", "en": "Directory %{path} is not empty"},
+  "model.image_data": {"zh-CN": "图片数据无效：%{error}", "en": "Invalid image data: %{error}"},
+  "model.image_ext": {"zh-CN": "图片只能保存为 .svg 或 .png 文件", "en": "Images can only be saved as .svg or .png files"},
   "model.io_failed": {"zh-CN": "读写 %{path} 失败：%{error}", "en": "Failed to access %{path}: %{error}"},
   "model.lk_column_missing": {"zh-CN": "列 %{name} 不存在", "en": "Column %{name} does not exist"},
   "model.lk_count_mismatch": {"zh-CN": "逻辑外键两边的列数必须相同且不为空", "en": "Both sides of a logical key must have the same, non-zero number of columns"},

@@ -3,6 +3,7 @@
 
 mod auth;
 mod design;
+mod diagrams;
 mod error;
 mod exports;
 mod lang;
@@ -104,6 +105,15 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/compare/preview", post(models::sync_preview))
         .route("/compare/sync", post(models::sync))
         .route("/compare/script", post(models::save_script))
+        .route("/models/{id}/diagrams", get(diagrams::list).post(diagrams::create))
+        .route(
+            "/models/{id}/diagrams/{schema}/{name}",
+            get(diagrams::get).put(diagrams::save).delete(diagrams::delete),
+        )
+        .route("/models/{id}/diagrams/{schema}/{name}/rename", post(diagrams::rename))
+        .route("/models/{id}/tables/{schema}/{name}/logical-keys", post(diagrams::add_key))
+        .route("/models/{id}/tables/{schema}/{name}/logical-keys/{index}", delete(diagrams::delete_key))
+        .route("/files/image", post(diagrams::save_image))
         .route("/exports", post(exports::create))
         .route("/exports/{id}", get(exports::status).delete(exports::cancel_or_remove))
         .route("/exports/{id}/file", get(exports::file))

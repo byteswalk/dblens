@@ -60,6 +60,102 @@ async fn models_need_local_files() {
     let (st, _) =
         call(&app, "POST", "/api/compare/script", Some(json!({ "path": "/tmp/x.sql", "text": "" }))).await;
     assert_eq!(st, StatusCode::FORBIDDEN);
+    let (st, _) = call(&app, "GET", "/api/models/x/diagrams?schema=s", None).await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+    let (st, _) =
+        call(&app, "POST", "/api/files/image", Some(json!({ "path": "/tmp/x.png", "data": "" }))).await;
+    assert_eq!(st, StatusCode::FORBIDDEN);
+}
+
+/// ER 图与逻辑外键（M4b）。
+#[tokio::test]
+async fn diagrams_and_logical_keys() {
+    let app = app(true);
+    let dir = tempfile::tempdir().unwrap();
+    let m = new_model(&app, dir.path(), "m").await;
+    let save = |name: Option<&str>, d: Value| json!({ "schema": "public", "name": name, "draft": d, "fingerprint": null });
+    for t in ["a", "b"] {
+        let (st, v) =
+            call(&app, "POST", &format!("/api/models/{m}/tables"), Some(save(None, draft(t, &["id", "x"]))))
+                .await;
+        assert_eq!(st, StatusCode::OK, "{v}");
+    }
+    // 默认图：没有文件时也能读，第一次保存建文件
+    let (_, list) = call(&app, "GET", &format!("/api/models/{m}/diagrams?schema=public"), None).await;
+    assert_eq!(list[0]["name"], "_all");
+    let (st, v) = call(&app, "GET", &format!("/api/models/{m}/diagrams/public/_all"), None).await;
+    assert_eq!((st, &v["fingerprint"]), (StatusCode::OK, &Value::Null), "{v}");
+    assert_eq!(v["tables"].as_array().unwrap().len(), 2);
+    let mut d = v["diagram"].clone();
+    d["positions"] = json!({ "a": { "x": 10, "y": 20 } });
+    let (st, r) = call(
+        &app,
+        "PUT",
+        &format!("/api/models/{m}/diagrams/public/_all"),
+        Some(json!({ "diagram": d, "fingerprint": null })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{r}");
+    let (st, _) = call(
+        &app,
+        "PUT",
+        &format!("/api/models/{m}/diagrams/public/_all"),
+        Some(json!({ "diagram": d, "fingerprint": null })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    // 主题图
+    let body = json!({ "schema": "public", "name": "t1", "tables": ["a"] });
+    let (st, _) = call(&app, "POST", &format!("/api/models/{m}/diagrams"), Some(body)).await;
+    assert_eq!(st, StatusCode::CREATED);
+    let (st, _) = call(
+        &app,
+        "POST",
+        &format!("/api/models/{m}/diagrams/public/t1/rename"),
+        Some(json!({ "to": "t2" })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    let (_, v) = call(&app, "GET", &format!("/api/models/{m}/diagrams/public/t2"), None).await;
+    assert_eq!(v["diagram"]["tables"], json!(["a"]));
+    let (st, _) = call(&app, "DELETE", &format!("/api/models/{m}/diagrams/public/t2"), None).await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    // 逻辑外键
+    let key = json!({ "columns": ["x"], "ref_table": "b", "ref_columns": ["id"], "comment": "c" });
+    let (st, r) = call(
+        &app,
+        "POST",
+        &format!("/api/models/{m}/tables/public/a/logical-keys"),
+        Some(json!({ "key": key })),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK, "{r}");
+    let (_, v) = call(&app, "GET", &format!("/api/models/{m}/diagrams/public/_all"), None).await;
+    let a = v["tables"].as_array().unwrap().iter().find(|t| t["table"]["name"] == "a").unwrap().clone();
+    assert_eq!(a["logical_keys"][0]["ref_table"], "b");
+    let bad = json!({ "key": { "columns": ["x"], "ref_table": "b", "ref_columns": ["nope"] } });
+    let (st, _) =
+        call(&app, "POST", &format!("/api/models/{m}/tables/public/a/logical-keys"), Some(bad)).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    let fp = r["fingerprint"].as_str().unwrap();
+    let (st, _) = call(
+        &app,
+        "DELETE",
+        &format!("/api/models/{m}/tables/public/a/logical-keys/0?fingerprint={fp}"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    // 导出图片只写 .svg、.png
+    let png = dir.path().join("er.png");
+    let (st, _) =
+        call(&app, "POST", "/api/files/image", Some(json!({ "path": png, "data": "iVBORw0K" }))).await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    assert_eq!(std::fs::read(&png).unwrap(), [0x89, b'P', b'N', b'G', 0x0d, 0x0a]);
+    let (st, _) =
+        call(&app, "POST", "/api/files/image", Some(json!({ "path": dir.path().join("x.exe"), "data": "" })))
+            .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

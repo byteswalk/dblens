@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use crate::AppState;
 use crate::error::ApiResult;
 
-fn local_only(s: &AppState) -> ApiResult<()> {
+pub(crate) fn local_only(s: &AppState) -> ApiResult<()> {
     if !s.config.local_files {
         return Err(Error::Denied { reason: msg!("model.local_only") }.into());
     }
