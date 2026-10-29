@@ -1,0 +1,291 @@
+//! 数据迁移的语句（M5b 设计文档第 4、5 节）：按主键增量读取、计数、抽样、自增和序列的调整、达梦的显式写入自增列。
+//! 只生成 SQL，不做 IO。
+
+use dblens_core::schema::Sequence;
+use dblens_core::{Result, Value};
+
+use super::script::sequence_sql;
+use crate::{Dialect, Family};
+
+/// 读一张表：列、主键（为空时不排序、不能续传）、过滤条件（源库写法，原样放进 WHERE）。
+#[derive(Debug, Clone, Copy)]
+pub struct TableRead<'a> {
+    pub schema: &'a str,
+    pub table: &'a str,
+    pub columns: &'a [String],
+    pub key: &'a [String],
+    pub filter: Option<&'a str>,
+}
+
+impl TableRead<'_> {
+    fn idents(d: &Dialect, cols: &[String]) -> String {
+        cols.iter().map(|c| d.ident(c)).collect::<Vec<_>>().join(", ")
+    }
+
+    fn filter(&self) -> Option<&str> {
+        self.filter.map(str::trim).filter(|f| !f.is_empty())
+    }
+
+    fn base(&self, d: &Dialect) -> String {
+        format!(
+            "SELECT {} FROM {}",
+            Self::idents(d, self.columns),
+            d.qualified(Some(self.schema), self.table)
+        )
+    }
+
+    /// 增量读取的查询：给出 `last`（上次位置的主键值）时只读主键大于它的行（参数见 `keyset_params`），按主键排序。
+    pub fn select(&self, d: &Dialect, last: Option<&[Value]>) -> String {
+        let mut sql = self.base(d);
+        let mut conds = Vec::new();
+        if let Some(f) = self.filter() {
+            conds.push(format!("({f})"));
+        }
+        if let Some(last) = last.filter(|_| !self.key.is_empty()) {
+            // 过滤条件中没有参数，主键条件的占位符从 1 开始
+            conds.push(format!("({})", keyset(d, self.key, last)));
+        }
+        if !conds.is_empty() {
+            sql += &format!(" WHERE {}", conds.join(" AND "));
+        }
+        if !self.key.is_empty() {
+            sql += &format!(" ORDER BY {}", Self::idents(d, self.key));
+        }
+        sql
+    }
+
+    /// 行数：`SELECT COUNT(*) AS n FROM 表 [WHERE 过滤条件]`。
+    pub fn count(&self, d: &Dialect) -> String {
+        let mut sql = format!("SELECT COUNT(*) AS n FROM {}", d.qualified(Some(self.schema), self.table));
+        if let Some(f) = self.filter() {
+            sql += &format!(" WHERE ({f})");
+        }
+        sql
+    }
+
+    /// 抽样：按主键升序（`desc` 为 false）或降序取前 `limit` 行。
+    pub fn sample(&self, d: &Dialect, desc: bool, limit: u64) -> String {
+        let mut base = self.base(d);
+        if let Some(f) = self.filter() {
+            base += &format!(" WHERE ({f})");
+        }
+        let order = self
+            .key
+            .iter()
+            .map(|c| format!("{}{}", d.ident(c), if desc { " DESC" } else { "" }))
+            .collect::<Vec<_>>()
+            .join(", ");
+        d.paginate(&format!("{base} ORDER BY {order}"), 0, limit)
+    }
+
+    /// 按主键取一行（抽样比对时读目标），不带过滤条件。`key` 为参数（决定 PG 的类型转换）。
+    pub fn row(&self, d: &Dialect, key: &[Value]) -> String {
+        let cond = self
+            .key
+            .iter()
+            .zip(key)
+            .enumerate()
+            .map(|(i, (k, v))| format!("{} = {}", d.ident(k), placeholder(d, i + 1, v)))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        format!("{} WHERE {cond}", self.base(d))
+    }
+}
+
+/// 占位符：PG 驱动不能直接绑定 NUMERIC 参数，精确小数按文本传、由数据库转换（与导入相同）。
+fn placeholder(d: &Dialect, n: usize, v: &Value) -> String {
+    let p = d.placeholder(n);
+    if d.family() == Family::Postgres && matches!(v, Value::Decimal(_)) {
+        format!("{p}::text::numeric")
+    } else {
+        p
+    }
+}
+
+/// `(a > ?) OR (a = ? AND b > ?) OR …`：复合主键的"大于上次位置"，各库都支持的写法。
+fn keyset(d: &Dialect, key: &[String], last: &[Value]) -> String {
+    let mut n = 1;
+    let mut ors = Vec::new();
+    for i in 0..key.len() {
+        let mut ands = Vec::new();
+        for (j, k) in key.iter().enumerate().take(i + 1) {
+            let op = if j == i { ">" } else { "=" };
+            let v = last.get(j).unwrap_or(&Value::Null);
+            ands.push(format!("{} {op} {}", d.ident(k), placeholder(d, n, v)));
+            n += 1;
+        }
+        ors.push(format!("({})", ands.join(" AND ")));
+    }
+    ors.join(" OR ")
+}
+
+/// `keyset` 的参数：上次位置的主键值按占位符的顺序展开。
+pub fn keyset_params(last: &[Value]) -> Vec<Value> {
+    (0..last.len()).flat_map(|i| last[..=i].iter().cloned()).collect()
+}
+
+/// 达梦写入自增列前后的开关；其他库为 None（标识列都是 BY DEFAULT，可以直接写）。
+pub fn identity_insert_sql(d: &Dialect, schema: &str, table: &str, on: bool) -> Option<String> {
+    (d.family() == Family::Dameng).then(|| {
+        format!("SET IDENTITY_INSERT {} {}", d.qualified(Some(schema), table), if on { "ON" } else { "OFF" })
+    })
+}
+
+/// 迁完数据后把自增列推到当前最大值之后。MySQL 系写入显式值时会自动推进计数器，达梦在 `IDENTITY_INSERT` 下也会，
+/// 都返回 None。
+pub fn identity_reset_sql(d: &Dialect, schema: &str, table: &str, column: &str) -> Result<Option<String>> {
+    let q = d.qualified(Some(schema), table);
+    let c = d.ident(column);
+    Ok(match d.family() {
+        Family::Postgres => Some(format!(
+            "SELECT setval(pg_get_serial_sequence({}, {}), COALESCE(MAX({c}), 0) + 1, false) FROM {q}",
+            d.literal(&Value::String(q.clone()))?,
+            d.literal(&Value::String(column.to_string()))?
+        )),
+        Family::Oracle => Some(format!(
+            "ALTER TABLE {q} MODIFY ({c} GENERATED BY DEFAULT AS IDENTITY (START WITH LIMIT VALUE))"
+        )),
+        Family::MySql | Family::Dameng => None,
+    })
+}
+
+/// 读序列的下一个值的查询（一行一列 `n`）：PG 系由 `last_value`、`is_called` 算出；Oracle、达梦取 `LAST_NUMBER`
+/// （带缓存时可能比实际的下一个值大，作为起点是安全的）。MySQL 系没有序列，返回 None。
+pub fn sequence_next_sql(d: &Dialect, schema: &str, name: &str) -> Result<Option<String>> {
+    Ok(match d.family() {
+        Family::Postgres => Some(format!(
+            "SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END AS n FROM {}",
+            d.qualified(Some(schema), name)
+        )),
+        Family::Oracle | Family::Dameng => Some(format!(
+            "SELECT LAST_NUMBER AS n FROM ALL_SEQUENCES WHERE SEQUENCE_OWNER = {} AND SEQUENCE_NAME = {}",
+            d.literal(&Value::String(schema.to_string()))?,
+            d.literal(&Value::String(name.to_string()))?
+        )),
+        Family::MySql => None,
+    })
+}
+
+/// 把目标序列推到 `next`：PG 系 `setval`；Oracle、达梦删掉后按原定义以 `next` 起始重建。
+pub fn sequence_restart_sql(d: &Dialect, schema: &str, seq: &Sequence, next: &str) -> Result<Vec<String>> {
+    let q = d.qualified(Some(schema), &seq.name);
+    Ok(match d.family() {
+        Family::Postgres => vec![format!("SELECT setval({}, {next}, false)", d.literal(&Value::String(q))?)],
+        Family::Oracle | Family::Dameng => {
+            let s = Sequence { start: Some(next.to_string()), ..seq.clone() };
+            vec![format!("DROP SEQUENCE {q}"), sequence_sql(d, schema, &s)]
+        }
+        Family::MySql => vec![],
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Variant;
+
+    fn d(v: Variant) -> Dialect {
+        Dialect::new(v)
+    }
+
+    fn s(v: &[&str]) -> Vec<String> {
+        v.iter().map(|x| x.to_string()).collect()
+    }
+
+    fn read<'a>(
+        table: &'a str,
+        cols: &'a [String],
+        key: &'a [String],
+        filter: Option<&'a str>,
+    ) -> TableRead<'a> {
+        TableRead { schema: if table == "T" { "APP" } else { "app" }, table, columns: cols, key, filter }
+    }
+
+    #[test]
+    fn incremental_selects() {
+        let (cols, id) = (s(&["id", "name"]), s(&["id"]));
+        let pg = d(Variant::Postgres);
+        assert_eq!(read("t", &cols, &id, None).select(&pg, None), "SELECT id, name FROM app.t ORDER BY id");
+        assert_eq!(
+            read("t", &cols, &id, Some("name <> 'x'")).select(&pg, Some(&[Value::Int(5)])),
+            "SELECT id, name FROM app.t WHERE (name <> 'x') AND ((id > $1)) ORDER BY id"
+        );
+        // PG 的精确小数参数按文本传
+        assert_eq!(
+            read("t", &cols, &id, None).select(&pg, Some(&[Value::Decimal("5".into())])),
+            "SELECT id, name FROM app.t WHERE ((id > $1::text::numeric)) ORDER BY id"
+        );
+        let ora = d(Variant::Oracle);
+        let ab = s(&["A", "B"]);
+        assert_eq!(
+            read("T", &ab, &ab, None).select(&ora, Some(&[Value::Int(1), Value::Int(2)])),
+            "SELECT A, B FROM APP.T WHERE ((A > :1) OR (A = :2 AND B > :3)) ORDER BY A, B"
+        );
+        assert_eq!(
+            read("t", &cols, &[], None).select(&d(Variant::MySql), Some(&[])),
+            "SELECT id, name FROM app.t"
+        );
+        assert_eq!(
+            keyset_params(&[Value::Int(1), Value::Int(2)]),
+            vec![Value::Int(1), Value::Int(1), Value::Int(2)]
+        );
+    }
+
+    #[test]
+    fn counts_samples_and_rows() {
+        let (my, id) = (d(Variant::MySql), s(&["id"]));
+        assert_eq!(
+            read("t", &id, &id, Some("x > 1")).count(&my),
+            "SELECT COUNT(*) AS n FROM app.t WHERE (x > 1)"
+        );
+        assert_eq!(
+            read("t", &id, &id, Some("x > 1")).sample(&my, true, 50),
+            "SELECT id FROM app.t WHERE (x > 1) ORDER BY id DESC
+LIMIT 50 OFFSET 0"
+        );
+        let ora = d(Variant::Oracle);
+        let (oid, cols) = (s(&["ID"]), s(&["ID", "X"]));
+        assert!(read("T", &oid, &oid, None).sample(&ora, false, 50).contains("FETCH NEXT 50 ROWS ONLY"));
+        assert_eq!(
+            read("T", &cols, &oid, Some("X > 1")).row(&ora, &[Value::Int(1)]),
+            "SELECT ID, X FROM APP.T WHERE ID = :1"
+        );
+    }
+
+    #[test]
+    fn identity_and_sequences() {
+        let pg = d(Variant::Postgres);
+        assert_eq!(
+            identity_reset_sql(&pg, "app", "t", "id").unwrap().unwrap(),
+            "SELECT setval(pg_get_serial_sequence('app.t', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM app.t"
+        );
+        assert_eq!(
+            identity_reset_sql(&d(Variant::Oracle), "APP", "T", "ID").unwrap().unwrap(),
+            "ALTER TABLE APP.T MODIFY (ID GENERATED BY DEFAULT AS IDENTITY (START WITH LIMIT VALUE))"
+        );
+        assert_eq!(identity_reset_sql(&d(Variant::MySql), "db", "t", "id").unwrap(), None);
+        assert_eq!(
+            identity_insert_sql(&d(Variant::Dameng), "APP", "T", true).as_deref(),
+            Some("SET IDENTITY_INSERT APP.T ON")
+        );
+        assert_eq!(identity_insert_sql(&pg, "app", "t", true), None);
+        assert!(sequence_next_sql(&pg, "app", "s").unwrap().unwrap().contains("is_called"));
+        let seq = Sequence {
+            name: "S".into(),
+            start: Some("1".into()),
+            increment: Some("1".into()),
+            min_value: None,
+            max_value: None,
+            cycle: false,
+            cache: Some(20),
+        };
+        let ora = d(Variant::Oracle);
+        let sqls = sequence_restart_sql(&ora, "APP", &seq, "42").unwrap();
+        assert_eq!(sqls[0], "DROP SEQUENCE APP.S");
+        assert!(sqls[1].contains("START WITH 42"), "{}", sqls[1]);
+        assert_eq!(
+            sequence_restart_sql(&pg, "app", &Sequence { name: "s".into(), ..seq }, "42").unwrap(),
+            ["SELECT setval('app.s', 42, false)"]
+        );
+    }
+}
