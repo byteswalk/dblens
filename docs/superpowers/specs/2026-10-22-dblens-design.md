@@ -335,7 +335,8 @@ trait Policy: Send + Sync {
 - M4b 已完成（设计 `docs/superpowers/specs/2026-10-28-m4b-er-diagram-design.md`，详细计划 `docs/superpowers/plans/2026-10-28-m4b-er-diagram.md`，说明 `docs/notes/m4b-er-diagram.md`）。
 - M4c 已完成（设计 `docs/superpowers/specs/2026-10-28-m4c-document-export-design.md`，详细计划 `docs/superpowers/plans/2026-10-28-m4c-document-export.md`，说明 `docs/notes/m4c-document-export.md`）。M4 全部完成。
 - 2026-10-28 M5 拆成两份（用户确认）：M5a 结构迁移；M5b 数据迁移（分批迁数据、断点续传、行数和抽样校验，插在 M5a 的建表和建约束之间）。
-- M5a 已完成（设计 `docs/superpowers/specs/2026-10-28-m5a-structure-migration-design.md`，详细计划 `docs/superpowers/plans/2026-10-28-m5a-structure-migration.md`，说明 `docs/notes/m5a-structure-migration.md`）。M5b 尚未开始。
+- M5a 已完成（设计 `docs/superpowers/specs/2026-10-28-m5a-structure-migration-design.md`，详细计划 `docs/superpowers/plans/2026-10-28-m5a-structure-migration.md`，说明 `docs/notes/m5a-structure-migration.md`）。
+- M5b 已完成（设计 `docs/superpowers/specs/2026-10-28-m5b-data-migration-design.md`，详细计划 `docs/superpowers/plans/2026-10-29-m5b-data-migration.md`，说明 `docs/notes/m5b-data-migration.md`）。M5 全部完成。
 
 ## 12. 风险与待验证项
 
