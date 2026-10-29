@@ -8,7 +8,7 @@ use dblens_core::schema::{Column, PrimaryKey, Table};
 use dblens_core::{ColumnType, Error, LogicalType, Result, Value, msg};
 use dblens_dialect::{Dialect, ImportStatement, WriteMode};
 use dblens_driver::{Connection, ExecEvent};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use super::file::{FileOptions, FileReader, FileRow};
@@ -62,7 +62,7 @@ pub enum Transaction {
     Batch,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OnError {
     #[default]

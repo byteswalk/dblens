@@ -17,6 +17,8 @@ fn app(local_files: bool) -> Router {
     let registry = Arc::new(DriverRegistry::with_drivers(store.clone(), vec![]));
     let history = HistoryLog::inline(store.clone());
     let service = Arc::new(Service::with_history(store, secrets, registry, Arc::new(DefaultPolicy), history));
+    // 迁移记录放在单独的临时目录（默认目录可能有其他测试留下的记录）
+    service.migrations.set_dir(tempfile::tempdir().unwrap().keep().join("migrations"));
     router(service, ApiConfig { token: "t".into(), allowed_origins: vec![], local_files })
 }
 
@@ -321,4 +323,11 @@ async fn migrations_need_existing_profiles() {
         let (st, v) = call(&app, "POST", path, Some(plan.clone())).await;
         assert_eq!(st, StatusCode::NOT_FOUND, "{path} {v}");
     }
+    // 没有完成的迁移：一开始为空；不存在的记录继续、放弃都报 404
+    let (st, v) = call(&app, "GET", "/api/migrations", None).await;
+    assert_eq!((st, v), (StatusCode::OK, json!([])));
+    let (st, _) = call(&app, "POST", "/api/migrations/abc123/resume", None).await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+    let (st, _) = call(&app, "DELETE", "/api/migrations/abc123", None).await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
 }

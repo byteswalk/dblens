@@ -9,6 +9,7 @@ use dblens_dialect::{Dialect, OpsQuery, Variant};
 use crate::export::ExportManager;
 use crate::history::HistoryLog;
 use crate::metadata::{MetadataCache, MetadataService};
+use crate::migrate::MigrationRecords;
 use crate::model::ModelStore;
 use crate::policy::{DefaultPolicy, Policy};
 use crate::profile::{Profile, ProfileInput};
@@ -33,6 +34,8 @@ pub struct Service {
     pub tasks: TaskManager,
     /// 打开的模型（M4a）。
     pub models: ModelStore,
+    /// 迁移记录（M5b）。
+    pub migrations: MigrationRecords,
     pub(crate) history: HistoryLog,
 }
 
@@ -46,6 +49,7 @@ impl Service {
         service.apply_lang_setting()?;
         service.exports.set_dir(data_dir.join("exports"));
         service.tasks.set_dirs(data_dir.join("tasks"), data_dir.join("imports"));
+        service.migrations.set_dir(data_dir.join("migrations"));
         Ok(service)
     }
 
@@ -82,6 +86,7 @@ impl Service {
             exports: ExportManager::default(),
             tasks: TaskManager::default(),
             models: ModelStore::default(),
+            migrations: MigrationRecords::default(),
             history,
             store,
             secrets,
