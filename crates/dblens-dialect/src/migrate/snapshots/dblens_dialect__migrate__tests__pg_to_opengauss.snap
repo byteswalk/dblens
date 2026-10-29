@@ -1,0 +1,47 @@
+---
+source: crates/dblens-dialect/src/migrate/tests.rs
+expression: "render(&draft, tgt)"
+---
+Info customers_id_seq: Sequence owned by a serial column; migrated with the identity column
+Lossy orders [fk_orders_product]: Referenced table products is neither migrated nor in the target; not migrated
+
+CREATE SEQUENCE app.order_seq
+    START WITH 1
+    INCREMENT BY 1
+    MINVALUE 1
+    MAXVALUE 9223372036854775807
+    CACHE 20
+    NO CYCLE;
+CREATE TABLE app.customers (
+    id bigserial NOT NULL,
+    name character varying(50) DEFAULT 'n/a' NOT NULL,
+    email character varying(100),
+    active boolean DEFAULT TRUE,
+    created timestamp(6) without time zone DEFAULT LOCALTIMESTAMP,
+    balance numeric(12,2) DEFAULT 0,
+    tags text[],
+    note text,
+    CONSTRAINT customers_pkey PRIMARY KEY (id)
+);
+COMMENT ON TABLE app.customers IS 'Customers';
+COMMENT ON COLUMN app.customers.name IS 'Customer name';
+CREATE TABLE app.orders (
+    id integer DEFAULT nextval('order_seq') NOT NULL,
+    customer_id bigint,
+    product_id integer,
+    amount numeric(10,2),
+    double_amount numeric(12,2) GENERATED ALWAYS AS ((amount * (2)::numeric)) STORED,
+    status character varying(10) DEFAULT 'new',
+    placed date DEFAULT CURRENT_DATE,
+    code uuid DEFAULT gen_random_uuid(),
+    pos point,
+    CONSTRAINT orders_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX ix_customers_name ON app.customers (name);
+CREATE INDEX ix_customers_note ON app.customers USING gin (note);
+CREATE INDEX ix_customers_lower ON app.customers (lower((email)::text));
+ALTER TABLE app.customers ADD CONSTRAINT customers_email_key UNIQUE (email);
+ALTER TABLE app.customers ADD CONSTRAINT ck_balance CHECK (balance >= (0)::numeric);
+ALTER TABLE app.orders ADD CONSTRAINT ck_status CHECK ((status)::text = ANY ((ARRAY['new'::character varying, 'paid'::character varying])::text[]));
+ALTER TABLE app.orders ADD CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES app.customers (id) ON DELETE CASCADE ON UPDATE CASCADE;

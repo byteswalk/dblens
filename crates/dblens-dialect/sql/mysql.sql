@@ -64,6 +64,8 @@ SELECT c.TABLE_NAME AS table_name,
          WHEN c.COLUMN_DEFAULT IS NULL THEN NULL
          WHEN c.GENERATION_EXPRESSION <> '' THEN NULL
          WHEN c.EXTRA LIKE '%DEFAULT\_GENERATED%' THEN c.COLUMN_DEFAULT
+         -- OceanBase 的 EXTRA 中没有 DEFAULT_GENERATED：时间列的 CURRENT_TIMESTAMP 默认值按表达式处理
+         WHEN c.DATA_TYPE IN ('datetime', 'timestamp') AND UPPER(c.COLUMN_DEFAULT) LIKE 'CURRENT\_TIMESTAMP%' THEN c.COLUMN_DEFAULT
          WHEN c.DATA_TYPE IN ('tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'decimal', 'float', 'double', 'year', 'bit') THEN c.COLUMN_DEFAULT
          ELSE CONCAT('''', REPLACE(REPLACE(c.COLUMN_DEFAULT, '\\', '\\\\'), '''', ''''''), '''')
        END AS default_value,

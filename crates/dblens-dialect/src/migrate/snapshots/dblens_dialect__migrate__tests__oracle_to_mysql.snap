@@ -1,0 +1,22 @@
+---
+source: crates/dblens-dialect/src/migrate/tests.rs
+expression: "render(&draft, Variant::MySql)"
+---
+Lossy DOC_SEQ: The target database has no sequences; not migrated
+Lossy DOCS.NO: Default "APP"."DOC_SEQ"."NEXTVAL" cannot be converted; not migrated
+Lossy DOCS.PRICE: NUMBER maps to DECIMAL(65,30); range or precision may change
+Lossy DOCS [IX_DOCS_BODY]: Includes a large-object column the target cannot index; not migrated
+
+CREATE TABLE app.DOCS (
+    ID BIGINT NOT NULL AUTO_INCREMENT,
+    NO BIGINT NULL,
+    TITLE VARCHAR(200) NULL,
+    BODY LONGTEXT NULL,
+    CREATED DATETIME(0) NULL DEFAULT CURRENT_TIMESTAMP,
+    FLAG SMALLINT NULL DEFAULT 0,
+    PRICE DECIMAL(65,30) NULL,
+    PRIMARY KEY (ID)
+);
+
+ALTER TABLE app.DOCS ADD INDEX IX_DOCS_TITLE (TITLE);
+ALTER TABLE app.DOCS ADD CONSTRAINT CK_FLAG CHECK (FLAG IN (0, 1));
