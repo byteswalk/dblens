@@ -8,6 +8,7 @@ mod documents;
 mod error;
 mod exports;
 mod lang;
+mod migrations;
 mod models;
 mod routes;
 mod tasks;
@@ -118,6 +119,8 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/documents", post(documents::start))
         .route("/documents/check", post(documents::check))
         .route("/documents/templates/export", post(documents::export_template))
+        .route("/migrations", post(migrations::start))
+        .route("/migrations/preview", post(migrations::preview))
         .route("/exports", post(exports::create))
         .route("/exports/{id}", get(exports::status).delete(exports::cancel_or_remove))
         .route("/exports/{id}/file", get(exports::file))

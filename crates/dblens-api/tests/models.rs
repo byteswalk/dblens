@@ -309,3 +309,16 @@ async fn documents() {
         "{md}"
     );
 }
+
+/// 结构迁移（M5a）：方案能解析；连接不存在时预览和开始都报 404。
+#[tokio::test]
+async fn migrations_need_existing_profiles() {
+    let app = app(true);
+    let plan = json!({ "source": { "profile": "nope", "schema": "s" }, "target": { "profile": "nope2", "schema": "t" },
+                       "settings": { "options": { "name_case": "upper" }, "type_rules": [{ "source": "CLOB", "target": "TEXT" }] },
+                       "existing": { "a": "missing_only" } });
+    for path in ["/api/migrations/preview", "/api/migrations"] {
+        let (st, v) = call(&app, "POST", path, Some(plan.clone())).await;
+        assert_eq!(st, StatusCode::NOT_FOUND, "{path} {v}");
+    }
+}

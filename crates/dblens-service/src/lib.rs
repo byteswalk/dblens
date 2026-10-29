@@ -13,6 +13,7 @@ mod favorite;
 mod history;
 mod import;
 mod metadata;
+mod migrate;
 mod model;
 mod objects;
 mod policy;
@@ -45,6 +46,7 @@ pub use import::{
     infer_type, new_table, preview_file,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
+pub use migrate::{MigrationEnd, MigrationPlan, MigrationPreview, OtherObject};
 pub use model::{
     DEFAULT_DIAGRAM, Diagram, DiagramDisplay, DiagramSummary, DiagramTable, DiagramTables, DiagramView,
     DiagramWarning, FileError, LogicalKey, ModelDatabase, ModelDesignPreview, ModelDesignRequest, ModelInfo,
