@@ -3,8 +3,10 @@
 
 import type {
   ColumnOverride,
+  DataOptions,
   ExistingAction,
   MigrationEnd,
+  MigrationMode,
   MigrationNote,
   MigrationPlan,
   MigrationPreview,
@@ -12,15 +14,26 @@ import type {
   TableOverride,
 } from '../../shared/api'
 
+export const DEFAULT_DATA: DataOptions = { batch_size: 1000, parallel: 2, on_error: 'stop', sample: 0 }
+
 export function emptyPlan(source: MigrationEnd): MigrationPlan {
   return {
     source,
     tables: null,
     sequences: null,
     target: { profile: '', schema: '' },
+    mode: 'all',
     settings: { options: { name_case: null, comments: true, checks: true }, type_rules: [], tables: {}, sequences: {} },
+    data: { ...DEFAULT_DATA },
     existing: {},
   }
+}
+
+/** 目标中已有同名表时可选的处理方式：只迁结构时不能追加或清空，只迁数据时不动结构。 */
+export function existingActions(mode: MigrationMode): ExistingAction[] {
+  if (mode === 'structure') return ['skip', 'recreate', 'missing_only']
+  if (mode === 'data') return ['skip', 'append', 'replace']
+  return ['skip', 'recreate', 'missing_only', 'append', 'replace']
 }
 
 /** 两端都选好了 schema。 */
@@ -53,8 +66,12 @@ export function setColumn(plan: MigrationPlan, table: string, column: string, pa
   })
 }
 
-/** 修改表的覆盖（目标名、不迁移）。 */
-export function setTable(plan: MigrationPlan, table: string, patch: Pick<TableOverride, 'name' | 'skip'>): MigrationPlan {
+/** 修改表的覆盖（目标名、不迁移、过滤条件、只迁结构）。 */
+export function setTable(
+  plan: MigrationPlan,
+  table: string,
+  patch: Pick<TableOverride, 'name' | 'skip' | 'filter' | 'structure_only'>,
+): MigrationPlan {
   return withTable(plan, table, (t) => ({ ...t, ...patch }))
 }
 
@@ -136,6 +153,8 @@ export function parsePlan(text: string): MigrationPlan | null {
       tables: v.tables ?? null,
       sequences: v.sequences ?? null,
       target: v.target,
+      mode: v.mode === 'structure' || v.mode === 'data' ? v.mode : 'all',
+      data: { ...DEFAULT_DATA, ...v.data },
       settings: {
         options: { ...base.settings.options, ...s.options },
         type_rules: Array.isArray(s.type_rules) ? s.type_rules : [],

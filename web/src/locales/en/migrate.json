@@ -50,7 +50,9 @@
     "all": "Set all to",
     "skip": "Skip",
     "recreate": "Drop and recreate",
-    "missing_only": "Only add missing indexes and constraints"
+    "missing_only": "Only add missing indexes and constraints",
+    "append": "Append data",
+    "replace": "Clear and import"
   },
   "summary": "{{tables}} tables, {{sequences}} sequences, {{constraints}} indexes and constraints",
   "saveScript": "Save Script…",
@@ -68,5 +70,57 @@
     "info": "Info",
     "lossy": "Lossy",
     "unsupported": "Unsupported"
-  }
+  },
+  "mode": {
+    "label": "Mode",
+    "all": "Structure and data",
+    "structure": "Structure only",
+    "data": "Data only"
+  },
+  "data": {
+    "batch": "Batch rows",
+    "parallel": "Tables in parallel",
+    "onError": "On error",
+    "stop": "Stop",
+    "skip": "Skip and log",
+    "sample": "Rows to sample",
+    "sampleHint": "0 compares row counts only"
+  },
+  "filter": "Filter (source SQL)",
+  "structureOnly": "Structure only",
+  "sourceHint": "Avoid writing to the source while migrating",
+  "phase": {
+    "structure": "Creating tables",
+    "data": "Copying data",
+    "constraints": "Creating indexes and constraints",
+    "sequences": "Adjusting sequences",
+    "verify": "Verifying",
+    "done": "Done"
+  },
+  "state": {
+    "pending": "Pending",
+    "copying": "Copying",
+    "done": "Done",
+    "failed": "Failed",
+    "skipped": "No data"
+  },
+  "progress": {
+    "table": "Table",
+    "state": "State",
+    "rows": "Copied / estimate",
+    "skipped": "Skipped",
+    "time": "Time",
+    "verify": "Verification",
+    "verifyOk": "Matched",
+    "verifyBad": "{{expected}} rows expected, {{target}} in target, {{mismatches}} differing values"
+  },
+  "unfinished": {
+    "title": "Unfinished migrations",
+    "item": "{{source}} → {{target}} · {{phase}} · {{done}}/{{total}} tables",
+    "resume": "Continue",
+    "discard": "Discard",
+    "discardConfirm": "Discard this migration? Its record is deleted; data already copied to the target stays.",
+    "running": "Running"
+  },
+  "unfinishedDone": "The migration did not finish; continue it from \"Unfinished migrations\" above"
 }

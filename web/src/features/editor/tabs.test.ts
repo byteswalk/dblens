@@ -191,3 +191,20 @@ describe('保存标签', () => {
     expect(parseTabs(value).tabs[0].sql).toBe('se')
   })
 })
+
+describe('迁移标签', () => {
+  it('恢复时给旧方案补上模式和数据选项', () => {
+    const old = {
+      source: { profile: 'a', schema: 's' },
+      target: { profile: 'b', schema: 't' },
+      tables: null,
+      sequences: null,
+      settings: { options: { name_case: null, comments: true, checks: true }, type_rules: [], tables: {}, sequences: {} },
+      existing: {},
+    }
+    const raw = JSON.stringify({ tabs: [{ id: 'm', title: '迁移', profileId: '', sql: '', migrate: old }], active: 'm', seq: 2 })
+    const plan = parseTabs(raw).tabs[0].migrate
+    expect(plan?.mode).toBe('all')
+    expect(plan?.data.batch_size).toBe(1000)
+  })
+})

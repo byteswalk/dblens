@@ -1,10 +1,11 @@
 // 迁移标签（M5a 设计文档第 5 节）：上方选择源和目标、选项、打开/另存方案；读取结构后左侧对象列表（带提示、只看有问题的），
 // 中间选中表的列映射表格（改目标名、类型、默认值，不迁某列，不认识的类型确认按文本迁），右侧这张表的目标 DDL；
 // 底部同名表的处理方式、不能开始的原因、汇总、另存脚本、开始迁移，执行中显示进度，完成后可取迁移报告。由工作区懒加载。
+// 数据迁移（M5b）：模式和数据选项、每张表的过滤条件和"只迁结构"、按表的进度、标签顶部的未完成的迁移。
 
 import { IconDeviceFloppy, IconFolderOpen, IconPlayerPlay, IconRefresh, IconSettings } from '@tabler/icons-react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Alert, App, Button, Checkbox, Empty, Input, Modal, Progress, Select, Space, Spin, Table, Tag } from 'antd'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert, App, Button, Checkbox, Empty, Input, InputNumber, Modal, Progress, Select, Space, Spin, Table, Tag } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -13,6 +14,7 @@ import { useUi } from '../../app/ui'
 import {
   type ExistingAction,
   type MigrationEnd,
+  type MigrationMode,
   type MigrationNote,
   type MigrationPlan,
   type NameCase,
@@ -25,7 +27,9 @@ import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
 import SqlBox from '../design/SqlBox'
 import { type QueryTab, useTabs } from '../editor/tabs'
+import { ProgressTable, UnfinishedList } from './progress'
 import {
+  existingActions,
   notesOf,
   parsePlan,
   ready,
@@ -41,7 +45,6 @@ import {
 } from './plan'
 
 const LEVEL_COLOR: Record<NoteLevel, string> = { info: 'default', lossy: 'orange', unsupported: 'red' }
-const ACTIONS: ExistingAction[] = ['skip', 'recreate', 'missing_only']
 
 /** 一端的选择：连接，再选 schema。 */
 function EndPicker({ label, value, profiles, onChange }: {
@@ -160,6 +163,8 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
   const [task, setTask] = useState<TaskStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const file = useRef<HTMLInputElement>(null)
+  const qc = useQueryClient()
+  const track = (id: string) => setTask({ id, state: 'running', progress: { statements_done: 0, statements_total: 0 }, failures: [], migration: null } as unknown as TaskStatus)
 
   const { data: p, error, isFetching, refetch } = useQuery({
     queryKey: ['migration-preview', JSON.stringify(plan)],
@@ -184,7 +189,8 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
         setTask(st)
         if (st.state !== 'running') {
           useUi.getState().refreshTree(plan.target.profile, plan.target.schema)
-          void refetch()
+          void qc.invalidateQueries({ queryKey: ['migrations'] })
+          if (loaded) void refetch()
         }
       } catch (e) {
         message.error((e as Error).message)
@@ -192,7 +198,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
       }
     }, 500)
     return () => clearTimeout(h)
-  }, [task, api, message, plan.target, refetch])
+  }, [task, api, message, plan.target, refetch, qc, loaded])
 
   const target = profiles.find((x) => x.id === plan.target.profile)
   const sum = p && summary(p)
@@ -202,8 +208,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
   const start = async () => {
     setBusy(true)
     try {
-      const id = await withVault(api, () => api.startMigration(plan))
-      setTask({ id, state: 'running', progress: { statements_done: 0, statements_total: 0 }, failures: [] } as unknown as TaskStatus)
+      track(await withVault(api, () => api.startMigration(plan)))
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -290,6 +295,8 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
   const source = focus?.kind === 'table' ? p?.source_tables.find((x) => x.name === focus.name) : undefined
   const mapped = focus ? p?.draft.tables.find((d) => d.source === focus.name) : undefined
   const tov = focus ? plan.settings.tables[focus.name] : undefined
+  const data = plan.mode !== 'structure'
+  const setData = (patch: Partial<MigrationPlan['data']>) => setPlan({ ...plan, data: { ...plan.data, ...patch } })
   const rows = (source?.columns ?? []).map((c) => {
     const target = mapped?.columns.find((m) => m.source === c.name)?.target
     return { c, ov: tov?.columns?.[c.name] ?? {}, tc: mapped?.target.columns.find((x) => x.name === target), notes: p ? notesOf(p, 'table', focus!.name, c.name) : [] }
@@ -297,6 +304,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
 
   return (
     <div className="compare-view">
+      <UnfinishedList onResume={track} />
       <div className="row toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
         <EndPicker label={t('migrate.source')} value={plan.source} profiles={profiles} onChange={(s) => setEnds(s, plan.target)} />
         <span>→</span>
@@ -341,6 +349,35 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
           {plan.settings.type_rules.length ? ` (${plan.settings.type_rules.length})` : ''}
         </Button>
       </div>
+      <div className="row toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
+        <span>{t('migrate.mode.label')}</span>
+        <Select
+          size="small"
+          style={{ width: 140 }}
+          value={plan.mode}
+          onChange={(mode: MigrationMode) => setPlan({ ...plan, mode, existing: {} })}
+          options={(['all', 'structure', 'data'] as const).map((v) => ({ value: v, label: t(`migrate.mode.${v}`) }))}
+        />
+        {data && (
+          <>
+            <span>{t('migrate.data.batch')}</span>
+            <InputNumber size="small" min={100} max={100000} step={500} value={plan.data.batch_size} onChange={(v) => v && setData({ batch_size: v })} />
+            <span>{t('migrate.data.parallel')}</span>
+            <InputNumber size="small" min={1} max={4} value={plan.data.parallel} onChange={(v) => v && setData({ parallel: v })} />
+            <span>{t('migrate.data.onError')}</span>
+            <Select
+              size="small"
+              style={{ width: 130 }}
+              value={plan.data.on_error}
+              onChange={(on_error: 'stop' | 'skip') => setData({ on_error })}
+              options={(['stop', 'skip'] as const).map((v) => ({ value: v, label: t(`migrate.data.${v}`) }))}
+            />
+            <span title={t('migrate.data.sampleHint')}>{t('migrate.data.sample')}</span>
+            <InputNumber size="small" min={0} max={10000} step={100} value={plan.data.sample} onChange={(v) => setData({ sample: v ?? 0 })} />
+          </>
+        )}
+      </div>
+      {task?.migration && <ProgressTable progress={task.migration} />}
       {error ? (
         <Alert type="error" showIcon message={(error as Error).message} />
       ) : !p ? (
@@ -402,9 +439,20 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
                 </>
               ) : (
                 <>
-                  <Space>
+                  <Space wrap>
                     {t('migrate.tableName')}
                     <LazyInput value={tov?.name} placeholder={mapped?.target.name ?? focus.name} onCommit={(name) => setPlan(setTable(plan, focus.name, { name }))} />
+                    {data && (
+                      <>
+                        <LazyInput value={tov?.filter} placeholder={t('migrate.filter')} onCommit={(filter) => setPlan(setTable(plan, focus.name, { filter }))} />
+                        <Checkbox
+                          checked={!!tov?.structure_only}
+                          onChange={(e) => setPlan(setTable(plan, focus.name, { structure_only: e.target.checked }))}
+                        >
+                          {t('migrate.structureOnly')}
+                        </Checkbox>
+                      </>
+                    )}
                   </Space>
                   <NoteTags notes={notesOf(p, 'table', focus.name, null)} />
                   <Table
@@ -495,7 +543,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
                 placeholder={t('migrate.existing.pick')}
                 value={null}
                 onChange={(a: ExistingAction) => setPlan(setExisting(plan, p.draft.tables.filter((x) => x.exists).map((x) => x.source), a))}
-                options={ACTIONS.map((a) => ({ value: a, label: t(`migrate.existing.${a}`) }))}
+                options={existingActions(plan.mode).map((a) => ({ value: a, label: t(`migrate.existing.${a}`) }))}
               />
               {p.draft.tables
                 .filter((x) => x.exists)
@@ -509,7 +557,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
                       placeholder={t('migrate.existing.pick')}
                       value={plan.existing[x.source]}
                       onChange={(a: ExistingAction) => setPlan(setExisting(plan, [x.source], a))}
-                      options={ACTIONS.map((a) => ({ value: a, label: t(`migrate.existing.${a}`) }))}
+                      options={existingActions(plan.mode).map((a) => ({ value: a, label: t(`migrate.existing.${a}`) }))}
                     />
                   </Space.Compact>
                 ))}
@@ -525,9 +573,11 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
               showIcon
               message={
                 task.state === 'done'
-                  ? task.failures.length
-                    ? t('migrate.doneWithFailures', { count: task.progress.statements_failed })
-                    : t('migrate.done')
+                  ? task.migration?.tables.some((x) => x.state === 'failed')
+                    ? t('migrate.unfinishedDone')
+                    : task.failures.length
+                      ? t('migrate.doneWithFailures', { count: task.progress.statements_failed })
+                      : t('migrate.done')
                   : t(task.state === 'cancelled' ? 'migrate.cancelled' : 'migrate.failed')
               }
               description={
@@ -563,6 +613,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
               sum && <span>{t('migrate.summary', sum)}</span>
             )}
             <span className="grow" />
+            {data && <span className="muted">{t('migrate.sourceHint')}</span>}
             <Button size="small" icon={<IconDeviceFloppy size={16} />} disabled={!p.statements.length} onClick={() => void saveScript()}>
               {t('migrate.saveScript')}
             </Button>
@@ -572,7 +623,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
               danger={!!p.confirm.length}
               icon={<IconPlayerPlay size={16} />}
               loading={busy}
-              disabled={running || isFetching || !!p.problems.length || !!p.denied || pending.length > 0 || !p.statements.length}
+              disabled={running || isFetching || !!p.problems.length || !!p.denied || pending.length > 0 || (!data && !p.statements.length)}
               onClick={confirmStart}
             >
               {t('migrate.start')}

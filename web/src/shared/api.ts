@@ -430,7 +430,18 @@ export interface MigrationEnd {
 }
 
 export type NameCase = 'keep' | 'lower' | 'upper'
-export type ExistingAction = 'skip' | 'recreate' | 'missing_only'
+export type ExistingAction = 'skip' | 'recreate' | 'missing_only' | 'append' | 'replace'
+/** 迁移的模式（M5b）：结构和数据、只迁结构、只迁数据。 */
+export type MigrationMode = 'all' | 'structure' | 'data'
+
+/** 迁数据的选项（M5b）。 */
+export interface DataOptions {
+  batch_size: number
+  parallel: number
+  on_error: 'stop' | 'skip'
+  /** 每张表抽样比对的行数，0 为不抽样。 */
+  sample: number
+}
 
 /** 一列的覆盖：`default` 为空串表示不要默认值；`accept` 确认把不认识的类型按文本迁移。 */
 export interface ColumnOverride {
@@ -448,6 +459,10 @@ export interface TableOverride {
   columns?: Record<string, ColumnOverride>
   /** 源检查约束名 → 目标表达式，空串表示不迁。 */
   checks?: Record<string, string>
+  /** 迁数据时的过滤条件（源库写法）。 */
+  filter?: string
+  /** 只迁结构不迁数据。 */
+  structure_only?: boolean
 }
 
 export interface MigrationSettings {
@@ -463,8 +478,50 @@ export interface MigrationPlan {
   tables: string[] | null
   sequences: string[] | null
   target: MigrationEnd
+  mode: MigrationMode
   settings: MigrationSettings
+  data: DataOptions
   existing: Record<string, ExistingAction>
+}
+
+export type MigrationPhase = 'structure' | 'data' | 'constraints' | 'sequences' | 'verify' | 'done'
+
+export interface MigrationVerify {
+  source_rows: number
+  target_rows: number
+  expected_rows: number
+  sampled: number
+  mismatches: { key: string; column: string; source: string; target: string }[]
+}
+
+/** 任务状态中的迁移进度：每张要迁数据的表。 */
+export interface MigrationProgress {
+  record: string
+  phase: MigrationPhase
+  tables: {
+    source: string
+    target: string
+    state: 'pending' | 'copying' | 'done' | 'failed' | 'skipped'
+    rows: number
+    skipped: number
+    estimate: number | null
+    elapsed_ms: number
+    error: string | null
+    verify: MigrationVerify | null
+  }[]
+}
+
+/** 没有完成的迁移。 */
+export interface MigrationSummary {
+  id: string
+  created_at: number
+  updated_at: number
+  source: string
+  target: string
+  phase: MigrationPhase
+  tables_done: number
+  tables_total: number
+  running: boolean
 }
 
 export type NoteLevel = 'info' | 'lossy' | 'unsupported'
@@ -543,6 +600,8 @@ export interface TaskStatus {
   remaining: string | null
   /** 反向生成：生成并打开的模型的编号。 */
   model: string | null
+  /** 迁移（M5b）：当前步骤和每张表的进度。 */
+  migration: MigrationProgress | null
 }
 
 /** 表设计器（M3）：与后端结构模型一致的完整表结构。 */
@@ -1122,6 +1181,13 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     previewMigration: (plan: MigrationPlan) => request<MigrationPreview>('POST', '/migrations/preview', plan),
     /** 开始迁移，返回任务 id。 */
     startMigration: async (plan: MigrationPlan) => (await request<{ id: string }>('POST', '/migrations', plan)).id,
+    /** 没有完成的迁移。 */
+    unfinishedMigrations: () => request<MigrationSummary[]>('GET', '/migrations'),
+    /** 继续一个没有完成的迁移，返回任务 id。 */
+    resumeMigration: async (id: string) =>
+      (await request<{ id: string }>('POST', `/migrations/${encodeURIComponent(id)}/resume`)).id,
+    /** 放弃：删除迁移记录（不动目标库）。 */
+    discardMigration: (id: string) => request<null>('DELETE', `/migrations/${encodeURIComponent(id)}`),
     syncPreview: (req: SyncRequest) => request<SyncPreview>('POST', '/compare/preview', req),
     /** 同步：目标是库时返回任务 id；目标是模型时已经写完，返回 null。 */
     sync: async (req: SyncRequest) => (await request<{ task: string | null }>('POST', '/compare/sync', req)).task,
