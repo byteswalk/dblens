@@ -45,7 +45,8 @@
     "sqlFile": "Run SQL File…",
     "exportData": "Export Data…",
     "newTable": "New table",
-    "exportDoc": "Export Document…"
+    "exportDoc": "Export Document…",
+    "migrate": "Migrate To…"
   },
   "duplicate": {
     "name": "{{name}} copy",

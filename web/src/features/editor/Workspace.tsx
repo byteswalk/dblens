@@ -3,7 +3,7 @@
 // 标签多时先缩窄（悬停看全名），再放不下就用滚轮横向滚动，不显示滚动条；右端 ▾ 列出全部标签；右键菜单批量关闭。
 
 import { Dropdown, type MenuProps } from 'antd'
-import { IconAffiliate, IconArrowsDiff, IconChevronDown, IconFileCode, IconPlus, IconSchema, IconTable, IconTableOptions, IconX } from '@tabler/icons-react'
+import { IconAffiliate, IconArrowsDiff, IconTransfer, IconChevronDown, IconFileCode, IconPlus, IconSchema, IconTable, IconTableOptions, IconX } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { Spin } from 'antd'
 import { Suspense, type WheelEvent, lazy, useEffect, useRef } from 'react'
@@ -25,6 +25,8 @@ const DesignView = lazy(() => import('../design/DesignView'))
 const CompareView = lazy(() => import('../compare/CompareView'))
 // ER 图带 React Flow，打开第一张图时才加载
 const ErView = lazy(() => import('../er/ErView'))
+// 迁移标签的 DDL 预览带 Monaco
+const MigrateView = lazy(() => import('../migrate/MigrateView'))
 
 function TabTitle({ tab, active, envClass, profileName, profile }: {
   tab: QueryTab
@@ -68,6 +70,8 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
       >
         {tab.er ? (
           <IconAffiliate size={16} />
+        ) : tab.migrate ? (
+          <IconTransfer size={16} />
         ) : tab.compare ? (
           <IconArrowsDiff size={16} />
         ) : tab.design?.model ? (
@@ -169,7 +173,11 @@ export default function Workspace() {
         )}
       </div>
       {tab &&
-        (tab.er ? (
+        (tab.migrate ? (
+          <Suspense fallback={<Spin style={{ margin: 48 }} />}>
+            <MigrateView key={tab.id} tab={tab} profiles={profiles} />
+          </Suspense>
+        ) : tab.er ? (
           <Suspense fallback={<Spin style={{ margin: 48 }} />}>
             <ErView key={tab.id} tab={tab} />
           </Suspense>
