@@ -281,6 +281,22 @@
   - `diagrams`：设计文档的 ER 图 `[{upload, schema, name, title, description?, names_only}]`，`upload` 为 `/uploads` 返回的编号（PNG）。
 - 任务 `kind` 为 `document`；xlsx 有截断的单元格时 `warnings` 为个数。markdown 带图片时：写到本机路径则图片在旁边的 `<文件名>_images/`，浏览器模式打包成 zip。
 
+### 结构迁移（M5a 加入）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/migrations/preview` | 预览：读两端结构（经元数据缓存）、转换、检查、生成脚本，不执行 |
+| POST | `/migrations` | 开始迁移（以库中最新的结构重新转换，检查不通过则 400），201 和 `{id}`；完成后迁移报告（markdown）从 `/tasks/{id}/report` 取 |
+
+- 请求是迁移方案：`{source: {profile, schema}, tables?, sequences?, target: {profile, schema}, settings, existing}`。
+  - `tables`、`sequences`：迁移范围，null 为全部。
+  - `settings`：`{options: {name_case: "keep" | "lower" | "upper" | null, comments, checks}, type_rules: [{source, target}], tables: {源表名: 表的覆盖}, sequences: {源序列名: {name?, skip?}}}`；
+    表的覆盖 `{name?, skip?, columns: {源列名: {name?, type?, default?, expression?, skip?, accept?}}, checks: {源约束名: 表达式}}`。
+  - `existing`：目标中已有同名表时的处理（按源表名）：`skip` / `recreate` / `missing_only`。
+- 预览返回 `{source_variant, target_variant, source_tables, source_sequences, draft: {tables, sequences, notes}, others, statements, text, problems, denied, confirm}`；
+  `notes` 的 `level` 为 `info` / `lossy` / `unsupported`，有 `unsupported` 或同名表没有选择处理方式时 `problems` 不为空，不能开始。
+- 任务 `kind` 为 `migrate`：逐条执行，失败的语句记入 `failures` 后继续；建表失败的表，依赖它的语句跳过。
+
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 
 `lang` 可选，决定事件中文字的语言（见"语言"一节）。
