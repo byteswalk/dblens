@@ -17,6 +17,7 @@ import SqlFileDialog from '../features/import/SqlFileDialog'
 import FavoriteDialog from '../features/favorites/FavoriteDialog'
 import FavoritesPanel from '../features/favorites/FavoritesPanel'
 import HistoryPanel from '../features/history/HistoryPanel'
+import ExportDocDialog from '../features/document/ExportDocDialog'
 import ModelDialogs from '../features/model/ModelDialogs'
 import ModelsPanel from '../features/model/ModelsPanel'
 import OpsPanel from '../features/ops/OpsPanel'
@@ -166,6 +167,7 @@ export default function Shell() {
       <ImportDialog />
       <SqlFileDialog />
       <ModelDialogs />
+      <ExportDocDialog />
     </div>
   )
 }

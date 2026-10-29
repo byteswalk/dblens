@@ -425,7 +425,7 @@ export interface SqlFileRequest {
 
 export interface TaskStatus {
   id: string
-  kind: 'import' | 'sql_file' | 'design' | 'reverse' | 'sync'
+  kind: 'import' | 'sql_file' | 'design' | 'reverse' | 'sync' | 'document'
   state: 'running' | 'confirm' | 'done' | 'failed' | 'cancelled'
   phase: 'preparing' | 'scanning' | 'creating' | 'clearing' | 'writing' | 'executing' | 'finished'
   progress: {
@@ -779,6 +779,48 @@ export interface DiagramView {
 /** 默认图的名字。 */
 export const DEFAULT_DIAGRAM = '_all'
 
+/** 文档导出（M4c）：数据字典、设计文档。 */
+export type DocKind = 'dictionary' | 'design'
+export type DocFormat = 'docx' | 'html' | 'markdown' | 'xlsx'
+export type DocSource =
+  | { kind: 'model'; model: string; schemas: string[] }
+  | { kind: 'database'; profile: string; schema: string }
+
+export interface DocInfo {
+  title: string
+  version?: string | null
+  author?: string | null
+  description?: string | null
+}
+
+/** 前端画好、已上传的一张 ER 图。 */
+export interface DocDiagramImage {
+  upload: string
+  schema: string
+  name: string
+  title: string
+  description?: string | null
+  names_only: boolean
+}
+
+export interface DocumentRequest {
+  source: DocSource
+  tables?: string[] | null
+  kind: DocKind
+  format: DocFormat
+  info: DocInfo
+  template?: string | null
+  reference?: string | null
+  view_definitions: boolean
+  diagrams: DocDiagramImage[]
+  output?: string | null
+}
+
+export interface DocumentProblem {
+  field: 'template' | 'reference' | 'output' | 'format'
+  error: ErrorBody
+}
+
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>
 
 export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o)) {
@@ -973,6 +1015,13 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
       request<{ fingerprint: string }>('DELETE', `${mt(id, schema, table)}/logical-keys/${index}`),
     /** 桌面版：把导出的图片（base64）写到"另存为"选的 .svg、.png 文件。 */
     saveImage: (path: string, data: string) => request<null>('POST', '/files/image', { path, data }),
+    startDocument: async (req: DocumentRequest) => (await request<{ id: string }>('POST', '/documents', req)).id,
+    /** 开始前检查：模板语法、样式来源、输出位置。 */
+    checkDocument: async (req: DocumentRequest) =>
+      (await request<{ problems: DocumentProblem[] }>('POST', '/documents/check', req)).problems,
+    /** 把内置模板写到指定路径（桌面版）。 */
+    exportDocTemplate: (format: 'html' | 'markdown', path: string) =>
+      request<null>('POST', '/documents/templates/export', { format, path }),
     /** 整个 schema 的表明细（库的 ER 图）。 */
     schemaTables: (id: string, schema: string) => request<DesignTableModel[]>('GET', `${s(id, schema)}/tables`),
     compare: (req: CompareRequest) => request<CompareResult>('POST', '/compare', req),

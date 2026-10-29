@@ -30,6 +30,8 @@ pub enum TaskKind {
     Reverse,
     /// 比对后同步到库（M4a）。
     Sync,
+    /// 导出文档（M4c）。
+    Document,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

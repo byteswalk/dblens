@@ -28,7 +28,8 @@
     "svg": "导出 SVG",
     "png": "导出 PNG",
     "svgWhite": "导出 SVG（白底）",
-    "pngWhite": "导出 PNG（白底）"
+    "pngWhite": "导出 PNG（白底）",
+    "designDoc": "导出设计文档…"
   },
   "menu": {
     "open": "打开",

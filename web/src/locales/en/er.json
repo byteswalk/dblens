@@ -29,7 +29,8 @@
     "svg": "Export SVG",
     "png": "Export PNG",
     "svgWhite": "Export SVG (white background)",
-    "pngWhite": "Export PNG (white background)"
+    "pngWhite": "Export PNG (white background)",
+    "designDoc": "Export Design Document…"
   },
   "menu": {
     "open": "Open",

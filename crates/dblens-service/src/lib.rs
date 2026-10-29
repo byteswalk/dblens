@@ -3,6 +3,8 @@
 mod changes;
 mod compare;
 mod design;
+/// 文档导出（M4c）。
+pub mod document;
 mod export;
 /// 测试用的假驱动，供本 crate 和 `dblens-api` 的测试使用（feature `testing`）。
 #[cfg(any(test, feature = "testing"))]

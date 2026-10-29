@@ -17,7 +17,8 @@
     "newTable": "New Table",
     "reload": "Reload",
     "reveal": "Show in File Manager",
-    "close": "Close Model"
+    "close": "Close Model",
+    "exportDoc": "Export Document…"
   },
   "rename": {
     "title": "Rename table {{name}} to"

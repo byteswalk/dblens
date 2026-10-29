@@ -208,7 +208,7 @@ impl Service {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::time::Duration;
 
     use dblens_core::schema::{Column, PrimaryKey};
@@ -225,7 +225,7 @@ mod tests {
     use crate::store::Store;
     use crate::task::{TaskState, TaskStatus};
 
-    fn service() -> (Arc<Service>, String, tempfile::TempDir) {
+    pub(crate) fn service() -> (Arc<Service>, String, tempfile::TempDir) {
         let store = Arc::new(Store::open_in_memory().unwrap());
         let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
         secrets.init_vault("master").unwrap();
@@ -245,7 +245,7 @@ mod tests {
         (Arc::new(s), p.id, dir)
     }
 
-    async fn wait(s: &Service, id: &str) -> TaskStatus {
+    pub(crate) async fn wait(s: &Service, id: &str) -> TaskStatus {
         for _ in 0..1000 {
             let st = s.tasks.status(id).unwrap();
             if st.state != TaskState::Running {

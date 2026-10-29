@@ -14,15 +14,21 @@ export interface Bounds {
 
 const PADDING = 24
 
-/** 把视口层按整张图的范围画成 data URL。 */
-export async function renderImage(viewport: HTMLElement, bounds: Bounds, format: ImageFormat, background: string): Promise<string> {
+/** 把视口层按整张图的范围画成 data URL。PNG 默认 2 倍像素。 */
+export async function renderImage(
+  viewport: HTMLElement,
+  bounds: Bounds,
+  format: ImageFormat,
+  background: string,
+  ratio = 2,
+): Promise<string> {
   const width = Math.ceil(bounds.width + PADDING * 2)
   const height = Math.ceil(bounds.height + PADDING * 2)
   const options = {
     backgroundColor: background,
     width,
     height,
-    pixelRatio: format === 'png' ? 2 : 1,
+    pixelRatio: format === 'png' ? ratio : 1,
     // 不内嵌网页字体（用系统字体），SVG 小得多
     skipFonts: true,
     // 连线手柄和连线的点击区域是操作用的，不画进图片（表多时也快得多）

@@ -13,6 +13,7 @@ import { useApi } from '../../app/context'
 import { ApiError, DEFAULT_DIAGRAM, type ModelSummary, type ModelTableEntry } from '../../shared/api'
 import { desktop } from '../../shared/shell'
 import { useTabs } from '../editor/tabs'
+import { useDocExport } from '../document/dialog'
 import { useModelDialogs } from './dialogs'
 
 type NodeRef =
@@ -113,10 +114,12 @@ function ModelTree({ model, onMenu }: { model: ModelSummary; onMenu(n: NodeRef, 
         ...common,
         { key: 'er-open', label: t('er.menu.openDefault') },
         { key: 'er-new', label: t('er.menu.newDiagram'), disabled: ro },
+        { key: 'export-doc', label: t('model.menu.exportDoc') },
       ]
     }
     return [
       ...common,
+      { key: 'export-doc', label: t('model.menu.exportDoc') },
       { type: 'divider' },
       { key: 'reload', label: t('model.menu.reload') },
       ...(desktop ? [{ key: 'reveal', label: t('model.menu.reveal') }] : []),
@@ -224,6 +227,17 @@ export default function ModelsPanel() {
       else if (key === 'compare') useTabs.getState().openCompare({ source: { kind: 'model', path: m.path, schema }, target: null })
       else if (key === 'reload') await reload(m)
       else if (key === 'reveal') await desktop?.revealInFolder(`${m.path}/model.yaml`)
+      else if (key === 'export-doc') {
+        useDocExport.getState().open({
+          kind: 'model',
+          model: m.id,
+          path: m.path,
+          name: m.info.name,
+          description: m.info.description ?? null,
+          schemas: m.info.schemas,
+          schema: n.type === 'schema' ? n.schema : undefined,
+        })
+      }
       else if (key === 'close') {
         await api.closeModel(m.id)
         await qc.invalidateQueries({ queryKey: ['models'] })

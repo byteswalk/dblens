@@ -4,6 +4,7 @@
 mod auth;
 mod design;
 mod diagrams;
+mod documents;
 mod error;
 mod exports;
 mod lang;
@@ -114,6 +115,9 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/models/{id}/tables/{schema}/{name}/logical-keys", post(diagrams::add_key))
         .route("/models/{id}/tables/{schema}/{name}/logical-keys/{index}", delete(diagrams::delete_key))
         .route("/files/image", post(diagrams::save_image))
+        .route("/documents", post(documents::start))
+        .route("/documents/check", post(documents::check))
+        .route("/documents/templates/export", post(documents::export_template))
         .route("/exports", post(exports::create))
         .route("/exports/{id}", get(exports::status).delete(exports::cancel_or_remove))
         .route("/exports/{id}/file", get(exports::file))

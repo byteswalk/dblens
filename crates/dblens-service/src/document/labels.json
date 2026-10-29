@@ -1,0 +1,282 @@
+{
+  "doc.dictionary": {
+    "zh-CN": "数据字典",
+    "en": "Data Dictionary"
+  },
+  "doc.design": {
+    "zh-CN": "设计文档",
+    "en": "Design Document"
+  },
+  "doc.version": {
+    "zh-CN": "版本",
+    "en": "Version"
+  },
+  "doc.author": {
+    "zh-CN": "作者",
+    "en": "Author"
+  },
+  "doc.generated": {
+    "zh-CN": "生成时间",
+    "en": "Generated"
+  },
+  "doc.source": {
+    "zh-CN": "来源",
+    "en": "Source"
+  },
+  "doc.contents": {
+    "zh-CN": "目录",
+    "en": "Contents"
+  },
+  "doc.overview": {
+    "zh-CN": "概述",
+    "en": "Overview"
+  },
+  "doc.stats": {
+    "zh-CN": "统计",
+    "en": "Statistics"
+  },
+  "doc.stat.schemas": {
+    "zh-CN": "Schema 数",
+    "en": "Schemas"
+  },
+  "doc.stat.tables": {
+    "zh-CN": "表数",
+    "en": "Tables"
+  },
+  "doc.stat.columns": {
+    "zh-CN": "列数",
+    "en": "Columns"
+  },
+  "doc.stat.foreign_keys": {
+    "zh-CN": "外键数",
+    "en": "Foreign keys"
+  },
+  "doc.stat.logical_keys": {
+    "zh-CN": "逻辑外键数",
+    "en": "Logical keys"
+  },
+  "doc.stat.views": {
+    "zh-CN": "视图数",
+    "en": "Views"
+  },
+  "doc.diagrams": {
+    "zh-CN": "ER 图",
+    "en": "ER Diagrams"
+  },
+  "doc.names_only": {
+    "zh-CN": "表较多，图中只显示表名；明细见各表。",
+    "en": "This diagram has many tables, so only table names are shown; see each table for details."
+  },
+  "doc.relations": {
+    "zh-CN": "表间关系",
+    "en": "Relationships"
+  },
+  "doc.tables": {
+    "zh-CN": "表清单",
+    "en": "Tables"
+  },
+  "doc.views": {
+    "zh-CN": "视图",
+    "en": "Views"
+  },
+  "doc.details": {
+    "zh-CN": "表明细",
+    "en": "Table Details"
+  },
+  "doc.unreadable": {
+    "zh-CN": "无法读取的表",
+    "en": "Unreadable Tables"
+  },
+  "doc.partition": {
+    "zh-CN": "分区",
+    "en": "Partition"
+  },
+  "doc.col.no": {
+    "zh-CN": "序号",
+    "en": "No."
+  },
+  "doc.col.schema": {
+    "zh-CN": "Schema",
+    "en": "Schema"
+  },
+  "doc.col.table": {
+    "zh-CN": "表名",
+    "en": "Table"
+  },
+  "doc.col.name": {
+    "zh-CN": "名称",
+    "en": "Name"
+  },
+  "doc.col.comment": {
+    "zh-CN": "注释",
+    "en": "Comment"
+  },
+  "doc.col.columns": {
+    "zh-CN": "列数",
+    "en": "Columns"
+  },
+  "doc.col.column": {
+    "zh-CN": "列名",
+    "en": "Column"
+  },
+  "doc.col.type": {
+    "zh-CN": "类型",
+    "en": "Type"
+  },
+  "doc.col.nullable": {
+    "zh-CN": "可空",
+    "en": "Nullable"
+  },
+  "doc.col.default": {
+    "zh-CN": "默认值",
+    "en": "Default"
+  },
+  "doc.col.flags": {
+    "zh-CN": "标记",
+    "en": "Flags"
+  },
+  "doc.col.index_columns": {
+    "zh-CN": "列",
+    "en": "Columns"
+  },
+  "doc.col.unique": {
+    "zh-CN": "唯一",
+    "en": "Unique"
+  },
+  "doc.col.method": {
+    "zh-CN": "方法",
+    "en": "Method"
+  },
+  "doc.col.kind": {
+    "zh-CN": "类别",
+    "en": "Kind"
+  },
+  "doc.col.detail": {
+    "zh-CN": "内容",
+    "en": "Detail"
+  },
+  "doc.col.references": {
+    "zh-CN": "引用",
+    "en": "References"
+  },
+  "doc.col.on_delete": {
+    "zh-CN": "删除时",
+    "en": "On delete"
+  },
+  "doc.col.on_update": {
+    "zh-CN": "更新时",
+    "en": "On update"
+  },
+  "doc.col.timing": {
+    "zh-CN": "时机",
+    "en": "Timing"
+  },
+  "doc.col.events": {
+    "zh-CN": "事件",
+    "en": "Events"
+  },
+  "doc.col.from": {
+    "zh-CN": "从",
+    "en": "From"
+  },
+  "doc.col.to": {
+    "zh-CN": "到",
+    "en": "To"
+  },
+  "doc.col.file": {
+    "zh-CN": "文件",
+    "en": "File"
+  },
+  "doc.col.error": {
+    "zh-CN": "原因",
+    "en": "Reason"
+  },
+  "doc.sec.indexes": {
+    "zh-CN": "索引",
+    "en": "Indexes"
+  },
+  "doc.sec.constraints": {
+    "zh-CN": "约束",
+    "en": "Constraints"
+  },
+  "doc.sec.foreign_keys": {
+    "zh-CN": "外键",
+    "en": "Foreign Keys"
+  },
+  "doc.sec.logical_keys": {
+    "zh-CN": "逻辑外键",
+    "en": "Logical Keys"
+  },
+  "doc.sec.triggers": {
+    "zh-CN": "触发器",
+    "en": "Triggers"
+  },
+  "doc.sec.referenced_by": {
+    "zh-CN": "被引用",
+    "en": "Referenced By"
+  },
+  "doc.sec.definition": {
+    "zh-CN": "定义",
+    "en": "Definition"
+  },
+  "doc.flag.pk": {
+    "zh-CN": "主键",
+    "en": "PK"
+  },
+  "doc.flag.auto": {
+    "zh-CN": "自增",
+    "en": "Auto"
+  },
+  "doc.flag.generated": {
+    "zh-CN": "生成列",
+    "en": "Generated"
+  },
+  "doc.kind.primary": {
+    "zh-CN": "主键",
+    "en": "Primary key"
+  },
+  "doc.kind.unique": {
+    "zh-CN": "唯一",
+    "en": "Unique"
+  },
+  "doc.kind.check": {
+    "zh-CN": "检查",
+    "en": "Check"
+  },
+  "doc.kind.index": {
+    "zh-CN": "索引",
+    "en": "Index"
+  },
+  "doc.kind.foreign_key": {
+    "zh-CN": "外键",
+    "en": "Foreign key"
+  },
+  "doc.kind.logical_key": {
+    "zh-CN": "逻辑外键",
+    "en": "Logical key"
+  },
+  "doc.yes": {
+    "zh-CN": "是",
+    "en": "Yes"
+  },
+  "doc.no": {
+    "zh-CN": "否",
+    "en": "No"
+  },
+  "doc.toc_hint": {
+    "zh-CN": "打开文档时按提示更新域，或右键这里选“更新域”，即可生成目录。",
+    "en": "Update fields when prompted on opening, or right-click here and choose Update Field, to build the table of contents."
+  },
+  "doc.sheet.tables": {
+    "zh-CN": "表清单",
+    "en": "Tables"
+  },
+  "doc.sheet.columns": {
+    "zh-CN": "列",
+    "en": "Columns"
+  },
+  "doc.sheet.keys": {
+    "zh-CN": "索引和约束",
+    "en": "Indexes and Constraints"
+  }
+}
