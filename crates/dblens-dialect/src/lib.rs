@@ -10,6 +10,7 @@ pub mod ident;
 mod import;
 pub mod literal;
 pub mod meta;
+pub mod migrate;
 mod ops;
 mod session;
 mod split;

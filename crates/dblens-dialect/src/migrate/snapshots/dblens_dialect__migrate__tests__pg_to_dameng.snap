@@ -1,0 +1,51 @@
+---
+source: crates/dblens-dialect/src/migrate/tests.rs
+expression: "render(&draft, tgt)"
+---
+Info customers_id_seq: Sequence owned by a serial column; migrated with the identity column
+Lossy customers.tags: Unrecognized type text[]; migrated as text (TEXT)
+Lossy customers [ix_customers_note]: Includes a large-object column the target cannot index; not migrated
+Lossy customers [ix_customers_lower]: Index expression lower((email)::text) cannot be converted; not migrated
+Lossy orders.code: Default gen_random_uuid() cannot be converted; not migrated
+Lossy orders.pos: Unrecognized type point; migrated as text (TEXT)
+Lossy orders [fk_orders_customer]: The target does not support ON UPDATE CASCADE; dropped
+Lossy orders [fk_orders_product]: Referenced table products is neither migrated nor in the target; not migrated
+
+CREATE SEQUENCE "app".ORDER_SEQ
+    START WITH 1
+    INCREMENT BY 1
+    MINVALUE 1
+    MAXVALUE 9223372036854775807
+    CACHE 20
+    NOCYCLE;
+CREATE TABLE "app".CUSTOMERS (
+    ID BIGINT IDENTITY(1, 1) NOT NULL,
+    NAME VARCHAR(50 CHAR) DEFAULT 'n/a' NOT NULL,
+    EMAIL VARCHAR(100 CHAR),
+    ACTIVE BIT DEFAULT 1,
+    CREATED TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
+    BALANCE DEC(12,2) DEFAULT 0,
+    TAGS TEXT,
+    NOTE TEXT,
+    CONSTRAINT CUSTOMERS_PKEY PRIMARY KEY (ID)
+);
+COMMENT ON TABLE "app".CUSTOMERS IS 'Customers';
+COMMENT ON COLUMN "app".CUSTOMERS.NAME IS 'Customer name';
+CREATE TABLE "app".ORDERS (
+    ID INT DEFAULT ORDER_SEQ.NEXTVAL NOT NULL,
+    CUSTOMER_ID BIGINT,
+    PRODUCT_ID INT,
+    AMOUNT DEC(10,2),
+    DOUBLE_AMOUNT DEC(12,2) GENERATED ALWAYS AS ((AMOUNT * (2))) VIRTUAL,
+    STATUS VARCHAR(10 CHAR) DEFAULT 'new',
+    PLACED DATE DEFAULT CURDATE(),
+    CODE VARCHAR(36),
+    POS TEXT,
+    CONSTRAINT ORDERS_PKEY PRIMARY KEY (ID)
+);
+
+CREATE INDEX "app".IX_CUSTOMERS_NAME ON "app".CUSTOMERS (NAME);
+ALTER TABLE "app".CUSTOMERS ADD CONSTRAINT CUSTOMERS_EMAIL_KEY UNIQUE (EMAIL);
+ALTER TABLE "app".CUSTOMERS ADD CONSTRAINT CK_BALANCE CHECK (BALANCE >= (0));
+ALTER TABLE "app".ORDERS ADD CONSTRAINT CK_STATUS CHECK ((STATUS) IN ('new', 'paid'));
+ALTER TABLE "app".ORDERS ADD CONSTRAINT FK_ORDERS_CUSTOMER FOREIGN KEY (CUSTOMER_ID) REFERENCES "app".CUSTOMERS (ID) ON DELETE CASCADE;

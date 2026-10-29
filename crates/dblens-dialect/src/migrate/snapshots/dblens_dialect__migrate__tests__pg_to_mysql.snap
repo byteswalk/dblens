@@ -1,0 +1,42 @@
+---
+source: crates/dblens-dialect/src/migrate/tests.rs
+expression: "render(&draft, tgt)"
+---
+Info customers_id_seq: Sequence owned by a serial column; migrated with the identity column
+Lossy order_seq: The target database has no sequences; not migrated
+Lossy customers.tags: Unrecognized type text[]; migrated as text (LONGTEXT)
+Lossy customers [ix_customers_note]: Includes a large-object column the target cannot index; not migrated
+Lossy customers [ix_customers_lower]: Index expression lower((email)::text) cannot be converted; not migrated
+Lossy orders.id: Default nextval('order_seq'::regclass) cannot be converted; not migrated
+Lossy orders.pos: Unrecognized type point; migrated as text (LONGTEXT)
+Lossy orders [fk_orders_product]: Referenced table products is neither migrated nor in the target; not migrated
+
+CREATE TABLE app.customers (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL DEFAULT 'n/a' COMMENT 'Customer name',
+    email VARCHAR(100) NULL,
+    active TINYINT(1) NULL DEFAULT TRUE,
+    created DATETIME(6) NULL DEFAULT CURRENT_TIMESTAMP(6),
+    balance DECIMAL(12,2) NULL DEFAULT 0,
+    tags LONGTEXT NULL,
+    note LONGTEXT NULL,
+    PRIMARY KEY (id)
+) COMMENT = 'Customers';
+CREATE TABLE app.orders (
+    id INT NOT NULL,
+    customer_id BIGINT NULL,
+    product_id INT NULL,
+    amount DECIMAL(10,2) NULL,
+    double_amount DECIMAL(12,2) GENERATED ALWAYS AS ((amount * (2))) NULL,
+    status VARCHAR(10) NULL DEFAULT 'new',
+    placed DATE NULL DEFAULT (CURRENT_DATE),
+    code CHAR(36) NULL DEFAULT (UUID()),
+    pos LONGTEXT NULL,
+    PRIMARY KEY (id)
+);
+
+ALTER TABLE app.customers ADD INDEX ix_customers_name (name);
+ALTER TABLE app.customers ADD CONSTRAINT customers_email_key UNIQUE (email);
+ALTER TABLE app.customers ADD CONSTRAINT ck_balance CHECK (balance >= (0));
+ALTER TABLE app.orders ADD CONSTRAINT ck_status CHECK ((status) IN ('new', 'paid'));
+ALTER TABLE app.orders ADD CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES app.customers (id) ON DELETE CASCADE ON UPDATE CASCADE;

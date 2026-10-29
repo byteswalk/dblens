@@ -408,7 +408,7 @@ impl Run<'_> {
     }
 
     /// 执行一条语句并记入历史。
-    async fn sql(&self, conn: &mut Box<dyn Connection>, sql: &str) -> Result<u64> {
+    pub(crate) async fn sql(&self, conn: &mut Box<dyn Connection>, sql: &str) -> Result<u64> {
         let (at, started) = (now_ms(), Instant::now());
         let result = exec(conn, sql, &[]).await;
         self.record(sql, at, started, result.as_ref().ok().copied(), result.as_ref().err());

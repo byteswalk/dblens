@@ -423,9 +423,102 @@ export interface SqlFileRequest {
   transaction: boolean
 }
 
+/** 结构迁移（M5a）：迁移的一端。 */
+export interface MigrationEnd {
+  profile: string
+  schema: string
+}
+
+export type NameCase = 'keep' | 'lower' | 'upper'
+export type ExistingAction = 'skip' | 'recreate' | 'missing_only'
+
+/** 一列的覆盖：`default` 为空串表示不要默认值；`accept` 确认把不认识的类型按文本迁移。 */
+export interface ColumnOverride {
+  name?: string
+  type?: string
+  default?: string
+  expression?: string
+  skip?: boolean
+  accept?: boolean
+}
+
+export interface TableOverride {
+  name?: string
+  skip?: boolean
+  columns?: Record<string, ColumnOverride>
+  /** 源检查约束名 → 目标表达式，空串表示不迁。 */
+  checks?: Record<string, string>
+}
+
+export interface MigrationSettings {
+  options: { name_case: NameCase | null; comments: boolean; checks: boolean }
+  type_rules: { source: string; target: string }[]
+  tables: Record<string, TableOverride>
+  sequences: Record<string, { name?: string; skip?: boolean }>
+}
+
+/** 迁移方案：可另存为 JSON 再打开。`tables`、`sequences` 为 null 时迁移全部。 */
+export interface MigrationPlan {
+  source: MigrationEnd
+  tables: string[] | null
+  sequences: string[] | null
+  target: MigrationEnd
+  settings: MigrationSettings
+  existing: Record<string, ExistingAction>
+}
+
+export type NoteLevel = 'info' | 'lossy' | 'unsupported'
+
+export interface MigrationNote {
+  kind: 'table' | 'sequence'
+  object: string
+  column?: string
+  item?: string
+  level: NoteLevel
+  message: string
+}
+
+export interface MigrationSequence {
+  name: string
+  start: string | null
+  increment: string | null
+  min_value: string | null
+  max_value: string | null
+  cycle: boolean
+  cache: number | null
+}
+
+export interface MigrationStatement {
+  phase: 1 | 2
+  kind: 'drop_table' | 'sequence' | 'create_table' | 'comment' | 'index' | 'unique' | 'check' | 'foreign_key'
+  object: string
+  requires: string[]
+  sql: string
+}
+
+export interface MigrationPreview {
+  source_variant: string
+  target_variant: string
+  source_tables: DesignTableModel[]
+  source_sequences: MigrationSequence[]
+  draft: {
+    tables: { source: string; target: DesignTableModel; columns: { source: string; target: string | null }[]; exists: boolean }[]
+    sequences: { source: string; target: MigrationSequence; exists: boolean }[]
+    notes: MigrationNote[]
+  }
+  /** 不迁移的对象（视图、例程、触发器、同义词）。 */
+  others: { kind: string; name: string; table?: string }[]
+  statements: MigrationStatement[]
+  text: string
+  /** 不能开始的原因。 */
+  problems: string[]
+  denied: string | null
+  confirm: string[]
+}
+
 export interface TaskStatus {
   id: string
-  kind: 'import' | 'sql_file' | 'design' | 'reverse' | 'sync' | 'document'
+  kind: 'import' | 'sql_file' | 'design' | 'reverse' | 'sync' | 'document' | 'migrate'
   state: 'running' | 'confirm' | 'done' | 'failed' | 'cancelled'
   phase: 'preparing' | 'scanning' | 'creating' | 'clearing' | 'writing' | 'executing' | 'finished'
   progress: {
@@ -1025,6 +1118,10 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     /** 整个 schema 的表明细（库的 ER 图）。 */
     schemaTables: (id: string, schema: string) => request<DesignTableModel[]>('GET', `${s(id, schema)}/tables`),
     compare: (req: CompareRequest) => request<CompareResult>('POST', '/compare', req),
+    /** 结构迁移：读结构、转换、检查、生成脚本，不执行。 */
+    previewMigration: (plan: MigrationPlan) => request<MigrationPreview>('POST', '/migrations/preview', plan),
+    /** 开始迁移，返回任务 id。 */
+    startMigration: async (plan: MigrationPlan) => (await request<{ id: string }>('POST', '/migrations', plan)).id,
     syncPreview: (req: SyncRequest) => request<SyncPreview>('POST', '/compare/preview', req),
     /** 同步：目标是库时返回任务 id；目标是模型时已经写完，返回 null。 */
     sync: async (req: SyncRequest) => (await request<{ task: string | null }>('POST', '/compare/sync', req)).task,

@@ -32,6 +32,8 @@ pub enum TaskKind {
     Sync,
     /// 导出文档（M4c）。
     Document,
+    /// 结构迁移（M5a）。
+    Migrate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -156,6 +158,11 @@ impl TaskHandle {
         if let Ok(mut s) = self.entry.status.lock() {
             f(&mut s);
         }
+    }
+
+    /// 当前状态的副本。
+    pub fn status(&self) -> TaskStatus {
+        self.entry.status.lock().map(|s| s.clone()).unwrap_or_else(|e| e.into_inner().clone())
     }
 
     pub fn cancelled(&self) -> bool {

@@ -5,10 +5,11 @@
 // 设计模型中的表（M4a）时 design.model 是模型目录，标签不绑定连接（profileId 为空串）。
 // 比对标签（M4a 设计文档第 7 节）：带 compare 的标签，两边是模型或连接的一个 schema；也不绑定连接。
 // ER 图标签（M4b 设计文档 4.1 节）：带 er 的标签，模型的一张图（不绑定连接）或连接的一个 schema（只读）。
+// 迁移标签（M5a 设计文档第 5 节）：带 migrate 的标签，内容是整个迁移方案（一并保存，切换标签不丢）；不绑定连接。
 
 import { create } from 'zustand'
 
-import type { TargetKind } from '../../shared/api'
+import type { MigrationPlan, TargetKind } from '../../shared/api'
 import { t } from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
 
@@ -58,6 +59,8 @@ export interface QueryTab {
   compare?: CompareTarget
   /** 有值时是 ER 图标签。 */
   er?: ErTarget
+  /** 有值时是迁移标签。 */
+  migrate?: MigrationPlan
 }
 
 const TARGET_KINDS: readonly unknown[] = ['table', 'view', 'materialized_view'] satisfies TargetKind[]
@@ -94,6 +97,11 @@ function isErTarget(v: unknown): v is ErTarget {
   const e = v as ErTarget | null
   if (typeof e?.schema !== 'string') return false
   return e.kind === 'model' ? typeof e.path === 'string' && typeof e.diagram === 'string' : e.kind === 'database' && typeof e.profile === 'string'
+}
+
+function isMigratePlan(v: unknown): v is MigrationPlan {
+  const m = v as MigrationPlan | null
+  return typeof m?.source?.profile === 'string' && typeof m.target?.profile === 'string' && typeof m.settings === 'object'
 }
 
 function isCompareTarget(v: unknown): v is CompareTarget {
@@ -133,7 +141,8 @@ export function parseTabs(raw: string | undefined): Persisted {
         (t.data === undefined || isDataTarget(t.data)) &&
         (t.design === undefined || isDesignTarget(t.design)) &&
         (t.compare === undefined || isCompareTarget(t.compare)) &&
-        (t.er === undefined || isErTarget(t.er)),
+        (t.er === undefined || isErTarget(t.er)) &&
+        (t.migrate === undefined || isMigratePlan(t.migrate)),
     )
     const active = tabs.some((t) => t.id === v.active) ? (v.active as string) : (tabs[0]?.id ?? null)
     return { tabs, active, seq: typeof v.seq === 'number' && v.seq > 0 ? v.seq : tabs.length + 1 }
@@ -159,6 +168,10 @@ interface TabsState extends Persisted {
   openEr(target: ErTarget, title: string): string
   /** 图改名后，标签跟着改。 */
   setEr(id: string, target: ErTarget, title: string): void
+  /** 新开迁移标签，返回它的 id。 */
+  openMigrate(plan: MigrationPlan): string
+  /** 修改迁移标签的方案。 */
+  setMigrate(id: string, plan: MigrationPlan): void
   /** 修改数据标签的过滤条件和排序。 */
   setData(id: string, patch: Pick<DataTarget, 'filter' | 'order'>): void
   close(id: string): void
@@ -243,6 +256,13 @@ export const useTabs = create<TabsState>()((set, get) => ({
     set({ tabs: get().tabs.map((x) => (x.id === id && x.er ? { ...x, er: { ...target }, title } : x)) }),
   setCompare: (id, target) =>
     set({ tabs: get().tabs.map((x) => (x.id === id && x.compare ? { ...x, compare: target } : x)) }),
+  openMigrate: (plan) => {
+    const tab: QueryTab = { id: newId(), title: t('migrate.title'), profileId: '', sql: '', migrate: plan }
+    set({ tabs: [...get().tabs, tab], active: tab.id })
+    return tab.id
+  },
+  setMigrate: (id, plan) =>
+    set({ tabs: get().tabs.map((x) => (x.id === id && x.migrate ? { ...x, migrate: plan } : x)) }),
   setData: (id, patch) =>
     set({ tabs: get().tabs.map((x) => (x.id === id && x.data ? { ...x, data: { ...x.data, ...patch } } : x)) }),
   close: (id) => {

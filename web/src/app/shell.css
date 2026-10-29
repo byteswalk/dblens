@@ -781,6 +781,41 @@ body {
   background: var(--warn-bg);
 }
 
+/* 结构迁移（M5a） */
+.migrate-objects {
+  width: 280px;
+  flex-shrink: 0;
+  overflow: auto;
+}
+.migrate-object {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.migrate-object:hover,
+.migrate-object.on {
+  background: var(--sel);
+}
+.migrate-mapping {
+  flex: 3;
+  min-width: 480px;
+  min-width: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.migrate-ddl {
+  flex: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* ER 图（M4b） */
 .er-view {
   display: flex;
