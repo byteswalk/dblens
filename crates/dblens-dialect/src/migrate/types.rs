@@ -148,6 +148,8 @@ pub(super) fn fk_action_supported(tgt: &Dialect, what: &str, action: &str) -> bo
 pub(super) fn sequence(tgt: &Dialect, s: &Sequence, name: &str, n: &mut Notes) -> Sequence {
     let mut out = Sequence { name: name.to_string(), ..s.clone() };
     if tgt.family() == Family::Postgres {
+        // 达梦的不缓存是 CACHE 0，PG 的缓存至少为 1
+        out.cache = out.cache.filter(|&c| c >= 1);
         let fits = |v: &Option<String>| v.as_deref().is_none_or(|v| v.trim().parse::<i64>().is_ok());
         for (label, v) in [("MINVALUE", &mut out.min_value), ("MAXVALUE", &mut out.max_value)] {
             if !fits(v) {

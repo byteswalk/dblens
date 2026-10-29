@@ -50,7 +50,9 @@
     "all": "全部设为",
     "skip": "跳过",
     "recreate": "删除重建",
-    "missing_only": "只建缺的索引和约束"
+    "missing_only": "只建缺的索引和约束",
+    "append": "追加数据",
+    "replace": "清空后导入"
   },
   "summary": "建 {{tables}} 张表、{{sequences}} 个序列、{{constraints}} 个索引和约束",
   "saveScript": "另存脚本…",
@@ -68,5 +70,57 @@
     "info": "说明",
     "lossy": "有损",
     "unsupported": "不支持"
-  }
+  },
+  "mode": {
+    "label": "模式",
+    "all": "结构和数据",
+    "structure": "只迁结构",
+    "data": "只迁数据"
+  },
+  "data": {
+    "batch": "每批行数",
+    "parallel": "并行表数",
+    "onError": "出错时",
+    "stop": "停止",
+    "skip": "跳过并记录",
+    "sample": "抽样比对行数",
+    "sampleHint": "0 为只比对行数"
+  },
+  "filter": "过滤条件（源库写法）",
+  "structureOnly": "只迁结构",
+  "sourceHint": "迁移期间源库最好不要写入",
+  "phase": {
+    "structure": "建表",
+    "data": "迁数据",
+    "constraints": "建索引和约束",
+    "sequences": "调整序列和自增",
+    "verify": "校验",
+    "done": "完成"
+  },
+  "state": {
+    "pending": "等待",
+    "copying": "迁移中",
+    "done": "完成",
+    "failed": "失败",
+    "skipped": "不迁数据"
+  },
+  "progress": {
+    "table": "表",
+    "state": "状态",
+    "rows": "已迁 / 估计",
+    "skipped": "跳过",
+    "time": "用时",
+    "verify": "校验",
+    "verifyOk": "一致",
+    "verifyBad": "应有 {{expected}} 行，目标 {{target}} 行，{{mismatches}} 处值不同"
+  },
+  "unfinished": {
+    "title": "未完成的迁移",
+    "item": "{{source}} → {{target}} · {{phase}} · {{done}}/{{total}} 张表",
+    "resume": "继续",
+    "discard": "放弃",
+    "discardConfirm": "放弃这个迁移？迁移记录将删除，目标库中已迁的内容不会删除。",
+    "running": "执行中"
+  },
+  "unfinishedDone": "迁移没有全部完成，可在上方\"未完成的迁移\"中继续"
 }

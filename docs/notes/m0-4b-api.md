@@ -297,6 +297,19 @@
   `notes` 的 `level` 为 `info` / `lossy` / `unsupported`，有 `unsupported` 或同名表没有选择处理方式时 `problems` 不为空，不能开始。
 - 任务 `kind` 为 `migrate`：逐条执行，失败的语句记入 `failures` 后继续；建表失败的表，依赖它的语句跳过。
 
+数据迁移（M5b 加入）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/migrations` | 没有完成的迁移：`[{id, created_at, updated_at, source, target, phase, tables_done, tables_total, running}]` |
+| POST | `/migrations/{id}/resume` | 继续，201 和 `{id}`（任务 id）；已完成、正在执行时 400，记录不存在时 404 |
+| DELETE | `/migrations/{id}` | 放弃：删除迁移记录（不动目标库），204 |
+
+- 方案加 `mode`（`all` / `structure` / `data`）、`data: {batch_size, parallel, on_error: "stop" | "skip", sample}`；表的覆盖加 `filter`（源库写法）、`structure_only`；
+  `existing` 加 `append`、`replace`。
+- 任务状态加 `migration: {record, phase, tables: [{source, target, state, rows, skipped, estimate, elapsed_ms, error, verify}]}`，
+  `phase` 为 `structure` / `data` / `constraints` / `sequences` / `verify` / `done`，`verify` 为 `{source_rows, target_rows, expected_rows, sampled, mismatches}`。
+
 ## WebSocket：`GET /api/sessions/{id}/ws?token=…&lang=…`
 
 `lang` 可选，决定事件中文字的语言（见"语言"一节）。

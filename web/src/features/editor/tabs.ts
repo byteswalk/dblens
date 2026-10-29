@@ -12,6 +12,7 @@ import { create } from 'zustand'
 import type { MigrationPlan, TargetKind } from '../../shared/api'
 import { t } from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
+import { parsePlan } from '../migrate/plan'
 
 export const TABS_KEY = 'ui.tabs'
 
@@ -144,6 +145,10 @@ export function parseTabs(raw: string | undefined): Persisted {
         (t.er === undefined || isErTarget(t.er)) &&
         (t.migrate === undefined || isMigratePlan(t.migrate)),
     )
+    // 迁移标签的方案补上后来加的项（M5b 的模式、数据选项），格式不对的丢掉
+    for (const t of tabs) {
+      if (t.migrate) t.migrate = parsePlan(JSON.stringify(t.migrate)) ?? undefined
+    }
     const active = tabs.some((t) => t.id === v.active) ? (v.active as string) : (tabs[0]?.id ?? null)
     return { tabs, active, seq: typeof v.seq === 'number' && v.seq > 0 ? v.seq : tabs.length + 1 }
   } catch {

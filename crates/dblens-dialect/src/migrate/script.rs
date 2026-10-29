@@ -11,7 +11,7 @@ use super::MigrationDraft;
 use crate::design::{Diff, TableChange};
 use crate::{Dialect, Family};
 
-/// 目标中已有同名表时的处理方式。
+/// 目标中已有同名表时的处理方式。追加数据、清空后导入（M5b）不动结构。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExistingAction {
@@ -19,9 +19,18 @@ pub enum ExistingAction {
     Recreate,
     /// 不建表，只建目标表中缺少的索引和约束。
     MissingOnly,
+    Append,
+    Replace,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+impl ExistingAction {
+    /// 是否迁数据：跳过、只建缺的索引和约束不迁。
+    pub fn copies_data(self) -> bool {
+        matches!(self, ExistingAction::Recreate | ExistingAction::Append | ExistingAction::Replace)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StatementKind {
     DropTable,
@@ -35,7 +44,7 @@ pub enum StatementKind {
 }
 
 /// 一条迁移语句。`object` 是源对象名；`requires`：这些源表建表失败时跳过本语句。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MigrationStatement {
     pub phase: u8,
     pub kind: StatementKind,
@@ -71,7 +80,7 @@ pub fn migration_script(
         } else {
             ExistingAction::Recreate
         };
-        if action == ExistingAction::Skip {
+        if matches!(action, ExistingAction::Skip | ExistingAction::Append | ExistingAction::Replace) {
             continue;
         }
         let present = target_tables.iter().find(|x| x.name.eq_ignore_ascii_case(&t.target.name));
@@ -211,7 +220,7 @@ fn drop_sql(tgt: &Dialect, schema: &str, name: &str) -> String {
 }
 
 /// 序列：PG 系用 `NO CYCLE`；Oracle、达梦用 `NOCYCLE`，缓存小于 2 时写 `NOCACHE`。
-fn sequence_sql(tgt: &Dialect, schema: &str, s: &Sequence) -> String {
+pub(super) fn sequence_sql(tgt: &Dialect, schema: &str, s: &Sequence) -> String {
     if tgt.family() == Family::Postgres {
         return tgt.sequence_ddl(schema, s).trim().trim_end_matches(';').to_string();
     }

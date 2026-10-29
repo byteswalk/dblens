@@ -1,6 +1,7 @@
 //! 结构迁移（M5a 设计文档第 3、4 节）：把源 schema 的表和序列按目标方言转换成目标结构，
 //! 给出逐项提示，再生成两步的 DDL（先建序列和表，再建索引和约束）。不做任何 IO。
 
+pub mod data;
 mod expr;
 mod names;
 mod script;
@@ -67,7 +68,8 @@ pub struct ColumnOverride {
     pub accept: bool,
 }
 
-/// 一张表的覆盖。`checks`：源检查约束名 → 目标表达式，空串表示不迁。
+/// 一张表的覆盖。`checks`：源检查约束名 → 目标表达式，空串表示不迁。`filter`：迁数据时的过滤条件（源库写法）；
+/// `structure_only`：只迁结构不迁数据（M5b）。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TableOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -78,6 +80,10 @@ pub struct TableOverride {
     pub columns: BTreeMap<String, ColumnOverride>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub checks: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub structure_only: bool,
 }
 
 /// 一个序列的覆盖。

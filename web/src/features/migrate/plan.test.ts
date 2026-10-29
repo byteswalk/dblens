@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
 
 import type { MigrationPreview } from '../../shared/api'
-import { emptyPlan, notesOf, parsePlan, ready, setCheck, setColumn, setExisting, setSequence, setTable, summary, unchosen, worst } from './plan'
+import {
+  emptyPlan,
+  existingActions,
+  notesOf,
+  parsePlan,
+  ready,
+  setCheck,
+  setColumn,
+  setExisting,
+  setSequence,
+  setTable,
+  summary,
+  unchosen,
+  worst,
+} from './plan'
 
 const src = { profile: 'a', schema: 's' }
 
@@ -67,6 +81,16 @@ describe('迁移方案', () => {
     expect(p.settings.tables.t.columns?.c).toEqual({ default: '' })
   })
 
+  it('数据选项：过滤条件、只迁结构、同名表可选的处理方式', () => {
+    let p = setTable(emptyPlan(src), 't', { filter: 'x > 1', structure_only: true })
+    expect(p.settings.tables.t).toEqual({ filter: 'x > 1', structure_only: true })
+    p = setTable(p, 't', { filter: undefined, structure_only: false })
+    expect(p.settings.tables).toEqual({})
+    expect(existingActions('structure')).not.toContain('append')
+    expect(existingActions('data')).toEqual(['skip', 'append', 'replace'])
+    expect(existingActions('all').length).toBe(5)
+  })
+
   it('表、检查约束、序列的覆盖', () => {
     let p = setTable(emptyPlan(src), 't', { skip: true })
     expect(p.settings.tables.t).toEqual({ skip: true })
@@ -97,6 +121,10 @@ describe('迁移方案', () => {
   it('打开另存的方案：补默认值，格式不对返回 null', () => {
     const p = parsePlan(JSON.stringify({ source: src, target: { profile: 'b', schema: 't' }, settings: { type_rules: [{ source: 'CLOB', target: 'TEXT' }] } }))
     expect(p?.settings.options).toEqual({ name_case: null, comments: true, checks: true })
+    // 旧方案没有模式和数据选项时补默认值
+    expect(p?.mode).toBe('all')
+    expect(p?.data).toEqual({ batch_size: 1000, parallel: 2, on_error: 'stop', sample: 0 })
+    expect(parsePlan(JSON.stringify({ ...p, mode: 'data', data: { sample: 50 } }))?.data.sample).toBe(50)
     expect(p?.settings.type_rules).toEqual([{ source: 'CLOB', target: 'TEXT' }])
     expect(p?.tables).toBeNull()
     expect(parsePlan('{"source": 1}')).toBeNull()

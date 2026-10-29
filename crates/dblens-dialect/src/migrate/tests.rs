@@ -383,6 +383,10 @@ fn existing_tables_follow_the_chosen_action() {
         "DropTable CreateTable Comment Comment Index Unique Check"
     );
     assert_eq!(kinds(Some(ExistingAction::MissingOnly)), "Check");
+    // 追加数据、清空后导入不动结构
+    assert_eq!(kinds(Some(ExistingAction::Append)), "");
+    assert_eq!(kinds(Some(ExistingAction::Replace)), "");
+    assert!(ExistingAction::Replace.copies_data() && !ExistingAction::MissingOnly.copies_data());
     // 外键要求两张表都建好
     let script = migration_script(&d, "APP", &draft, &BTreeMap::new(), &target_tables).unwrap();
     let fk = script.iter().find(|s| s.kind == StatementKind::ForeignKey).unwrap();

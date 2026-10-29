@@ -46,7 +46,10 @@ pub use import::{
     infer_type, new_table, preview_file,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
-pub use migrate::{MigrationEnd, MigrationPlan, MigrationPreview, OtherObject};
+pub use migrate::{
+    DataOptions, MigrationEnd, MigrationMode, MigrationPhase, MigrationPlan, MigrationPreview,
+    MigrationProgress, MigrationSummary, Mismatch, OtherObject, TableState, TableView, Verify,
+};
 pub use model::{
     DEFAULT_DIAGRAM, Diagram, DiagramDisplay, DiagramSummary, DiagramTable, DiagramTables, DiagramView,
     DiagramWarning, FileError, LogicalKey, ModelDatabase, ModelDesignPreview, ModelDesignRequest, ModelInfo,

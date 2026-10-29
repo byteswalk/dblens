@@ -123,6 +123,8 @@ pub struct TaskStatus {
     pub remaining: Option<String>,
     /// 反向生成：生成并打开的模型的编号。
     pub model: Option<String>,
+    /// 迁移（M5b）：迁移记录的编号、当前步骤、每张表的进度。
+    pub migration: Option<crate::migrate::MigrationProgress>,
 }
 
 struct Entry {
@@ -158,11 +160,6 @@ impl TaskHandle {
         if let Ok(mut s) = self.entry.status.lock() {
             f(&mut s);
         }
-    }
-
-    /// 当前状态的副本。
-    pub fn status(&self) -> TaskStatus {
-        self.entry.status.lock().map(|s| s.clone()).unwrap_or_else(|e| e.into_inner().clone())
     }
 
     pub fn cancelled(&self) -> bool {
@@ -415,6 +412,7 @@ impl TaskManager {
                 confirm: None,
                 remaining: None,
                 model: None,
+                migration: None,
                 report: None,
             }),
             cancelled: AtomicBool::new(false),

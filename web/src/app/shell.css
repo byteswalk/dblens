@@ -808,6 +808,11 @@ body {
   flex-direction: column;
   gap: 6px;
 }
+.migrate-progress {
+  padding: 0 10px;
+  max-height: 240px;
+  overflow: auto;
+}
 .migrate-ddl {
   flex: 2;
   min-width: 0;
