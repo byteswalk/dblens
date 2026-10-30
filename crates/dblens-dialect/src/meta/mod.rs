@@ -63,6 +63,12 @@ pub enum MetaKey {
     MaterializedViewsBasic,
     IndexesBasic,
     ViewDefinitionBasic,
+    // 以下是账号与权限（M9a），模板在 sql/privilege/，由 `Dialect::privilege_query` 生成。不在 `ALL` 中。
+    PrivCaps,
+    PrivPrincipals,
+    PrivMemberships,
+    PrivGrantsOf,
+    PrivGrantsOn,
 }
 
 impl MetaKey {
@@ -141,6 +147,11 @@ impl MetaKey {
             MetaKey::MaterializedViewsBasic => "materialized_views_basic",
             MetaKey::IndexesBasic => "indexes_basic",
             MetaKey::ViewDefinitionBasic => "view_definition_basic",
+            MetaKey::PrivCaps => "priv_caps",
+            MetaKey::PrivPrincipals => "priv_principals",
+            MetaKey::PrivMemberships => "priv_memberships",
+            MetaKey::PrivGrantsOf => "priv_grants_of",
+            MetaKey::PrivGrantsOn => "priv_grants_on",
         }
     }
 }

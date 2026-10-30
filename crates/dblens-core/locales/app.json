@@ -1608,6 +1608,10 @@
     "zh-CN": "生产环境：%{keyword} 语句",
     "en": "Production: %{keyword} statement"
   },
+  "privilege.bad_value": {
+    "zh-CN": "账号与权限查询返回了不认识的值：%{column} = %{value}",
+    "en": "Unexpected value in privilege query: %{column} = %{value}"
+  },
   "profile.host_required": {
     "zh-CN": "主机不能为空",
     "en": "The host is required"

@@ -12,6 +12,7 @@ pub mod literal;
 pub mod meta;
 pub mod migrate;
 mod ops;
+pub mod privilege;
 mod session;
 mod split;
 pub mod types;
