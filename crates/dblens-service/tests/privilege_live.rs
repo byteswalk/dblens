@@ -311,7 +311,14 @@ async fn flow(env: &str, fx: Fixture) {
     service.principal_privileges(&low, None, fx.user).await.unwrap();
     service.object_access(&low, None, fx.schema, fx.table).await.unwrap();
 
+    // 低权限连接开着时，SQL Server 删不掉它的登录名
+    service.metadata.forget(&low).await.unwrap();
     run(&service, &admin, fx.drop, true).await;
+    let left = service.privilege_overview(&admin, None).await.unwrap();
+    assert!(
+        !left.principals.iter().any(|p| p.name.eq_ignore_ascii_case("dblens_priv_low")),
+        "{env}: 夹具没有清理干净"
+    );
 }
 
 #[tokio::test]

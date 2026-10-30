@@ -16,20 +16,20 @@ import { type KindFilter, filterPrincipals, groupAccess, pathLabel, targetLabel 
 function CoverageNote({ coverage }: { coverage: Coverage | undefined }) {
   const { t } = useTranslation()
   if (coverage?.state !== 'partial') return null
-  return <Alert type="warning" showIcon banner message={`${t('privilege.partial')}：${coverage.missing.join('；')}`} />
+  return <Alert type="warning" showIcon banner message={t('privilege.partial', { detail: coverage.missing.join(' · ') })} />
 }
 
 function Notes({ notes }: { notes: PrivNote[] }) {
   const { t } = useTranslation()
   if (!notes.length) return null
-  return <span className="muted"> {notes.map((n) => t(`privilege.note.${n}`)).join('；')}</span>
+  return <span className="muted"> {notes.map((n) => t(`privilege.note.${n}`)).join(' · ')}</span>
 }
 
 function useGrantColumns(): ColumnsType<PrivilegeGrant> {
   const { t } = useTranslation()
   return [
     { title: t('privilege.col.scope'), dataIndex: 'scope', width: 90, render: (s: PrivilegeGrant['scope']) => t(`privilege.scope.${s}`) },
-    { title: t('privilege.col.target'), key: 'target', ellipsis: true, render: (_, g) => targetLabel(g) },
+    { title: t('privilege.col.target'), key: 'target', width: 220, ellipsis: true, render: (_, g) => targetLabel(g) },
     { title: t('privilege.col.privilege'), dataIndex: 'privilege', width: 200 },
     { title: t('privilege.col.grantable'), dataIndex: 'grantable', width: 80, render: (v: boolean) => (v ? t('privilege.yes') : t('privilege.no')) },
     { title: t('privilege.col.grantor'), dataIndex: 'grantor', width: 140, ellipsis: true },
@@ -40,10 +40,10 @@ function useEffectiveColumns(principals: Principal[]): ColumnsType<EffectivePriv
   const { t } = useTranslation()
   return [
     { title: t('privilege.col.scope'), key: 'scope', width: 90, render: (_, e) => t(`privilege.scope.${e.grant.scope}`) },
-    { title: t('privilege.col.target'), key: 'target', ellipsis: true, render: (_, e) => targetLabel(e.grant) },
-    { title: t('privilege.col.privilege'), key: 'privilege', width: 180, render: (_, e) => e.grant.privilege },
+    { title: t('privilege.col.target'), key: 'target', width: 200, ellipsis: true, render: (_, e) => targetLabel(e.grant) },
+    { title: t('privilege.col.privilege'), key: 'privilege', width: 160, render: (_, e) => e.grant.privilege },
     { title: t('privilege.col.state'), dataIndex: 'state', width: 80, render: (s: EffectivePrivilege['state']) => t(`privilege.state.${s}`) },
-    { title: t('privilege.col.path'), key: 'path', render: (_, e) => <span>{pathLabel(e.via, principals)}<Notes notes={e.notes} /></span> },
+    { title: t('privilege.col.path'), key: 'path', width: 420, render: (_, e) => <span>{pathLabel(e.via, principals)}<Notes notes={e.notes} /></span> },
   ]
 }
 
@@ -78,7 +78,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
       <CoverageNote coverage={data?.coverage} />
-      {error && <div className="err" style={{ padding: 12 }}>{t('privilege.error')}：{(error as Error).message}</div>}
+      {error && <div className="err" style={{ padding: 12 }}>{t('privilege.error', { detail: (error as Error).message })}</div>}
       <Tabs
         size="small"
         style={{ padding: '0 12px', flex: 1, minHeight: 0, overflow: 'auto' }}
@@ -99,7 +99,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
           {
             key: 'direct',
             label: t('privilege.tab.direct'),
-            children: <Table size="small" pagination={false} loading={isLoading} rowKey={(g) => `${g.scope}|${targetLabel(g)}|${g.privilege}`} columns={grantColumns} dataSource={data?.direct} />,
+            children: <Table size="small" pagination={false} loading={isLoading} scroll={{ x: 730 }} rowKey={(g) => `${g.scope}|${targetLabel(g)}|${g.privilege}`} columns={grantColumns} dataSource={data?.direct} />,
           },
           {
             key: 'effective',
@@ -107,7 +107,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
             children: (
               <>
                 <div className="muted" style={{ marginBottom: 8 }}>{t('privilege.computed')}</div>
-                <Table size="small" pagination={false} loading={isLoading} rowKey={(e) => `${e.via.join('>')}|${e.grant.scope}|${targetLabel(e.grant)}|${e.grant.privilege}`} columns={effectiveColumns} dataSource={data?.effective} />
+                <Table size="small" pagination={false} loading={isLoading} scroll={{ x: 950 }} rowKey={(e) => `${e.via.join('>')}|${e.grant.scope}|${targetLabel(e.grant)}|${e.grant.privilege}`} columns={effectiveColumns} dataSource={data?.effective} />
               </>
             ),
           },
@@ -137,7 +137,7 @@ function ObjectAccessPanel({ tab, principals, onPick }: { tab: QueryTab; princip
       </div>
       <CoverageNote coverage={data?.coverage} />
       <div className="muted" style={{ padding: '4px 12px' }}>{t('privilege.computed')}</div>
-      {error && <div className="err" style={{ padding: 12 }}>{t('privilege.error')}：{(error as Error).message}</div>}
+      {error && <div className="err" style={{ padding: 12 }}>{t('privilege.error', { detail: (error as Error).message })}</div>}
       <div style={{ flex: 1, overflow: 'auto', padding: '0 12px' }}>
         {isLoading ? <Spin style={{ margin: 48 }} /> : !groups.length ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('privilege.object.none')} />
@@ -147,7 +147,7 @@ function ObjectAccessPanel({ tab, principals, onPick }: { tab: QueryTab; princip
               <a onClick={() => onPick(g.principal)}>{principals.find((p) => p.id === g.principal)?.name ?? g.principal}</a>
               {g.items.map((a, i) => (
                 <div key={i} className="muted" style={{ paddingLeft: 12 }}>
-                  {a.privilege.grant.privilege}（{t(`privilege.state.${a.privilege.state}`)}）· {pathLabel(a.privilege.via, principals)}
+                  {a.privilege.grant.privilege} · {t(`privilege.state.${a.privilege.state}`)} · {pathLabel(a.privilege.via, principals)}
                   <Notes notes={a.privilege.notes} />
                 </div>
               ))}
@@ -238,7 +238,7 @@ export default function PrivilegesView({ tab }: { tab: QueryTab }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <CoverageNote coverage={data?.coverage} />
-        {error && <div className="err" style={{ padding: 12 }}>{t('privilege.error')}：{(error as Error).message}</div>}
+        {error && <div className="err" style={{ padding: 12 }}>{t('privilege.error', { detail: (error as Error).message })}</div>}
         {focus ? (
           <ObjectAccessPanel tab={tab} principals={principals} onPick={(id) => { setPicked(id); useTabs.getState().setPrivilegesFocus(tab.id, undefined) }} />
         ) : current ? (
