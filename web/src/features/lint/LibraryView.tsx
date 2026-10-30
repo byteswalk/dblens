@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import type { LintClause, LintException, LintRuleInfo, LintRuleset, LintSeverity } from '../../shared/api'
-import { SECTION_ORDER, download } from './logic'
+import type { LintClause, LintRuleInfo, LintRuleset, LintSeverity } from '../../shared/api'
+import { SECTION_ORDER } from './logic'
 
 const SEVERITIES: LintSeverity[] = ['error', 'warning', 'info']
 
@@ -151,10 +151,10 @@ function Editor({
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
-    if (!data) return
-    // 结果页豁免后规范会刷新：有未保存的改动时只带上例外，不冲掉改动
-    setDraft((d) => (d && dirty ? { ...d, exceptions: data.exceptions } : structuredClone(data)))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (data) {
+      setDraft(structuredClone(data))
+      setDirty(false)
+    }
   }, [data])
 
   if (isLoading || !draft) return <Spin style={{ margin: 48 }} />
@@ -187,15 +187,7 @@ function Editor({
     }
   }
 
-  const exceptions = draft.exceptions ?? []
-  const removeException = (x: LintException) =>
-    edit({ ...draft, exceptions: exceptions.filter((e) => e !== x) })
-  const removeClause = (cid: string) =>
-    edit({
-      ...draft,
-      clauses: draft.clauses.filter((c) => c.id !== cid),
-      exceptions: exceptions.filter((e) => e.clause !== cid),
-    })
+  const removeClause = (cid: string) => edit({ ...draft, clauses: draft.clauses.filter((c) => c.id !== cid) })
 
   const groups = SECTION_ORDER.map((section) => ({
     section,
@@ -218,7 +210,7 @@ function Editor({
         <Button size="small" onClick={() => void copy()}>
           {t('lint.lib.copy')}
         </Button>
-        <Button size="small" onClick={() => download(api.lintRulesetExportUrl(id))}>
+        <Button size="small" onClick={() => window.open(api.lintRulesetExportUrl(id), '_blank')}>
           {t('lint.lib.export')}
         </Button>
         {builtin ? (
@@ -337,39 +329,6 @@ function Editor({
             />
           </div>
         ))}
-        {exceptions.length > 0 && (
-          <div>
-            <div style={{ fontWeight: 600, margin: '10px 0 4px' }}>{t('lint.lib.exceptions')}</div>
-            <Table<LintException>
-              size="small"
-              pagination={false}
-              rowKey={(e) => `${e.clause}\n${e.object}`}
-              dataSource={exceptions}
-              columns={[
-                {
-                  title: t('lint.lib.clause'),
-                  render: (_: unknown, e) => draft.clauses.find((c) => c.id === e.clause)?.text ?? e.clause,
-                },
-                {
-                  title: t('lint.report.object_col'),
-                  dataIndex: 'object',
-                  width: 240,
-                  render: (v: string) => <code>{v}</code>,
-                },
-                { title: t('lint.report.waive_reason'), dataIndex: 'reason' },
-                {
-                  title: '',
-                  width: 70,
-                  render: (_: unknown, e) => (
-                    <Button type="link" size="small" onClick={() => removeException(e)}>
-                      {t('lint.lib.delete')}
-                    </Button>
-                  ),
-                },
-              ]}
-            />
-          </div>
-        )}
       </div>
     </div>
   )
