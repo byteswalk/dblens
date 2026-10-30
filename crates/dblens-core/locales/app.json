@@ -1612,6 +1612,30 @@
     "zh-CN": "账号与权限查询返回了不认识的值：%{column} = %{value}",
     "en": "Unexpected value in privilege query: %{column} = %{value}"
   },
+  "privilege.missing.caps": {
+    "zh-CN": "无法判断当前账号的查看范围",
+    "en": "Could not determine this account's visibility"
+  },
+  "privilege.missing.grants": {
+    "zh-CN": "部分授权读取不到",
+    "en": "Some grants could not be read"
+  },
+  "privilege.missing.memberships": {
+    "zh-CN": "角色成员关系读取不到",
+    "en": "Role memberships could not be read"
+  },
+  "privilege.missing.object": {
+    "zh-CN": "这个对象的授权读取不到",
+    "en": "Grants on this object could not be read"
+  },
+  "privilege.missing.others": {
+    "zh-CN": "当前账号看不到其他账号的信息",
+    "en": "This account cannot see other accounts"
+  },
+  "privilege.missing.principals": {
+    "zh-CN": "用户和角色列表不完整",
+    "en": "The list of users and roles is incomplete"
+  },
   "profile.host_required": {
     "zh-CN": "主机不能为空",
     "en": "The host is required"

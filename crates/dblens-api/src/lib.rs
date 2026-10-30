@@ -11,6 +11,7 @@ mod lang;
 mod lint;
 mod migrations;
 mod models;
+mod privileges;
 mod routes;
 mod tasks;
 mod web;
@@ -92,6 +93,9 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/profiles/{id}/schemas/{schema}/relations", get(routes::relations))
         .route("/profiles/{id}/schemas/{schema}/data-sql", post(routes::data_sql))
         .route("/profiles/{id}/ops", get(exports::ops))
+        .route("/profiles/{id}/privileges", get(privileges::overview))
+        .route("/profiles/{id}/privileges/principal", get(privileges::principal))
+        .route("/profiles/{id}/privileges/object", get(privileges::object))
         .route("/profiles/{id}/changes/preview", post(routes::preview_changes))
         .route("/profiles/{id}/design/caps", get(design::caps))
         .route("/profiles/{id}/design/table", get(design::table))

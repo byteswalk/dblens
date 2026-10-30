@@ -73,7 +73,13 @@ pub fn reachable(start: &str, memberships: &[Membership], public: &[&str]) -> Ve
     out
 }
 
-fn walk(id: &str, path: &mut Vec<String>, notes: &[PrivNote], memberships: &[Membership], out: &mut Vec<Reach>) {
+fn walk(
+    id: &str,
+    path: &mut Vec<String>,
+    notes: &[PrivNote],
+    memberships: &[Membership],
+    out: &mut Vec<Reach>,
+) {
     for m in memberships.iter().filter(|m| m.member == id) {
         if path.contains(&m.role) || out.len() >= MAX_PATHS {
             continue;
@@ -108,7 +114,11 @@ fn covers(deny: &PrivilegeGrant, grant: &PrivilegeGrant) -> bool {
 }
 
 /// 把经 `reach` 能拿到的授权展开成实际权限。`grants` 里不在 `reach` 中的主体被忽略。
-pub fn effective(reach: &[Reach], grants: &[PrivilegeGrant], ctx: EffectiveContext) -> Vec<EffectivePrivilege> {
+pub fn effective(
+    reach: &[Reach],
+    grants: &[PrivilegeGrant],
+    ctx: EffectiveContext,
+) -> Vec<EffectivePrivilege> {
     let sysadmin = reach.iter().any(|r| r.id == "server:sysadmin");
     let in_reach = |g: &&PrivilegeGrant| reach.iter().any(|r| r.id == g.grantee);
     let denies: Vec<&PrivilegeGrant> =
@@ -120,11 +130,12 @@ pub fn effective(reach: &[Reach], grants: &[PrivilegeGrant], ctx: EffectiveConte
                 continue;
             }
             let mut notes = r.notes.clone();
-            let mut state = if r.notes.iter().any(|n| matches!(n, PrivNote::NeedsSetRole | PrivNote::NotDefaultRole)) {
-                EffectiveState::Conditional
-            } else {
-                EffectiveState::Allowed
-            };
+            let mut state =
+                if r.notes.iter().any(|n| matches!(n, PrivNote::NeedsSetRole | PrivNote::NotDefaultRole)) {
+                    EffectiveState::Conditional
+                } else {
+                    EffectiveState::Allowed
+                };
             if g.effect == GrantEffect::Implicit {
                 notes.push(PrivNote::Implicit);
             }
@@ -161,7 +172,8 @@ pub fn who_can_access(
 ) -> Vec<ObjectAccess> {
     let mut out = Vec::new();
     for p in principals.iter().filter(|p| !public.contains(&p.id.as_str())) {
-        let ctx = EffectiveContext { host_wildcard: p.host.as_deref().is_some_and(|h| h.contains('%')), ..ctx };
+        let ctx =
+            EffectiveContext { host_wildcard: p.host.as_deref().is_some_and(|h| h.contains('%')), ..ctx };
         for privilege in effective(&reachable(&p.id, memberships, &[]), grants, ctx) {
             out.push(ObjectAccess { principal: p.id.clone(), privilege });
         }
@@ -192,7 +204,13 @@ mod tests {
     use super::*;
 
     fn m(member: &str, role: &str) -> Membership {
-        Membership { member: member.into(), role: role.into(), admin_option: false, inherits: None, default_role: None }
+        Membership {
+            member: member.into(),
+            role: role.into(),
+            admin_option: false,
+            inherits: None,
+            default_role: None,
+        }
     }
 
     fn g(grantee: &str, privilege: &str) -> PrivilegeGrant {
@@ -249,16 +267,26 @@ mod tests {
         let mut no = m("u", "r");
         no.inherits = Some(false);
         let e = effective(&reachable("u", &[no], &[]), &[g("r", "SELECT")], EffectiveContext::default());
-        assert_eq!((e[0].state, e[0].notes.clone()), (EffectiveState::Conditional, vec![PrivNote::NeedsSetRole]));
+        assert_eq!(
+            (e[0].state, e[0].notes.clone()),
+            (EffectiveState::Conditional, vec![PrivNote::NeedsSetRole])
+        );
         let mut off = m("u", "r");
         off.default_role = Some(false);
         let e = effective(&reachable("u", &[off], &[]), &[g("r", "SELECT")], EffectiveContext::default());
-        assert_eq!((e[0].state, e[0].notes.clone()), (EffectiveState::Conditional, vec![PrivNote::NotDefaultRole]));
+        assert_eq!(
+            (e[0].state, e[0].notes.clone()),
+            (EffectiveState::Conditional, vec![PrivNote::NotDefaultRole])
+        );
     }
 
     #[test]
     fn public_is_reached_and_marked() {
-        let e = effective(&reachable("u", &[], &["PUBLIC"]), &[g("PUBLIC", "SELECT")], EffectiveContext::default());
+        let e = effective(
+            &reachable("u", &[], &["PUBLIC"]),
+            &[g("PUBLIC", "SELECT")],
+            EffectiveContext::default(),
+        );
         assert_eq!(e[0].via, ["u", "PUBLIC"]);
         assert_eq!(e[0].notes, vec![PrivNote::PublicGrant]);
         assert_eq!(e[0].state, EffectiveState::Allowed);
@@ -294,7 +322,10 @@ mod tests {
         deny.effect = GrantEffect::Deny;
         deny.target.object = Some("other".into());
         let e = effective(&reachable("u", &[], &[]), &[g("u", "SELECT"), deny], ctx);
-        assert_eq!(e.iter().find(|x| x.grant.effect == GrantEffect::Grant).unwrap().state, EffectiveState::Allowed);
+        assert_eq!(
+            e.iter().find(|x| x.grant.effect == GrantEffect::Grant).unwrap().state,
+            EffectiveState::Allowed
+        );
     }
 
     #[test]
@@ -308,7 +339,10 @@ mod tests {
         assert_eq!(e[0].state, EffectiveState::Allowed);
         assert_eq!(e[0].notes, vec![PrivNote::Implicit, PrivNote::HostWildcard]);
         assert_eq!(e[1].state, EffectiveState::Conditional);
-        assert_eq!(e[1].notes, vec![PrivNote::AnyPrivilege, PrivNote::PartialRevokes, PrivNote::HostWildcard]);
+        assert_eq!(
+            e[1].notes,
+            vec![PrivNote::AnyPrivilege, PrivNote::PartialRevokes, PrivNote::HostWildcard]
+        );
     }
 
     #[test]

@@ -19,8 +19,8 @@ use dblens_core::Result;
 use serde::{Deserialize, Serialize};
 
 pub use effective::{
-    EffectiveContext, EffectivePrivilege, EffectiveState, ObjectAccess, PrivNote, Reach, effective, reachable,
-    who_can_access,
+    EffectiveContext, EffectivePrivilege, EffectiveState, ObjectAccess, PrivNote, Reach, effective,
+    reachable, who_can_access,
 };
 pub use rows::{Caps, caps, grants, memberships, principals};
 
@@ -209,7 +209,12 @@ fn sections(variant: Variant) -> &'static HashMap<String, String> {
 impl Dialect {
     /// 生成账号与权限的查询；该方言没有这一段时返回 None。参数：`grants_of` 用 name（主体 id），
     /// `grants_on` 用 schema、table。
-    pub fn privilege_query(&self, section: PrivSection, tier: PrivTier, args: &MetaArgs) -> Result<Option<MetaQuery>> {
+    pub fn privilege_query(
+        &self,
+        section: PrivSection,
+        tier: PrivTier,
+        args: &MetaArgs,
+    ) -> Result<Option<MetaQuery>> {
         match sections(self.variant()).get(section.name(tier)) {
             None => Ok(None),
             Some(t) => {
@@ -237,14 +242,24 @@ mod tests {
     use crate::{Family, Variant};
 
     fn args() -> MetaArgs {
-        MetaArgs { schema: Some("s".into()), table: Some("t".into()), name: Some("u".into()), ..Default::default() }
+        MetaArgs {
+            schema: Some("s".into()),
+            table: Some("t".into()),
+            name: Some("u".into()),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn every_variant_has_the_required_sections() {
         for &v in &ALL_VARIANTS {
             let d = Dialect::new(v);
-            for s in [PrivSection::Principals, PrivSection::Memberships, PrivSection::GrantsOf, PrivSection::GrantsOn] {
+            for s in [
+                PrivSection::Principals,
+                PrivSection::Memberships,
+                PrivSection::GrantsOf,
+                PrivSection::GrantsOn,
+            ] {
                 let q = d.privilege_query(s, PrivTier::Full, &args()).unwrap();
                 assert!(q.is_some_and(|q| !q.sql.is_empty() && !q.sql.contains("-- [")), "{v:?} {s:?}");
             }
@@ -259,7 +274,11 @@ mod tests {
         assert!(caps(Variant::MariaDb).is_none(), "MariaDB 没有 partial_revokes");
         assert!(caps(Variant::Postgres).is_none());
         let of = |v| {
-            Dialect::new(v).privilege_query(PrivSection::GrantsOf, PrivTier::Full, &args()).unwrap().unwrap().sql
+            Dialect::new(v)
+                .privilege_query(PrivSection::GrantsOf, PrivTier::Full, &args())
+                .unwrap()
+                .unwrap()
+                .sql
         };
         assert!(of(Variant::MySql).contains("procs_priv"));
         assert!(!of(Variant::TiDb).contains("procs_priv"));
@@ -272,10 +291,12 @@ mod tests {
         let d = Dialect::new(Variant::Oracle);
         let q = d.privilege_query(PrivSection::Principals, PrivTier::Limited, &args()).unwrap().unwrap();
         assert!(q.sql.contains("all_users"));
-        assert!(Dialect::new(Variant::Postgres)
-            .privilege_query(PrivSection::Principals, PrivTier::Limited, &args())
-            .unwrap()
-            .is_none());
+        assert!(
+            Dialect::new(Variant::Postgres)
+                .privilege_query(PrivSection::Principals, PrivTier::Limited, &args())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

@@ -492,6 +492,31 @@ async fn export_then_download() {
 }
 
 #[tokio::test]
+async fn privileges_check_parameters() {
+    let (app, _) = app();
+    let (_, p) =
+        call(&app, "POST", "/api/profiles", Some(json!({"profile": profile_json("p"), "password": "pw"})))
+            .await;
+    let id = p["id"].as_str().unwrap();
+    // 缺查询参数时 axum 返回纯文本，不走 `call`
+    let status = |uri: String| {
+        let app = app.clone();
+        async move {
+            let req = Request::get(uri)
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap();
+            app.oneshot(req).await.unwrap().status()
+        }
+    };
+    let missing = status(format!("/api/profiles/{id}/privileges/principal")).await;
+    assert_eq!(missing, StatusCode::BAD_REQUEST, "缺 principal 参数");
+    let missing = status(format!("/api/profiles/{id}/privileges/object?schema=s")).await;
+    assert_eq!(missing, StatusCode::BAD_REQUEST, "缺 object 参数");
+    assert_eq!(status("/api/profiles/none/privileges".into()).await, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn ops_follow_language() {
     let (app, _) = app();
     let (_, p) =

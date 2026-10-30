@@ -3,7 +3,8 @@
 use dblens_core::{Error, Result, Value, msg};
 
 use super::{
-    GrantEffect, GrantScope, GrantTarget, Membership, Principal, PrincipalKind, PrincipalLevel, PrivilegeGrant,
+    GrantEffect, GrantScope, GrantTarget, Membership, Principal, PrincipalKind, PrincipalLevel,
+    PrivilegeGrant,
 };
 use crate::meta::{MetaRow, MetaRows};
 
@@ -23,7 +24,17 @@ fn bad(column: &str, value: &str) -> Error {
 pub fn principals(rows: &MetaRows) -> Result<Vec<Principal>> {
     rows.require(
         "principals",
-        &["id", "name", "host", "principal_kind", "principal_level", "can_login", "locked", "expires_at", "builtin"],
+        &[
+            "id",
+            "name",
+            "host",
+            "principal_kind",
+            "principal_level",
+            "can_login",
+            "locked",
+            "expires_at",
+            "builtin",
+        ],
     )?;
     rows.iter()
         .map(|r| {
@@ -80,7 +91,19 @@ pub fn memberships(rows: &MetaRows) -> Result<Vec<Membership>> {
 pub fn grants(rows: &MetaRows) -> Result<Vec<PrivilegeGrant>> {
     rows.require(
         "grants",
-        &["grantee", "grant_scope", "db_name", "schema_name", "object_kind", "object_name", "column_name", "privilege", "effect", "grantable", "grantor"],
+        &[
+            "grantee",
+            "grant_scope",
+            "db_name",
+            "schema_name",
+            "object_kind",
+            "object_name",
+            "column_name",
+            "privilege",
+            "effect",
+            "grantable",
+            "grantor",
+        ],
     )?;
     rows.iter()
         .map(|r| {
@@ -146,10 +169,32 @@ mod tests {
 
     #[test]
     fn principals_keep_nulls_and_collect_attrs() {
-        let cols = ["id", "name", "host", "principal_kind", "principal_level", "can_login", "locked", "expires_at", "builtin", "attr_plugin"];
+        let cols = [
+            "id",
+            "name",
+            "host",
+            "principal_kind",
+            "principal_level",
+            "can_login",
+            "locked",
+            "expires_at",
+            "builtin",
+            "attr_plugin",
+        ];
         let rows = MetaRows::new(
             cols.iter().map(|c| c.to_string()).collect(),
-            vec![vec![s("'u'@'%'"), s("u"), s("%"), s("user"), s("server"), Value::Int(1), s("N"), Value::Null, Value::Int(0), s("x")]],
+            vec![vec![
+                s("'u'@'%'"),
+                s("u"),
+                s("%"),
+                s("user"),
+                s("server"),
+                Value::Int(1),
+                s("N"),
+                Value::Null,
+                Value::Int(0),
+                s("x"),
+            ]],
         );
         let p = principals(&rows).unwrap().remove(0);
         assert_eq!((p.kind, p.level), (PrincipalKind::User, PrincipalLevel::Server));
@@ -160,8 +205,34 @@ mod tests {
 
     #[test]
     fn grants_accept_each_spelling_of_grantable() {
-        let cols = ["grantee", "grant_scope", "db_name", "schema_name", "object_kind", "object_name", "column_name", "privilege", "effect", "grantable", "grantor"];
-        let row = |g: Value| vec![s("u"), s("object"), Value::Null, s("hr"), s("table"), s("emp"), Value::Null, s("SELECT"), s("grant"), g, Value::Null];
+        let cols = [
+            "grantee",
+            "grant_scope",
+            "db_name",
+            "schema_name",
+            "object_kind",
+            "object_name",
+            "column_name",
+            "privilege",
+            "effect",
+            "grantable",
+            "grantor",
+        ];
+        let row = |g: Value| {
+            vec![
+                s("u"),
+                s("object"),
+                Value::Null,
+                s("hr"),
+                s("table"),
+                s("emp"),
+                Value::Null,
+                s("SELECT"),
+                s("grant"),
+                g,
+                Value::Null,
+            ]
+        };
         let rows = MetaRows::new(
             cols.iter().map(|c| c.to_string()).collect(),
             vec![row(s("YES")), row(s("NO")), row(Value::Bool(true)), row(Value::Int(0))],
@@ -175,8 +246,31 @@ mod tests {
     #[test]
     fn unknown_kind_is_reported() {
         let rows = MetaRows::new(
-            ["id", "name", "host", "principal_kind", "principal_level", "can_login", "locked", "expires_at", "builtin"].iter().map(|c| c.to_string()).collect(),
-            vec![vec![s("a"), s("a"), Value::Null, s("alien"), s("server"), Value::Null, Value::Null, Value::Null, Value::Int(0)]],
+            [
+                "id",
+                "name",
+                "host",
+                "principal_kind",
+                "principal_level",
+                "can_login",
+                "locked",
+                "expires_at",
+                "builtin",
+            ]
+            .iter()
+            .map(|c| c.to_string())
+            .collect(),
+            vec![vec![
+                s("a"),
+                s("a"),
+                Value::Null,
+                s("alien"),
+                s("server"),
+                Value::Null,
+                Value::Null,
+                Value::Null,
+                Value::Int(0),
+            ]],
         );
         assert!(principals(&rows).is_err());
     }
@@ -186,7 +280,10 @@ mod tests {
         assert_eq!(caps(None), Caps { full_view: true, partial_revokes: false });
         let rows = MetaRows::new(vec!["full_view".into()], vec![vec![Value::Int(0)]]);
         assert_eq!(caps(Some(&rows)), Caps { full_view: false, partial_revokes: false });
-        let rows = MetaRows::new(vec!["full_view".into(), "partial_revokes".into()], vec![vec![Value::Int(1), Value::Int(1)]]);
+        let rows = MetaRows::new(
+            vec!["full_view".into(), "partial_revokes".into()],
+            vec![vec![Value::Int(1), Value::Int(1)]],
+        );
         assert_eq!(caps(Some(&rows)), Caps { full_view: true, partial_revokes: true });
     }
 }
