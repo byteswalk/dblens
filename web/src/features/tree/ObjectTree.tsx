@@ -32,6 +32,7 @@ import { useTabs } from '../editor/tabs'
 import { useExportDialog } from '../export/dialog'
 import { useImportDialogs } from '../import/dialog'
 import { useDocExport } from '../document/dialog'
+import { useLintStart } from '../lint/dialog'
 import { emptyPlan } from '../migrate/plan'
 import { useModelDialogs } from '../model/dialogs'
 import {
@@ -327,6 +328,7 @@ export default function ObjectTree() {
       { key: 'compare-model', label: t('tree.menu.compareModel') },
       { key: 'save-model', label: t('tree.menu.saveAsModel') },
       { key: 'export-doc', label: t('tree.menu.exportDoc') },
+      { key: 'lint', label: t('tree.menu.lint') },
       { key: 'migrate', label: t('tree.menu.migrate') },
       { type: 'divider' },
     ]
@@ -380,6 +382,7 @@ export default function ObjectTree() {
         useTabs.getState().openCompare({ source: null, target: { kind: 'database', profile: k.profileId, schema: k.schema } })
       } else if (key === 'save-model' && k.type === 's') useModelDialogs.getState().openReverse({ profileId: k.profileId, schema: k.schema })
       else if (key === 'export-doc' && k.type === 's') useDocExport.getState().open({ kind: 'database', profile: k.profileId, schema: k.schema })
+      else if (key === 'lint' && k.type === 's') useLintStart.getState().open({ kind: 'database', profile: k.profileId, schema: k.schema })
       else if (key === 'migrate' && k.type === 's') useTabs.getState().openMigrate(emptyPlan({ profile: k.profileId, schema: k.schema }))
       else if (key === 'import' && k.type === 'o') {
         useImportDialogs.getState().openImport({ profileId: k.profileId, schema: k.schema, table: k.name, create: false })

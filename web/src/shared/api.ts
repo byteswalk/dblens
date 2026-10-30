@@ -672,7 +672,7 @@ export interface MigrationPreview {
 
 export interface TaskStatus {
   id: string
-  kind: 'import' | 'sql_file' | 'design' | 'reverse' | 'sync' | 'document' | 'migrate'
+  kind: 'import' | 'sql_file' | 'design' | 'reverse' | 'sync' | 'document' | 'migrate' | 'lint'
   state: 'running' | 'confirm' | 'done' | 'failed' | 'cancelled'
   phase: 'preparing' | 'scanning' | 'creating' | 'clearing' | 'writing' | 'executing' | 'finished'
   progress: {
@@ -699,6 +699,120 @@ export interface TaskStatus {
   model: string | null
   /** 迁移（M5b）：当前步骤和每张表的进度。 */
   migration: MigrationProgress | null
+  /** 规范检查（M7a）：检查记录的编号。 */
+  lint_run: string | null
+}
+
+/** 设计规范检查（M7a）。 */
+export type LintSeverity = 'error' | 'warning' | 'info'
+export type LintVerdict = 'pass' | 'fail' | 'unknown' | 'manual' | 'not_applicable'
+export type LintSection =
+  | 'naming'
+  | 'table'
+  | 'primary_key'
+  | 'column'
+  | 'index'
+  | 'constraint'
+  | 'consistency'
+  | 'distribution'
+  | 'design'
+
+export interface LintRuleRef {
+  id: string
+  params?: Record<string, unknown>
+  databases?: string[]
+}
+
+export interface LintClause {
+  id: string
+  section: LintSection
+  text: string
+  enabled: boolean
+  severity: LintSeverity
+  manual_note?: string | null
+  rules?: LintRuleRef[]
+}
+
+export interface LintRuleset {
+  id: string
+  name: string
+  builtin: boolean
+  clauses: LintClause[]
+}
+
+export interface LintRulesetSummary {
+  id: string
+  name: string
+  builtin: boolean
+  modified: boolean
+  clause_count: number
+}
+
+export interface LintParamInfo {
+  key: string
+  kind: 'number' | 'text' | 'list' | 'choice'
+  default: unknown
+  choices?: string[]
+}
+
+export interface LintRuleInfo {
+  id: string
+  params: LintParamInfo[]
+}
+
+export interface LintIssue {
+  object: string
+  table?: string | null
+  message: string
+  suggestion?: string | null
+}
+
+export interface LintReview {
+  verdict: LintVerdict
+  note: string
+}
+
+export interface LintClauseResult {
+  clause: string
+  verdict: LintVerdict
+  reason?: string | null
+  issues: LintIssue[]
+  review?: LintReview | null
+}
+
+export interface LintClauseMeta {
+  id: string
+  section: LintSection
+  text: string
+  severity: LintSeverity
+}
+
+export interface LintRun {
+  id: string
+  created_at: number
+  target: string
+  ruleset_id: string
+  ruleset_name: string
+  family: string
+  clauses: LintClauseMeta[]
+  results: LintClauseResult[]
+}
+
+export interface LintRunSummary {
+  id: string
+  created_at: number
+  target: string
+  ruleset_name: string
+}
+
+/** 检查对象：模型或连接的一个 schema。 */
+export type LintSource =
+  | { kind: 'model'; model: string; schema: string }
+  | { kind: 'database'; profile: string; catalog?: string | null; schema: string }
+
+export interface LintRequest {
+  ruleset: string
+  source: LintSource
 }
 
 /** 表设计器（M3）：与后端结构模型一致的完整表结构。 */
@@ -1312,6 +1426,31 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
         .task,
     /** 桌面版：把同步脚本写到"另存为"选的 .sql 文件。 */
     saveScript: (path: string, text: string) => request<null>('POST', '/compare/script', { path, text }),
+    // 设计规范检查（M7a）
+    lintRulesets: () => request<LintRulesetSummary[]>('GET', '/lint/rulesets'),
+    lintRuleset: (id: string) => request<LintRuleset>('GET', `/lint/rulesets/${encodeURIComponent(id)}`),
+    createLintRuleset: async (set: LintRuleset) =>
+      (await request<{ id: string }>('POST', '/lint/rulesets', set)).id,
+    updateLintRuleset: (id: string, set: LintRuleset) =>
+      request<null>('PUT', `/lint/rulesets/${encodeURIComponent(id)}`, set),
+    deleteLintRuleset: (id: string) => request<null>('DELETE', `/lint/rulesets/${encodeURIComponent(id)}`),
+    resetLintRuleset: (id: string) => request<LintRuleset>('POST', `/lint/rulesets/${encodeURIComponent(id)}/reset`),
+    importLintRuleset: async (yaml: string) =>
+      (await request<{ id: string }>('POST', '/lint/rulesets/import', { yaml })).id,
+    lintRulesetExportUrl: (id: string) =>
+      `/api/lint/rulesets/${encodeURIComponent(id)}/export?token=${encodeURIComponent(token)}`,
+    lintRules: () => request<LintRuleInfo[]>('GET', '/lint/rules'),
+    lintRuns: () => request<LintRunSummary[]>('GET', '/lint/runs'),
+    /** 发起检查，返回任务 id。 */
+    startLint: async (req: LintRequest) => (await request<{ id: string }>('POST', '/lint/runs', req)).id,
+    lintRun: (id: string) => request<LintRun>('GET', `/lint/runs/${encodeURIComponent(id)}`),
+    deleteLintRun: (id: string) => request<null>('DELETE', `/lint/runs/${encodeURIComponent(id)}`),
+    /** 填写人工结论，返回更新后的记录。 */
+    reviewLintClause: (run: string, clause: string, input: LintReview) =>
+      request<LintRun>('PUT', `/lint/runs/${encodeURIComponent(run)}/clauses/${encodeURIComponent(clause)}`, input),
+    /** 报告下载地址。 */
+    lintReportUrl: (run: string, format: string, reviewer?: string) =>
+      `/api/lint/runs/${encodeURIComponent(run)}/report${q({ format, reviewer, token })}`,
     openSession: (profileId: string) => request<SessionInfo>('POST', '/sessions', { profile_id: profileId }),
     session: (id: number) => request<SessionInfo>('GET', `/sessions/${id}`),
     /** 关闭会话；有未提交的修改时按 commit 提交或回滚。 */

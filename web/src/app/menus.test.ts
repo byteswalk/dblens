@@ -23,6 +23,7 @@ describe('标题栏菜单', () => {
       'open-model',
       'new-model',
       'compare',
+      'lint',
       '-',
       'settings',
       '-',
@@ -35,7 +36,7 @@ describe('标题栏菜单', () => {
   it('浏览器模式没有窗口菜单和退出，帮助只有关于', () => {
     const m = buildMenus({ ...base, desktop: false })
     expect(m.map((g) => g.label)).toEqual(['文件', '查看', 'SQL', '帮助'])
-    expect(keys(m[0].items)).toEqual(['new-connection', 'new-query', 'close-tab', '-', 'global-search', 'new-table', 'import', 'sql-file', '-', 'open-model', 'new-model', 'compare', '-', 'settings'])
+    expect(keys(m[0].items)).toEqual(['new-connection', 'new-query', 'close-tab', '-', 'global-search', 'new-table', 'import', 'sql-file', '-', 'open-model', 'new-model', 'compare', 'lint', '-', 'settings'])
     expect(keys(m[3].items)).toEqual(['help:about'])
   })
 

@@ -77,7 +77,8 @@
       "globalSearch": "全库查找…",
       "openModel": "打开模型…",
       "newModel": "新建模型…",
-      "compare": "结构比对…"
+      "compare": "结构比对…",
+      "lint": "规范检查"
     },
     "view": {
       "title": "查看",

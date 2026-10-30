@@ -18,6 +18,7 @@ import FavoriteDialog from '../features/favorites/FavoriteDialog'
 import FavoritesPanel from '../features/favorites/FavoritesPanel'
 import HistoryPanel from '../features/history/HistoryPanel'
 import ExportDocDialog from '../features/document/ExportDocDialog'
+import { LintStartDialog } from '../features/lint/LintStartDialog'
 import ModelDialogs from '../features/model/ModelDialogs'
 import SearchDialog from '../features/tree/SearchDialog'
 import ModelsPanel from '../features/model/ModelsPanel'
@@ -170,6 +171,7 @@ export default function Shell() {
       <SqlFileDialog />
       <ModelDialogs />
       <ExportDocDialog />
+      <LintStartDialog />
     </div>
   )
 }

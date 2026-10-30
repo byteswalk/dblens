@@ -59,7 +59,8 @@
     "exportData": "Export Data…",
     "newTable": "New table",
     "exportDoc": "Export Document…",
-    "migrate": "Migrate To…"
+    "migrate": "Migrate To…",
+    "lint": "Design lint"
   },
   "duplicate": {
     "name": "{{name}} copy",

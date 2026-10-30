@@ -78,7 +78,8 @@
       "globalSearch": "Search database…",
       "openModel": "Open Model…",
       "newModel": "New Model…",
-      "compare": "Compare Schemas…"
+      "compare": "Compare Schemas…",
+      "lint": "Design lint"
     },
     "view": {
       "title": "View",

@@ -18,7 +18,8 @@
     "reload": "Reload",
     "reveal": "Show in File Manager",
     "close": "Close Model",
-    "exportDoc": "Export Document…"
+    "exportDoc": "Export Document…",
+    "lint": "Design lint"
   },
   "rename": {
     "title": "Rename table {{name}} to"

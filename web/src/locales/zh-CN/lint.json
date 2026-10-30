@@ -1,0 +1,81 @@
+{
+  "builtin": "内置",
+  "custom": "自定义",
+  "start": {
+    "title": "规范检查",
+    "target": "检查对象",
+    "pick": "选择规范",
+    "run": "开始检查"
+  },
+  "task": {
+    "running": "检查中（{{read}}/{{total}}）",
+    "cancel": "取消",
+    "failed": "检查失败：{{title}}"
+  },
+  "run": {
+    "title": "检查 · {{target}}",
+    "missing": "检查记录不存在",
+    "report": "导出报告",
+    "issue_count": "{{count}} 个问题",
+    "save_review": "保存",
+    "review_note": "说明（可选）"
+  },
+  "report": {
+    "reviewer": "检查人",
+    "pass_rate": "通过率",
+    "issues": "问题",
+    "clause": "条款",
+    "verdict": "结论",
+    "reason": "说明",
+    "object_col": "对象",
+    "message": "问题",
+    "suggestion": "建议"
+  },
+  "verdict": {
+    "pass": "通过",
+    "fail": "未通过",
+    "unknown": "无法判断",
+    "manual": "待人工确认",
+    "not_applicable": "不涉及"
+  },
+  "severity": {
+    "error": "错误",
+    "warning": "警告",
+    "info": "提示"
+  },
+  "section": {
+    "naming": "命名",
+    "table": "表",
+    "primary_key": "主键",
+    "column": "字段",
+    "index": "索引",
+    "constraint": "约束",
+    "consistency": "一致性",
+    "distribution": "分布式",
+    "design": "设计"
+  },
+  "lib": {
+    "title": "规范库",
+    "new": "新建",
+    "new_name": "新规范",
+    "import": "导入",
+    "imported": "已导入",
+    "modified": "已改",
+    "empty": "选择一份规范查看",
+    "saved": "已保存",
+    "save": "保存",
+    "copy": "复制",
+    "copy_name": "{{name}} 副本",
+    "export": "导出",
+    "reset": "恢复默认",
+    "reset_confirm": "恢复为内置默认值，丢弃改动？",
+    "delete": "删除",
+    "delete_confirm": "删除这份规范？",
+    "add_clause": "加人工条款",
+    "clause": "条款",
+    "severity": "级别",
+    "rules": "规则",
+    "manual": "人工",
+    "unknown_rule": "未知规则"
+  }
+}

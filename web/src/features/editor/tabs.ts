@@ -62,6 +62,16 @@ export interface QueryTab {
   er?: ErTarget
   /** 有值时是迁移标签。 */
   migrate?: MigrationPlan
+  /** 有值时是规范检查标签：规范库或某次检查的结果。 */
+  lint?: LintTab
+}
+
+/** 规范检查标签：规范库，或某次检查的结果。 */
+export type LintTab = { view: 'library' } | { view: 'run'; run: string }
+
+function isLintTab(v: unknown): v is LintTab {
+  const l = v as LintTab | null
+  return l?.view === 'library' || (l?.view === 'run' && typeof (l as { run?: unknown }).run === 'string')
 }
 
 const TARGET_KINDS: readonly unknown[] = ['table', 'view', 'materialized_view'] satisfies TargetKind[]
@@ -143,7 +153,8 @@ export function parseTabs(raw: string | undefined): Persisted {
         (t.design === undefined || isDesignTarget(t.design)) &&
         (t.compare === undefined || isCompareTarget(t.compare)) &&
         (t.er === undefined || isErTarget(t.er)) &&
-        (t.migrate === undefined || isMigratePlan(t.migrate)),
+        (t.migrate === undefined || isMigratePlan(t.migrate)) &&
+        (t.lint === undefined || isLintTab(t.lint)),
     )
     // 迁移标签的方案补上后来加的项（M5b 的模式、数据选项），格式不对的丢掉
     for (const t of tabs) {
@@ -179,6 +190,10 @@ interface TabsState extends Persisted {
   openMigrate(plan: MigrationPlan): string
   /** 修改迁移标签的方案。 */
   setMigrate(id: string, plan: MigrationPlan): void
+  /** 打开规范库标签：已打开时切换过去。返回标签的 id。 */
+  openLintLibrary(title: string): string
+  /** 打开某次检查的结果标签：已打开时切换过去。返回标签的 id。 */
+  openLintRun(run: string, title: string): string
   /** 修改数据标签的过滤条件和排序。 */
   setData(id: string, patch: Pick<DataTarget, 'filter' | 'order'>): void
   close(id: string): void
@@ -270,6 +285,28 @@ export const useTabs = create<TabsState>()((set, get) => ({
   },
   setMigrate: (id, plan) =>
     set({ tabs: get().tabs.map((x) => (x.id === id && x.migrate ? { ...x, migrate: plan } : x)) }),
+  openLintLibrary: (title) => {
+    const { tabs } = get()
+    const same = tabs.find((x) => x.lint?.view === 'library')
+    if (same) {
+      set({ active: same.id })
+      return same.id
+    }
+    const tab: QueryTab = { id: newId(), title, profileId: '', sql: '', lint: { view: 'library' } }
+    set({ tabs: [...tabs, tab], active: tab.id })
+    return tab.id
+  },
+  openLintRun: (run, title) => {
+    const { tabs } = get()
+    const same = tabs.find((x) => x.lint?.view === 'run' && x.lint.run === run)
+    if (same) {
+      set({ active: same.id })
+      return same.id
+    }
+    const tab: QueryTab = { id: newId(), title, profileId: '', sql: '', lint: { view: 'run', run } }
+    set({ tabs: [...tabs, tab], active: tab.id })
+    return tab.id
+  },
   setData: (id, patch) =>
     set({ tabs: get().tabs.map((x) => (x.id === id && x.data ? { ...x, data: { ...x.data, ...patch } } : x)) }),
   close: (id) => {

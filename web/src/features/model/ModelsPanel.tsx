@@ -14,6 +14,7 @@ import { ApiError, DEFAULT_DIAGRAM, type ModelSummary, type ModelTableEntry } fr
 import { desktop } from '../../shared/shell'
 import { useTabs } from '../editor/tabs'
 import { useDocExport } from '../document/dialog'
+import { useLintStart } from '../lint/dialog'
 import { useModelDialogs } from './dialogs'
 
 type NodeRef =
@@ -115,6 +116,7 @@ function ModelTree({ model, onMenu }: { model: ModelSummary; onMenu(n: NodeRef, 
         { key: 'er-open', label: t('er.menu.openDefault') },
         { key: 'er-new', label: t('er.menu.newDiagram'), disabled: ro },
         { key: 'export-doc', label: t('model.menu.exportDoc') },
+        { key: 'lint', label: t('model.menu.lint') },
       ]
     }
     return [
@@ -237,6 +239,9 @@ export default function ModelsPanel() {
           schemas: m.info.schemas,
           schema: n.type === 'schema' ? n.schema : undefined,
         })
+      }
+      else if (key === 'lint' && n.type === 'schema') {
+        useLintStart.getState().open({ kind: 'model', model: m.id, schema: n.schema })
       }
       else if (key === 'close') {
         await api.closeModel(m.id)

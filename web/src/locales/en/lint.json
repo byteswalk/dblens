@@ -1,0 +1,81 @@
+{
+  "builtin": "Built-in",
+  "custom": "Custom",
+  "start": {
+    "title": "Design lint",
+    "target": "Target",
+    "pick": "Choose a ruleset",
+    "run": "Run check"
+  },
+  "task": {
+    "running": "Checking ({{read}}/{{total}})",
+    "cancel": "Cancel",
+    "failed": "Check failed: {{title}}"
+  },
+  "run": {
+    "title": "Lint · {{target}}",
+    "missing": "Lint run not found",
+    "report": "Export report",
+    "issue_count": "{{count}} issues",
+    "save_review": "Save",
+    "review_note": "Note (optional)"
+  },
+  "report": {
+    "reviewer": "Reviewer",
+    "pass_rate": "Pass rate",
+    "issues": "Issues",
+    "clause": "Clause",
+    "verdict": "Verdict",
+    "reason": "Note",
+    "object_col": "Object",
+    "message": "Problem",
+    "suggestion": "Suggestion"
+  },
+  "verdict": {
+    "pass": "Pass",
+    "fail": "Fail",
+    "unknown": "Undetermined",
+    "manual": "Needs review",
+    "not_applicable": "N/A"
+  },
+  "severity": {
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "section": {
+    "naming": "Naming",
+    "table": "Table",
+    "primary_key": "Primary key",
+    "column": "Column",
+    "index": "Index",
+    "constraint": "Constraint",
+    "consistency": "Consistency",
+    "distribution": "Distribution",
+    "design": "Design"
+  },
+  "lib": {
+    "title": "Ruleset library",
+    "new": "New",
+    "new_name": "New ruleset",
+    "import": "Import",
+    "imported": "Imported",
+    "modified": "Modified",
+    "empty": "Select a ruleset to view",
+    "saved": "Saved",
+    "save": "Save",
+    "copy": "Copy",
+    "copy_name": "{{name}} copy",
+    "export": "Export",
+    "reset": "Reset",
+    "reset_confirm": "Reset to the built-in defaults and discard changes?",
+    "delete": "Delete",
+    "delete_confirm": "Delete this ruleset?",
+    "add_clause": "Add clause",
+    "clause": "Clause",
+    "severity": "Severity",
+    "rules": "Rules",
+    "manual": "Manual",
+    "unknown_rule": "Unknown rule"
+  }
+}

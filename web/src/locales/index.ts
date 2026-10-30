@@ -6,6 +6,7 @@ import enCommon from './en/common.json'
 import enConnections from './en/connections.json'
 import enDesign from './en/design.json'
 import enDocument from './en/document.json'
+import enLint from './en/lint.json'
 import enMigrate from './en/migrate.json'
 import enEditor from './en/editor.json'
 import enImport from './en/import.json'
@@ -18,6 +19,7 @@ import zhCommon from './zh-CN/common.json'
 import zhConnections from './zh-CN/connections.json'
 import zhDesign from './zh-CN/design.json'
 import zhDocument from './zh-CN/document.json'
+import zhLint from './zh-CN/lint.json'
 import zhMigrate from './zh-CN/migrate.json'
 import zhEditor from './zh-CN/editor.json'
 import zhImport from './zh-CN/import.json'
@@ -39,6 +41,7 @@ export const zhCN = {
   er: zhEr,
   document: zhDocument,
   migrate: zhMigrate,
+  lint: zhLint,
 }
 
 export const en = {
@@ -54,4 +57,5 @@ export const en = {
   er: enEr,
   document: enDocument,
   migrate: enMigrate,
+  lint: enLint,
 }
