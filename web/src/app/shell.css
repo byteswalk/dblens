@@ -1159,17 +1159,20 @@ body {
   opacity: 0;
   pointer-events: none;
 }
-.er-edge.logical path {
+/* 连线用次要文字色，深浅主题下都看得清 */
+.er-edge .react-flow__edge-path {
+  stroke: var(--text-2);
+  stroke-width: 1.5;
+}
+.er-edge.logical .react-flow__edge-path {
   stroke-dasharray: 6 4;
 }
-.er-edge.inferred path {
-  stroke-dasharray: 3 4;
-  opacity: 0.75;
+.er-edge.inferred .react-flow__edge-path {
+  stroke-dasharray: 4 3;
 }
-.er-edge.on path {
+.er-edge.on .react-flow__edge-path {
   stroke: var(--accent);
-  stroke-width: 2;
-  opacity: 1;
+  stroke-width: 2.5;
 }
 .er-topics {
   position: absolute;

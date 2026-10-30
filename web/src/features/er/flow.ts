@@ -80,7 +80,7 @@ export function flowEdges(
       type: 'er',
       label: e.count > 1 ? columns(e.count) : undefined,
       className,
-      markerEnd: { type: MarkerType.ArrowClosed },
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--text-2)' },
       data: {
         title: `${cardLabel ? `${cardLabel(e)}  ` : ''}${e.inferred ? `${inferredLabel} ` : ''}${e.title}`,
         cards: cardLabel ? [e.sourceCard, e.targetCard] : undefined,
