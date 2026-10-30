@@ -86,10 +86,10 @@ pub async fn client_log(Json(b): Json<ClientLog>) -> StatusCode {
     let cut = |s: Option<String>| s.unwrap_or_default().chars().take(MAX_CHARS).collect::<String>();
     tracing::error!(
         kind = %b.kind,
+        message = %cut(Some(b.message)),
         stack = %cut(b.stack),
         component_stack = %cut(b.component_stack),
-        "前端错误：{}",
-        b.message.chars().take(MAX_CHARS).collect::<String>()
+        "client error"
     );
     StatusCode::NO_CONTENT
 }
