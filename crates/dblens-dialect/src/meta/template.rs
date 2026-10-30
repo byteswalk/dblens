@@ -79,7 +79,7 @@ fn override_file(variant: Variant) -> Option<&'static str> {
         Variant::TiDb => Some(TIDB),
         Variant::OceanBase => Some(OCEANBASE),
         Variant::Kingbase => Some(KINGBASE),
-        Variant::OpenGauss => Some(OPENGAUSS),
+        Variant::OpenGauss | Variant::GaussDb => Some(OPENGAUSS),
         _ => None,
     }
 }

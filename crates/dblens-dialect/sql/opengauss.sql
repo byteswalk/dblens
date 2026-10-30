@@ -69,7 +69,8 @@ WHERE n.nspname = {{ bind("schema") }}
 ORDER BY c.relname
 
 -- [columns]
--- No identity columns (serial only); a generated column has pg_attrdef.adgencol = 's'.
+-- openGauss has serial only; GaussDB also has identity columns, whose sequence is named <table>_<column>_identity and
+-- has no 'a' dependency. A generated column has pg_attrdef.adgencol = 's'.
 SELECT c.relname AS table_name,
        a.attname AS name,
        (ROW_NUMBER() OVER (PARTITION BY c.oid ORDER BY a.attnum))::int AS ordinal,
@@ -78,10 +79,11 @@ SELECT c.relname AS table_name,
        CASE WHEN d.adgencol = 's' THEN NULL ELSE pg_catalog.pg_get_expr(d.adbin, d.adrelid) END AS default_value,
        pg_catalog.col_description(c.oid, a.attnum) AS comment,
        ((d.adbin IS NOT NULL AND pg_catalog.pg_get_expr(d.adbin, d.adrelid) LIKE 'nextval(%'
-            AND EXISTS (SELECT 1 FROM pg_catalog.pg_depend dp
-                        WHERE dp.refclassid = 'pg_catalog.pg_class'::regclass AND dp.refobjid = c.oid
-                          AND dp.refobjsubid = a.attnum AND dp.deptype = 'a'
-                          AND dp.classid = 'pg_catalog.pg_class'::regclass))) AS auto_increment,
+            AND (pg_catalog.pg_get_expr(d.adbin, d.adrelid) LIKE '%!_identity''::regclass)' ESCAPE '!'
+                 OR EXISTS (SELECT 1 FROM pg_catalog.pg_depend dp
+                            WHERE dp.refclassid = 'pg_catalog.pg_class'::regclass AND dp.refobjid = c.oid
+                              AND dp.refobjsubid = a.attnum AND dp.deptype = 'a'
+                              AND dp.classid = 'pg_catalog.pg_class'::regclass)))) AS auto_increment,
        CASE WHEN d.adgencol = 's' THEN pg_catalog.pg_get_expr(d.adbin, d.adrelid) END AS generated
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace

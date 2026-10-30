@@ -643,8 +643,15 @@ async fn oceanbase_metadata() {
 #[tokio::test]
 async fn opengauss_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_OPENGAUSS_URL").await else { return };
-    assert_eq!((live.d.variant(), live.d.oracle_mode()), (Variant::OpenGauss, false));
-    live.run_script(include_str!("fixtures/opengauss.sql")).await;
+    // 这个目标也可以指向 GaussDB：两者用同一份查询
+    assert!(matches!(live.d.variant(), Variant::OpenGauss | Variant::GaussDb), "{:?}", live.d.variant());
+    assert!(!live.d.oracle_mode());
+    let script = include_str!("fixtures/opengauss.sql");
+    if live.d.variant() == Variant::GaussDb {
+        live.run_script(&script.replace("EXECUTE FUNCTION", "EXECUTE PROCEDURE")).await;
+    } else {
+        live.run_script(script).await;
+    }
     check_pg_family(&mut live, PgFx { sequence_cache: false, ..PgFx::FULL }).await;
 }
 

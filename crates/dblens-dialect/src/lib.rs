@@ -189,6 +189,20 @@ impl Dialect {
         meta::sections(self.variant).contains_key(key.as_str())
     }
 
+    /// PG 系取列的自增序列的表达式。GaussDB 的 IDENTITY 列 `pg_get_serial_sequence` 取不到（返回 NULL），
+    /// 要从 pg_depend 找（依赖类型 i）。
+    pub fn serial_sequence_expr(&self, table: &str, column: &str) -> Result<String> {
+        let (t, c) =
+            (self.literal(&Value::String(table.into()))?, self.literal(&Value::String(column.into()))?);
+        let serial = format!("pg_catalog.pg_get_serial_sequence({t}, {c})");
+        if self.variant != Variant::GaussDb {
+            return Ok(serial);
+        }
+        Ok(format!(
+            "COALESCE({serial}, (SELECT pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(s.relname)              FROM pg_catalog.pg_depend d              JOIN pg_catalog.pg_class s ON s.oid = d.objid              JOIN pg_catalog.pg_namespace n ON n.oid = s.relnamespace              JOIN pg_catalog.pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid              WHERE d.refobjid = {t}::regclass AND a.attname = {c} AND d.deptype = 'i' AND s.relkind IN ('S', 'L')              LIMIT 1))"
+        ))
+    }
+
     /// 生成元数据查询；该方言没有这种查询时返回 None。
     pub fn meta_query(&self, key: MetaKey, args: &MetaArgs) -> Result<Option<MetaQuery>> {
         match meta::sections(self.variant).get(key.as_str()) {
@@ -358,6 +372,14 @@ mod tests {
         assert_eq!(pg_version_num(90204), Some(90204));
         assert!(Dialect::new(Variant::Kingbase).has_meta(MetaKey::VariantProbe));
         assert!(Dialect::new(Variant::OpenGauss).has_meta(MetaKey::VariantProbe));
+    }
+
+    #[test]
+    fn gaussdb_finds_identity_sequences_in_pg_depend() {
+        let pg = Dialect::new(Variant::Postgres).serial_sequence_expr("s.t", "id").unwrap();
+        assert_eq!(pg, "pg_catalog.pg_get_serial_sequence('s.t', 'id')");
+        let gauss = Dialect::new(Variant::GaussDb).serial_sequence_expr("s.t", "id").unwrap();
+        assert!(gauss.starts_with("COALESCE(") && gauss.contains("d.deptype = 'i'"), "{gauss}");
     }
 
     #[test]

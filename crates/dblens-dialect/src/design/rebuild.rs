@@ -283,9 +283,8 @@ impl Dialect {
         for c in draft.columns.iter().filter(|c| c.auto_increment && old_of(&c.name).is_some()) {
             match self.family() {
                 Family::Postgres => sql(format!(
-                    "SELECT pg_catalog.setval(pg_catalog.pg_get_serial_sequence({}, {}), COALESCE(MAX({col}), 0) + 1, false) FROM {q}",
-                    self.literal(&Value::String(q.clone()))?,
-                    self.literal(&Value::String(c.name.clone()))?,
+                    "SELECT pg_catalog.setval({}, COALESCE(MAX({col}), 0) + 1, false) FROM {q}",
+                    self.serial_sequence_expr(&q, &c.name)?,
                     col = self.ident(&c.name)
                 )),
                 Family::Oracle => sql(format!(
