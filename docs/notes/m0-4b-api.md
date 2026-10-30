@@ -104,6 +104,9 @@
 | GET | `/profiles/{id}/ops` | 运维查询（M1c3）：`[{key, name, category, sql}]`，`name` 按请求的语言，`category` 为 `session` / `lock` / `storage` / `sql`。按连接上次识别出的变体选模板，没连接过时按驱动；不连接数据库 |
 
 - SQL Server（M6a）：上面的元数据接口都可加 `catalog=库名`，在该库中查询（元数据连接按库区分）；不给时用连接的默认库。
+- SQL Server（M6b）：写入类功能的请求同样可带库名（其他库不填，行为不变）：表设计器的读原表（`?catalog=`）、预览和执行（请求体的 `catalog`）；
+  导入请求和建表语句预览的 `catalog`；比对的数据库一侧 `{kind: "database", profile, catalog?, schema}`；迁移方案两端 `{profile, catalog?, schema}`；
+  反向生成模型的 `catalog`（所选 schema 都在这个库中）；文档导出的数据库来源 `{kind: "database", profile, catalog?, schema}`。
 
 ### 会话
 
