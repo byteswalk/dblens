@@ -22,8 +22,10 @@
 
 ## 发布步骤
 
-1. 确认私钥和密码的备份能读出（`m0-4d-release.md`）。
-2. 配置 Secrets：`TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
-3. 确认 `main` 的 CI 通过。
-4. 打标签 `v0.1.0` 并推送，等 `release` 工作流生成草稿 Release。
-5. 检查安装包和 `latest.json`，再点 Publish。
+流程见 `m0-4d-release.md`，全部在本机完成，不使用 GitHub Actions。v0.1.0 先发 Windows。
+
+1. 确认私钥和密码的备份能读出。
+2. 跑完本地检查和实库测试。
+3. 设置签名环境变量后打包，写 `latest.json`。
+4. 打标签 `v0.1.0` 并推送，建草稿 Release，上传安装包和 `latest.json`。
+5. 检查后点 Publish。

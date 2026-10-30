@@ -20,7 +20,7 @@
 更新包用 Tauri updater 自带的密钥对签名（minisign），与代码签名证书无关，免费。
 
 - 公钥写在 `crates/dblens-desktop/tauri.conf.json` 的 `plugins.updater.pubkey`，随程序发布。
-- 私钥只在发布时由 CI 使用。
+- 私钥只在本机打包时使用。
 
 **私钥丢失或密码遗忘的后果**：已经发出去的版本再也收不到自动更新，只能让用户手动下载安装新版本（新版本换用新密钥）。所以私钥和密码必须离线备份。
 
@@ -44,34 +44,45 @@ pnpm --dir web tauri signer generate -w "<私钥保存路径>"
 - 密码：存进密码管理器，不要和私钥文件放在同一个地方。
 - 每次大版本发布前，确认备份能读出来。
 
-### 配置到 GitHub
-
-仓库 `byteswalk/dblens` → Settings → Secrets and variables → Actions，新建两个 secret：
-
-- `TAURI_SIGNING_PRIVATE_KEY`：私钥文件的全部内容；
-- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码。
-
 ## 发布流程
+
+不使用 GitHub Actions：在本机检查、打包，再上传到 GitHub。这台 Windows 机器只能打 Windows 的包，其他平台要在对应系统上打。
 
 1. 改版本号：
    - 根 `Cargo.toml` 的 `[workspace.package] version`，桌面程序和 `dblens-server` 都用它；
    - `web/package.json` 的 `version` 保持一致。
-2. 写发布说明 `docs/releases/v<版本>.md`。
-   - CI 会把它写进 Release 正文和 `latest.json` 的 `notes`，客户端提示更新时会显示；
-   - 写给用户看，简短列出变化。
-3. 提交后打标签并推送：
+2. 写发布说明 `docs/releases/v<版本>.md`，写给用户看，简短列出变化。客户端提示更新时会显示。
+3. 本地检查：`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`，
+   `web/` 下的 `pnpm typecheck`、`pnpm test`，以及实库测试。
+4. 打包：设置 `TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 后执行 `pnpm package`（见下面的"本地打包"），
+   得到安装包和同名的 `.sig`。
+5. 写 `latest.json`，`notes` 用发布说明的内容，`signature` 是 `.sig` 文件的内容：
+
+   ```json
+   {
+     "version": "<版本>",
+     "notes": "…",
+     "pub_date": "2026-10-30T00:00:00Z",
+     "platforms": {
+       "windows-x86_64": {
+         "signature": "…",
+         "url": "https://github.com/byteswalk/dblens/releases/download/v<版本>/DBLens_<版本>_x64-setup.exe"
+       }
+     }
+   }
+   ```
+
+6. 提交后打标签并推送，再建**草稿** Release，上传安装包和 `latest.json`：
 
    ```bash
    git tag v<版本>
    git push origin v<版本>
+   gh release create v<版本> --draft --title "DBLens v<版本>" --notes-file docs/releases/v<版本>.md <安装包> <latest.json>
    ```
 
-4. `release` 工作流（`.github/workflows/release.yml`）：
-   - 先检查标签与版本号一致、发布说明存在；
-   - 再构建各平台安装包和 `dblens-server`，生成**草稿** Release，附带 `latest.json` 和每个更新包的 `.sig` 签名。
-5. 在 GitHub 上检查草稿：安装包齐全，`latest.json` 中有各平台的地址和签名。然后点 Publish。
+7. 在 GitHub 上检查草稿：安装包齐全，`latest.json` 中有各平台的地址和签名。然后点 Publish。
    - **发布之前客户端看不到新版本**：更新源 `…/releases/latest/download/latest.json` 只指向已发布的最新 Release。
-6. 验证：用上一版本的程序点"帮助 → 检查更新…"，应提示新版本。
+8. 验证：用上一版本的程序点"帮助 → 检查更新…"，应提示新版本。
 
 ## 更新源
 
