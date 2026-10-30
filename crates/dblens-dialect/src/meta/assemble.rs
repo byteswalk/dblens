@@ -10,7 +10,7 @@ use dblens_core::{ColumnType, Result};
 use serde::{Deserialize, Serialize};
 
 use super::{MetaKey, MetaRow, MetaRows};
-use crate::Dialect;
+use crate::{Dialect, Family};
 
 /// 对象树里的 schema 节点。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,12 +71,20 @@ fn runs<'a>(rows: &[MetaRow<'a>], column: &str) -> Vec<Vec<MetaRow<'a>>> {
 }
 
 fn column(d: &Dialect, r: &MetaRow) -> Column {
-    let native = r.name("type_text").trim().to_string();
+    // Informix 的类型是编码后的数字，见 `coltype`
+    let decoded = (d.family() == Family::Informix).then(|| {
+        let (coltype, len) = (r.int("coltype").unwrap_or(0), r.int("collength").unwrap_or(0));
+        super::coltype::decode(coltype, len, r.text("extended_type").as_deref())
+    });
+    let native = match &decoded {
+        Some(c) => c.type_name.clone(),
+        None => r.name("type_text").trim().to_string(),
+    };
     Column {
         name: r.name("name"),
         ordinal: r.int("ordinal").and_then(|v| u32::try_from(v).ok()).unwrap_or(0),
         data_type: ColumnType { logical: d.logical_type(&native), native },
-        nullable: r.flag("nullable"),
+        nullable: decoded.as_ref().map_or_else(|| r.flag("nullable"), |c| c.nullable),
         default: r.text("default_value"),
         comment: r.text("comment"),
         auto_increment: r.flag("auto_increment"),
@@ -159,13 +167,23 @@ pub fn tables(d: &Dialect, rows: &TableRows) -> Result<Vec<Table>> {
                     _ => {}
                 }
             }
-            table.checks = checks
-                .get(&name)
-                .unwrap_or(&none)
-                .iter()
-                .map(|r| CheckConstraint {
-                    name: r.text("constraint_name"),
-                    expression: r.text("expression").unwrap_or_default(),
+            let check_rows = checks.get(&name).unwrap_or(&none);
+            // Informix 的检查约束文本按块存放，一块一行
+            let check_runs = if d.family() == Family::Informix {
+                runs(check_rows, "constraint_name")
+            } else {
+                check_rows.iter().map(|r| vec![*r]).collect()
+            };
+            table.checks = check_runs
+                .into_iter()
+                .map(|run| CheckConstraint {
+                    name: run[0].text("constraint_name"),
+                    expression: run
+                        .iter()
+                        .filter_map(|r| r.str("expression"))
+                        .collect::<String>()
+                        .trim()
+                        .to_string(),
                 })
                 .filter(|c| !is_not_null_check(&c.expression))
                 .collect();
@@ -311,7 +329,9 @@ pub fn source_text(key: MetaKey, rows: &MetaRows) -> Result<Option<String>> {
         }
         _ => {
             rows.require(key.as_str(), &["definition"])?;
-            Ok(rows.iter().next().and_then(|r| r.str("definition")))
+            // 一般只有一行；Informix 的视图文本按块存放，一块一行
+            let chunks: Vec<String> = rows.iter().filter_map(|r| r.str("definition")).collect();
+            Ok((!chunks.is_empty()).then(|| chunks.concat().trim_end().to_string()))
         }
     }
 }

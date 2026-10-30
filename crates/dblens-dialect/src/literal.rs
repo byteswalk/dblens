@@ -30,6 +30,16 @@ pub fn literal(family: Family, v: &Value) -> Result<String> {
         Value::DateTime(dt) if family == Family::SqlServer => {
             format!("CAST('{}' AS DATETIME2)", dt.format("%Y-%m-%dT%H:%M:%S%.f"))
         }
+        // 文本日期的解释受 DBDATE 影响，用 MDY 才不依赖环境
+        Value::Date(d) if family == Family::Informix => {
+            format!("MDY({}, {}, {})", d.format("%-m"), d.format("%-d"), d.format("%Y"))
+        }
+        Value::Time(t) if family == Family::Informix => {
+            format!("DATETIME({}) HOUR TO FRACTION(5)", t.format("%H:%M:%S%.5f"))
+        }
+        Value::DateTime(dt) if family == Family::Informix => {
+            format!("DATETIME({}) YEAR TO FRACTION(5)", dt.format("%Y-%m-%d %H:%M:%S%.5f"))
+        }
         Value::Date(d) => format!("DATE '{}'", d.format("%Y-%m-%d")),
         Value::Time(t) => {
             // Oracle 没有 TIME 类型，按 'HH24:MI:SS.FF6' 文本写出（与 types.rs 的存储约定一致，固定 6 位小数）
@@ -50,6 +60,10 @@ pub fn literal(family: Family, v: &Value) -> Result<String> {
             Family::SqlServer => {
                 format!("CAST('{}' AS DATETIMEOFFSET)", dt.format("%Y-%m-%dT%H:%M:%S%.f%:z"))
             }
+            // 没有带时区的类型，和 MySQL 一样写本地时间
+            Family::Informix => {
+                format!("DATETIME({}) YEAR TO FRACTION(5)", dt.naive_local().format("%Y-%m-%d %H:%M:%S%.5f"))
+            }
         },
         // 错误信息只报类型，不回显值本身（大字段或未知类型的文本可能很长或很敏感）
         Value::Lob(_) => return Err(Error::invalid(msg!("literal.lob"))),
@@ -64,7 +78,9 @@ fn float_literal(family: Family, f: f64) -> Result<String> {
         return match family {
             Family::Postgres => Ok("'NaN'::float8".to_string()),
             Family::Oracle => Ok("BINARY_DOUBLE_NAN".to_string()),
-            Family::MySql | Family::Dameng | Family::SqlServer => Err(Error::invalid(msg!("literal.nan"))),
+            Family::MySql | Family::Dameng | Family::SqlServer | Family::Informix => {
+                Err(Error::invalid(msg!("literal.nan")))
+            }
         };
     }
     if f.is_infinite() {
@@ -73,7 +89,7 @@ fn float_literal(family: Family, f: f64) -> Result<String> {
             (Family::Postgres, false) => Ok("'-Infinity'::float8".to_string()),
             (Family::Oracle, true) => Ok("BINARY_DOUBLE_INFINITY".to_string()),
             (Family::Oracle, false) => Ok("-BINARY_DOUBLE_INFINITY".to_string()),
-            (Family::MySql | Family::Dameng | Family::SqlServer, _) => {
+            (Family::MySql | Family::Dameng | Family::SqlServer | Family::Informix, _) => {
                 Err(Error::invalid(msg!("literal.infinity")))
             }
         };
@@ -129,7 +145,7 @@ fn string_literal(family: Family, s: &str) -> Result<String> {
         Family::MySql if s.contains('\\') || s.contains('\0') => {
             format!("_utf8mb4 X'{}'", hex_upper(s.as_bytes()))
         }
-        Family::MySql | Family::Dameng => quoted(s),
+        Family::MySql | Family::Dameng | Family::Informix => quoted(s),
         Family::Postgres if s.contains('\\') => {
             format!("E'{}'", s.replace('\\', "\\\\").replace('\'', "''"))
         }
@@ -195,6 +211,8 @@ fn bytes_literal(family: Family, b: &[u8]) -> Result<String> {
         Family::Dameng => format!("0x{hex}"),
         // SQL Server 的 0x 可以为空
         Family::SqlServer => format!("0x{hex}"),
+        // BYTE 和 BLOB 没有字面量写法，只能走绑定参数
+        Family::Informix => return Err(Error::invalid(msg!("literal.unsupported_type", ty = "BYTE"))),
     })
 }
 
@@ -212,6 +230,11 @@ pub fn paginate(family: Family, sql: &str, offset: u64, limit: u64) -> String {
         Family::MySql | Family::Postgres | Family::Dameng => {
             format!("{inner}\nLIMIT {limit} OFFSET {offset}")
         }
+        // SKIP、FIRST 紧跟在 SELECT 之后；不以 SELECT 开头的查询（WITH）不支持
+        Family::Informix => match inner.get(..6).filter(|h| h.eq_ignore_ascii_case("select")) {
+            Some(_) => format!("SELECT SKIP {offset} FIRST {limit}{}", &inner[6..]),
+            None => inner.to_string(),
+        },
     }
 }
 
@@ -222,6 +245,15 @@ mod tests {
 
     fn lit(f: Family, v: Value) -> String {
         literal(f, &v).unwrap()
+    }
+
+    #[test]
+    fn informix_literals() {
+        let f = Family::Informix;
+        assert_eq!(lit(f, Value::String("a'b".into())), "'a''b'");
+        assert_eq!(lit(f, Value::Date(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap())), "MDY(2, 29, 2024)");
+        assert_eq!(paginate(f, "SELECT * FROM t;", 5, 10), "SELECT SKIP 5 FIRST 10 * FROM t");
+        assert!(literal(f, &Value::Bytes(vec![1])).is_err());
     }
 
     #[test]

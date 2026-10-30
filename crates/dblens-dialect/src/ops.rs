@@ -26,6 +26,7 @@ const TIDB: &str = include_str!("../sql/ops/tidb.sql");
 const OCEANBASE: &str = include_str!("../sql/ops/oceanbase.sql");
 const OPENGAUSS: &str = include_str!("../sql/ops/opengauss.sql");
 const SQLSERVER: &str = include_str!("../sql/ops/sqlserver.sql");
+const INFORMIX: &str = include_str!("../sql/ops/informix.sql");
 
 /// 运维查询的分类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -117,6 +118,7 @@ fn base_file(family: Family) -> &'static str {
         Family::Oracle => ORACLE,
         Family::Dameng => DAMENG,
         Family::SqlServer => SQLSERVER,
+        Family::Informix => INFORMIX,
     }
 }
 
@@ -164,7 +166,9 @@ mod tests {
     fn every_variant_has_all_queries() {
         for &v in &crate::meta::template::ALL_VARIANTS {
             let qs = Dialect::new(v).ops_queries();
-            assert_eq!(qs.iter().map(|q| q.key.as_str()).collect::<Vec<_>>(), KEYS, "{v:?}");
+            // GBase 8s 没有慢 SQL 的来源
+            let keys = if v == Variant::Gbase8s { &KEYS[..5] } else { &KEYS[..] };
+            assert_eq!(qs.iter().map(|q| q.key.as_str()).collect::<Vec<_>>(), keys, "{v:?}");
             for q in qs {
                 assert!(!q.sql.is_empty() && !q.sql.contains("-- ["), "{v:?} {}", q.key);
                 if matches!(q.category, OpsCategory::Session | OpsCategory::Lock) {

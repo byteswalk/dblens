@@ -140,6 +140,7 @@ pub(super) fn identity_supported(tgt: &Dialect) -> bool {
 pub(super) fn fk_action_supported(tgt: &Dialect, what: &str, action: &str) -> bool {
     match tgt.family() {
         Family::Oracle | Family::Dameng => what == "DELETE" && (action == "CASCADE" || action == "SET NULL"),
+        Family::Informix => what == "DELETE" && action == "CASCADE",
         Family::MySql => action != "SET DEFAULT",
         Family::SqlServer => action != "RESTRICT",
         Family::Postgres => true,

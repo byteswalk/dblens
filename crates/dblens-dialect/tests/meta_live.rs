@@ -2,7 +2,8 @@
 //! DBLENS_TEST_MYSQL_URL、DBLENS_TEST_MARIADB_URL、DBLENS_TEST_PG_URL、DBLENS_TEST_ORACLE_URL、DBLENS_TEST_DM_URL；
 //! 国产库第一批：DBLENS_TEST_TIDB_URL、DBLENS_TEST_OCEANBASE_URL、DBLENS_TEST_OPENGAUSS_URL、
 //! DBLENS_TEST_OPENGAUSS_A_URL、DBLENS_TEST_KINGBASE_URL、DBLENS_TEST_KINGBASE_PG_URL；
-//! SQL Server：DBLENS_TEST_SQLSERVER_URL（库写测试库，如 `/dblens_test`；元数据查询在连接的当前库中执行）。
+//! SQL Server：DBLENS_TEST_SQLSERVER_URL（库写测试库，如 `/dblens_test`；元数据查询在连接的当前库中执行）；
+//! GBase 8s：DBLENS_TEST_GBASE_URL，另需 DBLENS_JAVA、DBLENS_BRIDGE_JAR。
 //!
 //! 每个家族先执行 `tests/fixtures/<家族>.sql` 建测试对象，再用全部元数据查询读回来逐项核对。
 //! 兼容库沿用所属家族的脚本，跳过不支持的段、替换写法不同的段（`run_script_with`）。
@@ -35,6 +36,7 @@ async fn connect(env: &str) -> Option<Live> {
         DriverId::Oracle => Box::new(dblens_driver_oracle::OracleDriver),
         DriverId::Dameng => Box::new(dblens_driver_dameng::DmDriver),
         DriverId::SqlServer => Box::new(dblens_driver_sqlserver::SqlServerDriver),
+        DriverId::Informix => Box::new(dblens_driver_jdbc::GbaseDriver),
     };
     let mut conn = driver.connect(&params).await.unwrap();
     let info = conn.server_info().await.unwrap();
@@ -729,5 +731,96 @@ async fn check_oracle_mode_objects(live: &mut Live) {
             text.starts_with(head) && has(&text, "RETURN integer") && text.trim_end().ends_with(';'),
             "{text}"
         );
+    }
+}
+
+#[tokio::test]
+async fn gbase8s_metadata() {
+    let Some(mut live) = connect("DBLENS_TEST_GBASE_URL").await else { return };
+    assert_eq!(live.d.variant(), Variant::Gbase8s);
+    live.run_script(include_str!("fixtures/gbase8s.sql")).await;
+    let s = "admin";
+
+    let catalogs = meta::schemas(&live.rows(MetaKey::Catalogs, &MetaArgs::default()).await).unwrap();
+    assert!(catalogs.iter().any(|c| c.name == "sysmaster" && c.is_system), "{catalogs:?}");
+    assert!(catalogs.iter().any(|c| c.name == "dblens_test" && !c.is_system), "{catalogs:?}");
+    let schemas = meta::schemas(&live.rows(MetaKey::Schemas, &MetaArgs::default()).await).unwrap();
+    assert!(schemas.iter().any(|x| x.name == s), "{schemas:?}");
+
+    let by_comment = MetaArgs { filter: Some("员工".into()), ..args(s) };
+    let hit = meta::objects(MetaKey::Tables, &live.rows(MetaKey::Tables, &by_comment).await).unwrap();
+    assert_eq!(hit.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(), ["dm_emp"]);
+
+    let all = live.tables(s, None).await;
+    let dept = table(&all, "dm_dept");
+    assert_eq!(dept.comment.as_deref(), Some("部门表"));
+    assert!(dept.columns[0].auto_increment && !dept.columns[0].nullable, "{:?}", dept.columns[0]);
+    assert_eq!(dept.primary_key.as_ref().unwrap().columns, ["id"]);
+    assert_eq!(dept.uniques[0].columns, ["name"]);
+
+    let emp = table(&all, "dm_emp");
+    let col = |n: &str| emp.columns.iter().find(|c| c.name == n).unwrap_or_else(|| panic!("没有列 {n}"));
+    let name = col("name");
+    assert!(!name.nullable && name.default.as_deref().unwrap().contains("无名"), "{name:?}");
+    assert_eq!(name.comment.as_deref(), Some("员工姓名"));
+    assert_eq!(name.data_type.native, "VARCHAR(100)");
+    assert_eq!(col("id").data_type.native, "BIGSERIAL");
+    assert!(col("id").auto_increment);
+    assert_eq!(col("salary").data_type.native, "DECIMAL(10,2)");
+    assert_eq!(col("active").data_type.logical, LogicalType::Bool);
+    assert_eq!(col("created").data_type.native, "DATETIME YEAR TO FRACTION(3)");
+    assert_eq!(col("clock").data_type.native, "DATETIME HOUR TO SECOND");
+    assert_eq!(col("bio").data_type.logical, LogicalType::Text);
+    assert_eq!(col("photo").data_type.logical, LogicalType::Blob);
+    let fk = emp.foreign_keys.iter().find(|f| f.ref_table == "dm_dept").unwrap();
+    assert_eq!((fk.columns.clone(), fk.on_delete.as_deref()), (vec!["dept_id".to_string()], Some("CASCADE")));
+    assert_eq!(fk.ref_schema.as_deref(), Some(s));
+    assert_eq!(fk.ref_columns, ["id"]);
+    let mgr = emp.foreign_keys.iter().find(|f| f.ref_table == "dm_emp").unwrap();
+    assert_eq!(mgr.on_delete.as_deref(), Some("NO ACTION"));
+    assert_eq!(emp.uniques[0].columns, ["dept_id", "name"]);
+    // 检查约束超过一块时要拼完整
+    assert!(emp.checks.iter().any(|c| has(&c.expression, "99999999")), "{:?}", emp.checks);
+    let idx = emp.indexes.iter().find(|i| i.name == "idx_dm_emp").unwrap();
+    assert_eq!(idx.columns.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["created", "name"]);
+    assert!(idx.columns[0].descending && !idx.columns[1].descending, "{idx:?}");
+    assert_eq!(emp.triggers[0].name, "dm_trg");
+    assert_eq!(emp.triggers[0].events, ["UPDATE"]);
+    let one = live.tables(s, Some("dm_emp")).await;
+    assert_eq!(&one[0], emp);
+
+    let d = live.d;
+    let columns = live.rows(MetaKey::Columns, &args(s)).await;
+    let views =
+        meta::views(&d, MetaKey::Views, &live.rows(MetaKey::Views, &args(s)).await, &columns).unwrap();
+    assert_eq!(views.iter().find(|v| v.name == "dm_v_emp").unwrap().columns.len(), 3);
+    let def = MetaArgs { name: Some("dm_v_emp".into()), ..args(s) };
+    let text = meta::source_text(MetaKey::ViewDefinition, &live.rows(MetaKey::ViewDefinition, &def).await)
+        .unwrap()
+        .unwrap();
+    assert!(has(&text, "create view") && has(&text, "dm_dept"), "{text}");
+
+    let routines = meta::routines(&live.rows(MetaKey::Routines, &args(s)).await).unwrap();
+    let kind = |n: &str| routines.iter().find(|r| r.name == n).unwrap().kind;
+    assert_eq!(kind("dm_p_meta"), RoutineKind::Procedure);
+    assert_eq!(kind("dm_f_meta"), RoutineKind::Function);
+    let src = MetaArgs { name: Some("dm_p_meta".into()), kind: Some("PROCEDURE".into()), ..args(s) };
+    let text = meta::source_text(MetaKey::RoutineSource, &live.rows(MetaKey::RoutineSource, &src).await)
+        .unwrap()
+        .unwrap();
+    assert!(has(&text, "end procedure"), "{text}");
+
+    let seqs = meta::sequences(&live.rows(MetaKey::Sequences, &args(s)).await).unwrap();
+    let seq = seqs.iter().find(|x| x.name == "dm_seq").unwrap();
+    assert_eq!(seq.start.as_deref(), Some("100"));
+    assert!(seq.cycle);
+    let syns = meta::synonyms(&live.rows(MetaKey::Synonyms, &args(s)).await).unwrap();
+    assert_eq!(syns.iter().find(|x| x.name == "dm_syn_emp").unwrap().target_name, "dm_emp");
+
+    let storage = MetaArgs { table: Some("dm_emp".into()), ..args(s) };
+    meta::table_storage(&live.rows(MetaKey::TableStorage, &storage).await).unwrap();
+
+    for q in live.d.ops_queries() {
+        fetch(&mut live.conn, &q.sql, &[]).await;
     }
 }

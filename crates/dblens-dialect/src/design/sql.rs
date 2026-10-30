@@ -53,7 +53,7 @@ impl Dialect {
                         out.push(msg!("design.unsupported.serial", column = to.name));
                     }
                 }
-                Family::Oracle | Family::Dameng | Family::SqlServer => {
+                Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix => {
                     if generated {
                         out.push(msg!("design.unsupported.generated", column = to.name));
                     }
@@ -73,6 +73,7 @@ impl Dialect {
             Family::Postgres => self.pg_design(schema, table, &diff.changes),
             Family::Oracle | Family::Dameng => self.oracle_design(schema, table, &diff.changes),
             Family::SqlServer => self.sqlserver_design(schema, table, &diff.changes),
+            Family::Informix => Err(dblens_core::Error::invalid(dblens_core::msg!("gbase.later"))),
         }
     }
 

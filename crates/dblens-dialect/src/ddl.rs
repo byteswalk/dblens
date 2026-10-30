@@ -114,6 +114,14 @@ impl Dialect {
                 | DdlKind::Procedure => Ok(None),
                 _ => Err(unsupported()),
             },
+            Family::Informix => match kind {
+                DdlKind::Table
+                | DdlKind::View
+                | DdlKind::Sequence
+                | DdlKind::Function
+                | DdlKind::Procedure => Ok(None),
+                _ => Err(unsupported()),
+            },
             // SQL Server：视图的模块定义就是完整的 CREATE VIEW；同义词由系统视图拼出；表、序列用结构模型，函数、过程用程序源码。
             // 名字用两段名交给 OBJECT_ID（在当前库中查找，调用方先切到对象所在的库）
             Family::SqlServer => {

@@ -226,6 +226,23 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "TIMESTAMP" | "DATETIME" => L::Timestamp { tz, precision: prec(6) },
             _ => L::Other,
         },
+        Family::Informix => match n {
+            "BOOLEAN" => L::Bool,
+            "SMALLINT" => L::Int { bits: 16 },
+            "INT" | "INTEGER" | "SERIAL" => L::Int { bits: 32 },
+            "INT8" | "BIGINT" | "SERIAL8" | "BIGSERIAL" => L::Int { bits: 64 },
+            "SMALLFLOAT" | "REAL" => L::Float { bits: 32 },
+            "FLOAT" | "DOUBLE" => L::Float { bits: 64 },
+            "DECIMAL" | "DEC" | "NUMERIC" | "MONEY" => decimal(),
+            "CHAR" | "NCHAR" => L::Char { len },
+            "VARCHAR" | "NVARCHAR" | "LVARCHAR" => L::VarChar { len },
+            "TEXT" | "CLOB" => L::Text,
+            "BYTE" | "BLOB" => L::Blob,
+            "DATE" => L::Date,
+            "DATETIME" => L::Timestamp { tz: false, precision: Some(5) },
+            "INTERVAL" => L::Interval,
+            _ => L::Other,
+        },
         // SQL Server 的 (MAX) 长度解析为 None
         Family::SqlServer => match n {
             "BIT" => L::Bool,
@@ -284,6 +301,7 @@ fn decimal_native(family: Family, precision: Option<u32>, scale: Option<i32>) ->
         Family::Dameng => ("DEC", "DEC", 38),
         // SQL Server 的 DECIMAL 不写参数是 (18,0)，无限定的源类型给 (38,10)
         Family::SqlServer => ("DECIMAL", "DECIMAL(38,10)", 38),
+        Family::Informix => ("DECIMAL", "DECIMAL(32,10)", 32),
     };
     // 精度 0 在各库都无效，按无限定处理
     let precision = precision.filter(|&p| p > 0);
@@ -317,6 +335,7 @@ fn decimal_native(family: Family, precision: Option<u32>, scale: Option<i32>) ->
             Family::Oracle => "NUMBER".into(),
             Family::Dameng => "DEC".into(),
             Family::SqlServer => "DECIMAL(38,10)".into(),
+            Family::Informix => "DECIMAL(32,10)".into(),
         };
     }
     if family == Family::MySql {
@@ -564,6 +583,27 @@ pub fn native_type(family: Family, logical: &LogicalType) -> String {
             L::Timestamp { tz: true, precision } => with_precision(family, "DATETIMEOFFSET", *precision),
             L::Interval => "NVARCHAR(100)".into(),
             L::Uuid => "UNIQUEIDENTIFIER".into(),
+        },
+        Family::Informix => match logical {
+            L::Bool => "BOOLEAN".into(),
+            L::Int { bits } | L::UInt { bits } => match bits {
+                0..=16 => "SMALLINT",
+                17..=32 => "INTEGER",
+                _ => "BIGINT",
+            }
+            .into(),
+            L::Float { bits } => if *bits <= 32 { "SMALLFLOAT" } else { "FLOAT" }.into(),
+            L::Decimal { precision, scale } => decimal_native(family, *precision, *scale),
+            L::Char { len } => format!("CHAR({})", len.unwrap_or(1)),
+            L::VarChar { len: Some(n) } if *n <= 255 => format!("VARCHAR({n})"),
+            L::VarChar { len: Some(n) } if *n <= 32739 => format!("LVARCHAR({n})"),
+            L::VarChar { .. } | L::Text | L::Json | L::Other => "TEXT".into(),
+            L::Binary { .. } | L::VarBinary { .. } | L::Blob => "BYTE".into(),
+            L::Date => "DATE".into(),
+            L::Time { .. } => "DATETIME HOUR TO FRACTION(5)".into(),
+            L::Timestamp { .. } => "DATETIME YEAR TO FRACTION(5)".into(),
+            L::Interval => "VARCHAR(100)".into(),
+            L::Uuid => "CHAR(36)".into(),
         },
     }
 }
