@@ -4,8 +4,8 @@
 use std::fmt::Write as _;
 
 use dblens_core::{Error, Lang, Msg, Result, msg};
-use dblens_dialect::DdlKind;
 use dblens_dialect::migrate::script_text;
+use dblens_dialect::{DdlKind, Family, Variant};
 
 use super::record::{MigrationRecord, TableState};
 use crate::profile::Profile;
@@ -26,6 +26,10 @@ impl Service {
         lang: Lang,
     ) -> String {
         let t = |m: Msg| m.render(lang);
+        // 脚本按目标的写法结束；连接已删除时按分号
+        let target_family = self
+            .profile(&r.plan.target.profile)
+            .map_or(Family::MySql, |p| Variant::base(p.input.driver).family());
         let mut md = String::new();
         let _ = writeln!(
             md,
@@ -158,7 +162,7 @@ impl Service {
             md,
             "## {}\n\n```sql\n{}\n```",
             t(msg!("migrate.report.script")),
-            script_text(&r.statements)
+            script_text(target_family, &r.statements)
         );
         md
     }

@@ -26,6 +26,9 @@ use crate::task::{TaskFailure, TaskHandle, TaskKind, TaskPhase};
 /// 预览和执行的请求。
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct DesignRequest {
+    /// 所在的库（SQL Server，M6b 设计文档第 6 节）；其他库不填。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog: Option<String>,
     pub schema: String,
     /// 已有表的名字；新建表时不给。
     #[serde(default)]
@@ -179,8 +182,14 @@ impl Service {
     }
 
     /// 打开设计器：原表（直接从库读取）、存储属性和行数估计、指纹。
-    pub async fn design_table(&self, profile_id: &str, schema: &str, name: &str) -> Result<DesignTable> {
-        let profile = self.feature_profile(profile_id)?;
+    pub async fn design_table(
+        &self,
+        profile_id: &str,
+        catalog: Option<&str>,
+        schema: &str,
+        name: &str,
+    ) -> Result<DesignTable> {
+        let profile = self.scoped_profile(profile_id, catalog)?;
         let table = self.fresh_table(&profile, schema, name).await?;
         let storage =
             meta::table_storage(&*self.fresh_rows(&profile, MetaKey::TableStorage, schema, name).await?)?;
@@ -217,7 +226,7 @@ impl Service {
     }
 
     async fn prepare_design(&self, profile_id: &str, req: &DesignRequest) -> Result<Prepared> {
-        let profile = self.feature_profile(profile_id)?;
+        let profile = self.scoped_profile(profile_id, req.catalog.as_deref())?;
         let dialect = self.metadata.dialect(&profile).await?;
         let mut draft = req.draft.clone();
         if let Some(name) = &req.name {
@@ -441,7 +450,9 @@ impl Run<'_> {
         self.task.set_cancel(Some(conn.cancel_handle()))?;
         let transactional = self.dialect.design_transactional();
         let outcome = async {
-            exec(&mut conn, &self.dialect.set_schema_sql(self.schema), &[]).await?;
+            if let Some(sql) = self.dialect.schema_switch_sql(self.schema) {
+                exec(&mut conn, &sql, &[]).await?;
+            }
             if transactional {
                 conn.set_autocommit(false).await?;
             }
@@ -611,6 +622,7 @@ mod tests {
             generated: None,
         };
         DesignRequest {
+            catalog: None,
             schema: "public".into(),
             name: None,
             draft: Table {

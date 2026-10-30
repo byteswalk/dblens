@@ -31,6 +31,8 @@ struct End {
     profile: String,
     driver: DriverId,
     variant: Variant,
+    /// 所在的库：SQL Server 是连接的库，其他库不填。
+    catalog: Option<String>,
     schema: String,
 }
 
@@ -85,7 +87,8 @@ async fn setup(envs: [&str; 2]) -> Option<(Arc<Service>, Vec<End>, tempfile::Tem
         };
         let summary = service.test_connection(input.clone(), &params.password).await.unwrap();
         let profile = service.create_profile(input, Some(&params.password)).unwrap();
-        ends.push(End { profile: profile.id, driver, variant: summary.variant, schema });
+        let catalog = if driver == DriverId::SqlServer { params.database.clone() } else { None };
+        ends.push(End { profile: profile.id, driver, variant: summary.variant, catalog, schema });
     }
     Some((service, ends, dir))
 }
@@ -146,8 +149,44 @@ fn source_ddl(end: &End, p: &str) -> Vec<String> {
     let opengauss = end.variant == Variant::OpenGauss;
     let n = ROWS;
     match end.driver {
-        // SQL Server 的迁移在 M6b，路线中没有它
-        DriverId::SqlServer => vec![],
+        DriverId::SqlServer => vec![
+            format!(
+                "CREATE TABLE {p}_cust (id BIGINT IDENTITY(1,1) PRIMARY KEY, name NVARCHAR(50) NOT NULL DEFAULT 'n/a', \
+                 active BIT DEFAULT 1, created DATETIME2 DEFAULT SYSDATETIME(), amount DECIMAL(12,2) DEFAULT 0, note NVARCHAR(MAX), \
+                 CONSTRAINT {p}_ck_amount CHECK (amount >= 0), CONSTRAINT {p}_uk_name UNIQUE (name))"
+            ),
+            format!(
+                "EXEC sp_addextendedproperty N'MS_Description', N'customers', N'SCHEMA', N'dbo', N'TABLE', N'{p}_cust'"
+            ),
+            format!(
+                "EXEC sp_addextendedproperty N'MS_Description', N'name', N'SCHEMA', N'dbo', N'TABLE', N'{p}_cust', N'COLUMN', N'name'"
+            ),
+            format!("CREATE INDEX {p}_ix_created ON {p}_cust (created)"),
+            format!(
+                "CREATE TABLE {p}_ord (id INT PRIMARY KEY, cust_id BIGINT, qty INT, status NVARCHAR(10) DEFAULT 'new', \
+                 CONSTRAINT {p}_ck_qty CHECK (qty > 0), \
+                 CONSTRAINT {p}_fk_cust FOREIGN KEY (cust_id) REFERENCES {p}_cust (id) ON DELETE CASCADE)"
+            ),
+            format!(
+                "CREATE TABLE {p}_types (id INT PRIMARY KEY, txt NVARCHAR(100), big NVARCHAR(MAX), amount DECIMAL(12,2), ratio FLOAT, \
+                 flag BIT, day DATE, ts DATETIME2(3), bin VARBINARY(16))"
+            ),
+            format!("CREATE SEQUENCE {p}_seq START WITH 1"),
+            format!(
+                "DECLARE @i INT = 0, @n BIGINT; WHILE @i < 5 BEGIN SET @n = NEXT VALUE FOR {p}_seq; SET @i += 1; END"
+            ),
+            format!(
+                "WITH s(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < {n}) \
+                 INSERT INTO {p}_cust (name, amount, note) SELECT CONCAT('name', n), n * 1.5, CONCAT(N'备注', n) FROM s OPTION (MAXRECURSION 0)"
+            ),
+            format!(
+                "INSERT INTO {p}_ord (id, cust_id, qty, status) VALUES (1, 1, 2, 'paid'), (2, 3, 1, 'new')"
+            ),
+            format!(
+                "INSERT INTO {p}_types VALUES (1, N'中文 abc', REPLICATE(N'y', 3000), 1234.5, 0.25, 1, '2026-01-02', '2026-01-02 03:04:05.678', 0x0102FF), \
+                 (2, N'x''q', N'z', -0.01, NULL, 0, NULL, NULL, 0x), (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
+            ),
+        ],
         DriverId::Mysql => vec![
             format!(
                 "CREATE TABLE {p}_cust (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL DEFAULT 'n/a' COMMENT 'name', \
@@ -325,10 +364,18 @@ async fn cleanup(s: &Service, src: &End, tgt: &End, p: &str, names: (&[String], 
 
 fn plan(src: &End, tgt: &End, tables: &[String], seq: Option<&str>, data: DataOptions) -> MigrationPlan {
     MigrationPlan {
-        source: MigrationEnd { profile: src.profile.clone(), schema: src.schema.clone() },
+        source: MigrationEnd {
+            profile: src.profile.clone(),
+            catalog: src.catalog.clone(),
+            schema: src.schema.clone(),
+        },
         tables: Some(tables.iter().rev().cloned().collect()),
         sequences: Some(seq.into_iter().map(String::from).collect()),
-        target: MigrationEnd { profile: tgt.profile.clone(), schema: tgt.schema.clone() },
+        target: MigrationEnd {
+            profile: tgt.profile.clone(),
+            catalog: tgt.catalog.clone(),
+            schema: tgt.schema.clone(),
+        },
         mode: Default::default(),
         settings: Default::default(),
         data,
@@ -406,6 +453,7 @@ async fn migrate_flow(src_env: &str, tgt_env: &str, p: &str) {
         let tseq = dialect.qualified(Some(&tgt.schema), &preview.draft.sequences[0].target.name);
         let sql = match tgt.driver {
             DriverId::Postgres => format!("SELECT nextval('{tseq}')"),
+            DriverId::SqlServer => format!("SELECT NEXT VALUE FOR {tseq}"),
             _ => format!("SELECT {tseq}.NEXTVAL FROM DUAL"),
         };
         let next = number(run(&s, tgt, &[sql], false).await);
@@ -547,7 +595,7 @@ fn shape(d: &Dialect, t: &Table, draft: &Table) -> Vec<String> {
     out
 }
 
-/// 每个源库迁到 MySQL、PG、Oracle、达梦（不迁到自己），另加信创常见路线。
+/// 每个源库迁到 MySQL、PG、Oracle、达梦（不迁到自己），另加信创常见路线；SQL Server 与这四个库互迁（M6b）。
 macro_rules! routes {
     ($($name:ident: $src:literal => $tgt:literal, $p:literal;)*) => {
         $(
@@ -604,6 +652,14 @@ routes! {
     kingbase_pg_to_pg: "DBLENS_TEST_KINGBASE_PG_URL" => "DBLENS_TEST_PG_URL", "m5kp";
     kingbase_pg_to_oracle: "DBLENS_TEST_KINGBASE_PG_URL" => "DBLENS_TEST_ORACLE_URL", "m5kp";
     kingbase_pg_to_dameng: "DBLENS_TEST_KINGBASE_PG_URL" => "DBLENS_TEST_DM_URL", "m5kp";
+    sqlserver_to_mysql: "DBLENS_TEST_SQLSERVER_URL" => "DBLENS_TEST_MYSQL_URL", "m6ms";
+    sqlserver_to_pg: "DBLENS_TEST_SQLSERVER_URL" => "DBLENS_TEST_PG_URL", "m6ms";
+    sqlserver_to_oracle: "DBLENS_TEST_SQLSERVER_URL" => "DBLENS_TEST_ORACLE_URL", "m6ms";
+    sqlserver_to_dameng: "DBLENS_TEST_SQLSERVER_URL" => "DBLENS_TEST_DM_URL", "m6ms";
+    mysql_to_sqlserver: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6my";
+    pg_to_sqlserver: "DBLENS_TEST_PG_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6pg";
+    oracle_to_sqlserver: "DBLENS_TEST_ORACLE_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6or";
+    dameng_to_sqlserver: "DBLENS_TEST_DM_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6dm";
 }
 
 /// 续传和跳过：每种目标家族各一条。
@@ -627,4 +683,6 @@ special! {
     skip_mysql_to_oracle: skip_flow, "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_ORACLE_URL", "m5sm";
     skip_oracle_to_pg: skip_flow, "DBLENS_TEST_ORACLE_URL" => "DBLENS_TEST_PG_URL", "m5so";
     skip_pg_to_dameng: skip_flow, "DBLENS_TEST_PG_URL" => "DBLENS_TEST_DM_URL", "m5sd";
+    resume_pg_to_sqlserver: resume_flow, "DBLENS_TEST_PG_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6rp";
+    skip_mysql_to_sqlserver: skip_flow, "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6sm";
 }

@@ -19,6 +19,22 @@ pub enum Family {
     SqlServer,
 }
 
+impl Family {
+    /// 脚本中一条语句的写法（M6b 设计文档 5.1 节）：SQL Server 后接单独一行 `GO`（`CREATE VIEW`、`CREATE TRIGGER` 等
+    /// 必须是批中第一条），其他库以 `;` 结尾。
+    pub fn terminate(self, sql: &str) -> String {
+        let sql = sql.trim_end();
+        match self {
+            Family::SqlServer => format!(
+                "{sql}
+GO"
+            ),
+            _ if sql.ends_with(';') => sql.to_string(),
+            _ => format!("{sql};"),
+        }
+    }
+}
+
 /// 兼容模式：人大金仓、openGauss 可以按 Oracle 的规则解释 SQL（空串即 NULL、`NUMBER`、`VARCHAR2`、
 /// 带时间的 `DATE`、Oracle 风格的过程块）。其他变体恒为 `Native`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -204,5 +220,22 @@ mod tests {
         assert_eq!(Variant::detect(DriverId::Mysql, &info("MySQL", "some unknown")), Variant::MySql);
         assert_eq!(serde_json::to_string(&Variant::OpenGauss).unwrap(), "\"opengauss\"");
         assert_eq!(serde_json::to_string(&Family::MySql).unwrap(), "\"mysql\"");
+    }
+
+    #[test]
+    fn script_terminators() {
+        assert_eq!(Family::MySql.terminate("SELECT 1"), "SELECT 1;");
+        assert_eq!(
+            Family::Oracle.terminate(
+                "SELECT 1 FROM DUAL;
+"
+            ),
+            "SELECT 1 FROM DUAL;"
+        );
+        assert_eq!(
+            Family::SqlServer.terminate("CREATE VIEW v AS SELECT 1"),
+            "CREATE VIEW v AS SELECT 1
+GO"
+        );
     }
 }

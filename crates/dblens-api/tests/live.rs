@@ -222,9 +222,15 @@ async fn sqlserver_catalogs() {
         call(&app, "GET", &format!("/api/profiles/{id}/schemas/sys/objects?catalog=msdb&kind=views"), None)
             .await;
     assert_eq!(st, StatusCode::OK, "{t}");
-    let (st, e) =
-        call(&app, "GET", &format!("/api/profiles/{id}/design/table?schema=dbo&name=t"), None).await;
-    assert_eq!(st, StatusCode::BAD_REQUEST, "{e}");
+    // M6b 起表设计器可用：按库读不存在的表是 404
+    let (st, e) = call(
+        &app,
+        "GET",
+        &format!("/api/profiles/{id}/design/table?catalog=master&schema=dbo&name=dblens_no_such"),
+        None,
+    )
+    .await;
+    assert_eq!(st, StatusCode::NOT_FOUND, "{e}");
 }
 
 #[tokio::test]

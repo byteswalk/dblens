@@ -83,6 +83,8 @@ pub async fn preview(State(s): State<AppState>, Json(b): Json<PreviewBody>) -> A
 
 #[derive(Deserialize)]
 pub struct DdlBody {
+    #[serde(default)]
+    catalog: Option<String>,
     schema: String,
     table: String,
     create: NewTable,
@@ -94,7 +96,7 @@ pub async fn ddl(
     Path(id): Path<String>,
     Json(b): Json<DdlBody>,
 ) -> ApiResult<Json<Value>> {
-    let sql = s.service.import_ddl(&id, &b.schema, &b.table, &b.create).await?;
+    let sql = s.service.import_ddl(&id, b.catalog.as_deref(), &b.schema, &b.table, &b.create).await?;
     Ok(Json(json!({ "sql": sql })))
 }
 

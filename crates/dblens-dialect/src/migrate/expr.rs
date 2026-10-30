@@ -35,6 +35,31 @@ fn tokenize(family: Family, s: &str) -> Option<Vec<Tok>> {
         let c = b[i];
         if c.is_whitespace() {
             i += 1;
+        } else if family == Family::SqlServer && (c == 'N' || c == 'n') && b.get(i + 1) == Some(&'\'') {
+            // SQL Server 的 Unicode 字符串 N'…'：去掉 N，按普通字符串读
+            i += 1;
+        } else if c == '[' && family == Family::SqlServer {
+            // SQL Server 的方括号标识符，`]]` 是一个 `]`
+            let mut v = String::new();
+            i += 1;
+            loop {
+                match b.get(i) {
+                    None => return None,
+                    Some(']') if b.get(i + 1) == Some(&']') => {
+                        v.push(']');
+                        i += 2;
+                    }
+                    Some(']') => {
+                        i += 1;
+                        break;
+                    }
+                    Some(ch) => {
+                        v.push(*ch);
+                        i += 1;
+                    }
+                }
+            }
+            out.push(Tok::Quoted(v));
         } else if c == '\'' {
             let mut v = String::new();
             i += 1;
@@ -202,8 +227,10 @@ pub fn convert_expr(
             Tok::Word(w) if KEYWORDS.iter().any(|k| w.eq_ignore_ascii_case(k)) => {
                 let up = w.to_ascii_uppercase();
                 match up.as_str() {
-                    // Oracle、达梦没有布尔字面量
-                    "TRUE" | "FALSE" if matches!(tgt.family(), Family::Oracle | Family::Dameng) => {
+                    // Oracle、达梦、SQL Server 没有布尔字面量
+                    "TRUE" | "FALSE"
+                        if matches!(tgt.family(), Family::Oracle | Family::Dameng | Family::SqlServer) =>
+                    {
                         (if up == "TRUE" { "1" } else { "0" }).to_string()
                     }
                     _ => up,
@@ -316,8 +343,9 @@ pub(super) fn convert_default(
     let toks = strip_parens(&toks);
     let logical = &column.logical;
     let oracle_like = matches!(fam, Family::Oracle | Family::Dameng);
+    // SQL Server 的 BIT 也只能写 1、0
     let boolean = |v: bool| -> String {
-        if oracle_like || (fam == Family::Postgres && *logical != L::Bool) {
+        if oracle_like || fam == Family::SqlServer || (fam == Family::Postgres && *logical != L::Bool) {
             (if v { "1" } else { "0" }).into()
         } else {
             (if v { "TRUE" } else { "FALSE" }).into()
@@ -329,6 +357,7 @@ pub(super) fn convert_default(
             (Family::Postgres, L::Date) => "CURRENT_DATE".into(),
             (Family::Oracle, L::Timestamp { .. } | L::Date) => "TRUNC(SYSDATE)".into(),
             (Family::Dameng, L::Date) => "CURDATE()".into(),
+            (Family::SqlServer, L::Date) => "CAST(GETDATE() AS DATE)".into(),
             _ => return Err(()),
         }))
     };
@@ -348,6 +377,8 @@ pub(super) fn convert_default(
             (Family::Oracle, L::Timestamp { tz: false, .. }) => "LOCALTIMESTAMP".into(),
             (Family::Oracle, L::Timestamp { tz: true, .. }) => "SYSTIMESTAMP".into(),
             (Family::Dameng, L::Timestamp { .. }) => "CURRENT_TIMESTAMP".into(),
+            (Family::SqlServer, L::Timestamp { tz: false, .. }) => "SYSDATETIME()".into(),
+            (Family::SqlServer, L::Timestamp { tz: true, .. }) => "SYSDATETIMEOFFSET()".into(),
             (_, L::Date) => return today(),
             _ => return Err(()),
         }))
@@ -390,6 +421,8 @@ pub(super) fn convert_default(
                 | "SYSDATE"
                 | "SYSTIMESTAMP"
                 | "GETDATE"
+                | "SYSDATETIME"
+                | "SYSDATETIMEOFFSET"
                 | "STATEMENT_TIMESTAMP"
                 | "TRANSACTION_TIMESTAMP"
                 | "CLOCK_TIMESTAMP"
@@ -409,6 +442,7 @@ pub(super) fn convert_default(
                     crate::Variant::MySql => Ok(Some("(UUID())".into())),
                     crate::Variant::Postgres => Ok(Some("gen_random_uuid()".into())),
                     crate::Variant::Oracle => Ok(Some("SYS_GUID()".into())),
+                    crate::Variant::SqlServer => Ok(Some("NEWID()".into())),
                     _ => Err(()),
                 }
             }
@@ -478,6 +512,20 @@ mod tests {
             convert_expr(&pg, &ora, "flag = true", &cols(&[("flag", "FLAG")])).as_deref(),
             Some("FLAG = 1")
         );
+        // SQL Server 作为来源：方括号标识符、N'' 字符串
+        let ms = d(Variant::SqlServer);
+        assert_eq!(
+            convert_expr(&ms, &pg, "([amount]>=(0))", &cols(&[("amount", "amount")])).as_deref(),
+            Some("(amount >= (0))")
+        );
+        assert_eq!(
+            convert_expr(&ms, &ora, "[status]<>N'x'", &cols(&[("status", "STATUS")])).as_deref(),
+            Some("STATUS <> 'x'")
+        );
+        assert_eq!(
+            convert_expr(&pg, &ms, "flag = true", &cols(&[("flag", "flag")])).as_deref(),
+            Some("flag = 1")
+        );
     }
 
     #[test]
@@ -505,6 +553,19 @@ mod tests {
         assert_eq!(conv(Oracle, Postgres, "-1.5 ", "NUMERIC(5,1)"), Ok(Some("-1.5".into())));
         assert_eq!(conv(Oracle, Postgres, "NULL", "INTEGER"), Ok(None));
         assert_eq!(conv(Postgres, Oracle, "true", "NUMBER(1)"), Ok(Some("1".into())));
+        // SQL Server 没有布尔字面量
+        assert_eq!(conv(MySql, SqlServer, "1", "BIT"), Ok(Some("1".into())));
+        assert_eq!(conv(Postgres, SqlServer, "true", "BIT"), Ok(Some("1".into())));
+        // 当前时间：SQL Server 作为目标和来源
+        assert_eq!(conv(Postgres, SqlServer, "now()", "DATETIME2(6)"), Ok(Some("SYSDATETIME()".into())));
+        assert_eq!(
+            conv(Postgres, SqlServer, "CURRENT_DATE", "DATE"),
+            Ok(Some("CAST(GETDATE() AS DATE)".into()))
+        );
+        assert_eq!(
+            conv(SqlServer, Postgres, "(sysdatetime())", "timestamp(6)"),
+            Ok(Some("LOCALTIMESTAMP".into()))
+        );
         assert_eq!(conv(MySql, Postgres, "b'1'", "BOOLEAN"), Ok(Some("TRUE".into())));
         assert_eq!(conv(Postgres, MySql, "now()", "DATETIME(6)"), Ok(Some("CURRENT_TIMESTAMP(6)".into())));
         assert_eq!(conv(Oracle, Postgres, "SYSDATE", "TIMESTAMP(0)"), Ok(Some("LOCALTIMESTAMP".into())));

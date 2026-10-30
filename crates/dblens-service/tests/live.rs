@@ -91,6 +91,11 @@ async fn setup(env: &str) -> Option<Live> {
 }
 
 impl Live {
+    /// M6b 的功能请求中的库名：SQL Server 是连接的库，其他库不填。
+    fn catalog(&self) -> Option<String> {
+        if self.driver == DriverId::SqlServer { self.database.clone() } else { None }
+    }
+
     fn dual(&self, expr: &str) -> String {
         match self.driver {
             DriverId::Oracle | DriverId::Dameng => format!("SELECT {expr} FROM DUAL"),
@@ -333,7 +338,7 @@ async fn sqlserver_export() {
 /// SQL Server：库列表、按库浏览（元数据连接以所选库为初始库）、执行计划后会话恢复正常、
 /// 一批里的多个结果集、M6b 之前的功能被拒绝。
 #[tokio::test]
-async fn sqlserver_catalogs_batches_and_gating() {
+async fn sqlserver_catalogs_and_batches() {
     let Some(live) = setup("DBLENS_TEST_SQLSERVER_URL").await else { return };
     let s = &live.service;
     let profile = s.profile(&live.profile_id).unwrap();
@@ -359,7 +364,9 @@ async fn sqlserver_catalogs_batches_and_gating() {
     assert_eq!(starts, 3, "{events:?}");
     s.sessions.close(id, false).await.unwrap();
 
-    assert!(matches!(s.design_table(&live.profile_id, "dbo", "t").await, Err(Error::Invalid { .. })));
+    // M6b 起写入类功能不再拦截：读不存在的表是"找不到"
+    let missing = s.design_table(&live.profile_id, live.catalog().as_deref(), "dbo", "dblens_no_such").await;
+    assert!(matches!(missing, Err(Error::NotFound { .. })), "{missing:?}");
     s.delete_profile(&live.profile_id).await.unwrap();
 }
 
@@ -968,6 +975,10 @@ async fn import_flow(env: &str) {
         DriverId::Oracle => {
             "CREATE TABLE m2b_t (id NUMBER(10) PRIMARY KEY, name VARCHAR2(40), price NUMBER(10, 2), on_day DATE, note VARCHAR2(40))"
         }
+        // 非 Unicode 的 VARCHAR 在默认排序规则下存不了中文
+        DriverId::SqlServer => {
+            "CREATE TABLE m2b_t (id INT PRIMARY KEY, name NVARCHAR(40), price DECIMAL(10, 2), on_day DATE, note NVARCHAR(40))"
+        }
         _ => {
             "CREATE TABLE m2b_t (id INT PRIMARY KEY, name VARCHAR(40), price DECIMAL(10, 2), on_day DATE, note VARCHAR(40))"
         }
@@ -980,6 +991,7 @@ async fn import_flow(env: &str) {
     };
     let request = |source: FileSource, mode: WriteMode| ImportRequest {
         profile_id: live.profile_id.clone(),
+        catalog: live.catalog(),
         source,
         file: FileOptions::csv(),
         schema: live.schema.clone(),
@@ -1109,6 +1121,28 @@ async fn import_flow(env: &str) {
     let gone = live.submit(id, ExecRequest::new("SELECT COUNT(*) FROM m2b_new")).await;
     assert!(gone.iter().any(|e| matches!(e, SessionEvent::Failed { .. })), "{env}：新建的表应已删除");
 
+    // 自增列（M6b）：达梦、SQL Server 往自增列写显式值要打开 IDENTITY_INSERT；追加和按主键更新都要能写
+    if matches!(live.driver, DriverId::Dameng | DriverId::SqlServer) {
+        live.submit(id, ExecRequest::new("DROP TABLE IF EXISTS m2b_id")).await;
+        let text_type = if live.driver == DriverId::SqlServer { "NVARCHAR(40)" } else { "VARCHAR(40)" };
+        live.run(id, &format!("CREATE TABLE m2b_id (id INT IDENTITY(1,1) PRIMARY KEY, name {text_type})"))
+            .await;
+        let id_req = |source: FileSource, mode: WriteMode| ImportRequest {
+            table: n("m2b_id"),
+            mapping: mapping(&["id", "name"]),
+            ..request(source, mode)
+        };
+        let st = run(id_req(upload(s, "i.csv", "编号,名称\n5,五\n9,九\n"), WriteMode::Append)).await;
+        assert_eq!((st.state, st.progress.rows_written), (TaskState::Done, 2), "{env}：{st:?}");
+        let st = run(id_req(upload(s, "u.csv", "编号,名称\n9,玖\n12,十二\n"), WriteMode::Upsert)).await;
+        assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+        assert_eq!(one("SELECT name FROM m2b_id WHERE id = 9".into()).await.as_deref(), Some("玖"), "{env}");
+        // 写入显式值后自增接着最大值往下走
+        live.run(id, "INSERT INTO m2b_id (name) VALUES ('x')").await;
+        assert_eq!(one("SELECT MAX(id) FROM m2b_id".into()).await.as_deref(), Some("13"), "{env}");
+        live.submit(id, ExecRequest::new("DROP TABLE m2b_id")).await;
+    }
+
     for sql in &drop {
         live.submit(id, ExecRequest::new(*sql)).await;
     }
@@ -1138,6 +1172,11 @@ async fn oracle_import() {
 #[tokio::test]
 async fn dameng_import() {
     import_flow("DBLENS_TEST_DM_URL").await;
+}
+
+#[tokio::test]
+async fn sqlserver_import() {
+    import_flow("DBLENS_TEST_SQLSERVER_URL").await;
 }
 
 /// 执行 SQL 文件（M2b）：各方言的程序体写法（MySQL 的 DELIMITER、PG 的 $$、Oracle/达梦的 PL/SQL 块加 `/`），
@@ -1304,7 +1343,6 @@ async fn design_flow(env: &str) {
         DriverId::Postgres => ["bigint", "varchar(20)", "numeric(10,2)", "varchar(40)"],
         DriverId::Oracle => ["NUMBER(19)", "VARCHAR2(20)", "NUMBER(10,2)", "VARCHAR2(40)"],
         DriverId::Dameng => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
-        // 表设计器的 SQL Server 支持在 M6b，这里只为穷尽分支
         DriverId::SqlServer => ["BIGINT", "NVARCHAR(20)", "DECIMAL(10,2)", "NVARCHAR(40)"],
     };
     let col = |name: &str, native: &str| Column {
@@ -1339,13 +1377,18 @@ async fn design_flow(env: &str) {
         }],
         ..Default::default()
     };
-    let request = |name: Option<&str>,
-                   draft: Table,
-                   renames: Renames,
-                   rebuild: bool,
-                   fingerprint: Option<String>| {
-        DesignRequest { schema: live.schema.clone(), name: name.map(n), draft, renames, rebuild, fingerprint }
-    };
+    let request =
+        |name: Option<&str>, draft: Table, renames: Renames, rebuild: bool, fingerprint: Option<String>| {
+            DesignRequest {
+                catalog: live.catalog(),
+                schema: live.schema.clone(),
+                name: name.map(n),
+                draft,
+                renames,
+                rebuild,
+                fingerprint,
+            }
+        };
     let apply = |req: DesignRequest| async move {
         let task = s.start_design(&live.profile_id, req).await.unwrap();
         wait_task(s, &task).await
@@ -1363,7 +1406,8 @@ async fn design_flow(env: &str) {
         live.run(id, &format!("INSERT INTO m3_t (code, amount, note) VALUES ('{code}', {amount}, '{note}')"))
             .await;
     }
-    live.run(id, "CREATE TABLE m3_items (item_id INT PRIMARY KEY, order_code VARCHAR(20))").await;
+    // 外键两端的类型要相同（SQL Server 的 NVARCHAR 不能引用 VARCHAR）
+    live.run(id, &format!("CREATE TABLE m3_items (item_id INT PRIMARY KEY, order_code {})", types[1])).await;
     live.run(
         id,
         "ALTER TABLE m3_items ADD CONSTRAINT fk_m3_items FOREIGN KEY (order_code) REFERENCES m3_t (code)",
@@ -1372,7 +1416,8 @@ async fn design_flow(env: &str) {
     live.run(id, "INSERT INTO m3_items VALUES (1, 'a')").await;
     live.run(id, "CREATE VIEW m3_v AS SELECT id, code FROM m3_t").await;
     // 2. 修改：note 改名为 remark 并加长，amount 不可空、改默认值和注释，换索引，加列 extra，改表注释
-    let t = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap();
+    let t =
+        s.design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_t")).await.unwrap();
     assert_eq!(t.table.columns.len(), 4, "{env}");
     assert!(t.table.columns[0].auto_increment, "{env}：{:?}", t.table.columns[0]);
     let mut d = t.table.clone();
@@ -1402,7 +1447,11 @@ async fn design_flow(env: &str) {
     assert!(p.errors.is_empty() && !p.rebuild.active && p.rebuild.reasons.is_empty(), "{env}：{p:?}");
     let st = apply(req).await;
     assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
-    let after = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap().table;
+    let after = s
+        .design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_t"))
+        .await
+        .unwrap()
+        .table;
     // 读回的结构与草稿一致（默认值的写法各库不同，只比较是否有默认值）
     let left = diff_table(Some(&after), &d, &Renames::default()).unwrap().changes;
     let left: Vec<_> = left
@@ -1437,7 +1486,8 @@ async fn design_flow(env: &str) {
     }
 
     // 3. 原表被别人改过：拒绝执行
-    let t = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap();
+    let t =
+        s.design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_t")).await.unwrap();
     live.run(id, "ALTER TABLE m3_t ADD tmp_col INT").await;
     let mut d = t.table.clone();
     d.comment = Some("冲突".into());
@@ -1455,7 +1505,8 @@ async fn design_flow(env: &str) {
     if live.driver != DriverId::Mysql {
         live.run(id, "GRANT SELECT ON m3_t TO PUBLIC").await;
     }
-    let t = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap();
+    let t =
+        s.design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_t")).await.unwrap();
     let mut d = t.table.clone();
     let amount = d.columns.remove(2);
     d.columns.insert(0, amount);
@@ -1483,7 +1534,11 @@ async fn design_flow(env: &str) {
     assert!(p.rebuild.refused.is_none(), "{env}：{p:?}");
     let st = apply(req).await;
     assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
-    let after = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap().table;
+    let after = s
+        .design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_t"))
+        .await
+        .unwrap()
+        .table;
     let names: Vec<&str> = after.columns.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(
         names,
@@ -1531,24 +1586,40 @@ async fn design_flow(env: &str) {
             MetaArgs { schema: Some(live.schema.clone()), table: Some(n("m3_t")), ..Default::default() };
         let rows = s.metadata.rows(&profile, MetaKey::Grants, &args).await.unwrap().unwrap();
         let grants = dblens_dialect::meta::grants(&rows).unwrap();
-        assert!(grants.iter().any(|g| g.grantee == "PUBLIC" && g.privilege == "SELECT"), "{env}：{grants:?}");
+        // SQL Server 的角色名是小写的 public
+        assert!(
+            grants.iter().any(|g| g.grantee.eq_ignore_ascii_case("PUBLIC") && g.privilege == "SELECT"),
+            "{env}：{grants:?}"
+        );
     }
     // 其他表指向本表的外键还在
-    let items = s.design_table(&live.profile_id, &live.schema, &n("m3_items")).await.unwrap().table;
+    let items = s
+        .design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_items"))
+        .await
+        .unwrap()
+        .table;
     assert_eq!(items.foreign_keys.len(), 1, "{env}");
     if live.driver != DriverId::Postgres {
         assert_eq!(one("SELECT COUNT(*) FROM m3_v".into()).await.as_deref(), Some("4"), "{env}：视图仍可用");
     }
 
-    // 5. 中途失败：加列后检查约束出错。PG 全部回滚；其他库已执行的保留
-    let t = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap();
+    // 5. 中途失败：加列后检查约束出错。PG、SQL Server 全部回滚；其他库已执行的保留
+    let t =
+        s.design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_t")).await.unwrap();
     let mut d = t.table.clone();
     d.columns.push(col("z", types[1]));
     d.checks.push(CheckConstraint { name: Some(n("ck_m3_bad")), expression: "no_such_column > 0".into() });
     let st = apply(request(Some("m3_t"), d, Renames::default(), false, Some(t.fingerprint))).await;
     assert_eq!(st.state, TaskState::Failed, "{env}：{st:?}");
-    let cols = s.design_table(&live.profile_id, &live.schema, &n("m3_t")).await.unwrap().table.columns.len();
-    assert_eq!(cols, if live.driver == DriverId::Postgres { 5 } else { 6 }, "{env}");
+    let cols = s
+        .design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_t"))
+        .await
+        .unwrap()
+        .table
+        .columns
+        .len();
+    let rolled_back = matches!(live.driver, DriverId::Postgres | DriverId::SqlServer);
+    assert_eq!(cols, if rolled_back { 5 } else { 6 }, "{env}");
 
     cleanup().await;
     if live.driver == DriverId::Postgres {
@@ -1580,6 +1651,11 @@ async fn oracle_design() {
 #[tokio::test]
 async fn dameng_design() {
     design_flow("DBLENS_TEST_DM_URL").await;
+}
+
+#[tokio::test]
+async fn sqlserver_design() {
+    design_flow("DBLENS_TEST_SQLSERVER_URL").await;
 }
 
 /// MySQL 驱动的取消测试用的耗时查询（SLEEP() 被 KILL QUERY 打断时返回 1 而不报错）。
@@ -1647,6 +1723,7 @@ async fn model_flow(env: &str) {
     // 1. 反向生成
     let dir = tempfile::tempdir().unwrap();
     let req = ReverseRequest {
+        catalog: live.catalog(),
         profile_id: live.profile_id.clone(),
         schemas: vec![live.schema.clone()],
         path: dir.path().join("model").to_string_lossy().into(),
@@ -1704,7 +1781,11 @@ async fn model_flow(env: &str) {
     );
 
     // 3. 模型 → 库：按记下的改名配对
-    let db = CompareSideRef::Database { profile: live.profile_id.clone(), schema: schema.clone() };
+    let db = CompareSideRef::Database {
+        profile: live.profile_id.clone(),
+        catalog: live.catalog(),
+        schema: schema.clone(),
+    };
     let md = CompareSideRef::Model { model: m.clone(), schema: schema.clone() };
     let compare = |source: &CompareSideRef, target: &CompareSideRef| CompareRequest {
         source: source.clone(),
@@ -1759,6 +1840,7 @@ async fn model_flow(env: &str) {
 
     // 5. ER 图（M4b）：同步后的库再反向生成一次，默认图中外键连线的列对应
     let req = ReverseRequest {
+        catalog: live.catalog(),
         profile_id: live.profile_id.clone(),
         schemas: vec![schema.clone()],
         path: dir.path().join("model2").to_string_lossy().into(),
@@ -1777,7 +1859,11 @@ async fn model_flow(env: &str) {
     // 文档导出（M4c）：库的这个 schema 导出 markdown 数据字典，表和外键（链接到被引用的表）都在
     let out = dir.path().join("dict.md");
     let req = DocumentRequest {
-        source: DocSource::Database { profile: live.profile_id.clone(), schema: schema.clone() },
+        source: DocSource::Database {
+            profile: live.profile_id.clone(),
+            catalog: live.catalog(),
+            schema: schema.clone(),
+        },
         tables: None,
         kind: DocKind::Dictionary,
         format: DocFormat::Markdown,
@@ -1814,7 +1900,11 @@ async fn model_flow(env: &str) {
     if created {
         let o = other.unwrap();
         cleanup(Some(o)).await;
-        let b = CompareSideRef::Database { profile: live.profile_id.clone(), schema: o.into() };
+        let b = CompareSideRef::Database {
+            profile: live.profile_id.clone(),
+            catalog: live.catalog(),
+            schema: o.into(),
+        };
         let r = s.compare(&compare(&db, &b)).await.unwrap();
         assert!(m4_status(&r).iter().all(|(_, st)| *st == TableStatus::Added), "{env}：{:?}", m4_status(&r));
         let sync = SyncRequest { compare: compare(&db, &b), selected: m4_items(&r), fingerprint: None };
@@ -1853,6 +1943,11 @@ async fn oracle_model() {
 #[tokio::test]
 async fn dameng_model() {
     model_flow("DBLENS_TEST_DM_URL").await;
+}
+
+#[tokio::test]
+async fn sqlserver_model() {
+    model_flow("DBLENS_TEST_SQLSERVER_URL").await;
 }
 
 const MYSQL_SLOW: &str = "SELECT COUNT(*) FROM information_schema.columns a, information_schema.columns b, information_schema.columns c";

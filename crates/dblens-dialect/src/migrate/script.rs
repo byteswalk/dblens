@@ -95,13 +95,18 @@ pub fn migration_script(
                     drop_sql(tgt, schema, &t.target.name),
                 ));
             }
-            let base = Table {
+            let mut base = Table {
                 uniques: vec![],
                 foreign_keys: vec![],
                 checks: vec![],
                 indexes: vec![],
                 ..t.target.clone()
             };
+            if tgt.family() == Family::SqlServer {
+                for c in &mut base.columns {
+                    c.default = c.default.take().map(|d| qualify_next_value(tgt, schema, d));
+                }
+            }
             for (i, s) in
                 design(tgt, schema, "", TableChange::CreateTable { table: base })?.into_iter().enumerate()
             {
@@ -183,13 +188,13 @@ pub fn migration_script(
     Ok(first)
 }
 
-/// 脚本全文：每条语句以 `;` 结尾，两步之间空一行。
-pub fn script_text(statements: &[MigrationStatement]) -> String {
+/// 脚本全文：每条语句按目标的写法结束（`Family::terminate`），两步之间空一行。
+pub fn script_text(target: Family, statements: &[MigrationStatement]) -> String {
     let part = |phase| {
         statements
             .iter()
             .filter(|s| s.phase == phase)
-            .map(|s| format!("{};", s.sql))
+            .map(|s| target.terminate(&s.sql))
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -210,6 +215,14 @@ fn design(tgt: &Dialect, schema: &str, table: &str, change: TableChange) -> Resu
         .collect())
 }
 
+/// SQL Server 的默认值 `NEXT VALUE FOR 序列` 补上 schema：不切换当前 schema，一段名按用户的默认架构解析。
+fn qualify_next_value(tgt: &Dialect, schema: &str, default: String) -> String {
+    match default.strip_prefix("NEXT VALUE FOR ") {
+        Some(seq) if !seq.contains('.') => format!("NEXT VALUE FOR {}.{seq}", tgt.ident(schema)),
+        _ => default,
+    }
+}
+
 fn drop_sql(tgt: &Dialect, schema: &str, name: &str) -> String {
     let q = tgt.qualified(Some(schema), name);
     match tgt.family() {
@@ -224,7 +237,11 @@ pub(super) fn sequence_sql(tgt: &Dialect, schema: &str, s: &Sequence) -> String 
     if tgt.family() == Family::Postgres {
         return tgt.sequence_ddl(schema, s).trim().trim_end_matches(';').to_string();
     }
+    let sqlserver = tgt.family() == Family::SqlServer;
     let mut out = format!("CREATE SEQUENCE {}", tgt.qualified(Some(schema), &s.name));
+    if sqlserver {
+        out += " AS BIGINT";
+    }
     for (label, v) in [
         ("START WITH", &s.start),
         ("INCREMENT BY", &s.increment),
@@ -232,13 +249,19 @@ pub(super) fn sequence_sql(tgt: &Dialect, schema: &str, s: &Sequence) -> String 
         ("MAXVALUE", &s.max_value),
     ] {
         if let Some(v) = v.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+            // SQL Server 的序列是 BIGINT：超出范围的边界（如 Oracle 的 28 个 9）不写，取类型的边界
+            if sqlserver && v.parse::<i64>().is_err() {
+                continue;
+            }
             out += &format!("\n    {label} {v}");
         }
     }
+    // SQL Server 写 NO CACHE / NO CYCLE，Oracle、达梦写 NOCACHE / NOCYCLE
+    let no = if sqlserver { "NO " } else { "NO" };
     out += &match s.cache {
         Some(c) if c >= 2 => format!("\n    CACHE {c}"),
-        _ => "\n    NOCACHE".into(),
+        _ => format!("\n    {no}CACHE"),
     };
-    out += if s.cycle { "\n    CYCLE" } else { "\n    NOCYCLE" };
+    out += &if s.cycle { "\n    CYCLE".to_string() } else { format!("\n    {no}CYCLE") };
     out
 }

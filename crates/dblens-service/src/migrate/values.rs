@@ -115,7 +115,15 @@ pub fn to_target(v: &Value, col: &Column) -> Result<Value> {
         (L::Decimal { .. }, Value::Float(f)) => Value::Decimal(f.to_string()),
         _ => convert(v, col, EmptyAs::Null)?,
     };
-    Ok(out)
+    // 小数秒超出目标精度时先截断：有的库写入时四舍五入（达梦），有的截断，校验按截断比较
+    Ok(match (out, logical) {
+        (Value::DateTime(t), L::Timestamp { precision, .. }) => Value::DateTime(truncate(&t, *precision)),
+        (Value::DateTimeTz(t), L::Timestamp { precision, .. }) => {
+            let nanos = truncate(&t.naive_utc(), *precision).nanosecond();
+            Value::DateTimeTz(t.with_nanosecond(nanos).unwrap_or(t))
+        }
+        (out, _) => out,
+    })
 }
 
 /// 去掉小数末尾的 0（`1.50` → `1.5`，`2.00` → `2`）。

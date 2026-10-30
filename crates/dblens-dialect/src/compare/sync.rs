@@ -101,10 +101,8 @@ pub fn sync_script(
             match &item.change {
                 SchemaChange::DropTable { name } => drop_tables
                     .push(SyncStep::Sql { sql: format!("DROP TABLE {}", q(name)), items: vec![item.id] }),
-                SchemaChange::RenameTable { from, to } => renames.push(SyncStep::Sql {
-                    sql: format!("ALTER TABLE {} RENAME TO {}", q(from), d.ident(to)),
-                    items: vec![item.id],
-                }),
+                SchemaChange::RenameTable { from, to } => renames
+                    .push(SyncStep::Sql { sql: d.rename_table_sql(schema, from, to)?, items: vec![item.id] }),
                 SchemaChange::Table { change } if matches!(change.as_ref(), C::CreateTable { .. }) => {
                     let C::CreateTable { table } = change.as_ref() else { unreachable!() };
                     // 外键在所有表建好之后再加

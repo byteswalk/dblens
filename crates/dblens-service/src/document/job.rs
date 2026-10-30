@@ -56,7 +56,13 @@ pub enum DocSource {
     /// 打开的模型中的若干 schema。
     Model { model: String, schemas: Vec<String> },
     /// 连接的一个 schema。
-    Database { profile: String, schema: String },
+    Database {
+        profile: String,
+        /// 所在的库（SQL Server）；其他库不填。
+        #[serde(default)]
+        catalog: Option<String>,
+        schema: String,
+    },
 }
 
 /// 一张 ER 图的图片（前端画好后上传）。
@@ -203,8 +209,8 @@ impl Service {
                     done();
                 }
             }
-            DocSource::Database { profile, schema } => {
-                let p = self.feature_profile(profile)?;
+            DocSource::Database { profile, catalog, schema } => {
+                let p = self.scoped_profile(profile, catalog.as_deref())?;
                 // 跳过元数据缓存，以库中最新的结构为准
                 let args = MetaArgs { schema: Some(schema.clone()), ..Default::default() };
                 for key in MetaKey::TABLE_DETAIL.into_iter().chain([MetaKey::Views]) {
@@ -235,9 +241,10 @@ impl Service {
                 let m = self.models.summary_of(model)?;
                 Ok((format!("{} ({})", m.info.name, m.path), m.info.name))
             }
-            DocSource::Database { profile, schema } => {
+            DocSource::Database { profile, catalog, schema } => {
                 let p = self.profile(profile)?;
-                Ok((format!("{} / {schema}", p.input.name), schema.clone()))
+                let place = catalog.as_ref().map_or_else(|| schema.clone(), |c| format!("{c}.{schema}"));
+                Ok((format!("{} / {place}", p.input.name), schema.clone()))
             }
         }
     }
@@ -407,7 +414,7 @@ mod tests {
 
     fn req(format: DocFormat, kind: DocKind) -> DocumentRequest {
         DocumentRequest {
-            source: DocSource::Database { profile: "p".into(), schema: "s".into() },
+            source: DocSource::Database { profile: "p".into(), catalog: None, schema: "s".into() },
             tables: None,
             kind,
             format,

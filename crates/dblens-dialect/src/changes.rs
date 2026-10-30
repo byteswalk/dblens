@@ -87,6 +87,11 @@ impl<'a> Builder<'a> {
     }
 
     fn value(&mut self, v: &Value) -> Result<()> {
+        // SQL Server：类型未知的 NULL 参数按 nvarchar 传，写进 varbinary 等列会报"不能隐式转换"，直接写 NULL
+        if self.dialect.family() == Family::SqlServer && matches!(v, Value::Null) {
+            self.text("NULL");
+            return Ok(());
+        }
         self.params.push(v.clone());
         self.sql.push_str(&self.dialect.placeholder(self.params.len()));
         // PG 驱动不能直接绑定 NUMERIC 参数：精确小数按文本传，由数据库转换（整数列也接受 numeric 的赋值和比较）

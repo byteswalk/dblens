@@ -93,13 +93,17 @@ impl Ctx {
 
     pub async fn connect_source(&self) -> Result<Box<dyn Connection>> {
         let (mut c, _) = self.service.registry.connect(&self.source, self.source_password.clone()).await?;
-        exec(&mut c, &self.source_dialect.set_schema_sql(&self.source_schema()?), &[]).await?;
+        if let Some(sql) = self.source_dialect.schema_switch_sql(&self.source_schema()?) {
+            exec(&mut c, &sql, &[]).await?;
+        }
         Ok(c)
     }
 
     pub async fn connect_target(&self) -> Result<Box<dyn Connection>> {
         let (mut c, _) = self.service.registry.connect(&self.target, self.target_password.clone()).await?;
-        exec(&mut c, &self.target_dialect.set_schema_sql(&self.target_schema()?), &[]).await?;
+        if let Some(sql) = self.target_dialect.schema_switch_sql(&self.target_schema()?) {
+            exec(&mut c, &sql, &[]).await?;
+        }
         Ok(c)
     }
 

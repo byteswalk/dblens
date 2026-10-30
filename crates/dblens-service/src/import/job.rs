@@ -6,6 +6,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use dblens_core::schema::{Column, PrimaryKey, Table};
 use dblens_core::{ColumnType, Error, LogicalType, Result, Value, msg};
+use dblens_dialect::migrate::data::identity_insert_sql;
 use dblens_dialect::{Dialect, ImportStatement, WriteMode};
 use dblens_driver::{Connection, ExecEvent};
 use serde::{Deserialize, Serialize};
@@ -73,6 +74,10 @@ pub enum OnError {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ImportRequest {
     pub profile_id: String,
+    /// 所在的库（SQL Server，M6b 设计文档第 6 节）；其他库不填。
+    #[serde(default)]
+    pub catalog: Option<String>,
+
     pub source: FileSource,
     pub file: FileOptions,
     pub schema: String,
@@ -260,11 +265,12 @@ impl Service {
     pub async fn import_ddl(
         &self,
         profile_id: &str,
+        catalog: Option<&str>,
         schema: &str,
         table: &str,
         def: &NewTable,
     ) -> Result<String> {
-        let profile = self.feature_profile(profile_id)?;
+        let profile = self.scoped_profile(profile_id, catalog)?;
         let dialect = self.metadata.dialect(&profile).await?;
         Ok(dialect.create_table_sql(schema, &new_table(&dialect, table, def)?))
     }
@@ -285,7 +291,7 @@ impl Service {
 
     /// 提交导入任务，返回任务 id。提交时检查连接、文件、目标表、映射和执行策略；执行在后台进行。
     pub async fn start_import(self: &Arc<Self>, req: ImportRequest, allow_path: bool) -> Result<String> {
-        let profile = self.feature_profile(&req.profile_id)?;
+        let profile = self.scoped_profile(&req.profile_id, req.catalog.as_deref())?;
         let password = self.secrets.get(&profile.id)?.unwrap_or_default();
         let dialect = self.metadata.dialect(&profile).await?;
         let (table, create_sql) = match &req.create {
@@ -414,12 +420,28 @@ impl Service {
                 exec(&mut conn, sql, &[]).await?;
                 created = true;
             }
+            // 达梦、SQL Server 往自增列写显式值要打开 IDENTITY_INSERT（会话级），写完关掉
+            let identity = plan
+                .columns
+                .iter()
+                .any(|name| plan.table.columns.iter().any(|c| &c.name == name && c.auto_increment));
+            let identity_insert = |on| {
+                identity
+                    .then(|| identity_insert_sql(&plan.dialect, &plan.schema, &plan.table.name, on))
+                    .flatten()
+            };
+            if let Some(sql) = identity_insert(true) {
+                exec(&mut conn, &sql, &[]).await?;
+            }
             conn.set_autocommit(false).await?;
             let result = self.write_rows(task, plan, &mut conn, reader).await;
             if result.is_err() {
                 let _ = conn.rollback().await;
             }
             let restore = conn.set_autocommit(true).await;
+            if let Some(sql) = identity_insert(false) {
+                let _ = exec(&mut conn, &sql, &[]).await;
+            }
             result.and(restore)
         }
         .await;
@@ -621,6 +643,7 @@ mod tests {
     fn request(profile_id: &str, upload: &str) -> ImportRequest {
         ImportRequest {
             profile_id: profile_id.into(),
+            catalog: None,
             source: FileSource::Upload { upload: upload.into() },
             file: FileOptions::csv(),
             schema: "public".into(),
@@ -802,7 +825,7 @@ mod tests {
         let (s, p, _, _dir) = service();
         let def = request(&p, "x").create.unwrap();
         assert_eq!(
-            s.import_ddl(&p, "public", "导入", &def).await.unwrap(),
+            s.import_ddl(&p, None, "public", "导入", &def).await.unwrap(),
             "CREATE TABLE public.\"导入\" (\n    id BIGINT NOT NULL,\n    name VARCHAR(20),\n    PRIMARY KEY (id)\n)"
         );
         let up = upload(&s, 3, &[]);

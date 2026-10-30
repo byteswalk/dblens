@@ -38,6 +38,11 @@ impl Dialect {
         format!("DELETE FROM {}", self.qualified(Some(schema), table))
     }
 
+    /// 每条写入语句至多包含的参数个数：SQL Server 一次请求最多 2100 个参数，留些余量取 2000。
+    pub fn max_params(&self) -> usize {
+        if self.family() == Family::SqlServer { 2000 } else { MAX_PARAMS_PER_STATEMENT }
+    }
+
     /// 新建表的建表语句（列、可空、主键），不带结尾的分号。
     pub fn create_table_sql(&self, schema: &str, table: &Table) -> String {
         self.table_create(schema, table).trim_end().trim_end_matches(';').to_string()
@@ -81,7 +86,7 @@ impl Dialect {
         let merge = mode == WriteMode::Upsert && matches!(self.family(), Family::Oracle | Family::Dameng);
         // Oracle、达梦的 MERGE 每行一条：多行要用 UNION ALL 拼来源，各行的 NULL 参数类型不一致时会报错
         let per_statement =
-            if merge { 1 } else { (MAX_PARAMS_PER_STATEMENT / cols.len()).clamp(1, MAX_ROWS_PER_STATEMENT) };
+            if merge { 1 } else { (self.max_params() / cols.len()).clamp(1, MAX_ROWS_PER_STATEMENT) };
         let target = self.qualified(Some(schema), &table.name);
         let names: Vec<String> = cols.iter().map(|c| self.ident(&c.name)).collect();
         let list = names.join(", ");
@@ -92,6 +97,8 @@ impl Dialect {
             let mut b = Binder { dialect: self, sql: String::new(), params: Vec::new() };
             if merge {
                 b.merge(&target, &cols, &names, &key, &rows[start])?;
+            } else if mode == WriteMode::Upsert && self.family() == Family::SqlServer {
+                b.mssql_merge(&target, &cols, &names, &key, &rows[start..end])?;
             } else {
                 b.insert(&target, &cols, &list, &rows[start..end])?;
                 if mode == WriteMode::Upsert {
@@ -116,6 +123,11 @@ impl Binder<'_> {
     /// 一个参数。PG 驱动不能直接绑定 NUMERIC 参数，精确小数按文本传、由数据库转换（与表数据编辑相同）；
     /// 时间间隔和不认识的类型也按文本传，转换成列的原生类型。
     fn param(&mut self, col: &Column, v: &Value) {
+        // SQL Server：类型未知的 NULL 参数按 nvarchar 传，写进 varbinary 等列会报"不能隐式转换"，直接写 NULL
+        if self.dialect.family() == Family::SqlServer && matches!(v, Value::Null) {
+            self.sql.push_str("NULL");
+            return;
+        }
         self.params.push(v.clone());
         self.sql.push_str(&self.dialect.placeholder(self.params.len()));
         if self.dialect.family() != Family::Postgres || matches!(v, Value::Null) {
@@ -201,6 +213,43 @@ impl Binder<'_> {
                 }
             }
         }
+    }
+
+    /// SQL Server 的按主键更新：一批一条多行 MERGE（来源是带参数的 VALUES）。自增列不能更新，不写进 UPDATE SET；
+    /// 没有可更新的列时省略 WHEN MATCHED。MERGE 必须以分号结束。
+    fn mssql_merge(
+        &mut self,
+        target: &str,
+        cols: &[&Column],
+        names: &[String],
+        key: &[usize],
+        rows: &[Vec<Value>],
+    ) -> Result<()> {
+        self.sql.push_str(&format!("MERGE INTO {target} AS t USING (VALUES "));
+        for (n, row) in rows.iter().enumerate() {
+            if n > 0 {
+                self.sql.push_str(", ");
+            }
+            self.sql.push('(');
+            self.row_values(cols, row)?;
+            self.sql.push(')');
+        }
+        let on: Vec<String> = key.iter().map(|&k| format!("t.{0} = s.{0}", names[k])).collect();
+        self.sql.push_str(&format!(") AS s ({}) ON {}", names.join(", "), on.join(" AND ")));
+        let sets: Vec<String> = (0..names.len())
+            .filter(|&k| !key.contains(&k) && !cols[k].auto_increment)
+            .map(|k| format!("t.{0} = s.{0}", names[k]))
+            .collect();
+        if !sets.is_empty() {
+            self.sql.push_str(&format!(" WHEN MATCHED THEN UPDATE SET {}", sets.join(", ")));
+        }
+        let values: Vec<String> = names.iter().map(|n| format!("s.{n}")).collect();
+        self.sql.push_str(&format!(
+            " WHEN NOT MATCHED THEN INSERT ({}) VALUES ({});",
+            names.join(", "),
+            values.join(", ")
+        ));
+        Ok(())
     }
 
     /// Oracle、达梦的按主键更新：一行一条 MERGE。只映射了主键列时省略 WHEN MATCHED。
@@ -413,6 +462,39 @@ mod tests {
         let st = d.import_statements("s", &wide, &cols, &rows, WriteMode::Append).unwrap();
         assert_eq!(st.iter().map(|s| s.rows.len()).collect::<Vec<_>>(), [300, 300, 100]);
         assert!(st.iter().all(|s| s.params.len() <= MAX_PARAMS_PER_STATEMENT));
+        // SQL Server 一次请求最多 2100 个参数：100 列 → 每条 20 行
+        let ms = Dialect::new(Variant::SqlServer);
+        let st = ms.import_statements("s", &wide, &cols, &rows, WriteMode::Append).unwrap();
+        assert!(
+            st.iter().all(|s| s.rows.len() == 20),
+            "{:?}",
+            st.iter().map(|s| s.rows.len()).collect::<Vec<_>>()
+        );
+        let st = ms
+            .import_statements("s", &orders(), &names(&["id", "name", "price"]), &many, WriteMode::Upsert)
+            .unwrap();
+        assert!(st.iter().all(|s| s.params.len() <= 2000) && st.len() == 3);
+    }
+
+    #[test]
+    fn sqlserver_upsert_is_one_multi_row_merge() {
+        assert_eq!(
+            sql(Variant::SqlServer, "dbo", WriteMode::Upsert),
+            [
+                "MERGE INTO dbo.orders AS t USING (VALUES (@P1, @P2, @P3), (@P4, NULL, NULL)) AS s (id, name, price) \
+              ON t.id = s.id WHEN MATCHED THEN UPDATE SET t.name = s.name, t.price = s.price \
+              WHEN NOT MATCHED THEN INSERT (id, name, price) VALUES (s.id, s.name, s.price);"
+            ]
+        );
+        // 只映射了主键列：没有 WHEN MATCHED
+        let only = Dialect::new(Variant::SqlServer)
+            .import_statements("dbo", &orders(), &names(&["id"]), &[vec![Value::Int(1)]], WriteMode::Upsert)
+            .unwrap();
+        assert_eq!(
+            only[0].sql,
+            "MERGE INTO dbo.orders AS t USING (VALUES (@P1)) AS s (id) ON t.id = s.id \
+             WHEN NOT MATCHED THEN INSERT (id) VALUES (s.id);"
+        );
     }
 
     #[test]

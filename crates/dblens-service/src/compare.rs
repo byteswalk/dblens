@@ -7,13 +7,13 @@ use std::sync::Arc;
 
 use dblens_core::schema::Table;
 use dblens_core::{Error, Msg, Result, msg};
-use dblens_dialect::Dialect;
 use dblens_dialect::compare::{
     CompareOptions, CompareRenames, CompareSide, SchemaChange, SchemaDiff, SyncScript, SyncStep,
     apply_changes, compare_schemas, sync_rebuild_tables, sync_script,
 };
 use dblens_dialect::design::{RebuildContext, TableChange};
 use dblens_dialect::meta::{MetaArgs, MetaKey};
+use dblens_dialect::{Dialect, Family};
 use serde::{Deserialize, Serialize};
 
 use crate::design::{Part, Run};
@@ -26,8 +26,17 @@ use crate::task::{TaskKind, TaskPhase};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CompareSideRef {
-    Model { model: String, schema: String },
-    Database { profile: String, schema: String },
+    Model {
+        model: String,
+        schema: String,
+    },
+    Database {
+        profile: String,
+        /// 所在的库（SQL Server）；其他库不填。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        catalog: Option<String>,
+        schema: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -162,12 +171,12 @@ fn effective_renames(source: &Side, target: &Side, requested: &CompareRenames) -
     out
 }
 
-/// 同步脚本全文：每条语句以 `;` 结尾，各段之间空一行。
-fn script_text(script: &SyncScript) -> String {
+/// 同步脚本全文：每条语句按目标的写法结束（`Family::terminate`），各段之间空一行。
+fn script_text(target: Family, script: &SyncScript) -> String {
     let parts: Vec<String> = script
         .steps
         .iter()
-        .map(|s| part_of(s).texts().into_iter().map(|t| format!("{t};")).collect::<Vec<_>>().join("\n"))
+        .map(|s| part_of(s).texts().into_iter().map(|t| target.terminate(&t)).collect::<Vec<_>>().join("\n"))
         .collect();
     parts.join("\n\n")
 }
@@ -265,8 +274,8 @@ impl Service {
                     profile: None,
                 })
             }
-            CompareSideRef::Database { profile, schema } => {
-                let profile = self.feature_profile(profile)?;
+            CompareSideRef::Database { profile, catalog, schema } => {
+                let profile = self.scoped_profile(profile, catalog.as_deref())?;
                 let dialect = self.metadata.dialect(&profile).await?;
                 // 跳过元数据缓存，以库中最新的结构为准
                 let args = MetaArgs { schema: Some(schema.clone()), ..Default::default() };
@@ -354,7 +363,7 @@ impl Service {
         match &c.target.profile {
             Some(profile) => {
                 let script = self.sync_script_of(&c, &req.selected).await?;
-                preview.text = script_text(&script);
+                preview.text = script_text(c.target.dialect.family(), &script);
                 let texts: Vec<String> = script.steps.iter().flat_map(|s| part_of(s).texts()).collect();
                 (preview.denied, preview.confirm) =
                     self.check_policy(profile, c.target.dialect, &texts).await;

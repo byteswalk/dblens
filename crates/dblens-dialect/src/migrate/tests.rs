@@ -171,7 +171,7 @@ fn render(draft: &MigrationDraft, tgt: Variant) -> String {
         );
     }
     let script = migration_script(&Dialect::new(tgt), "app", draft, &BTreeMap::new(), &[]).unwrap();
-    out + "\n" + &script_text(&script)
+    out + "\n" + &script_text(tgt.family(), &script)
 }
 
 /// 不认识的类型都确认按文本迁移。
@@ -196,6 +196,7 @@ fn pg_to_each_family() {
         (Variant::Oracle, "pg_to_oracle"),
         (Variant::Dameng, "pg_to_dameng"),
         (Variant::OpenGauss, "pg_to_opengauss"),
+        (Variant::SqlServer, "pg_to_sqlserver"),
     ] {
         let draft = migrate(&input(Variant::Postgres, tgt, &tables, &sequences), &settings);
         assert!(!draft.blocked(), "{name}");

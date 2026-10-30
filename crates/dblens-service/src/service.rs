@@ -3,9 +3,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use dblens_core::{Error, Lang, Result, msg, set_default_lang};
+use dblens_core::{Lang, Result, set_default_lang};
 use dblens_dialect::{Dialect, OpsQuery, Variant};
-use dblens_driver::DriverId;
 
 use crate::export::ExportManager;
 use crate::history::HistoryLog;
@@ -103,14 +102,9 @@ impl Service {
         self.store.profile(id)
     }
 
-    /// 写入类功能（表设计器、导入、文档导出、结构对比、迁移、逆向成模型）用的连接配置：SQL Server 在 M6b 之前
-    /// 不支持这些功能，在入口处拒绝，不会生成错误的 SQL。
-    pub(crate) fn feature_profile(&self, id: &str) -> Result<Profile> {
-        let p = self.profile(id)?;
-        if p.input.driver == DriverId::SqlServer {
-            return Err(Error::invalid(msg!("sqlserver.later")));
-        }
-        Ok(p)
+    /// 在某个库中工作的连接配置（SQL Server 的表设计器、导入、比对、迁移等，M6b 设计文档第 6 节）：没给库名时就是连接配置本身。
+    pub(crate) fn scoped_profile(&self, id: &str, catalog: Option<&str>) -> Result<Profile> {
+        Ok(self.profile(id)?.in_catalog(catalog))
     }
 
     /// 新建连接配置；给出密码时一并保存。

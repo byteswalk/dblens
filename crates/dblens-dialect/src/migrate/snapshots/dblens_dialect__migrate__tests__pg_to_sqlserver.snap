@@ -1,0 +1,59 @@
+---
+source: crates/dblens-dialect/src/migrate/tests.rs
+expression: "render(&draft, tgt)"
+---
+Info customers_id_seq: Sequence owned by a serial column; migrated with the identity column
+Lossy customers.tags: Unrecognized type text[]; migrated as text (NVARCHAR(MAX))
+Lossy customers [ix_customers_note]: Includes a large-object column the target cannot index; not migrated
+Lossy customers [ix_customers_lower]: Index expression lower((email)::text) cannot be converted; not migrated
+Lossy orders.pos: Unrecognized type point; migrated as text (NVARCHAR(MAX))
+Lossy orders [fk_orders_product]: Referenced table products is neither migrated nor in the target; not migrated
+
+CREATE SEQUENCE app.order_seq AS BIGINT
+    START WITH 1
+    INCREMENT BY 1
+    MINVALUE 1
+    MAXVALUE 9223372036854775807
+    CACHE 20
+    NO CYCLE
+GO
+CREATE TABLE app.customers (
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    name NVARCHAR(50) CONSTRAINT DF_customers_name DEFAULT N'n/a' NOT NULL,
+    email NVARCHAR(100) NULL,
+    active BIT CONSTRAINT DF_customers_active DEFAULT 1 NULL,
+    created DATETIME2(6) CONSTRAINT DF_customers_created DEFAULT SYSDATETIME() NULL,
+    balance DECIMAL(12,2) CONSTRAINT DF_customers_balance DEFAULT 0 NULL,
+    tags NVARCHAR(MAX) NULL,
+    note NVARCHAR(MAX) NULL,
+    CONSTRAINT customers_pkey PRIMARY KEY (id)
+)
+GO
+EXEC sys.sp_addextendedproperty N'MS_Description', N'Customers', N'SCHEMA', N'app', N'TABLE', N'customers'
+GO
+EXEC sys.sp_addextendedproperty N'MS_Description', N'Customer name', N'SCHEMA', N'app', N'TABLE', N'customers', N'COLUMN', N'name'
+GO
+CREATE TABLE app.orders (
+    id INT CONSTRAINT DF_orders_id DEFAULT NEXT VALUE FOR app.order_seq NOT NULL,
+    customer_id BIGINT NULL,
+    product_id INT NULL,
+    amount DECIMAL(10,2) NULL,
+    double_amount AS (amount * (2)),
+    status NVARCHAR(10) CONSTRAINT DF_orders_status DEFAULT N'new' NULL,
+    placed DATE CONSTRAINT DF_orders_placed DEFAULT CAST(GETDATE() AS DATE) NULL,
+    code UNIQUEIDENTIFIER CONSTRAINT DF_orders_code DEFAULT NEWID() NULL,
+    pos NVARCHAR(MAX) NULL,
+    CONSTRAINT orders_pkey PRIMARY KEY (id)
+)
+GO
+
+CREATE INDEX ix_customers_name ON app.customers (name)
+GO
+ALTER TABLE app.customers ADD CONSTRAINT customers_email_key UNIQUE (email)
+GO
+ALTER TABLE app.customers ADD CONSTRAINT ck_balance CHECK (balance >= (0))
+GO
+ALTER TABLE app.orders ADD CONSTRAINT ck_status CHECK ((status) IN (N'new', N'paid'))
+GO
+ALTER TABLE app.orders ADD CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES app.customers (id) ON DELETE CASCADE ON UPDATE CASCADE
+GO

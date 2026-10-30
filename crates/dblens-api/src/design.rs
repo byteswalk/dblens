@@ -17,6 +17,8 @@ pub async fn caps(State(s): State<AppState>, Path(id): Path<String>) -> ApiResul
 
 #[derive(Deserialize)]
 pub struct TableQuery {
+    #[serde(default)]
+    catalog: Option<String>,
     schema: String,
     name: String,
 }
@@ -27,7 +29,7 @@ pub async fn table(
     Path(id): Path<String>,
     Query(q): Query<TableQuery>,
 ) -> ApiResult<Json<DesignTable>> {
-    Ok(Json(s.service.design_table(&id, &q.schema, &q.name).await?))
+    Ok(Json(s.service.design_table(&id, q.catalog.as_deref(), &q.schema, &q.name).await?))
 }
 
 pub async fn preview(
