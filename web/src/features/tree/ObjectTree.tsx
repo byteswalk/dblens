@@ -300,6 +300,7 @@ export default function ObjectTree() {
       ? [
           { key: 'new-query', label: t('tree.menu.newQuery'), extra: 'Ctrl+T' },
           { key: 'sql-file', label: t('tree.menu.sqlFile') },
+          { key: 'privileges', label: t('tree.menu.privileges') },
           { type: 'divider' },
           { key: 'edit', label: t('tree.menu.editConnection') },
           { key: 'duplicate', label: t('tree.menu.duplicateConnection') },
@@ -349,6 +350,7 @@ export default function ObjectTree() {
       const children = generateMenu(target, relations) as NonNullable<MenuProps['items']>
       items.push({ key: 'gen-menu', label: t('tree.menu.generate'), children })
     }
+    if (target) items.push({ key: 'who-can-access', label: t('tree.menu.whoCanAccess') })
     return items.length ? [...items, { type: 'divider' }] : []
   }
 
@@ -374,6 +376,10 @@ export default function ObjectTree() {
         })
         insertSql(sql, k.profileId)
       } else if (key === 'view-data') openData(k)
+      else if (key === 'privileges') useTabs.getState().openPrivileges(k.profileId, t('privilege.title'))
+      else if (key === 'who-can-access' && k.type === 'o') {
+        useTabs.getState().openPrivileges(k.profileId, t('privilege.title'), { schema: k.schema, object: k.name })
+      }
       else if (key === 'design' && k.type === 'o') useTabs.getState().openDesign(k.profileId, { schema: k.schema, table: k.name })
       else if (key === 'new-table' && k.type === 's') useTabs.getState().openDesign(k.profileId, { schema: k.schema, table: null })
       else if (key === 'er' && k.type === 's') {

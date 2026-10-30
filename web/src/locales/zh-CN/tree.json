@@ -36,6 +36,8 @@
   },
   "filterPlaceholder": "按名称或注释过滤",
   "menu": {
+    "privileges": "用户与权限",
+    "whoCanAccess": "谁能访问",
     "compareModel": "与模型比对…",
     "er": "查看 ER 图",
     "saveAsModel": "另存为模型…",

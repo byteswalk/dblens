@@ -36,6 +36,8 @@
   },
   "filterPlaceholder": "Filter by name or comment",
   "menu": {
+    "privileges": "Users & privileges",
+    "whoCanAccess": "Who can access",
     "compareModel": "Compare with Model…",
     "er": "View ER Diagram",
     "saveAsModel": "Save as Model…",

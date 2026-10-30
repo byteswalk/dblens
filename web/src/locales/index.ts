@@ -11,6 +11,7 @@ import enMigrate from './en/migrate.json'
 import enEditor from './en/editor.json'
 import enImport from './en/import.json'
 import enModel from './en/model.json'
+import enPrivilege from './en/privilege.json'
 import enEr from './en/er.json'
 import enResults from './en/results.json'
 import enTree from './en/tree.json'
@@ -24,6 +25,7 @@ import zhMigrate from './zh-CN/migrate.json'
 import zhEditor from './zh-CN/editor.json'
 import zhImport from './zh-CN/import.json'
 import zhModel from './zh-CN/model.json'
+import zhPrivilege from './zh-CN/privilege.json'
 import zhEr from './zh-CN/er.json'
 import zhResults from './zh-CN/results.json'
 import zhTree from './zh-CN/tree.json'
@@ -38,6 +40,7 @@ export const zhCN = {
   import: zhImport,
   design: zhDesign,
   model: zhModel,
+  privilege: zhPrivilege,
   er: zhEr,
   document: zhDocument,
   migrate: zhMigrate,
@@ -54,6 +57,7 @@ export const en = {
   import: enImport,
   design: enDesign,
   model: enModel,
+  privilege: enPrivilege,
   er: enEr,
   document: enDocument,
   migrate: enMigrate,

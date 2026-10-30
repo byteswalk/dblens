@@ -3,7 +3,7 @@
 // 标签多时先缩窄（悬停看全名），再放不下就用滚轮横向滚动，不显示滚动条；右端 ▾ 列出全部标签；右键菜单批量关闭。
 
 import { Dropdown, type MenuProps } from 'antd'
-import { IconAffiliate, IconArrowsDiff, IconTransfer, IconChevronDown, IconClipboardCheck, IconFileCode, IconPlus, IconSchema, IconTable, IconTableOptions, IconX } from '@tabler/icons-react'
+import { IconAffiliate, IconArrowsDiff, IconTransfer, IconChevronDown, IconClipboardCheck, IconFileCode, IconPlus, IconShieldLock, IconSchema, IconTable, IconTableOptions, IconX } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { Spin } from 'antd'
 import { Suspense, type WheelEvent, lazy, useEffect, useRef } from 'react'
@@ -30,6 +30,8 @@ const MigrateView = lazy(() => import('../migrate/MigrateView'))
 // 规范检查：规范库和结果页
 const LintLibraryView = lazy(() => import('../lint/LibraryView'))
 const LintRunView = lazy(() => import('../lint/RunView'))
+// 账号权限：懒加载，不影响启动
+const PrivilegesView = lazy(() => import('../privileges/PrivilegesView'))
 
 /** 按住标签横向拖动：移过别的标签时换位。不用 HTML5 拖放：Tauri 的窗口拖放会拦截它。 */
 function startTabDrag(id: string, startX: number) {
@@ -92,7 +94,9 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
         title={`${tab.title} · ${profileName}`}
         data-tab-id={tab.id}
       >
-        {tab.lint ? (
+        {tab.privileges ? (
+          <IconShieldLock size={16} />
+        ) : tab.lint ? (
           <IconClipboardCheck size={16} />
         ) : tab.er ? (
           <IconAffiliate size={16} />
@@ -205,7 +209,11 @@ export default function Workspace() {
         )}
       </div>
       {tab &&
-        (tab.lint?.view === 'library' ? (
+        (tab.privileges ? (
+          <Suspense fallback={<Spin style={{ margin: 48 }} />}>
+            <PrivilegesView key={tab.id} tab={tab} />
+          </Suspense>
+        ) : tab.lint?.view === 'library' ? (
           <Suspense fallback={<Spin style={{ margin: 48 }} />}>
             <LintLibraryView key={tab.id} />
           </Suspense>
