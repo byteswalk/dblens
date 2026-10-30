@@ -340,6 +340,8 @@ trait Policy: Send + Sync {
 - 2026-10-29 用户决定：国产库第二批取消，兼容 MySQL / PG / Oracle 协议的产品不做产品识别；先做 SQL Server，分两份：M6a 连接、浏览、查询；M6b 表设计器、导入、文档导出、比对、迁移。
 - M6a 已完成（设计 `docs/superpowers/specs/2026-10-29-m6a-sqlserver-design.md`，详细计划 `docs/superpowers/plans/2026-10-29-m6a-sqlserver.md`，说明 `docs/notes/m6a-sqlserver.md`）。
 - M6b 已完成（设计 `docs/superpowers/specs/2026-10-29-m6b-sqlserver-design.md`，详细计划 `docs/superpowers/plans/2026-10-29-m6b-sqlserver.md`，说明 `docs/notes/m6b-sqlserver.md`）。M6 全部完成，SQL Server 与其他库同等可用。
+- M7a 已完成（设计 `docs/superpowers/specs/2026-10-30-m7-lint-design.md`，详细计划 `docs/superpowers/plans/2026-10-30-m7a-lint.md`，说明 `docs/notes/m7a-lint.md`）。
+- M7b 已完成（同一设计，详细计划 `docs/superpowers/plans/2026-10-30-m7b-lint-reports.md`，说明 `docs/notes/m7b-lint-reports.md`）。M7c 尚未开始。
 
 ## 12. 风险与待验证项
 
