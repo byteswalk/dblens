@@ -78,8 +78,10 @@
     "view": {
       "title": "View",
       "themeSystem": "System Theme",
-      "themeLight": "Light Theme",
-      "themeDark": "Dark Theme"
+      "themeLight": "Paper",
+      "themeDark": "Ink",
+      "themeSlate": "Slate",
+      "themeRose": "Rose"
     },
     "sql": {
       "runCurrent": "Run Current Statement",

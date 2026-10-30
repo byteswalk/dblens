@@ -77,8 +77,10 @@
     "view": {
       "title": "查看",
       "themeSystem": "主题跟随系统",
-      "themeLight": "亮色主题",
-      "themeDark": "暗色主题"
+      "themeLight": "素白",
+      "themeDark": "墨黑",
+      "themeSlate": "钢岩",
+      "themeRose": "藕荷"
     },
     "sql": {
       "runCurrent": "执行当前语句",

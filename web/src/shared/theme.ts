@@ -3,13 +3,18 @@
 
 import { useSyncExternalStore } from 'react'
 
-export type ThemePref = 'system' | 'light' | 'dark'
-export type Theme = 'light' | 'dark'
+export type ThemePref = 'system' | 'light' | 'dark' | 'slate' | 'rose'
+export type Theme = 'light' | 'dark' | 'slate' | 'rose'
 
 export const THEME_KEY = 'ui.theme'
 
 export function parseThemePref(v: string | undefined): ThemePref {
-  return v === 'light' || v === 'dark' ? v : 'system'
+  return v === 'light' || v === 'dark' || v === 'slate' || v === 'rose' ? v : 'system'
+}
+
+/** 深色系主题：antd、ER 图等只分深浅的组件按它选。 */
+export function isDarkTheme(t: Theme): boolean {
+  return t === 'dark' || t === 'slate'
 }
 
 export function resolveTheme(pref: ThemePref, systemDark: boolean): Theme {

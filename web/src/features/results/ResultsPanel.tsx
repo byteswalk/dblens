@@ -1,7 +1,7 @@
 // 结果面板（设计稿第 2 部分）：结果集、失败的语句、消息各一个标签。每次执行后自动选中第一个结果集，
 // 没有结果集时选中第一个失败的语句，再没有就选"消息"。结果集标签右侧有"导出"按钮（M1c3，执行计划的结果除外）。
 
-import { IconAlertCircle, IconBinaryTree, IconDownload, IconMessage, IconTable } from '@tabler/icons-react'
+import { IconAlertCircle, IconArrowAutofitWidth, IconBinaryTree, IconDownload, IconMessage, IconTable } from '@tabler/icons-react'
 import { Button, Spin } from 'antd'
 import { type ReactNode, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,7 +37,9 @@ export default function ResultsPanel({ rt, onFetchMore, sort, onSort, onExport, 
   const tabs = resultTabs(exec, explain, capped)
   // null 表示自动：跟着执行进度选中第一个结果；用户点过标签后保持用户的选择，直到下一次执行
   const [selected, setSelected] = useState<string | null>(null)
-  useEffect(() => setSelected(null), [rt.submission])
+  // 自动刷新时语句没变，保持选中的标签
+  useEffect(() => setSelected(null), [rt.submission?.sql])
+  const [fitKey, setFitKey] = useState(0)
   const first = tabs.find((x) => x.kind === 'result') ?? tabs.find((x) => x.kind === 'error') ?? tabs.at(-1)!
   const current = tabs.find((x) => x.key === selected) ?? first
 
@@ -62,6 +64,17 @@ export default function ResultsPanel({ rt, onFetchMore, sort, onSort, onExport, 
         ))}
         <span className="grow" />
         {running && <Spin size="small" style={{ marginRight: 8 }} />}
+        {current.kind === 'result' && !renderResult && (
+          <Button
+            type="text"
+            size="small"
+            icon={<IconArrowAutofitWidth size={16} />}
+            onClick={() => setFitKey((k) => k + 1)}
+            style={{ marginRight: 4 }}
+          >
+            {t('results.fitColumns')}
+          </Button>
+        )}
         {onExport && current.kind === 'result' && !explain && (
           <Button
             type="text"
@@ -88,6 +101,7 @@ export default function ResultsPanel({ rt, onFetchMore, sort, onSort, onExport, 
             onFetchMore={onFetchMore}
             sort={sort}
             onSort={onSort}
+            fitKey={fitKey}
           />
         )}
         {current.kind === 'error' && (

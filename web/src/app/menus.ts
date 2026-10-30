@@ -52,6 +52,8 @@ export function buildMenus(s: MenuState): MenuGroup[] {
     theme('system', t('app.menu.view.themeSystem')),
     theme('light', t('app.menu.view.themeLight')),
     theme('dark', t('app.menu.view.themeDark')),
+    theme('slate', t('app.menu.view.themeSlate')),
+    theme('rose', t('app.menu.view.themeRose')),
   ]
 
   const sql: MenuEntry[] = [

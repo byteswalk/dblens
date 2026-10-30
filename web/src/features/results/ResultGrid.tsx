@@ -13,10 +13,10 @@ import {
   type Rectangle,
   type Theme,
 } from '@glideapps/glide-data-grid'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { type ResultSet, cellText } from '../../shared/exec'
-import { type Order, sortedTitle } from '../data/sort'
+import { type Order, nextOrder, sortedTitle } from '../data/sort'
 import { useSetting } from '../../shared/settings'
 import { THEME_KEY } from '../../shared/theme'
 import CellViewer, { type ViewedCell } from './CellViewer'
@@ -24,10 +24,25 @@ import { isNumeric } from './cell'
 import { shouldFetchMore } from './results'
 
 /** 按列名和前几行的内容估计列宽。 */
-export function columnWidth(r: ResultSet, col: number): number {
+export function columnWidth(r: ResultSet, col: number, sample = 50, max = 420): number {
   let chars = r.columns[col].name.length + 2
-  for (const row of r.rows.slice(0, 50)) chars = Math.max(chars, cellText(row[col]).length)
-  return Math.min(420, Math.max(72, chars * 8 + 24))
+  for (const row of r.rows.slice(0, sample)) chars = Math.max(chars, cellText(row[col]).length)
+  return Math.min(max, Math.max(72, chars * 8 + 24))
+}
+
+/** 已加载的行按 order 排序后的下标：数值按大小，其余按文字，NULL 排最后。 */
+export function sortedRows(r: ResultSet, order: Order | undefined): number[] {
+  const rows = r.rows.map((_, i) => i)
+  const col = order ? r.columns.findIndex((c) => c.name === order.column) : -1
+  if (!order || col < 0) return rows
+  const sign = order.desc ? -1 : 1
+  return rows.sort((a, b) => {
+    const [x, y] = [r.rows[a][col], r.rows[b][col]]
+    if (x.t === 'null' || y.t === 'null') return x.t === y.t ? a - b : x.t === 'null' ? 1 : -1
+    const [tx, ty] = [cellText(x), cellText(y)]
+    const d = isNumeric(x) && isNumeric(y) ? Number(tx) - Number(ty) : tx.localeCompare(ty, undefined, { numeric: true })
+    return d * sign || a - b
+  })
 }
 
 /** 表格配色取自外壳的 CSS 变量，主题切换时重新读取。 */
@@ -63,24 +78,36 @@ export interface ResultGridProps {
   /** 服务端在等 fetch_more（这个结果集还有下一批）。 */
   waiting: boolean
   onFetchMore(): void
-  /** 当前的排序；给出 onSort 时点列头排序。 */
+  /** 服务端排序（数据标签）；不给 onSort 时点列头只排已加载的行。 */
   sort?: Order
   onSort?(column: string): void
+  /** 递增时按全部已加载的行自适应列宽。 */
+  fitKey?: number
 }
 
-export default function ResultGrid({ result, waiting, onFetchMore, sort, onSort }: ResultGridProps) {
+export default function ResultGrid({ result, waiting, onFetchMore, sort, onSort, fitKey = 0 }: ResultGridProps) {
   const theme = useGridTheme()
   const [viewed, setViewed] = useState<ViewedCell | null>(null)
   // 列宽在列信息和第一批行到达时估计，续取的行不影响
   const hasRows = result.rows.length > 0
+  const [widths, setWidths] = useState<Record<number, number>>({})
+  useEffect(() => {
+    if (fitKey) setWidths(Object.fromEntries(result.columns.map((_, i) => [i, columnWidth(result, i, Infinity, 800)])))
+    // 只在点按钮时重算
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey])
+  const [localSort, setLocalSort] = useState<Order>(null)
+  const order = onSort ? sort : localSort
+  const rowCount = result.rows.length
+  const view = useMemo(() => sortedRows(result, onSort ? null : localSort), [result, rowCount, localSort, onSort])
   const columns: GridColumn[] = useMemo(
-    () => result.columns.map((c, i) => ({ id: String(i), title: sortedTitle(c.name, sort), width: columnWidth(result, i) })),
-    [result.columns, hasRows, sort],
+    () => result.columns.map((c, i) => ({ id: String(i), title: sortedTitle(c.name, order), width: widths[i] ?? columnWidth(result, i) })),
+    [result.columns, hasRows, order, widths],
   )
   const muted = useMemo(() => ({ textDark: theme.textLight }), [theme])
 
   const getCellContent = ([col, row]: Item): GridCell => {
-    const c = result.rows[row]?.[col] ?? { t: 'null' }
+    const c = result.rows[view[row]]?.[col] ?? { t: 'null' }
     const text = cellText(c)
     return {
       kind: GridCellKind.Text,
@@ -104,9 +131,14 @@ export default function ResultGrid({ result, waiting, onFetchMore, sort, onSort 
         getCellContent={getCellContent}
         getCellsForSelection
         onVisibleRegionChanged={onVisible}
-        onHeaderClicked={onSort ? (col) => onSort(result.columns[col].name) : undefined}
+        onHeaderClicked={(col) => {
+          const name = result.columns[col].name
+          if (onSort) onSort(name)
+          else setLocalSort((o) => nextOrder(o, name))
+        }}
+        onColumnResize={(_, width, col) => setWidths((w) => ({ ...w, [col]: width }))}
         onCellActivated={([col, row]) =>
-          setViewed({ column: result.columns[col].name, row: row + 1, value: result.rows[row][col] })
+          setViewed({ column: result.columns[col].name, row: view[row] + 1, value: result.rows[view[row]][col] })
         }
         rowMarkers="number"
         smoothScrollX

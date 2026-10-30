@@ -1,4 +1,9 @@
 {
+  "refresh": {
+    "prodTitle": "Auto refresh on a production connection?",
+    "prodContent": "The query will run again every {{seconds}} seconds and keep using production resources.",
+    "stopped": "Auto refresh turned off: a statement failed or was not a query"
+  },
   "command": {
     "runCurrent": "Run Current Statement",
     "runAll": "Run All",
@@ -12,6 +17,8 @@
     "runAll": "Run All (F5)",
     "stop": "Stop (Ctrl+Break)",
     "stopOnError": "Stop on Error",
+    "refreshOff": "Auto refresh: off",
+    "refreshEvery": "Every {{seconds}}s",
     "continueOnError": "Continue on Error",
     "autoCommit": "Auto-commit",
     "manualCommit": "Manual Commit",

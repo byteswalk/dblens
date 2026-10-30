@@ -1,4 +1,9 @@
 {
+  "refresh": {
+    "prodTitle": "生产连接开启自动刷新？",
+    "prodContent": "将每 {{seconds}} 秒重新执行一次查询，会持续占用生产库资源。",
+    "stopped": "自动刷新已关闭：语句出错，或含有查询以外的语句"
+  },
   "command": {
     "runCurrent": "执行当前语句",
     "runAll": "执行全部",
@@ -12,6 +17,8 @@
     "runAll": "执行全部（F5）",
     "stop": "停止（Ctrl+Break）",
     "stopOnError": "出错停止",
+    "refreshOff": "自动刷新：关",
+    "refreshEvery": "每 {{seconds}} 秒刷新",
     "continueOnError": "出错继续",
     "autoCommit": "自动提交",
     "manualCommit": "手动提交",

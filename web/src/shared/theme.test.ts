@@ -14,5 +14,7 @@ describe('主题', () => {
     expect(parseThemePref('dark')).toBe('dark')
     expect(parseThemePref(undefined)).toBe('system')
     expect(parseThemePref('blue')).toBe('system')
+    expect(parseThemePref('slate')).toBe('slate')
+    expect(parseThemePref('rose')).toBe('rose')
   })
 })

@@ -107,7 +107,7 @@ export default function SqlEditor({ path, language, defaultValue, marks, sql, on
       keepCurrentModel
       language={language}
       defaultValue={defaultValue}
-      theme={theme === 'dark' ? 'dblens-dark' : 'dblens-light'}
+      theme={`dblens-${theme}`}
       onMount={onMount}
       onChange={(v) => onChange(v ?? '')}
       options={{

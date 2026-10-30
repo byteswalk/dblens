@@ -13,24 +13,31 @@ import VaultDialog from '../features/connections/VaultDialog'
 import { type Api, createApi } from '../shared/api'
 import { LANG_KEY, applyLang, parseLangPref, resolveLang } from '../shared/i18n'
 import { useSetting, useSettings } from '../shared/settings'
-import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../shared/theme'
+import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark, isDarkTheme, type Theme } from '../shared/theme'
 import SettingsDialog from './SettingsDialog'
 import Shell from './Shell'
 import { ApiContext } from './context'
 import './shell.css'
 import { SIDE_KEY, parseSide, useUi } from './ui'
 
+/** 有自己强调色的主题。 */
+const THEME_PRIMARY: Partial<Record<Theme, { colorPrimary: string }>> = {
+  slate: { colorPrimary: '#62a9cc' },
+  rose: { colorPrimary: '#a84a70' },
+}
+
 function Themed() {
   const systemDark = useSystemDark()
   const theme = resolveTheme(parseThemePref(useSetting(THEME_KEY)), systemDark)
   useEffect(() => {
     document.documentElement.dataset.theme = theme
+    document.documentElement.dataset.tone = isDarkTheme(theme) ? 'dark' : 'light'
   }, [theme])
   const lang = resolveLang(parseLangPref(useSetting(LANG_KEY)))
   useEffect(() => applyLang(lang), [lang])
-  const algorithm = theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm
+  const algorithm = isDarkTheme(theme) ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm
   // 不用 compactAlgorithm：它把字号再减 2px。正文 14px 与 shell.css 的 --fs 一致，控件高度略收紧
-  const token = { fontSize: 14, borderRadius: 4, controlHeight: 30, controlHeightSM: 26 }
+  const token = { fontSize: 14, borderRadius: 4, controlHeight: 30, controlHeightSM: 26, ...THEME_PRIMARY[theme] }
   return (
     <ConfigProvider locale={lang === 'en' ? enUS : zhCN} theme={{ algorithm, token }}>
       <AntApp style={{ height: '100%' }}>

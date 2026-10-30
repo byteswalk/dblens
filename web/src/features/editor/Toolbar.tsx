@@ -44,9 +44,12 @@ export interface ToolbarProps {
   rt: TabRuntime
   runner: Runner
   profiles: Profile[]
+  /** 自动刷新的间隔（秒），0 表示关闭。 */
+  refresh: number
+  onRefreshChange(seconds: number): void
 }
 
-export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
+export default function Toolbar({ tab, rt, runner, profiles, refresh, onRefreshChange }: ToolbarProps) {
   const api = useApi()
   const { t } = useTranslation()
   const { message, modal } = App.useApp()
@@ -87,6 +90,18 @@ export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
           { value: 'continue', label: t('editor.toolbar.continueOnError') },
         ]}
         style={{ width: 92 }}
+      />
+      <Select
+        size="small"
+        variant="filled"
+        value={refresh}
+        onChange={onRefreshChange}
+        options={[0, 5, 10, 30, 60].map((s) => ({
+          value: s,
+          label: s ? t('editor.toolbar.refreshEvery', { seconds: s }) : t('editor.toolbar.refreshOff'),
+        }))}
+        popupMatchSelectWidth={false}
+        style={{ width: 118 }}
       />
       <span className="sep" />
       <Select

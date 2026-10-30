@@ -34,7 +34,7 @@ import { useApi } from '../../app/context'
 import { type DesignTableModel, type ErDiagram, type ErDisplay, type ErPosition, type ErTable, DEFAULT_DIAGRAM, schemaLabel } from '../../shared/api'
 import { useSetting } from '../../shared/settings'
 import { desktop } from '../../shared/shell'
-import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../../shared/theme'
+import { THEME_KEY, isDarkTheme, parseThemePref, resolveTheme, useSystemDark } from '../../shared/theme'
 import { withVault } from '../connections/vault'
 import { type QueryTab, useTabs } from '../editor/tabs'
 import { useDocExport } from '../document/dialog'
@@ -478,7 +478,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
           onEdgeMouseEnter={(e, edge) => setHover({ x: e.clientX, y: e.clientY, text: (edge.data as { title: string }).title })}
           onEdgeMouseLeave={() => setHover(null)}
           onlyRenderVisibleElements={!exporting}
-          colorMode={lightExport ? 'light' : theme}
+          colorMode={lightExport ? 'light' : isDarkTheme(theme) ? 'dark' : 'light'}
           fitView
           minZoom={0.05}
           maxZoom={2}

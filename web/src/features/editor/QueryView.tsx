@@ -3,7 +3,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button } from 'antd'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
 
@@ -29,11 +29,14 @@ import { type QueryTab, takeRun, useTabs } from './tabs'
 /** 会改变对象结构的语句（按首个关键字）。 */
 const DDL = new Set(['CREATE', 'ALTER', 'DROP', 'RENAME', 'TRUNCATE', 'COMMENT'])
 
+/** 自动刷新只重跑这些语句。 */
+const REFRESHABLE = new Set(['SELECT', 'WITH', 'SHOW'])
+
 export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: Profile[] }) {
   const api = useApi()
   const qc = useQueryClient()
   const { t } = useTranslation()
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const runner = runnerFor(api, tab.id)
   const rt = useTabRuntime(tab.id)
   const profile = profiles.find((p) => p.id === tab.profileId)
@@ -187,9 +190,34 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
   const confirm = !rt.running && !rt.declined ? rt.exec.confirm : null
   const sub = rt.submission
 
+  // 自动刷新：上一轮结束后隔 refresh 秒重跑同样的语句。只重跑查询，出错或有写操作时关掉
+  const [refresh, setRefresh] = useState(0)
+  const changeRefresh = (seconds: number) => {
+    if (seconds && !refresh && profile?.environment === 'prod') {
+      modal.confirm({
+        title: t('editor.refresh.prodTitle'),
+        content: t('editor.refresh.prodContent', { seconds }),
+        onOk: () => setRefresh(seconds),
+      })
+    } else setRefresh(seconds)
+  }
+  const idle = !rt.running || rt.exec.waitingForMore
+  useEffect(() => {
+    if (!refresh || !idle || !sub) return
+    if (!rt.exec.statements.every((s) => !s.error && REFRESHABLE.has(s.keyword))) {
+      setRefresh(0)
+      message.warning(t('editor.refresh.stopped'))
+      return
+    }
+    const timer = setTimeout(() => {
+      void runner.stop().then(() => runner.run(sub.sql, sub.base, sub.opts, rt.source))
+    }, refresh * 1000)
+    return () => clearTimeout(timer)
+  }, [refresh, idle, sub, rt.exec, rt.source, runner, message, t])
+
   return (
     <div className="query">
-      <Toolbar tab={tab} rt={rt} runner={runner} profiles={profiles} />
+      <Toolbar tab={tab} rt={rt} runner={runner} profiles={profiles} refresh={refresh} onRefreshChange={changeRefresh} />
       {!profile && <Alert type="error" banner message={t('editor.query.profileDeleted')} />}
       {rt.session?.broken && (
         <Alert

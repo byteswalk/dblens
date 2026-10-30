@@ -1,4 +1,5 @@
 {
+  "fitColumns": "Fit columns",
   "tab": {
     "result": "Result {{n}}",
     "explain": "Explain Plan",

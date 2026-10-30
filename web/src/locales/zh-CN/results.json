@@ -1,4 +1,5 @@
 {
+  "fitColumns": "自适应列宽",
   "tab": {
     "result": "结果 {{n}}",
     "explain": "执行计划",
