@@ -1,4 +1,10 @@
 {
+  "crash": {
+    "title": "Something went wrong",
+    "hint": "The error has been logged. Unsaved work may be lost after reloading.",
+    "copy": "Copy details",
+    "reload": "Reload"
+  },
   "boot": {
     "serverUnreachable": "Cannot connect to the DBLens service",
     "missingToken": "Missing access token",

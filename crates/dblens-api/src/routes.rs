@@ -72,6 +72,28 @@ pub struct SettingBody {
     pub value: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct ClientLog {
+    pub kind: String,
+    pub message: String,
+    pub stack: Option<String>,
+    pub component_stack: Option<String>,
+}
+
+/// 前端的错误写进日志：界面崩溃在日志里能查到。
+pub async fn client_log(Json(b): Json<ClientLog>) -> StatusCode {
+    const MAX_CHARS: usize = 8000;
+    let cut = |s: Option<String>| s.unwrap_or_default().chars().take(MAX_CHARS).collect::<String>();
+    tracing::error!(
+        kind = %b.kind,
+        stack = %cut(b.stack),
+        component_stack = %cut(b.component_stack),
+        "前端错误：{}",
+        b.message.chars().take(MAX_CHARS).collect::<String>()
+    );
+    StatusCode::NO_CONTENT
+}
+
 pub async fn set_setting(
     State(s): State<AppState>,
     Path(key): Path<String>,

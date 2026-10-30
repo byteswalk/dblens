@@ -16,6 +16,8 @@ import { useSetting, useSettings } from '../shared/settings'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark, isDarkTheme, type Theme } from '../shared/theme'
 import SettingsDialog from './SettingsDialog'
 import Shell from './Shell'
+import { installCrashLog } from '../shared/crash'
+import CrashBoundary from './CrashBoundary'
 import { ApiContext } from './context'
 import './shell.css'
 import { SIDE_KEY, parseSide, useUi } from './ui'
@@ -40,7 +42,9 @@ function Themed() {
   return (
     <ConfigProvider locale={lang === 'en' ? enUS : zhCN} theme={{ algorithm, token }}>
       <AntApp style={{ height: '100%' }}>
-        <Shell />
+        <CrashBoundary>
+          <Shell />
+        </CrashBoundary>
         <ConnectionDialog />
         <VaultDialog />
         <SettingsDialog />
@@ -75,6 +79,9 @@ function Boot({ api }: { api: Api }) {
 export default function App({ token }: { token: string | null }) {
   const { t } = useTranslation()
   const api = useMemo(() => (token ? createApi(token) : null), [token])
+  useEffect(() => {
+    if (api) installCrashLog(api.clientLog)
+  }, [api])
   const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), [])
   if (!api) {
     return (

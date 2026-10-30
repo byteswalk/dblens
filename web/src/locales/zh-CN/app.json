@@ -1,4 +1,10 @@
 {
+  "crash": {
+    "title": "界面出错了",
+    "hint": "错误已写入日志。重新加载后，未保存的内容可能丢失。",
+    "copy": "复制错误信息",
+    "reload": "重新加载"
+  },
   "boot": {
     "serverUnreachable": "无法连接 DBLens 服务",
     "missingToken": "缺少访问令牌",

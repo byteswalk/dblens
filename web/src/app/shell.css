@@ -118,6 +118,39 @@
   --muted: #8a7480;
   --accent: #a84a70;
 }
+.crash {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--panel);
+  color: var(--text);
+  user-select: text;
+}
+.crash pre {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  font: 12px/1.5 var(--mono);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+.crash-actions {
+  gap: 8px;
+}
+.crash button {
+  padding: 4px 14px;
+  color: var(--text);
+  background: var(--hover);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  cursor: pointer;
+}
 html,
 body,
 #root {

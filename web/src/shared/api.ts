@@ -1,6 +1,7 @@
 // REST 接口客户端。接口说明见 docs/notes/m0-4b-api.md；页面与接口同源，路径都以 /api 开头。
 // 请求都带上当前界面语言（REST 用 Accept-Language，WebSocket 用 lang 参数），后端按它输出错误和提示。
 
+import type { ClientError } from './crash'
 import type { CellValue } from './exec'
 import { currentLang, t } from './i18n'
 
@@ -1104,6 +1105,7 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
 
   return {
     settings: () => request<Record<string, string>>('GET', '/settings'),
+    clientLog: (e: ClientError) => request<void>('POST', '/client-log', e),
     putSetting: (key: string, value: string | null) =>
       request<null>('PUT', `/settings/${encodeURIComponent(key)}`, { value }),
     drivers: () => request<DriverStatus[]>('GET', '/drivers'),

@@ -58,6 +58,7 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/drivers", get(routes::drivers))
         .route("/drivers/{driver}/lib-dir", put(routes::set_lib_dir))
         .route("/settings", get(routes::settings))
+        .route("/client-log", post(routes::client_log))
         .route("/settings/{key}", put(routes::set_setting))
         .route("/history", get(routes::history).delete(routes::clear_history))
         .route("/history/{id}", delete(routes::delete_history))
