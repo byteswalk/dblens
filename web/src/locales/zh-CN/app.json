@@ -55,6 +55,7 @@
   },
   "titleBar": {
     "windowTitle": "{{tab}} · {{connection}} — {{app}}",
+    "windowTitlePlain": "{{tab}} — {{app}}",
     "pin": "窗口置顶（Ctrl+Shift+T）",
     "minimize": "最小化",
     "maximize": "最大化",

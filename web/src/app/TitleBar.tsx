@@ -142,14 +142,17 @@ export default function TitleBar() {
   const profile = profiles?.find((p) => p.id === tab?.profileId)
   // 标题："当前标签 · 连接 — DBLens 数洞"
   const appName = t('common.appName')
-  const title = tab
-    ? t('app.titleBar.windowTitle', {
-        tab: tab.title,
-        // 模型的设计器标签、比对标签不绑定连接
-        connection: tab.profileId ? (profile?.name ?? t('app.status.connectionDeleted')) : t('app.side.models'),
-        app: appName,
-      })
-    : appName
+  const title = !tab
+    ? appName
+    : // 规范库、规范检查标签不绑连接，来源在标签标题里已写明，不加连接段（否则会退化成"模型"）
+      tab.lint
+      ? t('app.titleBar.windowTitlePlain', { tab: tab.title, app: appName })
+      : t('app.titleBar.windowTitle', {
+          tab: tab.title,
+          // 模型的设计器标签、比对标签不绑定连接
+          connection: tab.profileId ? (profile?.name ?? t('app.status.connectionDeleted')) : t('app.side.models'),
+          app: appName,
+        })
   useEffect(() => {
     document.title = title
   }, [title])

@@ -56,6 +56,7 @@
   },
   "titleBar": {
     "windowTitle": "{{tab}} · {{connection}} — {{app}}",
+    "windowTitlePlain": "{{tab}} — {{app}}",
     "pin": "Always on Top (Ctrl+Shift+T)",
     "minimize": "Minimize",
     "maximize": "Maximize",
