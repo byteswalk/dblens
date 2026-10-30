@@ -44,6 +44,16 @@ pnpm --dir web tauri signer generate -w "<私钥保存路径>"
 - 密码：存进密码管理器，不要和私钥文件放在同一个地方。
 - 每次大版本发布前，确认备份能读出来。
 
+## Java 桥接
+
+GBase 8s 经 Java 桥接连接，安装包要带桥接程序和精简 JRE。
+
+- 打包机需要 JDK 11 及以上，`jlink` 用它的 jmods。**发布用 OpenJDK 构建（如 Eclipse Temurin）**，不要用 Oracle JDK，后者的再分发条款不同。
+- `pnpm package` 先运行 `scripts/build-bridge.mjs`、`scripts/prepare-clients.mjs`，生成被 git 忽略的 `clients-staging/`，再打进安装包。
+- 这个目录按当前平台生成，每个平台要各打一次。
+- `dblens-server` 的压缩包要把 `clients-staging/` 改名为 `clients/`，放到程序旁边。
+- JDBC 驱动不随包发布。只有确认许可后，才把它写进 `scripts/clients.manifest.json` 的 `jdbc`（文件名和 SHA-256），文件放在 `DBLENS_CLIENTS_DIR`。
+
 ## 发布流程
 
 不使用 GitHub Actions：在本机检查、打包，再上传到 GitHub。这台 Windows 机器只能打 Windows 的包，其他平台要在对应系统上打。

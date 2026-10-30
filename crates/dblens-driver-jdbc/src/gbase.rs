@@ -45,9 +45,13 @@ pub(crate) fn login_error(code: i32, message: String) -> Error {
     }
 }
 
-/// 程序自带的目录：`<程序目录>/clients`。Linux 的 deb 和 macOS 的 app 由打包任务放到同样的相对位置。
+/// 程序自带的目录：Windows 和压缩包在程序旁边，deb 在 `../lib/<产品>/`，macOS 的 app 在 `../Resources/`。
 fn bundled() -> Option<PathBuf> {
-    Some(std::env::current_exe().ok()?.parent()?.join("clients"))
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    [dir.join("clients"), dir.join("../lib/dblens/clients"), dir.join("../Resources/clients")]
+        .into_iter()
+        .find(|d| d.is_dir())
 }
 
 struct Parts {
