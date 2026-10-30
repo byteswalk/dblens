@@ -27,7 +27,8 @@ pub fn placeholder(family: Family, index: usize) -> String {
     }
 }
 
-fn needs_quote(family: Family, name: &str) -> bool {
+/// 名字必须加引号才能引用时返回 true。
+pub fn needs_quote(family: Family, name: &str) -> bool {
     let Some(first) = name.chars().next() else { return true };
     let first_ok = match family {
         Family::MySql | Family::Postgres | Family::SqlServer => first.is_ascii_alphabetic() || first == '_',
@@ -46,6 +47,11 @@ fn needs_quote(family: Family, name: &str) -> bool {
         Family::Oracle | Family::Dameng => !name.chars().any(|c| c.is_ascii_lowercase()),
     };
     !case_ok || is_reserved(family, &name.to_ascii_uppercase())
+}
+
+/// 名字是保留字时返回 true，不分大小写。
+pub fn is_reserved_word(family: Family, name: &str) -> bool {
+    is_reserved(family, &name.to_ascii_uppercase())
 }
 
 fn is_reserved(family: Family, upper: &str) -> bool {

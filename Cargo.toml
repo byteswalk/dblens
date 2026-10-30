@@ -23,6 +23,7 @@ dblens-driver-mysql = { path = "crates/dblens-driver-mysql" }
 dblens-driver-oracle = { path = "crates/dblens-driver-oracle" }
 dblens-driver-postgres = { path = "crates/dblens-driver-postgres" }
 dblens-driver-sqlserver = { path = "crates/dblens-driver-sqlserver" }
+dblens-lint = { path = "crates/dblens-lint" }
 
 argon2 = "0.6.0"
 async-trait = "0.1.92"

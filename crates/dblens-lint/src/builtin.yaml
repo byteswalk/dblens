@@ -1,0 +1,950 @@
+# 内置规范。条款的检查逻辑在 Rust 里，这里只记文字、开关、级别和参数。
+# 编号发布后不要改：用户的差异和旧检查结果都按编号关联。
+# 文字不带海关字样和样例；海关式要求（必备字段名、应用前缀、全大写）做成参数，复制后配置。
+
+# ============================================================
+- id: general
+  name:
+    zh-CN: 数洞通用
+    en: Shudong General
+  clauses:
+    - id: naming.charset
+      section: naming
+      text:
+        zh-CN: 对象名由字母、数字、下划线组成，以字母开头
+        en: Object names use letters, digits and underscores, and start with a letter
+      severity: warning
+      rules:
+        - { id: name.charset }
+    - id: naming.length
+      section: naming
+      text:
+        zh-CN: 对象名长度不超过限定值
+        en: Object names stay within the length limit
+      severity: warning
+      rules:
+        - { id: name.max_length, params: { target: all, max: 64 } }
+    - id: naming.reserved
+      section: naming
+      text:
+        zh-CN: 不用保留字、关键字单独作对象名
+        en: Do not use a reserved word alone as an object name
+      severity: warning
+      rules:
+        - { id: name.reserved }
+    - id: naming.quoted
+      section: naming
+      text:
+        zh-CN: 对象名不需要加引号即可引用
+        en: Object names are usable without quoting
+      severity: info
+      rules:
+        - { id: name.quoted }
+    - id: naming.pinyin
+      section: naming
+      text:
+        zh-CN: 不用汉语拼音或拼音首字母作对象名
+        en: Do not name objects with Hanyu Pinyin
+      severity: warning
+      rules:
+        - { id: name.pinyin }
+    - id: naming.temporal_suffix
+      section: naming
+      text:
+        zh-CN: 日期字段以 DATE 结尾，时间字段以 TIME 结尾
+        en: Date columns end with DATE, datetime columns with TIME
+      severity: info
+      rules:
+        - { id: name.temporal_suffix, params: { date: [DATE], time: [TIME] } }
+    - id: naming.prefix
+      section: naming
+      text:
+        zh-CN: 主键、索引、序列等按前缀命名（PK_、UK_、IX_、SEQ_、V_ 等）
+        en: Keys, indexes, sequences, etc. follow name prefixes (PK_, UK_, IX_, SEQ_, V_...)
+      enabled: false
+      severity: info
+      rules:
+        - { id: name.prefix, params: { target: primary_key, prefix: [PK_] } }
+        - { id: name.prefix, params: { target: unique, prefix: [UK_] } }
+        - { id: name.prefix, params: { target: index, prefix: [IX_, IDX_] } }
+        - { id: name.prefix, params: { target: sequence, prefix: [SEQ_] } }
+        - { id: name.prefix, params: { target: view, prefix: [V_, VW_] } }
+    - id: table.primary_key
+      section: table
+      text:
+        zh-CN: 每张表都应有主键（纯技术日志表除外）
+        en: Every table should have a primary key (pure technical log tables aside)
+      severity: warning
+      rules:
+        - { id: table.primary_key }
+    - id: table.comment
+      section: table
+      text:
+        zh-CN: 每张表都应有中文注释
+        en: Every table should have a comment
+      severity: warning
+      rules:
+        - { id: table.comment }
+    - id: table.max_columns
+      section: table
+      text:
+        zh-CN: 单表字段数不超过限定值
+        en: A table stays within the column-count limit
+      severity: warning
+      rules:
+        - { id: table.max_columns, params: { max: 200 } }
+    - id: table.required_columns
+      section: table
+      text:
+        zh-CN: 表应含创建时间、更新时间字段（字段名可配）
+        en: Tables should carry create-time and update-time columns (names configurable)
+      severity: info
+      manual_note:
+        zh-CN: 请按本系统的命名核对必备字段
+        en: Check the required columns against this system's naming
+      rules:
+        - id: table.required_columns
+          params:
+            fields: ["CREATE_TIME|CREATED_AT|REC_CREATE_TIME", "UPDATE_TIME|UPDATED_AT|REC_LAST_UPDATE_TIME"]
+    - id: table.backup_leftover
+      section: table
+      text:
+        zh-CN: 不残留备份表（_BAK、日期后缀等）
+        en: No leftover backup tables (_BAK, date suffixes, etc.)
+      severity: warning
+      rules:
+        - { id: table.backup_leftover }
+    - id: table.reserved_columns
+      section: table
+      text:
+        zh-CN: 审慎使用预留字段
+        en: Use reserved placeholder columns sparingly
+      severity: info
+      rules:
+        - { id: table.reserved_columns }
+    - id: table.all_nullable
+      section: table
+      text:
+        zh-CN: 新表不应所有字段都可空
+        en: A new table should not have every column nullable
+      severity: info
+      rules:
+        - { id: table.all_nullable }
+    - id: table.row_count
+      section: table
+      text:
+        zh-CN: 数据量大的表应设计分区
+        en: Large tables should be partitioned
+      enabled: false
+      severity: info
+      rules:
+        - { id: table.row_count, params: { max: 20000000 } }
+    - id: pk.auto_increment
+      section: primary_key
+      text:
+        zh-CN: 审慎使用自增列做主键
+        en: Use auto-increment columns as primary keys with care
+      severity: info
+      rules:
+        - { id: pk.auto_increment }
+    - id: column.comment
+      section: column
+      text:
+        zh-CN: 每个字段都应有中文注释
+        en: Every column should have a comment
+      severity: warning
+      rules:
+        - { id: column.comment }
+        - { id: column.comment_differs }
+    - id: column.date_as_string
+      section: column
+      text:
+        zh-CN: 日期时间字段不用字符型
+        en: Date and time columns should not use string types
+      severity: warning
+      rules:
+        - { id: column.date_as_string }
+    - id: column.numeric
+      section: column
+      text:
+        zh-CN: 整数不用小数类型，小数应指定精度
+        en: Integers avoid decimal types; decimals specify precision
+      severity: warning
+      rules:
+        - { id: column.integer_as_decimal }
+        - { id: column.decimal_precision }
+    - id: column.money_float
+      section: column
+      text:
+        zh-CN: 金额类字段不用 FLOAT、DOUBLE
+        en: Monetary columns should not use FLOAT or DOUBLE
+      severity: warning
+      rules:
+        - { id: column.money_float }
+    - id: column.char_type
+      section: column
+      text:
+        zh-CN: 优先用 VARCHAR，不用定长 CHAR
+        en: Prefer VARCHAR over fixed-length CHAR
+      severity: info
+      rules:
+        - { id: column.char_type }
+    - id: column.big_types
+      section: column
+      text:
+        zh-CN: 不用 LONG、ENUM，审慎使用大字段
+        en: Avoid LONG and ENUM; use large-object types with care
+      severity: warning
+      rules:
+        - { id: column.long }
+        - { id: column.enum }
+        - { id: column.lob }
+    - id: column.varchar_max
+      section: column
+      text:
+        zh-CN: 不大量使用超长 VARCHAR
+        en: Do not use many oversized VARCHAR columns
+      severity: info
+      rules:
+        - { id: column.varchar_max, params: { max_len: 4000, max_count: 3 } }
+    - id: index.max_count
+      section: index
+      text:
+        zh-CN: 单表索引数量不宜过多
+        en: A table should not have too many indexes
+      severity: info
+      rules:
+        - { id: index.max_count, params: { max: 5 } }
+    - id: index.max_columns
+      section: index
+      text:
+        zh-CN: 组合索引字段数不宜过多
+        en: A composite index should not span too many columns
+      severity: info
+      rules:
+        - { id: index.max_columns, params: { max: 5 } }
+    - id: index.redundant
+      section: index
+      text:
+        zh-CN: 不建重复或被覆盖的索引
+        en: Do not create duplicate or covered indexes
+      severity: warning
+      rules:
+        - { id: index.redundant }
+    - id: index.bad_columns
+      section: index
+      text:
+        zh-CN: 不在大字段上建索引，不用函数索引、位图索引
+        en: No indexes on large columns, and no function or bitmap indexes
+      severity: warning
+      rules:
+        - { id: index.on_lob }
+        - { id: index.function }
+        - { id: index.bitmap }
+        - { id: index.every_column }
+    - id: index.fk_without_index
+      section: index
+      text:
+        zh-CN: 外键列应有索引
+        en: Foreign-key columns should be indexed
+      severity: warning
+      rules:
+        - { id: index.fk_without_index }
+    - id: constraint.foreign_key
+      section: constraint
+      text:
+        zh-CN: 审慎使用外键
+        en: Use foreign keys with care
+      severity: info
+      rules:
+        - { id: constraint.foreign_key }
+    - id: constraint.trigger
+      section: constraint
+      text:
+        zh-CN: 审慎使用触发器
+        en: Use triggers with care
+      severity: warning
+      rules:
+        - { id: constraint.trigger }
+    - id: consistency.types
+      section: consistency
+      text:
+        zh-CN: 同名字段类型一致，关联字段类型一致
+        en: Same-named columns and related columns share a type
+      severity: info
+      manual_note:
+        zh-CN: 启发式判断，请人工复核
+        en: Heuristic; please review manually
+      rules:
+        - { id: consistency.same_name }
+        - { id: consistency.fk_type }
+    - id: design.third_normal_form
+      section: design
+      text:
+        zh-CN: 表设计原则上遵循第三范式
+        en: Table design generally follows third normal form
+      severity: info
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+    - id: design.enum_in_comment
+      section: design
+      text:
+        zh-CN: 枚举值、编码规则应写入注释
+        en: Enumerated values and coding rules belong in the comment
+      severity: info
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+    - id: design.media_not_in_db
+      section: design
+      text:
+        zh-CN: 多媒体文件不入库，库中只存路径
+        en: Media files stay out of the database; store only their paths
+      severity: info
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+    - id: design.er_diagram
+      section: design
+      text:
+        zh-CN: 提供 ER 图，标注实体关系并按业务分组
+        en: Provide an ER diagram with relationships and business grouping
+      severity: info
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+
+# ============================================================
+- id: strict-oltp
+  name:
+    zh-CN: 事务型严格
+    en: Transactional Strict
+  clauses:
+    - id: naming.charset
+      section: naming
+      text:
+        zh-CN: 对象名由字母、数字、下划线组成，以字母开头，不含特殊符号
+        en: Object names use letters, digits and underscores, start with a letter, no special characters
+      severity: error
+      rules:
+        - { id: name.charset }
+    - id: naming.length
+      section: naming
+      text:
+        zh-CN: 对象名长度不超过限定值
+        en: Object names stay within the length limit
+      severity: error
+      rules:
+        - { id: name.max_length, params: { target: all, max: 40 } }
+    - id: naming.case
+      section: naming
+      text:
+        zh-CN: 对象名按数据库习惯统一大小写
+        en: Object name case follows the database convention
+      severity: warning
+      rules:
+        - { id: name.case, params: { case: auto } }
+    - id: naming.reserved
+      section: naming
+      text:
+        zh-CN: 不用保留字、关键字单独作对象名
+        en: Do not use a reserved word alone as an object name
+      severity: error
+      rules:
+        - { id: name.reserved }
+    - id: naming.quoted
+      section: naming
+      text:
+        zh-CN: 创建对象时不用带引号的命名
+        en: Do not create objects with quoted names
+      severity: error
+      rules:
+        - { id: name.quoted }
+    - id: naming.pinyin
+      section: naming
+      text:
+        zh-CN: 不用汉语拼音或拼音首字母作对象名
+        en: Do not name objects with Hanyu Pinyin
+      severity: warning
+      rules:
+        - { id: name.pinyin }
+    - id: naming.temporal_suffix
+      section: naming
+      text:
+        zh-CN: 日期字段以 DATE 结尾，时间字段以 TIME 结尾
+        en: Date columns end with DATE, datetime columns with TIME
+      severity: warning
+      rules:
+        - { id: name.temporal_suffix, params: { date: [DATE], time: [TIME] } }
+    - id: naming.prefix
+      section: naming
+      text:
+        zh-CN: 主键 PK_、唯一索引 UK_、普通索引 IX_、序列 SEQ_、存储过程 PROC_、函数 FN_、视图 V_
+        en: PK_ keys, UK_ unique, IX_ indexes, SEQ_ sequences, PROC_ procedures, FN_ functions, V_ views
+      severity: warning
+      rules:
+        - { id: name.prefix, params: { target: primary_key, prefix: [PK_] } }
+        - { id: name.prefix, params: { target: unique, prefix: [UK_] } }
+        - { id: name.prefix, params: { target: index, prefix: [IX_] } }
+        - { id: name.prefix, params: { target: sequence, prefix: [SEQ_] } }
+        - { id: name.prefix, params: { target: procedure, prefix: [PROC_] } }
+        - { id: name.prefix, params: { target: function, prefix: [FN_] } }
+        - { id: name.prefix, params: { target: view, prefix: [V_] } }
+    - id: naming.app_prefix
+      section: naming
+      text:
+        zh-CN: 表名、用户名应含应用简称前缀（前缀可配）
+        en: Table and user names carry the application prefix (configurable)
+      enabled: false
+      severity: warning
+      rules:
+        - { id: name.required_prefix, params: { target: table, prefix: "" } }
+    - id: table.primary_key
+      section: table
+      text:
+        zh-CN: 每张表都应有主键（纯技术日志表除外），主键值不改
+        en: Every table should have a primary key (pure technical log tables aside)
+      severity: error
+      rules:
+        - { id: table.primary_key }
+    - id: table.comment
+      section: table
+      text:
+        zh-CN: 每张表都应有中文注释
+        en: Every table should have a comment
+      severity: error
+      rules:
+        - { id: table.comment }
+    - id: table.max_columns
+      section: table
+      text:
+        zh-CN: 单表字段数小于 200
+        en: A table has fewer than 200 columns
+      severity: error
+      rules:
+        - { id: table.max_columns, params: { max: 200 } }
+    - id: table.char_bytes
+      section: table
+      text:
+        zh-CN: 单表字符型字段累加不超过 8092 字节
+        en: A table's character columns total no more than 8092 bytes
+      severity: warning
+      rules:
+        - { id: table.char_bytes, params: { max: 8092, bytes_per_char: 1 } }
+    - id: table.required_columns
+      section: table
+      text:
+        zh-CN: 表应含必备字段（版本号、入库时间、更新时间，字段名可配）
+        en: Tables carry the required columns (version, create-time, update-time; names configurable)
+      severity: error
+      manual_note:
+        zh-CN: 字段名按本系统配置，请核对
+        en: Column names are configured per system; please verify
+      rules:
+        - id: table.required_columns
+          params:
+            fields: ["REC_VERSION|VERSION", "REC_CREATE_TIME|CREATE_TIME|INDB_TIME", "REC_LAST_UPDATE_TIME|UPDATE_TIME"]
+    - id: table.backup_leftover
+      section: table
+      text:
+        zh-CN: 不残留备份表
+        en: No leftover backup tables
+      severity: warning
+      rules:
+        - { id: table.backup_leftover }
+    - id: table.reserved_columns
+      section: table
+      text:
+        zh-CN: 审慎使用预留字段
+        en: Use reserved placeholder columns sparingly
+      severity: warning
+      rules:
+        - { id: table.reserved_columns }
+    - id: table.all_nullable
+      section: table
+      text:
+        zh-CN: 新表不应所有字段都可空
+        en: A new table should not have every column nullable
+      severity: warning
+      rules:
+        - { id: table.all_nullable }
+    - id: table.row_count
+      section: table
+      text:
+        zh-CN: 数据量超限的表应设计分区
+        en: Tables above the row limit should be partitioned
+      enabled: false
+      severity: warning
+      rules:
+        - { id: table.row_count, params: { max: 20000000 } }
+    - id: pk.auto_increment
+      section: primary_key
+      text:
+        zh-CN: 审慎使用自增列做主键
+        en: Use auto-increment columns as primary keys with care
+      severity: warning
+      rules:
+        - { id: pk.auto_increment }
+    - id: pk.auto_increment_step
+      section: primary_key
+      text:
+        zh-CN: 自增列做主键时自增步长应为 2
+        en: An auto-increment primary key should step by 2
+      severity: info
+      rules:
+        - { id: pk.auto_increment_step, params: { step: 2 } }
+    - id: pk.on_update_timestamp
+      section: primary_key
+      text:
+        zh-CN: 不用带自动更新属性的时间戳作主键
+        en: Do not use an on-update timestamp as a primary key
+      severity: warning
+      rules:
+        - { id: pk.on_update_timestamp }
+    - id: column.comment
+      section: column
+      text:
+        zh-CN: 每个字段都应有中文注释，且注释不等于字段名
+        en: Every column has a comment, and it differs from the column name
+      severity: error
+      rules:
+        - { id: column.comment }
+        - { id: column.comment_differs }
+    - id: column.date_as_string
+      section: column
+      text:
+        zh-CN: 日期时间字段不用字符型
+        en: Date and time columns should not use string types
+      severity: error
+      rules:
+        - { id: column.date_as_string }
+    - id: column.numeric
+      section: column
+      text:
+        zh-CN: 整数不用小数类型，小数应指定精度
+        en: Integers avoid decimal types; decimals specify precision
+      severity: error
+      rules:
+        - { id: column.integer_as_decimal }
+        - { id: column.decimal_precision }
+    - id: column.money_float
+      section: column
+      text:
+        zh-CN: 金额类字段不用 FLOAT、DOUBLE
+        en: Monetary columns should not use FLOAT or DOUBLE
+      severity: warning
+      rules:
+        - { id: column.money_float }
+    - id: column.char_type
+      section: column
+      text:
+        zh-CN: 用 VARCHAR，不用 CHAR、NCHAR、NVARCHAR
+        en: Use VARCHAR, not CHAR, NCHAR or NVARCHAR
+      severity: error
+      rules:
+        - { id: column.char_type }
+    - id: column.big_types
+      section: column
+      text:
+        zh-CN: 不用 LONG、ENUM，审慎使用 TEXT、BLOB 大字段
+        en: Avoid LONG and ENUM; use TEXT and BLOB with care
+      severity: error
+      rules:
+        - { id: column.long }
+        - { id: column.enum }
+        - { id: column.lob }
+    - id: column.varchar_max
+      section: column
+      text:
+        zh-CN: 不大量使用 VARCHAR(4000) 等超长字段
+        en: Do not use many VARCHAR(4000)-class columns
+      severity: warning
+      rules:
+        - { id: column.varchar_max, params: { max_len: 4000, max_count: 3 } }
+    - id: index.max_count
+      section: index
+      text:
+        zh-CN: 单表索引数量不超过 5
+        en: A table has at most 5 indexes
+      severity: warning
+      rules:
+        - { id: index.max_count, params: { max: 5 } }
+    - id: index.max_columns
+      section: index
+      text:
+        zh-CN: 组合索引字段数不超过 5
+        en: A composite index spans at most 5 columns
+      severity: warning
+      rules:
+        - { id: index.max_columns, params: { max: 5 } }
+    - id: index.redundant
+      section: index
+      text:
+        zh-CN: 不建重复或被覆盖的索引
+        en: Do not create duplicate or covered indexes
+      severity: warning
+      rules:
+        - { id: index.redundant }
+    - id: index.bad_columns
+      section: index
+      text:
+        zh-CN: 不用函数索引、位图索引，不在大字段列建索引，不对每列都建单列索引
+        en: No function or bitmap indexes, no indexes on large columns, not every column indexed
+      severity: error
+      rules:
+        - { id: index.on_lob }
+        - { id: index.function }
+        - { id: index.bitmap }
+        - { id: index.every_column }
+    - id: index.fk_without_index
+      section: index
+      text:
+        zh-CN: 外键列应有索引
+        en: Foreign-key columns should be indexed
+      severity: warning
+      rules:
+        - { id: index.fk_without_index }
+    - id: index.local_partition
+      section: index
+      text:
+        zh-CN: 分区表的主键、索引应建成本地索引
+        en: On partitioned tables, keys and indexes should be local
+      severity: info
+      rules:
+        - { id: index.local_partition }
+    - id: constraint.foreign_key
+      section: constraint
+      text:
+        zh-CN: 不用外键
+        en: Do not use foreign keys
+      severity: error
+      rules:
+        - { id: constraint.foreign_key }
+    - id: constraint.trigger
+      section: constraint
+      text:
+        zh-CN: 不用触发器
+        en: Do not use triggers
+      severity: error
+      rules:
+        - { id: constraint.trigger }
+    - id: constraint.objects
+      section: constraint
+      text:
+        zh-CN: 审慎使用视图、自定义函数、存储过程
+        en: Use views, functions and procedures with care
+      severity: warning
+      rules:
+        - { id: constraint.view }
+        - { id: constraint.function }
+        - { id: constraint.procedure }
+    - id: constraint.dblink
+      section: constraint
+      text:
+        zh-CN: 不用 DBLINK
+        en: Do not use DBLINK
+      severity: error
+      rules:
+        - { id: constraint.dblink }
+    - id: constraint.event_temp
+      section: constraint
+      text:
+        zh-CN: 不用 EVENT、数据库临时表
+        en: Do not use EVENT or temporary tables
+      severity: warning
+      rules:
+        - { id: db.event }
+        - { id: db.temporary_table }
+    - id: constraint.grants
+      section: constraint
+      text:
+        zh-CN: 不跨主用户授权
+        en: Do not grant across primary users
+      severity: info
+      rules:
+        - { id: db.grants }
+    - id: consistency.types
+      section: consistency
+      text:
+        zh-CN: 避免同名异义、同义异名，关联字段类型一致
+        en: Avoid name/meaning mismatches; related columns share a type
+      severity: warning
+      manual_note:
+        zh-CN: 启发式判断，请人工复核
+        en: Heuristic; please review manually
+      rules:
+        - { id: consistency.same_name }
+        - { id: consistency.synonym }
+        - { id: consistency.fk_type }
+    - id: design.third_normal_form
+      section: design
+      text:
+        zh-CN: 表设计遵循第三范式，冗余字段为非频繁修改的常用关联字段
+        en: Third normal form; redundant columns are stable, frequently joined ones
+      severity: warning
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+    - id: design.enum_in_comment
+      section: design
+      text:
+        zh-CN: 枚举值、编码规则、外来数据的变化应写入注释
+        en: Enumerations, coding rules and upstream changes belong in comments
+      severity: warning
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+    - id: design.media_not_in_db
+      section: design
+      text:
+        zh-CN: 多媒体文件不入库，库中只存元数据和路径
+        en: Media files stay out of the database; store only metadata and paths
+      severity: warning
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+    - id: design.cleanup_plan
+      section: design
+      text:
+        zh-CN: 增长快的表应有数据清理和归档方案
+        en: Fast-growing tables have a data cleanup and archiving plan
+      severity: info
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+    - id: design.er_diagram
+      section: design
+      text:
+        zh-CN: 提供 ER 图，标注实体关系并按业务分组
+        en: Provide an ER diagram with relationships and business grouping
+      severity: info
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+
+# ============================================================
+- id: analytical
+  name:
+    zh-CN: 分析型
+    en: Analytical
+  clauses:
+    - id: naming.charset
+      section: naming
+      text:
+        zh-CN: 对象名由字母、数字、下划线组成，以字母开头
+        en: Object names use letters, digits and underscores, and start with a letter
+      severity: error
+      rules:
+        - { id: name.charset }
+    - id: naming.length
+      section: naming
+      text:
+        zh-CN: 表名 ≤56、字段名 ≤64、其他对象名 ≤48
+        en: Tables ≤56, columns ≤64, other names ≤48
+      severity: error
+      rules:
+        - { id: name.max_length, params: { target: table, max: 56 } }
+        - { id: name.max_length, params: { target: column, max: 64 } }
+        - { id: name.max_length, params: { target: index, max: 48 } }
+        - { id: name.max_length, params: { target: other, max: 48 } }
+        - { id: name.max_length, params: { target: schema, max: 48 } }
+    - id: naming.case
+      section: naming
+      text:
+        zh-CN: 对象名统一大写
+        en: Object names are uppercase
+      severity: warning
+      rules:
+        - { id: name.case, params: { case: upper } }
+    - id: naming.reserved
+      section: naming
+      text:
+        zh-CN: 不用保留字、关键字单独作对象名
+        en: Do not use a reserved word alone as an object name
+      severity: error
+      rules:
+        - { id: name.reserved }
+    - id: naming.quoted
+      section: naming
+      text:
+        zh-CN: 创建对象时不用带引号的命名
+        en: Do not create objects with quoted names
+      severity: error
+      rules:
+        - { id: name.quoted }
+    - id: naming.pinyin
+      section: naming
+      text:
+        zh-CN: 不用汉语拼音或拼音首字母作对象名
+        en: Do not name objects with Hanyu Pinyin
+      severity: warning
+      rules:
+        - { id: name.pinyin }
+    - id: table.no_primary_key
+      section: primary_key
+      text:
+        zh-CN: 不建主键（数据库不支持）
+        en: Do not define primary keys (unsupported)
+      severity: error
+      rules:
+        - { id: table.no_primary_key }
+    - id: table.comment
+      section: table
+      text:
+        zh-CN: 每张表都应有中文注释，标明采集或加工来源
+        en: Every table has a comment noting its source
+      severity: error
+      rules:
+        - { id: table.comment }
+    - id: table.reserved_columns
+      section: table
+      text:
+        zh-CN: 不宜预留字段
+        en: Avoid reserved placeholder columns
+      severity: warning
+      rules:
+        - { id: table.reserved_columns }
+    - id: column.comment
+      section: column
+      text:
+        zh-CN: 每个字段都应有中文注释，且注释不等于字段名
+        en: Every column has a comment, and it differs from the column name
+      severity: error
+      rules:
+        - { id: column.comment }
+        - { id: column.comment_differs }
+    - id: column.date_as_string
+      section: column
+      text:
+        zh-CN: 日期时间字段不用字符型
+        en: Date and time columns should not use string types
+      severity: error
+      rules:
+        - { id: column.date_as_string }
+    - id: column.numeric
+      section: column
+      text:
+        zh-CN: 整数不用小数类型，小数应指定精度
+        en: Integers avoid decimal types; decimals specify precision
+      severity: error
+      rules:
+        - { id: column.integer_as_decimal }
+        - { id: column.decimal_precision }
+    - id: column.char_type
+      section: column
+      text:
+        zh-CN: 优先用 VARCHAR
+        en: Prefer VARCHAR
+      severity: warning
+      rules:
+        - { id: column.char_type }
+    - id: column.big_types
+      section: column
+      text:
+        zh-CN: 不宜 LONG、TEXT、BLOB 大字段
+        en: Avoid LONG, TEXT and BLOB large columns
+      severity: warning
+      rules:
+        - { id: column.long }
+        - { id: column.lob }
+    - id: column.varchar_max
+      section: column
+      text:
+        zh-CN: 不大量使用超长 VARCHAR
+        en: Do not use many oversized VARCHAR columns
+      severity: warning
+      rules:
+        - { id: column.varchar_max, params: { max_len: 4000, max_count: 3 } }
+    - id: column.no_auto_increment
+      section: column
+      text:
+        zh-CN: 不用自增列或自增数据类型
+        en: Do not use auto-increment columns
+      severity: error
+      rules:
+        - { id: column.no_auto_increment }
+    - id: index.none
+      section: index
+      text:
+        zh-CN: 不建索引（数据库自带智能索引）
+        en: Do not create indexes (the database indexes automatically)
+      severity: error
+      rules:
+        - { id: index.none }
+    - id: constraint.foreign_key
+      section: constraint
+      text:
+        zh-CN: 不建外键
+        en: Do not create foreign keys
+      severity: error
+      rules:
+        - { id: constraint.foreign_key }
+    - id: constraint.trigger
+      section: constraint
+      text:
+        zh-CN: 不建触发器
+        en: Do not create triggers
+      severity: error
+      rules:
+        - { id: constraint.trigger }
+    - id: constraint.sequence
+      section: constraint
+      text:
+        zh-CN: 不创建序列
+        en: Do not create sequences
+      severity: error
+      rules:
+        - { id: constraint.sequence }
+    - id: constraint.objects
+      section: constraint
+      text:
+        zh-CN: 不宜视图、自定义函数
+        en: Avoid views and custom functions
+      severity: warning
+      rules:
+        - { id: constraint.view }
+        - { id: constraint.function }
+    - id: constraint.dblink
+      section: constraint
+      text:
+        zh-CN: 不用 DBLINK
+        en: Do not use DBLINK
+      severity: error
+      rules:
+        - { id: constraint.dblink }
+    - id: constraint.event
+      section: constraint
+      text:
+        zh-CN: 不用 EVENT
+        en: Do not use EVENT
+      severity: warning
+      rules:
+        - { id: db.event }
+    - id: dist.distribution_key
+      section: distribution
+      text:
+        zh-CN: 分布表应选随机性好、常用于 JOIN 和 GROUP BY 的列作分布键
+        en: Distributed tables pick a well-distributed, frequently joined/grouped distribution key
+      severity: warning
+      manual_note:
+        zh-CN: 现有元数据无分布键信息，需人工确认
+        en: Distribution keys are not in metadata; confirm manually
+    - id: dist.replicated_table
+      section: distribution
+      text:
+        zh-CN: 小参数表宜设计为复制表
+        en: Small parameter tables should be replicated tables
+      severity: info
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation
+    - id: design.er_diagram
+      section: design
+      text:
+        zh-CN: 提供 ER 图，包含分布键、关联字段并按业务分组
+        en: Provide an ER diagram with distribution keys, relationships and business grouping
+      severity: info
+      manual_note:
+        zh-CN: 需人工确认
+        en: Needs manual confirmation

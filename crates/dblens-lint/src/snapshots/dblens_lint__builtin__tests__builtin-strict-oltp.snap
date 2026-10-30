@@ -1,0 +1,695 @@
+---
+source: crates/dblens-lint/src/builtin.rs
+expression: "serde_json::to_string_pretty(&set).unwrap()"
+---
+{
+  "id": "strict-oltp",
+  "name": "Transactional Strict",
+  "builtin": true,
+  "clauses": [
+    {
+      "id": "naming.charset",
+      "section": "naming",
+      "text": "Object names use letters, digits and underscores, start with a letter, no special characters",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "name.charset"
+        }
+      ]
+    },
+    {
+      "id": "naming.length",
+      "section": "naming",
+      "text": "Object names stay within the length limit",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "name.max_length",
+          "params": {
+            "max": 40,
+            "target": "all"
+          }
+        }
+      ]
+    },
+    {
+      "id": "naming.case",
+      "section": "naming",
+      "text": "Object name case follows the database convention",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "name.case",
+          "params": {
+            "case": "auto"
+          }
+        }
+      ]
+    },
+    {
+      "id": "naming.reserved",
+      "section": "naming",
+      "text": "Do not use a reserved word alone as an object name",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "name.reserved"
+        }
+      ]
+    },
+    {
+      "id": "naming.quoted",
+      "section": "naming",
+      "text": "Do not create objects with quoted names",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "name.quoted"
+        }
+      ]
+    },
+    {
+      "id": "naming.pinyin",
+      "section": "naming",
+      "text": "Do not name objects with Hanyu Pinyin",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "name.pinyin"
+        }
+      ]
+    },
+    {
+      "id": "naming.temporal_suffix",
+      "section": "naming",
+      "text": "Date columns end with DATE, datetime columns with TIME",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "name.temporal_suffix",
+          "params": {
+            "date": [
+              "DATE"
+            ],
+            "time": [
+              "TIME"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "naming.prefix",
+      "section": "naming",
+      "text": "PK_ keys, UK_ unique, IX_ indexes, SEQ_ sequences, PROC_ procedures, FN_ functions, V_ views",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "name.prefix",
+          "params": {
+            "prefix": [
+              "PK_"
+            ],
+            "target": "primary_key"
+          }
+        },
+        {
+          "id": "name.prefix",
+          "params": {
+            "prefix": [
+              "UK_"
+            ],
+            "target": "unique"
+          }
+        },
+        {
+          "id": "name.prefix",
+          "params": {
+            "prefix": [
+              "IX_"
+            ],
+            "target": "index"
+          }
+        },
+        {
+          "id": "name.prefix",
+          "params": {
+            "prefix": [
+              "SEQ_"
+            ],
+            "target": "sequence"
+          }
+        },
+        {
+          "id": "name.prefix",
+          "params": {
+            "prefix": [
+              "PROC_"
+            ],
+            "target": "procedure"
+          }
+        },
+        {
+          "id": "name.prefix",
+          "params": {
+            "prefix": [
+              "FN_"
+            ],
+            "target": "function"
+          }
+        },
+        {
+          "id": "name.prefix",
+          "params": {
+            "prefix": [
+              "V_"
+            ],
+            "target": "view"
+          }
+        }
+      ]
+    },
+    {
+      "id": "naming.app_prefix",
+      "section": "naming",
+      "text": "Table and user names carry the application prefix (configurable)",
+      "enabled": false,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "name.required_prefix",
+          "params": {
+            "prefix": "",
+            "target": "table"
+          }
+        }
+      ]
+    },
+    {
+      "id": "table.primary_key",
+      "section": "table",
+      "text": "Every table should have a primary key (pure technical log tables aside)",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "table.primary_key"
+        }
+      ]
+    },
+    {
+      "id": "table.comment",
+      "section": "table",
+      "text": "Every table should have a comment",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "table.comment"
+        }
+      ]
+    },
+    {
+      "id": "table.max_columns",
+      "section": "table",
+      "text": "A table has fewer than 200 columns",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "table.max_columns",
+          "params": {
+            "max": 200
+          }
+        }
+      ]
+    },
+    {
+      "id": "table.char_bytes",
+      "section": "table",
+      "text": "A table's character columns total no more than 8092 bytes",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "table.char_bytes",
+          "params": {
+            "bytes_per_char": 1,
+            "max": 8092
+          }
+        }
+      ]
+    },
+    {
+      "id": "table.required_columns",
+      "section": "table",
+      "text": "Tables carry the required columns (version, create-time, update-time; names configurable)",
+      "enabled": true,
+      "severity": "error",
+      "manual_note": "Column names are configured per system; please verify",
+      "rules": [
+        {
+          "id": "table.required_columns",
+          "params": {
+            "fields": [
+              "REC_VERSION|VERSION",
+              "REC_CREATE_TIME|CREATE_TIME|INDB_TIME",
+              "REC_LAST_UPDATE_TIME|UPDATE_TIME"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "table.backup_leftover",
+      "section": "table",
+      "text": "No leftover backup tables",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "table.backup_leftover"
+        }
+      ]
+    },
+    {
+      "id": "table.reserved_columns",
+      "section": "table",
+      "text": "Use reserved placeholder columns sparingly",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "table.reserved_columns"
+        }
+      ]
+    },
+    {
+      "id": "table.all_nullable",
+      "section": "table",
+      "text": "A new table should not have every column nullable",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "table.all_nullable"
+        }
+      ]
+    },
+    {
+      "id": "table.row_count",
+      "section": "table",
+      "text": "Tables above the row limit should be partitioned",
+      "enabled": false,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "table.row_count",
+          "params": {
+            "max": 20000000
+          }
+        }
+      ]
+    },
+    {
+      "id": "pk.auto_increment",
+      "section": "primary_key",
+      "text": "Use auto-increment columns as primary keys with care",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "pk.auto_increment"
+        }
+      ]
+    },
+    {
+      "id": "pk.auto_increment_step",
+      "section": "primary_key",
+      "text": "An auto-increment primary key should step by 2",
+      "enabled": true,
+      "severity": "info",
+      "rules": [
+        {
+          "id": "pk.auto_increment_step",
+          "params": {
+            "step": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "pk.on_update_timestamp",
+      "section": "primary_key",
+      "text": "Do not use an on-update timestamp as a primary key",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "pk.on_update_timestamp"
+        }
+      ]
+    },
+    {
+      "id": "column.comment",
+      "section": "column",
+      "text": "Every column has a comment, and it differs from the column name",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.comment"
+        },
+        {
+          "id": "column.comment_differs"
+        }
+      ]
+    },
+    {
+      "id": "column.date_as_string",
+      "section": "column",
+      "text": "Date and time columns should not use string types",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.date_as_string"
+        }
+      ]
+    },
+    {
+      "id": "column.numeric",
+      "section": "column",
+      "text": "Integers avoid decimal types; decimals specify precision",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.integer_as_decimal"
+        },
+        {
+          "id": "column.decimal_precision"
+        }
+      ]
+    },
+    {
+      "id": "column.money_float",
+      "section": "column",
+      "text": "Monetary columns should not use FLOAT or DOUBLE",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "column.money_float"
+        }
+      ]
+    },
+    {
+      "id": "column.char_type",
+      "section": "column",
+      "text": "Use VARCHAR, not CHAR, NCHAR or NVARCHAR",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.char_type"
+        }
+      ]
+    },
+    {
+      "id": "column.big_types",
+      "section": "column",
+      "text": "Avoid LONG and ENUM; use TEXT and BLOB with care",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.long"
+        },
+        {
+          "id": "column.enum"
+        },
+        {
+          "id": "column.lob"
+        }
+      ]
+    },
+    {
+      "id": "column.varchar_max",
+      "section": "column",
+      "text": "Do not use many VARCHAR(4000)-class columns",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "column.varchar_max",
+          "params": {
+            "max_count": 3,
+            "max_len": 4000
+          }
+        }
+      ]
+    },
+    {
+      "id": "index.max_count",
+      "section": "index",
+      "text": "A table has at most 5 indexes",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "index.max_count",
+          "params": {
+            "max": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "index.max_columns",
+      "section": "index",
+      "text": "A composite index spans at most 5 columns",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "index.max_columns",
+          "params": {
+            "max": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "index.redundant",
+      "section": "index",
+      "text": "Do not create duplicate or covered indexes",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "index.redundant"
+        }
+      ]
+    },
+    {
+      "id": "index.bad_columns",
+      "section": "index",
+      "text": "No function or bitmap indexes, no indexes on large columns, not every column indexed",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "index.on_lob"
+        },
+        {
+          "id": "index.function"
+        },
+        {
+          "id": "index.bitmap"
+        },
+        {
+          "id": "index.every_column"
+        }
+      ]
+    },
+    {
+      "id": "index.fk_without_index",
+      "section": "index",
+      "text": "Foreign-key columns should be indexed",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "index.fk_without_index"
+        }
+      ]
+    },
+    {
+      "id": "index.local_partition",
+      "section": "index",
+      "text": "On partitioned tables, keys and indexes should be local",
+      "enabled": true,
+      "severity": "info",
+      "rules": [
+        {
+          "id": "index.local_partition"
+        }
+      ]
+    },
+    {
+      "id": "constraint.foreign_key",
+      "section": "constraint",
+      "text": "Do not use foreign keys",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "constraint.foreign_key"
+        }
+      ]
+    },
+    {
+      "id": "constraint.trigger",
+      "section": "constraint",
+      "text": "Do not use triggers",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "constraint.trigger"
+        }
+      ]
+    },
+    {
+      "id": "constraint.objects",
+      "section": "constraint",
+      "text": "Use views, functions and procedures with care",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "constraint.view"
+        },
+        {
+          "id": "constraint.function"
+        },
+        {
+          "id": "constraint.procedure"
+        }
+      ]
+    },
+    {
+      "id": "constraint.dblink",
+      "section": "constraint",
+      "text": "Do not use DBLINK",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "constraint.dblink"
+        }
+      ]
+    },
+    {
+      "id": "constraint.event_temp",
+      "section": "constraint",
+      "text": "Do not use EVENT or temporary tables",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "db.event"
+        },
+        {
+          "id": "db.temporary_table"
+        }
+      ]
+    },
+    {
+      "id": "constraint.grants",
+      "section": "constraint",
+      "text": "Do not grant across primary users",
+      "enabled": true,
+      "severity": "info",
+      "rules": [
+        {
+          "id": "db.grants"
+        }
+      ]
+    },
+    {
+      "id": "consistency.types",
+      "section": "consistency",
+      "text": "Avoid name/meaning mismatches; related columns share a type",
+      "enabled": true,
+      "severity": "warning",
+      "manual_note": "Heuristic; please review manually",
+      "rules": [
+        {
+          "id": "consistency.same_name"
+        },
+        {
+          "id": "consistency.synonym"
+        },
+        {
+          "id": "consistency.fk_type"
+        }
+      ]
+    },
+    {
+      "id": "design.third_normal_form",
+      "section": "design",
+      "text": "Third normal form; redundant columns are stable, frequently joined ones",
+      "enabled": true,
+      "severity": "warning",
+      "manual_note": "Needs manual confirmation",
+      "rules": []
+    },
+    {
+      "id": "design.enum_in_comment",
+      "section": "design",
+      "text": "Enumerations, coding rules and upstream changes belong in comments",
+      "enabled": true,
+      "severity": "warning",
+      "manual_note": "Needs manual confirmation",
+      "rules": []
+    },
+    {
+      "id": "design.media_not_in_db",
+      "section": "design",
+      "text": "Media files stay out of the database; store only metadata and paths",
+      "enabled": true,
+      "severity": "warning",
+      "manual_note": "Needs manual confirmation",
+      "rules": []
+    },
+    {
+      "id": "design.cleanup_plan",
+      "section": "design",
+      "text": "Fast-growing tables have a data cleanup and archiving plan",
+      "enabled": true,
+      "severity": "info",
+      "manual_note": "Needs manual confirmation",
+      "rules": []
+    },
+    {
+      "id": "design.er_diagram",
+      "section": "design",
+      "text": "Provide an ER diagram with relationships and business grouping",
+      "enabled": true,
+      "severity": "info",
+      "manual_note": "Needs manual confirmation",
+      "rules": []
+    }
+  ]
+}

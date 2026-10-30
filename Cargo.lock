@@ -1374,6 +1374,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dblens-lint"
+version = "0.1.0"
+dependencies = [
+ "dblens-core",
+ "dblens-dialect",
+ "insta",
+ "serde",
+ "serde-saphyr 2.0.0",
+ "serde_json",
+]
+
+[[package]]
 name = "dblens-server"
 version = "0.1.0"
 dependencies = [

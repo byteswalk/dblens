@@ -1,0 +1,365 @@
+---
+source: crates/dblens-lint/src/builtin.rs
+expression: "serde_json::to_string_pretty(&set).unwrap()"
+---
+{
+  "id": "analytical",
+  "name": "Analytical",
+  "builtin": true,
+  "clauses": [
+    {
+      "id": "naming.charset",
+      "section": "naming",
+      "text": "Object names use letters, digits and underscores, and start with a letter",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "name.charset"
+        }
+      ]
+    },
+    {
+      "id": "naming.length",
+      "section": "naming",
+      "text": "Tables ≤56, columns ≤64, other names ≤48",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "name.max_length",
+          "params": {
+            "max": 56,
+            "target": "table"
+          }
+        },
+        {
+          "id": "name.max_length",
+          "params": {
+            "max": 64,
+            "target": "column"
+          }
+        },
+        {
+          "id": "name.max_length",
+          "params": {
+            "max": 48,
+            "target": "index"
+          }
+        },
+        {
+          "id": "name.max_length",
+          "params": {
+            "max": 48,
+            "target": "other"
+          }
+        },
+        {
+          "id": "name.max_length",
+          "params": {
+            "max": 48,
+            "target": "schema"
+          }
+        }
+      ]
+    },
+    {
+      "id": "naming.case",
+      "section": "naming",
+      "text": "Object names are uppercase",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "name.case",
+          "params": {
+            "case": "upper"
+          }
+        }
+      ]
+    },
+    {
+      "id": "naming.reserved",
+      "section": "naming",
+      "text": "Do not use a reserved word alone as an object name",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "name.reserved"
+        }
+      ]
+    },
+    {
+      "id": "naming.quoted",
+      "section": "naming",
+      "text": "Do not create objects with quoted names",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "name.quoted"
+        }
+      ]
+    },
+    {
+      "id": "naming.pinyin",
+      "section": "naming",
+      "text": "Do not name objects with Hanyu Pinyin",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "name.pinyin"
+        }
+      ]
+    },
+    {
+      "id": "table.no_primary_key",
+      "section": "primary_key",
+      "text": "Do not define primary keys (unsupported)",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "table.no_primary_key"
+        }
+      ]
+    },
+    {
+      "id": "table.comment",
+      "section": "table",
+      "text": "Every table has a comment noting its source",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "table.comment"
+        }
+      ]
+    },
+    {
+      "id": "table.reserved_columns",
+      "section": "table",
+      "text": "Avoid reserved placeholder columns",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "table.reserved_columns"
+        }
+      ]
+    },
+    {
+      "id": "column.comment",
+      "section": "column",
+      "text": "Every column has a comment, and it differs from the column name",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.comment"
+        },
+        {
+          "id": "column.comment_differs"
+        }
+      ]
+    },
+    {
+      "id": "column.date_as_string",
+      "section": "column",
+      "text": "Date and time columns should not use string types",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.date_as_string"
+        }
+      ]
+    },
+    {
+      "id": "column.numeric",
+      "section": "column",
+      "text": "Integers avoid decimal types; decimals specify precision",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.integer_as_decimal"
+        },
+        {
+          "id": "column.decimal_precision"
+        }
+      ]
+    },
+    {
+      "id": "column.char_type",
+      "section": "column",
+      "text": "Prefer VARCHAR",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "column.char_type"
+        }
+      ]
+    },
+    {
+      "id": "column.big_types",
+      "section": "column",
+      "text": "Avoid LONG, TEXT and BLOB large columns",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "column.long"
+        },
+        {
+          "id": "column.lob"
+        }
+      ]
+    },
+    {
+      "id": "column.varchar_max",
+      "section": "column",
+      "text": "Do not use many oversized VARCHAR columns",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "column.varchar_max",
+          "params": {
+            "max_count": 3,
+            "max_len": 4000
+          }
+        }
+      ]
+    },
+    {
+      "id": "column.no_auto_increment",
+      "section": "column",
+      "text": "Do not use auto-increment columns",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "column.no_auto_increment"
+        }
+      ]
+    },
+    {
+      "id": "index.none",
+      "section": "index",
+      "text": "Do not create indexes (the database indexes automatically)",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "index.none"
+        }
+      ]
+    },
+    {
+      "id": "constraint.foreign_key",
+      "section": "constraint",
+      "text": "Do not create foreign keys",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "constraint.foreign_key"
+        }
+      ]
+    },
+    {
+      "id": "constraint.trigger",
+      "section": "constraint",
+      "text": "Do not create triggers",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "constraint.trigger"
+        }
+      ]
+    },
+    {
+      "id": "constraint.sequence",
+      "section": "constraint",
+      "text": "Do not create sequences",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "constraint.sequence"
+        }
+      ]
+    },
+    {
+      "id": "constraint.objects",
+      "section": "constraint",
+      "text": "Avoid views and custom functions",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "constraint.view"
+        },
+        {
+          "id": "constraint.function"
+        }
+      ]
+    },
+    {
+      "id": "constraint.dblink",
+      "section": "constraint",
+      "text": "Do not use DBLINK",
+      "enabled": true,
+      "severity": "error",
+      "rules": [
+        {
+          "id": "constraint.dblink"
+        }
+      ]
+    },
+    {
+      "id": "constraint.event",
+      "section": "constraint",
+      "text": "Do not use EVENT",
+      "enabled": true,
+      "severity": "warning",
+      "rules": [
+        {
+          "id": "db.event"
+        }
+      ]
+    },
+    {
+      "id": "dist.distribution_key",
+      "section": "distribution",
+      "text": "Distributed tables pick a well-distributed, frequently joined/grouped distribution key",
+      "enabled": true,
+      "severity": "warning",
+      "manual_note": "Distribution keys are not in metadata; confirm manually",
+      "rules": []
+    },
+    {
+      "id": "dist.replicated_table",
+      "section": "distribution",
+      "text": "Small parameter tables should be replicated tables",
+      "enabled": true,
+      "severity": "info",
+      "manual_note": "Needs manual confirmation",
+      "rules": []
+    },
+    {
+      "id": "design.er_diagram",
+      "section": "design",
+      "text": "Provide an ER diagram with distribution keys, relationships and business grouping",
+      "enabled": true,
+      "severity": "info",
+      "manual_note": "Needs manual confirmation",
+      "rules": []
+    }
+  ]
+}
