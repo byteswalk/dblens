@@ -50,6 +50,8 @@
     "title": "自动布局",
     "horizontal": "横向重排",
     "vertical": "纵向重排",
+    "elkRight": "少交叉（从左到右）",
+    "elkDown": "少交叉（从上到下）",
     "a4PagesPortrait": "A4 纵向多页",
     "a4PagesLandscape": "A4 横向多页",
     "a4Portrait": "A4 纵向单页",

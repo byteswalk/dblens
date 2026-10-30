@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
-import { TABS_KEY, markRun, parseTabs, persistTabs, takeRun, useTabs } from './tabs'
+import { TABS_KEY, markRun, parseTabs, persistTabs, takeRun, useTabs, wheelTarget } from './tabs'
 
 describe('标签换位', () => {
   it('移到目标位置，顺序保持', () => {
@@ -218,5 +218,20 @@ describe('迁移标签', () => {
     const plan = parseTabs(raw).tabs[0].migrate
     expect(plan?.mode).toBe('all')
     expect(plan?.data.batch_size).toBe(1000)
+  })
+})
+
+describe('标签栏滚轮', () => {
+  // 四个标签各宽 100，当前是第一个
+  const lefts = [0, 100, 200, 300]
+
+  it('当前标签贴在左边时，下一个标签紧贴它停下', () => {
+    expect(wheelTarget(lefts, 0, 100, 0, true)).toBe(100)
+    expect(wheelTarget(lefts, 0, 100, 100, true)).toBe(200)
+    expect(wheelTarget(lefts, 0, 100, 200, false)).toBe(100)
+  })
+
+  it('当前标签在后面时按标签左边对齐', () => {
+    expect(wheelTarget(lefts, 3, 100, 0, true)).toBe(100)
   })
 })

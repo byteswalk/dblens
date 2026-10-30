@@ -556,7 +556,6 @@ body {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  scroll-snap-type: x proximity;
 }
 .tab-strip::-webkit-scrollbar {
   display: none;
@@ -574,7 +573,6 @@ body {
   white-space: nowrap;
   overflow: hidden;
   cursor: pointer;
-  scroll-snap-align: start;
 }
 .tab .tab-title {
   min-width: 0;

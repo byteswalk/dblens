@@ -51,6 +51,8 @@
     "title": "Auto Layout",
     "horizontal": "Left to right",
     "vertical": "Top to bottom",
+    "elkRight": "Fewer crossings, left to right",
+    "elkDown": "Fewer crossings, top to bottom",
     "a4PagesPortrait": "A4 portrait, multiple pages",
     "a4PagesLandscape": "A4 landscape, multiple pages",
     "a4Portrait": "A4 portrait, one page",

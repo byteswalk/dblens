@@ -328,3 +328,12 @@ export function persistTabs(delayMs = 800): () => void {
   }
   return stopPersist
 }
+
+/**
+ * 滚轮滚一格后的 scrollLeft：下一个标签的左边对齐。当前标签已经贴在左边时，
+ * 其余标签要从它右边开始，不能滑到它下面露出半截。
+ */
+export function wheelTarget(lefts: number[], active: number, activeWidth: number, scroll: number, forward: boolean) {
+  const stops = lefts.flatMap((x, i) => (i === active ? [] : [active >= 0 && i > active ? x - activeWidth : x]))
+  return forward ? stops.find((x) => x > scroll + 1) : stops.filter((x) => x < scroll - 1).at(-1)
+}

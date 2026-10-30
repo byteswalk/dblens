@@ -17,7 +17,7 @@ import QueryView from './QueryView'
 import { disposeModel } from './SqlEditor'
 import { useQueryActions } from './actions'
 import { useTabRuntime } from './runner'
-import { type QueryTab, useTabs } from './tabs'
+import { type QueryTab, useTabs, wheelTarget } from './tabs'
 
 // 设计器带 Monaco 的 SQL 预览，打开第一个设计器标签时才加载
 const DesignView = lazy(() => import('../design/DesignView'))
@@ -151,9 +151,10 @@ export default function Workspace() {
   const onWheel = (e: WheelEvent) => {
     const el = strip.current
     if (!el || e.deltaX !== 0 || e.deltaY === 0) return
-    const lefts = [...el.children].map((c) => (c as HTMLElement).offsetLeft - el.offsetLeft)
-    const next =
-      e.deltaY > 0 ? lefts.find((x) => x > el.scrollLeft + 1) : lefts.filter((x) => x < el.scrollLeft - 1).at(-1)
+    const tabs = [...el.children] as HTMLElement[]
+    const on = tabs.findIndex((c) => c.classList.contains('on'))
+    const lefts = tabs.map((c) => c.offsetLeft - el.offsetLeft)
+    const next = wheelTarget(lefts, on, on < 0 ? 0 : tabs[on].offsetWidth, el.scrollLeft, e.deltaY > 0)
     if (next !== undefined) el.scrollLeft = next
   }
 

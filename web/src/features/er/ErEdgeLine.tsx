@@ -3,6 +3,8 @@
 import { BaseEdge, type EdgeProps, Position, getSmoothStepPath } from '@xyflow/react'
 import { memo } from 'react'
 
+import { type ElkPoint, routePath } from './elk'
+
 const LANE_GAP = 14
 const CARD_OFFSET = 16
 
@@ -17,8 +19,8 @@ function ErEdgeLine({
   label,
   data,
 }: EdgeProps) {
-  const { lane = 0, cards } = (data ?? {}) as { lane?: number; cards?: [string, string] }
-  const [path, labelX, labelY] = getSmoothStepPath({
+  const { lane = 0, cards, route } = (data ?? {}) as { lane?: number; cards?: [string, string]; route?: ElkPoint[] }
+  const [stepPath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
@@ -29,6 +31,8 @@ function ErEdgeLine({
     offset: 18 + Math.abs(lane) * LANE_GAP,
     centerX: (sourceX + targetX) / 2 + lane * LANE_GAP,
   })
+  // ELK 算好的路线优先；拖动表后路线作废，退回普通折线
+  const path = route ? routePath(route) : stepPath
   const near = (x: number, y: number, side: Position, text: string) => (
     <g className="er-card" transform={`translate(${x + (side === Position.Left ? -CARD_OFFSET : CARD_OFFSET)}, ${y - 11})`}>
       <rect x={-8} y={-7} width={16} height={14} rx={3} />
