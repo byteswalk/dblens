@@ -19,3 +19,7 @@ node_modules/
 # 单独测试 vendor/ 中的库时生成
 /vendor/*/Cargo.lock
 /vendor/*/target/
+
+# 桥接进程和打包时生成的客户端目录
+/bridge/build/
+/clients-staging/

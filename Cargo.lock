@@ -1315,6 +1315,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dblens-driver-jdbc"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "dblens-core",
+ "dblens-driver",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "dblens-driver-mysql"
 version = "0.1.0"
 dependencies = [
