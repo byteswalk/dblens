@@ -10,11 +10,11 @@
     },
     "oracle": {
       "label": "Oracle",
-      "note": "Requires Oracle Instant Client"
+      "note": "Requires Oracle Instant Client, or choose the JDBC driver under Advanced"
     },
     "dameng": {
       "label": "DM (Dameng)",
-      "note": "Requires the DM DPI client library"
+      "note": "Requires the DM DPI client library, or choose the JDBC driver under Advanced"
     },
     "sqlserver": {
       "label": "SQL Server",
@@ -57,11 +57,11 @@
     },
     "oracle": {
       "label": "Oracle",
-      "note": "Requires Oracle Instant Client"
+      "note": "Requires Oracle Instant Client, or choose the JDBC driver under Advanced"
     },
     "dameng": {
       "label": "Dameng DM",
-      "note": "Requires the Dameng DPI client library"
+      "note": "Requires the DM DPI client library, or choose the JDBC driver under Advanced"
     },
     "sqlserver": {
       "label": "SQL Server",

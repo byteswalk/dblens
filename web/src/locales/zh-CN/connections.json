@@ -10,11 +10,11 @@
     },
     "oracle": {
       "label": "Oracle",
-      "note": "需要 Oracle Instant Client"
+      "note": "需要 Oracle Instant Client；也可在「高级」中改用 JDBC 驱动"
     },
     "dameng": {
       "label": "达梦 DM",
-      "note": "需要达梦 DPI 客户端库"
+      "note": "需要达梦 DPI 客户端库；也可在「高级」中改用 JDBC 驱动"
     },
     "sqlserver": {
       "label": "SQL Server",
@@ -57,11 +57,11 @@
     },
     "oracle": {
       "label": "Oracle",
-      "note": "需要 Oracle Instant Client"
+      "note": "需要 Oracle Instant Client；也可在「高级」中改用 JDBC 驱动"
     },
     "dameng": {
       "label": "达梦 DM",
-      "note": "需要达梦 DPI 客户端库"
+      "note": "需要达梦 DPI 客户端库；也可在「高级」中改用 JDBC 驱动"
     },
     "sqlserver": {
       "label": "SQL Server",
