@@ -148,10 +148,18 @@ export function moveTables(edits: TopicEdits, tables: string[], topic: string): 
   return { ...edits, tables: { ...edits.tables, ...Object.fromEntries(tables.map((n) => [n, topic])) } }
 }
 
-/** 删除主题：表回到其他。 */
-export function deleteTopic(edits: TopicEdits, id: string): TopicEdits {
+/** 删除主题：它现在的表都归入其他，否则自动分出的主题下次又会冒出来。 */
+export function deleteTopic(edits: TopicEdits, topic: Topic): TopicEdits {
   const names = { ...edits.names }
-  delete names[id]
-  const moved = Object.entries(edits.tables).map(([n, t]) => [n, t === id ? OTHER_TOPIC : t])
-  return { names, tables: Object.fromEntries(moved) }
+  delete names[topic.id]
+  return { names, tables: moveTables(edits, topic.tables, OTHER_TOPIC).tables }
+}
+
+/** 设定主题包含的表：新选的移入，去掉的归入其他。记下名字，表都移走时主题还在。 */
+export function setTopicTables(edits: TopicEdits, topic: Topic, tables: string[]): TopicEdits {
+  const removed = topic.tables.filter((n) => !tables.includes(n))
+  return {
+    names: { ...edits.names, [topic.id]: topic.name },
+    tables: moveTables(moveTables(edits, removed, OTHER_TOPIC), tables, topic.id).tables,
+  }
 }

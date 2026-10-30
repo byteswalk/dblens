@@ -1,6 +1,6 @@
-// 画布一角的业务主题列表：点击只看这个主题，双击改名，可新建、删除。
+// 画布一角的业务主题列表：点击只看这个主题，双击改名，可新建、删除、编辑包含的表。
 
-import { IconPlus, IconRestore, IconX } from '@tabler/icons-react'
+import { IconPencil, IconPlus, IconRestore, IconX } from '@tabler/icons-react'
 import { Input } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -13,11 +13,12 @@ export interface TopicPanelProps {
   onSelect(id: string | null): void
   onRename(id: string, name: string): void
   onAdd(): void
+  onEditTables(id: string): void
   onDelete(id: string): void
   onReset(): void
 }
 
-export default function TopicPanel({ topics, current, onSelect, onRename, onAdd, onDelete, onReset }: TopicPanelProps) {
+export default function TopicPanel({ topics, current, onSelect, onRename, onAdd, onEditTables, onDelete, onReset }: TopicPanelProps) {
   const { t } = useTranslation()
   const [editing, setEditing] = useState<string | null>(null)
   const total = topics.reduce((n, x) => n + x.tables.length, 0)
@@ -63,7 +64,19 @@ export default function TopicPanel({ topics, current, onSelect, onRename, onAdd,
                 <span className="muted">{x.tables.length}</span>
                 {x.id !== OTHER_TOPIC && (
                   <span
-                    className="er-topic-btn del"
+                    className="er-topic-btn on-hover"
+                    title={t('er.groups.editTablesHint')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onEditTables(x.id)
+                    }}
+                  >
+                    <IconPencil size={12} />
+                  </span>
+                )}
+                {x.id !== OTHER_TOPIC && (
+                  <span
+                    className="er-topic-btn on-hover"
                     title={t('er.groups.delete')}
                     onClick={(e) => {
                       e.stopPropagation()

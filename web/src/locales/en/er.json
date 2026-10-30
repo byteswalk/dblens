@@ -17,6 +17,11 @@
     "new": "New topic",
     "add": "New topic",
     "reset": "Restore automatic grouping",
+    "resetConfirm": "Restore automatic grouping?",
+    "resetConfirmHint": "Your renames, new and deleted topics and table moves will be lost. This cannot be undone.",
+    "editTables": "Tables in topic: {{name}}",
+    "editTablesHint": "Edit tables",
+    "otherTables": "Other tables",
     "delete": "Delete topic (tables go to Other)",
     "editHint": "Click to show only this topic, double-click to rename",
     "moveTo": "Move to topic"

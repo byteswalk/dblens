@@ -17,6 +17,11 @@
     "new": "新主题",
     "add": "新建主题",
     "reset": "恢复自动分组",
+    "resetConfirm": "恢复自动分组？",
+    "resetConfirmHint": "你对主题的改名、新建、删除和表的调整都会丢失，无法撤销。",
+    "editTables": "编辑主题的表：{{name}}",
+    "editTablesHint": "编辑包含的表",
+    "otherTables": "其余的表",
     "delete": "删除主题（表归入其他）",
     "editHint": "单击只看这个主题，双击改名",
     "moveTo": "移到主题"

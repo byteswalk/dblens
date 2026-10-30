@@ -1224,11 +1224,11 @@ body {
 .er-topic-btn:hover {
   color: var(--text);
 }
-.er-topic .del {
-  visibility: hidden;
+.er-topic .on-hover {
+  display: none;
 }
-.er-topic:hover .del {
-  visibility: visible;
+.er-topic:hover .on-hover {
+  display: inline-flex;
 }
 .er-more {
   height: 22px;

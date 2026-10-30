@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { ErTable } from '../../shared/api'
-import { EMPTY_EDITS, OTHER_TOPIC, deleteTopic, moveTables, resolveTopics, topicOfTable } from './topics'
+import { EMPTY_EDITS, OTHER_TOPIC, deleteTopic, moveTables, resolveTopics, setTopicTables, topicOfTable } from './topics'
 
 const t = (name: string, comment: string | null = null) =>
   ({ table: { name, comment, columns: [] }, logical_keys: [] }) as unknown as ErTable
@@ -28,7 +28,27 @@ describe('业务主题', () => {
     const renamed = { names: { RISK: '分析研判' }, tables: {} }
     const moved = moveTables(renamed, ['SZSS_BASE_A'], 'RISK')
     expect(topicOfTable(resolveTopics(tables, moved, '其他')).get('SZSS_BASE_A')).toBe('分析研判')
-    const removed = deleteTopic(moved, 'RISK')
+    const risk = resolveTopics(tables, moved, '其他').find((x) => x.id === 'RISK')!
+    const removed = deleteTopic(moved, risk)
     expect(removed.tables.SZSS_BASE_A).toBe(OTHER_TOPIC)
+  })
+
+  it('删除自动分出的主题后，它不会再冒出来', () => {
+    const tables = names.map((n) => t(n))
+    const base = resolveTopics(tables, EMPTY_EDITS, '其他').find((x) => x.id === 'BASE')!
+    const list = resolveTopics(tables, deleteTopic(EMPTY_EDITS, base), '其他')
+    expect(list.some((x) => x.id === 'BASE')).toBe(false)
+    expect(topicOfTable(list).get('SZSS_BASE_A')).toBe('其他')
+  })
+
+  it('编辑主题包含的表：勾上的移入，去掉的归其他，空主题保留', () => {
+    const tables = names.map((n) => t(n))
+    const base = resolveTopics(tables, EMPTY_EDITS, '其他').find((x) => x.id === 'BASE')!
+    const edited = setTopicTables(EMPTY_EDITS, base, ['SZSS_BASE_A', 'OTHER'])
+    const of = topicOfTable(resolveTopics(tables, edited, '其他'))
+    expect(of.get('OTHER')).toBe('基础数据')
+    expect(of.get('SZSS_BASE_B')).toBe('其他')
+    const empty = resolveTopics(tables, setTopicTables(EMPTY_EDITS, base, []), '其他')
+    expect(empty.find((x) => x.id === 'BASE')?.name).toBe('基础数据')
   })
 })
