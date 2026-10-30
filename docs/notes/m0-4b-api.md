@@ -87,7 +87,8 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/profiles/{id}/schemas?filter=` | schema 列表 |
+| GET | `/profiles/{id}/catalogs?filter=` | 数据库列表（M6a 加入，只有 SQL Server 有这一层，其他驱动返回空数组）：`[{name, is_system}]`；有权访问的在线库，系统库排在后面 |
+| GET | `/profiles/{id}/schemas?filter=&catalog=` | schema 列表 |
 | GET | `…/schemas/{schema}/objects?kind=tables\|views\|materialized_views&filter=` | 对象树节点 |
 | GET | `…/schemas/{schema}/tables?table=` | 表明细；不给 `table` 时取整个 schema |
 | GET | `…/schemas/{schema}/views?kind=views\|materialized_views` | 视图及其列 |
@@ -101,6 +102,8 @@
 | POST | `…/schemas/{schema}/data-sql` | 数据标签的 SQL（M1c2 加入），`{"object", "filter"?, "order"?: {"column", "desc"}, "count"?}` → `{"sql": "…"}`；`filter` 为空白时不加 WHERE，`count` 为 true 时生成 `SELECT COUNT(*)` |
 | POST | `/profiles/{id}/refresh` | 刷新元数据缓存，`{"schema": "…" \| null}` |
 | GET | `/profiles/{id}/ops` | 运维查询（M1c3）：`[{key, name, category, sql}]`，`name` 按请求的语言，`category` 为 `session` / `lock` / `storage` / `sql`。按连接上次识别出的变体选模板，没连接过时按驱动；不连接数据库 |
+
+- SQL Server（M6a）：上面的元数据接口都可加 `catalog=库名`，在该库中查询（元数据连接按库区分）；不给时用连接的默认库。
 
 ### 会话
 
@@ -147,7 +150,7 @@
 | POST | `/profiles/{id}/changes/preview` | 预览改动集生成的语句，返回 `[{index, sql}]`（`sql` 中的值写成字面量），不执行 |
 | POST | `/sessions/{id}/changes` | 在会话中执行改动集，返回 `{applied, failed}`。失败时已整体回滚，`failed` 为 `{index, error}`（仍是 200）；会话正忙时 409 |
 
-- 改动集：`{schema, table, changes: [...]}`，每个改动按 `kind` 区分：
+- 改动集：`{schema, table, catalog?, changes: [...]}`（`catalog` 为 SQL Server 的库名，M6a 加入），每个改动按 `kind` 区分：
   - `{"kind": "update", "key": {列: 值}, "original": {列: 原值}, "values": {列: 新值}}`；
   - `{"kind": "insert", "values": {列: 值}}`；
   - `{"kind": "delete", "key": {列: 值}}`。

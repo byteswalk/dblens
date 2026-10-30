@@ -23,7 +23,7 @@ tiberius 的结果流（`QueryStream`）只给出结果集和行：语句的影�
 
 | 库 | 上游版本 | 改动 |
 |---|---|---|
-| `tiberius` | 0.13.0 | `src/tds/stream/query.rs`：`QueryItem` 加 `Done(u64)`（设置了 DONE_COUNT 的 DONE、DONEINPROC）和 `Info(InfoMessage)`，`poll_next` 产出它们；`forward_to_metadata` 遇到这两种令牌时停下（不跳过）；其余对 `QueryItem` 的 `match` 补上新分支。新增 `InfoMessage` 结构，`src/result.rs` 导出它。`src/tds/codec/token/token_done.rs` 加 `has_count()`。`src/client/connection.rs`：`cancel_request` 发出取消后改为按包丢弃剩下的响应，直到某条响应以带 DONE_ATTN 的 DONE 令牌结束（新增 `drain_to_attention_ack`，返回 `()`）；原来按令牌读到当前响应末尾，结果集读到一半丢弃时确认会留在连接上，下一个请求得到空结果。原来的 `flush_done_attention`、`is_attention` 不再使用，标了 `allow(dead_code)` |
+| `tiberius` | 0.13.0 | `src/tds/stream/query.rs`：`QueryItem` 加 `Done(u64)`（设置了 DONE_COUNT 的 DONE、DONEINPROC）和 `Info(InfoMessage)`，`poll_next` 产出它们；`forward_to_metadata` 遇到这两种令牌时停下（不跳过）；其余对 `QueryItem` 的 `match` 补上新分支。新增 `InfoMessage` 结构，`src/result.rs` 导出它。`src/tds/codec/token/token_done.rs` 加 `has_count()`。`src/client/connection.rs`：`cancel_request` 发出取消后改为按包丢弃剩下的响应，直到某条响应以带 DONE_ATTN 的 DONE 令牌结束（新增 `drain_to_attention_ack`，返回 `()`）；原来按令牌读到当前响应末尾，结果集读到一半丢弃时确认会留在连接上，下一个请求得到空结果。原来的 `flush_done_attention`（`src/tds/stream/token.rs`）、`is_attention` 不再使用，标了 `allow(dead_code)` |
 
 ## 升级步骤
 
