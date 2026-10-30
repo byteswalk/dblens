@@ -1,5 +1,11 @@
 -- openGauss：aclexplode 不能用 LATERAL，放进子查询；pg_roles 另有 rolsystemadmin 等列。
 
+-- [caps]
+-- 普通用户查 pg_roles 不报错，只是看不到别人。
+SELECT CASE WHEN r.rolsuper OR r.rolsystemadmin THEN 1 ELSE 0 END AS full_view
+FROM pg_catalog.pg_roles r
+WHERE r.rolname = current_user
+
 -- [principals]
 SELECT r.rolname AS id,
        r.rolname AS name,

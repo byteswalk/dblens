@@ -88,7 +88,8 @@ fn walk(
         if m.inherits == Some(false) && !edge.contains(&PrivNote::NeedsSetRole) {
             edge.push(PrivNote::NeedsSetRole);
         }
-        if m.default_role == Some(false) && !edge.contains(&PrivNote::NotDefaultRole) {
+        // 默认角色只说账号到角色这一层：角色启用后，它包含的角色都生效
+        if path.len() == 1 && m.default_role == Some(false) && !edge.contains(&PrivNote::NotDefaultRole) {
             edge.push(PrivNote::NotDefaultRole);
         }
         path.push(m.role.clone());
@@ -278,6 +279,20 @@ mod tests {
             (e[0].state, e[0].notes.clone()),
             (EffectiveState::Conditional, vec![PrivNote::NotDefaultRole])
         );
+    }
+
+    #[test]
+    fn default_role_only_applies_to_the_first_edge() {
+        let mut first = m("u", "r1");
+        first.default_role = Some(true);
+        let mut nested = m("r1", "r2");
+        nested.default_role = Some(false);
+        let e = effective(
+            &reachable("u", &[first, nested], &[]),
+            &[g("r2", "SELECT")],
+            EffectiveContext::default(),
+        );
+        assert_eq!((e[0].state, e[0].notes.clone()), (EffectiveState::Allowed, vec![]));
     }
 
     #[test]
