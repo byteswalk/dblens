@@ -154,6 +154,33 @@ const DAMENG_TYPES: &[TypeEntry] = &[
     t("TIMESTAMP WITH TIME ZONE", L),
 ];
 
+/// SQL Server：长度可写 MAX 的类型在设计器里按长度填写（M6b 再细化）。
+const SQLSERVER_TYPES: &[TypeEntry] = &[
+    t("BIT", N),
+    t("TINYINT", N),
+    t("SMALLINT", N),
+    t("INT", N),
+    t("BIGINT", N),
+    t("DECIMAL", P),
+    t("NUMERIC", P),
+    t("MONEY", N),
+    t("REAL", N),
+    t("FLOAT", N),
+    t("CHAR", L),
+    t("VARCHAR", L),
+    t("NCHAR", L),
+    t("NVARCHAR", L),
+    t("BINARY", L),
+    t("VARBINARY", L),
+    t("DATE", N),
+    t("TIME", L),
+    t("DATETIME", N),
+    t("DATETIME2", L),
+    t("DATETIMEOFFSET", L),
+    t("UNIQUEIDENTIFIER", N),
+    t("XML", N),
+];
+
 impl Dialect {
     pub fn design_caps(&self) -> DesignCaps {
         let v = self.version().unwrap_or(u32::MAX);
@@ -207,6 +234,15 @@ impl Dialect {
                 on_update: vec![],
                 index_methods: vec!["NORMAL", "BITMAP"],
                 types: if self.family() == Family::Oracle { ORACLE_TYPES } else { DAMENG_TYPES }.to_vec(),
+            },
+            Family::SqlServer => DesignCaps {
+                reorder: false,
+                checks: true,
+                descending_index: true,
+                on_delete: vec!["NO ACTION", "CASCADE", "SET NULL", "SET DEFAULT"],
+                on_update: vec!["NO ACTION", "CASCADE", "SET NULL", "SET DEFAULT"],
+                index_methods: vec!["NONCLUSTERED", "CLUSTERED"],
+                types: SQLSERVER_TYPES.to_vec(),
             },
         }
     }

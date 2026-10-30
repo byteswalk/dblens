@@ -316,7 +316,8 @@ impl Context<'_> {
             })
     }
 
-    /// 约束名：系统生成的名字（MySQL 的主键 `PRIMARY`、Oracle 的 `SYS_C…`、达梦的 `CONS…`）不带过去，由目标库生成。
+    /// 约束名：系统生成的名字（MySQL 的主键 `PRIMARY`、Oracle 的 `SYS_C…`、达梦的 `CONS…`、SQL Server 的 `PK__…` 等）
+    /// 不带过去，由目标库生成。
     fn constraint(&self, name: &Option<String>) -> Option<String> {
         let n = text(name)?;
         let digits = |p: &str| {
@@ -326,6 +327,7 @@ impl Context<'_> {
             Family::MySql => n.eq_ignore_ascii_case("PRIMARY"),
             Family::Oracle => digits("SYS_C"),
             Family::Dameng => digits("CONS"),
+            Family::SqlServer => ["PK__", "UQ__", "FK__", "CK__", "DF__"].iter().any(|p| n.starts_with(p)),
             Family::Postgres => false,
         };
         (!system).then(|| self.case.apply(n))

@@ -18,12 +18,12 @@ pub enum NameCase {
 }
 
 impl NameCase {
-    /// 目标库的习惯：Oracle、达梦折叠为大写，PG 系（含兼容 Oracle 的模式）折叠为小写，MySQL 系保持。
+    /// 目标库的习惯：Oracle、达梦折叠为大写，PG 系（含兼容 Oracle 的模式）折叠为小写，MySQL 系、SQL Server 保持。
     pub fn for_target(target: &Dialect) -> NameCase {
         match target.family() {
             Family::Oracle | Family::Dameng => NameCase::Upper,
             Family::Postgres => NameCase::Lower,
-            Family::MySql => NameCase::Keep,
+            Family::MySql | Family::SqlServer => NameCase::Keep,
         }
     }
 
@@ -36,7 +36,7 @@ impl NameCase {
     }
 }
 
-/// 标识符长度上限（MySQL 按字符，其余按字节）：MySQL 64，PG 系 63，Oracle 12.2 起 128、之前 30，达梦 128。
+/// 标识符长度上限（MySQL 按字符，其余按字节）：MySQL 64，PG 系 63，Oracle 12.2 起 128、之前 30，达梦、SQL Server 128。
 pub fn max_ident_len(target: &Dialect) -> usize {
     match target.family() {
         Family::MySql => 64,
@@ -48,7 +48,7 @@ pub fn max_ident_len(target: &Dialect) -> usize {
                 128
             }
         }
-        Family::Dameng => 128,
+        Family::Dameng | Family::SqlServer => 128,
     }
 }
 

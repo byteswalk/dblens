@@ -50,7 +50,9 @@ impl Dialect {
         let sql = if cols.is_empty() {
             match (self.family(), table.columns.iter().find(|c| c.generated.is_none())) {
                 (Family::MySql, _) => format!("INSERT INTO {target} () VALUES ()"),
-                (Family::Postgres | Family::Dameng, _) => format!("INSERT INTO {target} DEFAULT VALUES"),
+                (Family::Postgres | Family::Dameng | Family::SqlServer, _) => {
+                    format!("INSERT INTO {target} DEFAULT VALUES")
+                }
                 (Family::Oracle, Some(first)) => {
                     format!("INSERT INTO {target} ({}) VALUES (DEFAULT)", self.ident(&first.name))
                 }

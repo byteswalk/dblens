@@ -53,7 +53,7 @@ impl Dialect {
                         out.push(msg!("design.unsupported.serial", column = to.name));
                     }
                 }
-                Family::Oracle | Family::Dameng => {
+                Family::Oracle | Family::Dameng | Family::SqlServer => {
                     if generated {
                         out.push(msg!("design.unsupported.generated", column = to.name));
                     }
@@ -72,6 +72,8 @@ impl Dialect {
             Family::MySql => self.mysql_design(schema, table, &diff.changes),
             Family::Postgres => self.pg_design(schema, table, &diff.changes),
             Family::Oracle | Family::Dameng => self.oracle_design(schema, table, &diff.changes),
+            // 表设计器的 SQL Server 支持在 M6b
+            Family::SqlServer => Err(dblens_core::Error::invalid(dblens_core::msg!("sqlserver.later"))),
         }
     }
 

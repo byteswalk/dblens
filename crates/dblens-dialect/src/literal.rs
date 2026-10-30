@@ -22,6 +22,14 @@ pub fn literal(family: Family, v: &Value) -> Result<String> {
         Value::Json(j) => string_literal(family, &j.to_string())?,
         Value::Uuid(u) => string_literal(family, &u.to_string())?,
         Value::Bytes(b) => bytes_literal(family, b)?,
+        // SQL Server 没有 DATE '…' 这类字面量；ISO 8601 文本经 CAST 转换，不受 DATEFORMAT、语言设置影响
+        Value::Date(d) if family == Family::SqlServer => format!("CAST('{}' AS DATE)", d.format("%Y-%m-%d")),
+        Value::Time(t) if family == Family::SqlServer => {
+            format!("CAST('{}' AS TIME)", t.format("%H:%M:%S%.f"))
+        }
+        Value::DateTime(dt) if family == Family::SqlServer => {
+            format!("CAST('{}' AS DATETIME2)", dt.format("%Y-%m-%dT%H:%M:%S%.f"))
+        }
         Value::Date(d) => format!("DATE '{}'", d.format("%Y-%m-%d")),
         Value::Time(t) => {
             // Oracle 没有 TIME 类型，按 'HH24:MI:SS.FF6' 文本写出（与 types.rs 的存储约定一致，固定 6 位小数）
@@ -39,6 +47,9 @@ pub fn literal(family: Family, v: &Value) -> Result<String> {
             Family::Oracle | Family::Dameng => {
                 format!("TIMESTAMP '{}'", dt.format("%Y-%m-%d %H:%M:%S%.f %:z"))
             }
+            Family::SqlServer => {
+                format!("CAST('{}' AS DATETIMEOFFSET)", dt.format("%Y-%m-%dT%H:%M:%S%.f%:z"))
+            }
         },
         // 错误信息只报类型，不回显值本身（大字段或未知类型的文本可能很长或很敏感）
         Value::Lob(_) => return Err(Error::invalid(msg!("literal.lob"))),
@@ -53,7 +64,7 @@ fn float_literal(family: Family, f: f64) -> Result<String> {
         return match family {
             Family::Postgres => Ok("'NaN'::float8".to_string()),
             Family::Oracle => Ok("BINARY_DOUBLE_NAN".to_string()),
-            Family::MySql | Family::Dameng => Err(Error::invalid(msg!("literal.nan"))),
+            Family::MySql | Family::Dameng | Family::SqlServer => Err(Error::invalid(msg!("literal.nan"))),
         };
     }
     if f.is_infinite() {
@@ -62,7 +73,9 @@ fn float_literal(family: Family, f: f64) -> Result<String> {
             (Family::Postgres, false) => Ok("'-Infinity'::float8".to_string()),
             (Family::Oracle, true) => Ok("BINARY_DOUBLE_INFINITY".to_string()),
             (Family::Oracle, false) => Ok("-BINARY_DOUBLE_INFINITY".to_string()),
-            (Family::MySql | Family::Dameng, _) => Err(Error::invalid(msg!("literal.infinity"))),
+            (Family::MySql | Family::Dameng | Family::SqlServer, _) => {
+                Err(Error::invalid(msg!("literal.infinity")))
+            }
         };
     }
     // 普通区间用十进制写法，避免指数形式在各库之间的解析差异；其余用科学计数法保留精度
@@ -106,7 +119,8 @@ fn is_decimal_text(s: &str) -> bool {
 const ORACLE_LITERAL_MAX: usize = 4000;
 
 /// 字符串字面量。MySQL 含反斜杠或 NUL 时用十六进制 + utf8mb4 形式，不受 sql_mode 影响；
-/// PostgreSQL 含反斜杠时用 E'' 形式；Oracle 超过 4000 字节时拆成 TO_CLOB 拼接；NUL 在非 MySQL 方言中报错。
+/// PostgreSQL 含反斜杠时用 E'' 形式；Oracle 超过 4000 字节时拆成 TO_CLOB 拼接；SQL Server 一律用 N''（Unicode）；
+/// NUL 在非 MySQL 方言中报错。
 fn string_literal(family: Family, s: &str) -> Result<String> {
     if s.contains('\0') && family != Family::MySql {
         return Err(Error::invalid(msg!("literal.nul")));
@@ -120,6 +134,7 @@ fn string_literal(family: Family, s: &str) -> Result<String> {
             format!("E'{}'", s.replace('\\', "\\\\").replace('\'', "''"))
         }
         Family::Postgres => quoted(s),
+        Family::SqlServer => format!("N{}", quoted(s)),
         Family::Oracle => {
             let chunks = oracle_chunks(s, ORACLE_LITERAL_MAX);
             if let [only] = chunks.as_slice() {
@@ -178,6 +193,8 @@ fn bytes_literal(family: Family, b: &[u8]) -> Result<String> {
         // 达梦的 0x 字面量不能为空，空值写成空字符串由数据库隐式转换
         Family::Dameng if b.is_empty() => "''".to_string(),
         Family::Dameng => format!("0x{hex}"),
+        // SQL Server 的 0x 可以为空
+        Family::SqlServer => format!("0x{hex}"),
     })
 }
 
@@ -185,11 +202,13 @@ fn bytes_literal(family: Family, b: &[u8]) -> Result<String> {
 /// 仅适用于自身不含 LIMIT/FETCH 的查询。
 /// 子句另起一行，原查询末尾的行注释不会吞掉它。
 /// 采用追加而非包装：允许重复列名，ORDER BY 仍然有效（MariaDB 会忽略派生表内的 ORDER BY）。
-/// Oracle 需要 12c 及以上；11g 的 ROWNUM 分页尚未实现。
+/// Oracle 需要 12c 及以上；11g 的 ROWNUM 分页尚未实现。SQL Server 的 OFFSET 要求查询带 ORDER BY。
 pub fn paginate(family: Family, sql: &str, offset: u64, limit: u64) -> String {
     let inner = sql.trim_start().trim_end_matches(|c: char| c == ';' || c.is_whitespace());
     match family {
-        Family::Oracle => format!("{inner}\nOFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"),
+        Family::Oracle | Family::SqlServer => {
+            format!("{inner}\nOFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY")
+        }
         Family::MySql | Family::Postgres | Family::Dameng => {
             format!("{inner}\nLIMIT {limit} OFFSET {offset}")
         }
@@ -411,5 +430,30 @@ mod tests {
             "SELECT * FROM t -- 注释\nOFFSET 0 ROWS FETCH NEXT 50 ROWS ONLY"
         );
         assert!(paginate(Family::Dameng, "SELECT 1", 0, 1).ends_with("\nLIMIT 1 OFFSET 0"));
+        assert_eq!(
+            paginate(Family::SqlServer, "SELECT * FROM t ORDER BY id;", 10, 5),
+            "SELECT * FROM t ORDER BY id\nOFFSET 10 ROWS FETCH NEXT 5 ROWS ONLY"
+        );
+    }
+
+    #[test]
+    fn sqlserver_literals() {
+        let f = Family::SqlServer;
+        assert_eq!(lit(f, Value::Bool(true)), "1");
+        assert_eq!(lit(f, Value::String("it's 数洞".into())), "N'it''s 数洞'");
+        assert_eq!(lit(f, Value::Bytes(vec![0x01, 0xab])), "0x01AB");
+        assert_eq!(lit(f, Value::Bytes(vec![])), "0x");
+        let d = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+        assert_eq!(lit(f, Value::Date(d)), "CAST('2024-02-29' AS DATE)");
+        let t = NaiveTime::from_hms_micro_opt(13, 45, 30, 123456).unwrap();
+        assert_eq!(lit(f, Value::Time(t)), "CAST('13:45:30.123456' AS TIME)");
+        assert_eq!(
+            lit(f, Value::DateTime(d.and_hms_opt(1, 2, 3).unwrap())),
+            "CAST('2024-02-29T01:02:03' AS DATETIME2)"
+        );
+        let tz = FixedOffset::east_opt(8 * 3600).unwrap().with_ymd_and_hms(2024, 2, 29, 13, 45, 30).unwrap();
+        assert_eq!(lit(f, Value::DateTimeTz(tz)), "CAST('2024-02-29T13:45:30+08:00' AS DATETIMEOFFSET)");
+        assert!(literal(f, &Value::Float(f64::NAN)).is_err());
+        assert!(literal(f, &Value::String("a\0b".into())).is_err());
     }
 }

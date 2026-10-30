@@ -259,7 +259,8 @@ fn same_check(a: &str, b: &str) -> bool {
 }
 
 /// 名字是否像库自动生成的：Oracle、达梦的 `SYS_C…`、`CONS…`、`INDEX…`；MySQL 的 `PRIMARY`、`<表>_ibfk_N`、
-/// `<表>_chk_N`；PG 家族的 `<表>_pkey`、`<表>_…_key`、`<表>_…_fkey`、`<表>_…_check`。
+/// `<表>_chk_N`；PG 家族的 `<表>_pkey`、`<表>_…_key`、`<表>_…_fkey`、`<表>_…_check`；
+/// SQL Server 的 `PK__表__哈希`、`UQ__…`、`FK__…`、`CK__…`、`DF__…`。
 pub(super) fn is_generated(d: &Dialect, table: &str, name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     let digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
@@ -277,6 +278,7 @@ pub(super) fn is_generated(d: &Dialect, table: &str, name: &str) -> bool {
                 || n.strip_prefix(&format!("{t}_ibfk_")).is_some_and(digits)
                 || n.strip_prefix(&format!("{t}_chk_")).is_some_and(digits)
         }
+        Family::SqlServer => ["PK__", "UQ__", "FK__", "CK__", "DF__"].iter().any(|p| upper.starts_with(p)),
         Family::Postgres => {
             let prefix = format!("{}_", table.to_ascii_lowercase());
             let n = name.to_ascii_lowercase();

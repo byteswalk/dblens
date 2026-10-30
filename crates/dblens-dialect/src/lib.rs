@@ -155,6 +155,11 @@ impl Dialect {
         session::explain(self.family(), sql)
     }
 
+    /// 生成执行计划之后无论成败都要执行的语句（见 `session::explain`）。
+    pub fn explain_cleanup(&self) -> Option<&'static str> {
+        session::explain_cleanup(self.family())
+    }
+
     /// 查询当前 schema 的语句，结果是一行一列。
     pub fn current_schema_sql(&self) -> &'static str {
         session::current_schema(self.family())

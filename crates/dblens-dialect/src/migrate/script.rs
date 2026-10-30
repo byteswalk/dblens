@@ -213,7 +213,7 @@ fn design(tgt: &Dialect, schema: &str, table: &str, change: TableChange) -> Resu
 fn drop_sql(tgt: &Dialect, schema: &str, name: &str) -> String {
     let q = tgt.qualified(Some(schema), name);
     match tgt.family() {
-        Family::MySql => format!("DROP TABLE {q}"),
+        Family::MySql | Family::SqlServer => format!("DROP TABLE {q}"),
         Family::Postgres | Family::Dameng => format!("DROP TABLE {q} CASCADE"),
         Family::Oracle => format!("DROP TABLE {q} CASCADE CONSTRAINTS"),
     }

@@ -5,7 +5,7 @@ use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_dialect::{Dialect, Family, Variant};
 
 /// 有自己的模板覆盖文件的变体（PolarDB、GaussDB、HighGo 沿用家族模板）。
-const VARIANTS: [Variant; 9] = [
+const VARIANTS: [Variant; 10] = [
     Variant::MySql,
     Variant::MariaDb,
     Variant::TiDb,
@@ -15,11 +15,13 @@ const VARIANTS: [Variant; 9] = [
     Variant::OpenGauss,
     Variant::Oracle,
     Variant::Dameng,
+    Variant::SqlServer,
 ];
 
 #[test]
 fn rendered_metadata_queries() {
     let full = MetaArgs {
+        catalog: None,
         schema: Some("HR".into()),
         table: Some("EMP".into()),
         name: Some("EMP".into()),
@@ -44,14 +46,18 @@ fn every_family_covers_the_common_keys() {
         let d = Dialect::new(v);
         for key in MetaKey::ALL {
             let optional = match key {
+                // 只有 SQL Server 有数据库这一层
+                MetaKey::Catalogs => v.family() != Family::SqlServer,
                 MetaKey::MaterializedViews
                 | MetaKey::Synonyms
                 | MetaKey::Sequences
                 | MetaKey::VariantProbe => true,
                 MetaKey::DependentViews | MetaKey::Grants => v.family() == Family::MySql,
                 MetaKey::TriggerDdl => v != Variant::Oracle,
-                // OceanBase 没有 information_schema.KEYWORDS
-                MetaKey::ReservedWords => matches!(v, Variant::MariaDb | Variant::OceanBase),
+                // OceanBase 没有 information_schema.KEYWORDS；SQL Server 没有可查的保留字表（用 ident.rs 的清单）
+                MetaKey::ReservedWords => {
+                    matches!(v, Variant::MariaDb | Variant::OceanBase | Variant::SqlServer)
+                }
                 _ => false,
             };
             assert!(optional || d.has_meta(key), "{v:?} 缺少 {key:?} 模板");
@@ -63,6 +69,7 @@ fn every_family_covers_the_common_keys() {
 #[test]
 fn legacy_version_branches_render() {
     let full = MetaArgs {
+        catalog: None,
         schema: Some("HR".into()),
         table: Some("EMP".into()),
         name: Some("EMP".into()),

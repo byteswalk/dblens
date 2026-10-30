@@ -2,7 +2,7 @@
 //! `timestamp(6) with time zone`），逻辑类型用于跨库映射和设计器。
 //!
 //! 约定：
-//! - 原生 → 逻辑时，没有显式精度的时间类型补上源库的默认精度（PG/Oracle/达梦 6，MySQL 0），
+//! - 原生 → 逻辑时，没有显式精度的时间类型补上源库的默认精度（PG/Oracle/达梦 6，MySQL 0，SQL Server 7），
 //!   这样跨库时目标库不会因为默认精度不同而悄悄改变精度。
 //! - 逻辑 → 原生时，按目标库的上限钳制精度、长度和小数位，保证生成的 DDL 在目标库上可执行。
 
@@ -226,6 +226,35 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "TIMESTAMP" | "DATETIME" => L::Timestamp { tz, precision: prec(6) },
             _ => L::Other,
         },
+        // SQL Server 的 (MAX) 长度解析为 None
+        Family::SqlServer => match n {
+            "BIT" => L::Bool,
+            // TINYINT 是 0–255
+            "TINYINT" => L::UInt { bits: 8 },
+            "SMALLINT" => L::Int { bits: 16 },
+            "INT" => L::Int { bits: 32 },
+            "BIGINT" => L::Int { bits: 64 },
+            "REAL" => L::Float { bits: 32 },
+            "FLOAT" => L::Float { bits: if len.is_some_and(|p| p <= 24) { 32 } else { 64 } },
+            "DECIMAL" | "NUMERIC" => decimal(),
+            "MONEY" => L::Decimal { precision: Some(19), scale: Some(4) },
+            "SMALLMONEY" => L::Decimal { precision: Some(10), scale: Some(4) },
+            "CHAR" | "NCHAR" => L::Char { len },
+            "VARCHAR" | "NVARCHAR" => L::VarChar { len },
+            "TEXT" | "NTEXT" | "XML" => L::Text,
+            "BINARY" => L::Binary { len },
+            "VARBINARY" => L::VarBinary { len },
+            "IMAGE" => L::Blob,
+            "DATE" => L::Date,
+            "TIME" => L::Time { precision: prec(7) },
+            "DATETIME2" => L::Timestamp { tz: false, precision: prec(7) },
+            "DATETIME" => L::Timestamp { tz: false, precision: Some(3) },
+            "SMALLDATETIME" => L::Timestamp { tz: false, precision: Some(0) },
+            "DATETIMEOFFSET" => L::Timestamp { tz: true, precision: prec(7) },
+            "UNIQUEIDENTIFIER" => L::Uuid,
+            // ROWVERSION / TIMESTAMP（行版本）、空间类型、HIERARCHYID、SQL_VARIANT 等没有对应逻辑类型
+            _ => L::Other,
+        },
     }
 }
 
@@ -236,9 +265,13 @@ fn with_len(name: &str, len: Option<u32>) -> String {
     }
 }
 
-/// 时间精度按目标库上限钳制：Oracle 最高 9，其余最高 6。
+/// 时间精度按目标库上限钳制：Oracle 最高 9，SQL Server 最高 7，其余最高 6。
 fn with_precision(family: Family, name: &str, p: Option<u8>) -> String {
-    let max = if family == Family::Oracle { 9 } else { 6 };
+    let max = match family {
+        Family::Oracle => 9,
+        Family::SqlServer => 7,
+        _ => 6,
+    };
     with_len(name, p.map(|v| u32::from(v.min(max))))
 }
 
@@ -249,6 +282,8 @@ fn decimal_native(family: Family, precision: Option<u32>, scale: Option<i32>) ->
         Family::Postgres => ("NUMERIC", "NUMERIC", 1000),
         Family::Oracle => ("NUMBER", "NUMBER", 38),
         Family::Dameng => ("DEC", "DEC", 38),
+        // SQL Server 的 DECIMAL 不写参数是 (18,0)，无限定的源类型给 (38,10)
+        Family::SqlServer => ("DECIMAL", "DECIMAL(38,10)", 38),
     };
     // 精度 0 在各库都无效，按无限定处理
     let precision = precision.filter(|&p| p > 0);
@@ -281,6 +316,7 @@ fn decimal_native(family: Family, precision: Option<u32>, scale: Option<i32>) ->
             Family::Postgres => "NUMERIC".into(),
             Family::Oracle => "NUMBER".into(),
             Family::Dameng => "DEC".into(),
+            Family::SqlServer => "DECIMAL(38,10)".into(),
         };
     }
     if family == Family::MySql {
@@ -491,6 +527,44 @@ pub fn native_type(family: Family, logical: &LogicalType) -> String {
             L::Json | L::Other => "CLOB".into(),
             L::Uuid => "VARCHAR(36)".into(),
         },
+        // 字符一律用 Unicode 的 N 类型：NCHAR/NVARCHAR 上限 4000 字符，超出用 NVARCHAR(MAX)；二进制上限 8000 字节
+        Family::SqlServer => match logical {
+            L::Bool => "BIT".into(),
+            // TINYINT 无符号，有符号 8 位用 SMALLINT
+            L::Int { bits } => match bits {
+                0..=16 => "SMALLINT",
+                17..=32 => "INT",
+                _ => "BIGINT",
+            }
+            .into(),
+            L::UInt { bits } => match bits {
+                0..=8 => "TINYINT",
+                9..=16 => "INT",
+                17..=32 => "BIGINT",
+                _ => "DECIMAL(20,0)",
+            }
+            .into(),
+            L::Float { bits } => if *bits <= 32 { "REAL" } else { "FLOAT" }.into(),
+            L::Decimal { precision, scale } => decimal_native(family, *precision, *scale),
+            L::Char { len } => match len.unwrap_or(1) {
+                n if n > 4000 => "NVARCHAR(MAX)".into(),
+                n => format!("NCHAR({n})"),
+            },
+            L::VarChar { len: Some(n) } if *n <= 4000 => format!("NVARCHAR({n})"),
+            L::VarChar { .. } | L::Text | L::Json | L::Other => "NVARCHAR(MAX)".into(),
+            L::Binary { len } => match len.unwrap_or(1) {
+                n if n > 8000 => "VARBINARY(MAX)".into(),
+                n => format!("BINARY({n})"),
+            },
+            L::VarBinary { len: Some(n) } if *n <= 8000 => format!("VARBINARY({n})"),
+            L::VarBinary { .. } | L::Blob => "VARBINARY(MAX)".into(),
+            L::Date => "DATE".into(),
+            L::Time { precision } => with_precision(family, "TIME", *precision),
+            L::Timestamp { tz: false, precision } => with_precision(family, "DATETIME2", *precision),
+            L::Timestamp { tz: true, precision } => with_precision(family, "DATETIMEOFFSET", *precision),
+            L::Interval => "NVARCHAR(100)".into(),
+            L::Uuid => "UNIQUEIDENTIFIER".into(),
+        },
     }
 }
 
@@ -499,7 +573,8 @@ mod tests {
     use super::*;
     use LogicalType as L;
 
-    const FAMILIES: [Family; 4] = [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng];
+    const FAMILIES: [Family; 5] =
+        [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng, Family::SqlServer];
 
     fn dec(p: Option<u32>, s: Option<i32>) -> L {
         L::Decimal { precision: p, scale: s }
@@ -1105,6 +1180,50 @@ mod tests {
             assert_eq!(native_type(*to, &logical), *expected, "{from:?} {native} -> {to:?}");
         }
         assert_eq!(native_type(Family::MySql, &L::Char { len: Some(500) }), "VARCHAR(500)");
+    }
+
+    #[test]
+    fn sqlserver_round_trip() {
+        let f = Family::SqlServer;
+        for (native, back) in [
+            ("bit", "BIT"),
+            ("tinyint", "TINYINT"),
+            ("smallint", "SMALLINT"),
+            ("int", "INT"),
+            ("bigint", "BIGINT"),
+            ("real", "REAL"),
+            ("float", "FLOAT"),
+            ("decimal(10,2)", "DECIMAL(10,2)"),
+            ("money", "DECIMAL(19,4)"),
+            ("nchar(10)", "NCHAR(10)"),
+            // 非 Unicode 的字符类型统一成 N 类型
+            ("varchar(100)", "NVARCHAR(100)"),
+            ("nvarchar(4000)", "NVARCHAR(4000)"),
+            ("nvarchar(max)", "NVARCHAR(MAX)"),
+            ("varchar(max)", "NVARCHAR(MAX)"),
+            ("ntext", "NVARCHAR(MAX)"),
+            ("binary(16)", "BINARY(16)"),
+            ("varbinary(max)", "VARBINARY(MAX)"),
+            ("image", "VARBINARY(MAX)"),
+            ("date", "DATE"),
+            ("time(3)", "TIME(3)"),
+            ("datetime2(7)", "DATETIME2(7)"),
+            ("datetime", "DATETIME2(3)"),
+            ("smalldatetime", "DATETIME2(0)"),
+            ("datetimeoffset(7)", "DATETIMEOFFSET(7)"),
+            ("uniqueidentifier", "UNIQUEIDENTIFIER"),
+        ] {
+            assert_eq!(native_type(f, &logical_type(f, native)), back, "{native}");
+        }
+        assert_eq!(logical_type(f, "geography"), L::Other);
+        assert_eq!(logical_type(f, "rowversion"), L::Other);
+        // 有符号 8 位放不进 TINYINT
+        assert_eq!(native_type(f, &L::Int { bits: 8 }), "SMALLINT");
+        assert_eq!(native_type(f, &L::VarChar { len: Some(5000) }), "NVARCHAR(MAX)");
+        assert_eq!(native_type(f, &dec(None, None)), "DECIMAL(38,10)");
+        assert_eq!(native_type(f, &ts(true, Some(9))), "DATETIMEOFFSET(7)");
+        // 从 PG 来的 timestamp 到 SQL Server 是 DATETIME2(6)
+        assert_eq!(native_type(f, &logical_type(Family::Postgres, "timestamp")), "DATETIME2(6)");
     }
 
     #[test]

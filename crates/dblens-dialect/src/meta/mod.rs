@@ -21,6 +21,9 @@ pub use rows::{MetaRow, MetaRows};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MetaKey {
+    /// 列出数据库（只有 SQL Server：连接 → 数据库 → 架构）。参数：filter。
+    /// 其余查询都在当前库中执行，服务层先切到所选的库。
+    Catalogs,
     /// 列出 schema（MySQL 为 database）。参数：filter。
     Schemas,
     /// 列出表（含分区父表）。参数：schema、filter、table（只取这一张）。
@@ -58,7 +61,8 @@ pub enum MetaKey {
 }
 
 impl MetaKey {
-    pub const ALL: [MetaKey; 21] = [
+    pub const ALL: [MetaKey; 22] = [
+        MetaKey::Catalogs,
         MetaKey::Schemas,
         MetaKey::Tables,
         MetaKey::Views,
@@ -94,6 +98,7 @@ impl MetaKey {
 
     pub fn as_str(self) -> &'static str {
         match self {
+            MetaKey::Catalogs => "catalogs",
             MetaKey::Schemas => "schemas",
             MetaKey::Tables => "tables",
             MetaKey::Views => "views",
@@ -123,6 +128,8 @@ impl MetaKey {
 /// 查询参数。`filter` 是用户在对象树过滤框里输入的原文（按名字或注释包含匹配，不区分大小写）。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MetaArgs {
+    /// 所在的数据库（SQL Server）。不进模板：服务层执行前先切到这个库。
+    pub catalog: Option<String>,
     pub schema: Option<String>,
     pub table: Option<String>,
     pub name: Option<String>,

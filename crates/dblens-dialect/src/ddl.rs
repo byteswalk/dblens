@@ -114,6 +114,27 @@ impl Dialect {
                 | DdlKind::Procedure => Ok(None),
                 _ => Err(unsupported()),
             },
+            // SQL Server：视图的模块定义就是完整的 CREATE VIEW；同义词由系统视图拼出；表、序列用结构模型，函数、过程用程序源码。
+            // 名字用两段名交给 OBJECT_ID（在当前库中查找，调用方先切到对象所在的库）
+            Family::SqlServer => {
+                let two_part =
+                    Value::String(format!("{}.{}", self.quote_ident(schema), self.quote_ident(name)));
+                match kind {
+                    DdlKind::Table | DdlKind::Sequence | DdlKind::Function | DdlKind::Procedure => Ok(None),
+                    DdlKind::View => query(
+                        "SELECT m.definition AS ddl FROM sys.sql_modules m WHERE m.object_id = OBJECT_ID(@P1)".into(),
+                        vec![two_part],
+                    ),
+                    DdlKind::Synonym => query(
+                        "SELECT N'CREATE SYNONYM ' + QUOTENAME(SCHEMA_NAME(s.schema_id)) + N'.' + QUOTENAME(s.name) \
+                         + N' FOR ' + s.base_object_name + N';' AS ddl \
+                         FROM sys.synonyms s WHERE s.object_id = OBJECT_ID(@P1)"
+                            .into(),
+                        vec![two_part],
+                    ),
+                    _ => Err(unsupported()),
+                }
+            }
         }
     }
 
@@ -121,7 +142,7 @@ impl Dialect {
         self.literal(&Value::String(text.into()))
     }
 
-    /// PG 系的建表语句：列、约束、分区，之后是索引、触发器和注释（`table_extras`），每条以 `;` 结束。
+    /// PG 系、SQL Server 的建表语句：列、约束、分区，之后是索引、触发器和注释（`table_extras`），每条以 `;` 结束。
     pub fn table_ddl(&self, schema: &str, t: &Table) -> Result<String> {
         let mut out = self.table_create(schema, t);
         out += &self.table_extras(schema, t, true)?;
@@ -134,7 +155,19 @@ impl Dialect {
         let mut items: Vec<String> = Vec::new();
         for c in &t.columns {
             let mut s = format!("{} {}", self.ident(&c.name), c.data_type.native);
-            if let Some(g) = &c.generated {
+            if self.family() == Family::SqlServer {
+                // SQL Server 的计算列没有类型和可空性：`名 AS (表达式)`
+                if let Some(g) = &c.generated {
+                    items.push(format!("{} AS ({})", self.ident(&c.name), strip_parens(g)));
+                    continue;
+                }
+                if c.auto_increment {
+                    s += " IDENTITY(1,1)";
+                }
+                if let Some(d) = &c.default {
+                    s += &format!(" DEFAULT {d}");
+                }
+            } else if let Some(g) = &c.generated {
                 s += &format!(" GENERATED ALWAYS AS ({g}) STORED");
             } else if let Some(d) = &c.default {
                 s += &format!(" DEFAULT {d}");
@@ -215,10 +248,40 @@ impl Dialect {
                 cols.join(", ")
             );
         }
+        let sqlserver = self.family() == Family::SqlServer;
         for tr in t.triggers.iter().filter(|_| triggers) {
             if let Some(d) = &tr.definition {
-                out += &format!("\n{};", d.trim_end_matches(';').trim());
+                if sqlserver {
+                    // CREATE TRIGGER 必须是批中的第一条语句
+                    out += &format!("\nGO\n{}\nGO", d.trim());
+                } else {
+                    out += &format!("\n{};", d.trim_end_matches(';').trim());
+                }
             }
+        }
+        if sqlserver {
+            // SQL Server 的注释是扩展属性 MS_Description
+            let property = |text: &str, column: Option<&str>| -> Result<String> {
+                let mut s = format!(
+                    "\nEXEC sys.sp_addextendedproperty N'MS_Description', {}, N'SCHEMA', {}, N'TABLE', {}",
+                    self.comment_literal(text)?,
+                    self.comment_literal(schema)?,
+                    self.comment_literal(&t.name)?
+                );
+                if let Some(col) = column {
+                    s += &format!(", N'COLUMN', {}", self.comment_literal(col)?);
+                }
+                Ok(s + ";")
+            };
+            if let Some(c) = &t.comment {
+                out += &property(c, None)?;
+            }
+            for c in &t.columns {
+                if let Some(cm) = &c.comment {
+                    out += &property(cm, Some(&c.name))?;
+                }
+            }
+            return Ok(out);
         }
         if let Some(c) = &t.comment {
             out += &format!("\nCOMMENT ON TABLE {q} IS {};", self.comment_literal(c)?);
@@ -264,6 +327,33 @@ impl Dialect {
         out += if s.cycle { "\n    CYCLE" } else { "\n    NO CYCLE" };
         out + ";\n"
     }
+}
+
+/// 去掉表达式最外层成对的括号（SQL Server 的定义文本自带括号，如 `([a]+[b])`）。
+fn strip_parens(e: &str) -> &str {
+    let e = e.trim();
+    match e.strip_prefix('(').and_then(|r| r.strip_suffix(')')) {
+        // 只有首尾的括号互相配对时才去掉：`(a)+(b)` 不能变成 `a)+(b`
+        Some(inner) if balanced(inner) => inner,
+        _ => e,
+    }
+}
+
+fn balanced(s: &str) -> bool {
+    let mut depth = 0i32;
+    for c in s.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    depth == 0
 }
 
 /// 数据库返回的 DDL 文本：统一换行，去掉首尾空白。
@@ -417,6 +507,65 @@ COMMENT ON TABLE public.\"Orders\" IS '订单';
 COMMENT ON COLUMN public.\"Orders\".code IS '编码 ''A''';
 "
         );
+    }
+
+    #[test]
+    fn sqlserver_queries_and_table() {
+        let d = Dialect::new(Variant::SqlServer);
+        let v = d.ddl_query(DdlKind::View, "dbo", "v]1").unwrap().unwrap();
+        assert!(v.sql.contains("sys.sql_modules"), "{}", v.sql);
+        assert_eq!(v.params, [Value::String("[dbo].[v]]1]".into())]);
+        assert!(d.ddl_query(DdlKind::Synonym, "dbo", "s").unwrap().unwrap().sql.contains("CREATE SYNONYM"));
+        assert_eq!(d.ddl_query(DdlKind::Table, "dbo", "t").unwrap(), None);
+        assert_eq!(d.ddl_query(DdlKind::Procedure, "dbo", "p").unwrap(), None);
+        assert!(d.ddl_query(DdlKind::Package, "dbo", "p").is_err());
+
+        let mut id = col("id", "int");
+        id.nullable = false;
+        id.auto_increment = true;
+        let mut name = col("name", "nvarchar(50)");
+        name.default = Some("(N'x')".into());
+        name.comment = Some("名称".into());
+        let mut total = col("total", "int");
+        total.generated = Some("([id]*(2))".into());
+        let t = Table {
+            name: "Orders".into(),
+            comment: Some("订单".into()),
+            columns: vec![id, name, total],
+            primary_key: Some(PrimaryKey { name: Some("PK_Orders".into()), columns: vec!["id".into()] }),
+            indexes: vec![Index {
+                name: "IX_name".into(),
+                columns: vec![IndexColumn { name: "name".into(), descending: false }],
+                unique: false,
+                method: Some("NONCLUSTERED".into()),
+            }],
+            triggers: vec![Trigger {
+                name: "trg".into(),
+                timing: None,
+                events: vec![],
+                definition: Some("CREATE TRIGGER trg ON dbo.Orders AFTER INSERT AS SELECT 1".into()),
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            d.table_ddl("dbo", &t).unwrap(),
+            "CREATE TABLE dbo.Orders (
+    id int IDENTITY(1,1) NOT NULL,
+    name nvarchar(50) DEFAULT (N'x'),
+    total AS ([id]*(2)),
+    CONSTRAINT PK_Orders PRIMARY KEY (id)
+);
+
+CREATE INDEX IX_name ON dbo.Orders (name);
+GO
+CREATE TRIGGER trg ON dbo.Orders AFTER INSERT AS SELECT 1
+GO
+EXEC sys.sp_addextendedproperty N'MS_Description', N'订单', N'SCHEMA', N'dbo', N'TABLE', N'Orders';
+EXEC sys.sp_addextendedproperty N'MS_Description', N'名称', N'SCHEMA', N'dbo', N'TABLE', N'Orders', N'COLUMN', N'name';
+"
+        );
+        assert_eq!(strip_parens("(a)+(b)"), "(a)+(b)");
+        assert_eq!(strip_parens(" ((a)) "), "(a)");
     }
 
     #[test]

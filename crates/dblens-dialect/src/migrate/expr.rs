@@ -308,6 +308,7 @@ pub(super) fn convert_default(
                 .map(|s| Some(format!("nextval({s})")))
                 .map_err(|_| ()),
             Family::Oracle | Family::Dameng => Ok(Some(format!("{}.NEXTVAL", tgt.ident(name)))),
+            Family::SqlServer => Ok(Some(format!("NEXT VALUE FOR {}", tgt.ident(name)))),
             Family::MySql => Err(()),
         };
     }

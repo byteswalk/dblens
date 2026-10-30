@@ -135,11 +135,13 @@ pub(super) fn identity_supported(tgt: &Dialect) -> bool {
     !(tgt.family() == Family::Oracle && tgt.version().is_some_and(|v| v < 120000))
 }
 
-/// 外键动作在目标库中是否可用：Oracle、达梦只有 ON DELETE CASCADE / SET NULL；MySQL（InnoDB）不支持 SET DEFAULT。
+/// 外键动作在目标库中是否可用：Oracle、达梦只有 ON DELETE CASCADE / SET NULL；MySQL（InnoDB）不支持 SET DEFAULT；
+/// SQL Server 没有 RESTRICT。
 pub(super) fn fk_action_supported(tgt: &Dialect, what: &str, action: &str) -> bool {
     match tgt.family() {
         Family::Oracle | Family::Dameng => what == "DELETE" && (action == "CASCADE" || action == "SET NULL"),
         Family::MySql => action != "SET DEFAULT",
+        Family::SqlServer => action != "RESTRICT",
         Family::Postgres => true,
     }
 }

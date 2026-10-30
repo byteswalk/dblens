@@ -1,12 +1,15 @@
 //! 执行策略（设计文档 7.7 节）：所有执行路径都要先问 `Policy`。个人版的 `DefaultPolicy` 只在生产环境的连接上，
-//! 对不带 WHERE 的 UPDATE/DELETE、DROP、TRUNCATE 要求确认；团队版以后用同一接口实现授权、审计等。
+//! 对不带 WHERE 的 UPDATE/DELETE、DROP、TRUNCATE 要求确认（SQL Server 另加 KILL、SHUTDOWN、DBCC、RESTORE、
+//! ALTER DATABASE）；团队版以后用同一接口实现授权、审计等。
+//!
+//! SQL Server 按 `GO` 分批执行，一批里可以有多条语句：分析时取批中最危险的一条（见 `classify_batch`）。
 
 use async_trait::async_trait;
 use dblens_core::{Msg, msg};
 use dblens_dialect::{Dialect, Family};
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ObjectName, Statement};
-use sqlparser::dialect::{GenericDialect, MySqlDialect, PostgreSqlDialect};
+use sqlparser::dialect::{GenericDialect, MsSqlDialect, MySqlDialect, PostgreSqlDialect};
 use sqlparser::parser::Parser;
 
 use crate::profile::Environment;
@@ -98,6 +101,11 @@ impl Policy for DefaultPolicy {
                 msg!("policy.prod_no_where", keyword = stmt.keyword)
             }
             "DROP" | "TRUNCATE" => msg!("policy.prod_statement", keyword = stmt.keyword),
+            "KILL" | "SHUTDOWN" | "DBCC" | "RESTORE" | "ALTER DATABASE"
+                if ctx.dialect.family() == Family::SqlServer =>
+            {
+                msg!("policy.prod_statement", keyword = stmt.keyword)
+            }
             _ => return Decision::Allow,
         };
         Decision::Confirm { reason }
@@ -161,8 +169,11 @@ fn from_ast(stmt: &Statement) -> (Option<bool>, Vec<ObjectRef>) {
 }
 
 /// 分析一条语句。MySQL、PG 家族用 sqlparser 解析；Oracle/达梦（PL/SQL 语法 sqlparser 支持不全）
-/// 和解析失败时只看首个关键字，此时无法判断是否带 WHERE。
+/// 和解析失败时只看首个关键字，此时无法判断是否带 WHERE。SQL Server 的一批见 `classify_batch`。
 pub fn classify(dialect: &Dialect, sql: &str) -> StatementInfo {
+    if dialect.family() == Family::SqlServer {
+        return classify_batch(sql);
+    }
     let keyword = first_keyword(sql);
     // PL/SQL 匿名块
     let kind = if keyword == "BEGIN" && matches!(dialect.family(), Family::Oracle | Family::Dameng) {
@@ -173,7 +184,7 @@ pub fn classify(dialect: &Dialect, sql: &str) -> StatementInfo {
     let parsed = match dialect.family() {
         Family::MySql => Parser::parse_sql(&MySqlDialect {}, sql).ok(),
         Family::Postgres => Parser::parse_sql(&PostgreSqlDialect {}, sql).ok(),
-        Family::Oracle | Family::Dameng => None,
+        Family::Oracle | Family::Dameng | Family::SqlServer => None,
     };
     let (has_where, objects) = match parsed.as_deref() {
         Some([stmt]) => from_ast(stmt),
@@ -189,6 +200,123 @@ pub fn classify(dialect: &Dialect, sql: &str) -> StatementInfo {
         }
     };
     StatementInfo { kind, keyword, has_where, objects }
+}
+
+/// SQL Server 中执行前要确认的关键字（另有 `ALTER DATABASE`）。
+const SQLSERVER_DANGEROUS: [&str; 4] = ["KILL", "SHUTDOWN", "DBCC", "RESTORE"];
+
+/// SQL Server 的一批：用 sqlparser 的 MsSQL 方言拆成语句，取第一条危险的语句（不带 WHERE 的 UPDATE/DELETE、DROP、
+/// TRUNCATE、`SQLSERVER_DANGEROUS`、ALTER DATABASE）作为结果；没有危险语句时，有 DDL 则按 DDL（元数据缓存要失效），
+/// 否则按第一条。所有 DDL 涉及的对象都收集起来。
+/// 解析不了（`IF`、`WHILE`、`BEGIN…END` 等过程式代码，或没有用分号分隔的多条语句）时，跳过字符串、方括号和注释扫描关键字：出现危险关键字时
+/// 以它为关键字、`has_where` 为 None，宁可多问一次。
+fn classify_batch(sql: &str) -> StatementInfo {
+    let first = first_keyword(sql);
+    let Ok(stmts) = Parser::parse_sql(&MsSqlDialect {}, sql) else {
+        let words = batch_words(sql);
+        let found = words.iter().enumerate().find_map(|(i, w)| match w.as_str() {
+            "DROP" | "TRUNCATE" | "DELETE" | "UPDATE" => Some(w.clone()),
+            "ALTER" if words.get(i + 1).is_some_and(|n| n == "DATABASE") => Some("ALTER DATABASE".into()),
+            w if SQLSERVER_DANGEROUS.contains(&w) => Some(w.to_string()),
+            _ => None,
+        });
+        let keyword = found.unwrap_or(first);
+        let kind = kind_of_keyword(keyword.split(' ').next().unwrap_or_default());
+        return StatementInfo { kind, keyword, has_where: None, objects: vec![] };
+    };
+    let infos: Vec<StatementInfo> = stmts
+        .iter()
+        .map(|s| {
+            let text = s.to_string();
+            let mut keyword = first_keyword(&text);
+            if keyword == "ALTER" && text.to_uppercase().split_whitespace().nth(1) == Some("DATABASE") {
+                keyword = "ALTER DATABASE".into();
+            }
+            let (has_where, objects) = from_ast(s);
+            StatementInfo {
+                kind: kind_of_keyword(keyword.split(' ').next().unwrap_or_default()),
+                keyword,
+                has_where,
+                objects,
+            }
+        })
+        .collect();
+    let objects: Vec<ObjectRef> = infos.iter().flat_map(|i| i.objects.clone()).collect();
+    let dangerous = |i: &&StatementInfo| match i.keyword.as_str() {
+        "UPDATE" | "DELETE" => i.has_where != Some(true),
+        "DROP" | "TRUNCATE" | "ALTER DATABASE" => true,
+        k => SQLSERVER_DANGEROUS.contains(&k),
+    };
+    let pick = infos
+        .iter()
+        .find(dangerous)
+        .or_else(|| infos.iter().find(|i| i.kind == StatementKind::Ddl))
+        .or(infos.first());
+    match pick {
+        Some(i) => StatementInfo { objects, ..i.clone() },
+        None => StatementInfo { kind: kind_of_keyword(&first), keyword: first, has_where: None, objects },
+    }
+}
+
+/// T-SQL 文本中字符串、方括号和双引号标识符、注释以外的单词（大写）。
+fn batch_words(sql: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut chars = sql.chars().peekable();
+    let mut word = String::new();
+    let flush = |word: &mut String, words: &mut Vec<String>| {
+        if !word.is_empty() {
+            words.push(std::mem::take(word).to_uppercase());
+        }
+    };
+    while let Some(c) = chars.next() {
+        match c {
+            '\'' | '"' | '[' => {
+                flush(&mut word, &mut words);
+                let close = if c == '[' { ']' } else { c };
+                while let Some(d) = chars.next() {
+                    if d == close {
+                        // 两个结束符表示一个字符
+                        if chars.peek() == Some(&close) {
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            '-' if chars.peek() == Some(&'-') => {
+                flush(&mut word, &mut words);
+                for d in chars.by_ref() {
+                    if d == '\n' {
+                        break;
+                    }
+                }
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                flush(&mut word, &mut words);
+                chars.next();
+                let mut depth = 1;
+                while depth > 0 {
+                    match chars.next() {
+                        Some('*') if chars.peek() == Some(&'/') => {
+                            chars.next();
+                            depth -= 1;
+                        }
+                        Some('/') if chars.peek() == Some(&'*') => {
+                            chars.next();
+                            depth += 1;
+                        }
+                        Some(_) => {}
+                        None => break,
+                    }
+                }
+            }
+            c if c.is_alphanumeric() || c == '_' || c == '@' || c == '#' => word.push(c),
+            _ => flush(&mut word, &mut words),
+        }
+    }
+    flush(&mut word, &mut words);
+    words
 }
 
 #[cfg(test)]
@@ -237,6 +365,46 @@ mod tests {
         assert_eq!((s.kind, s.has_where), (StatementKind::Dml, None), "解析失败");
         assert_eq!(classify(&pg(), "").kind, StatementKind::Other);
         assert_eq!(classify(&pg(), "# c\nSELECT 1").keyword, "SELECT");
+    }
+
+    #[test]
+    fn sqlserver_batches_pick_the_most_dangerous_statement() {
+        let ms = Dialect::new(Variant::SqlServer);
+        let s = classify(&ms, "SELECT 1; DELETE FROM dbo.t WHERE id = 1; UPDATE t SET a = 1");
+        assert_eq!((s.keyword.as_str(), s.has_where), ("UPDATE", Some(false)));
+        let s = classify(&ms, "SELECT 1; DELETE FROM t WHERE id = 1");
+        assert_eq!((s.kind, s.keyword.as_str()), (StatementKind::Dql, "SELECT"));
+        // 不写分号的多条语句 sqlparser 解析不了，按关键字扫描，无法判断 WHERE（生产环境上会多问一次）
+        let s = classify(&ms, "SELECT 1\nDELETE FROM t WHERE id = 1");
+        assert_eq!((s.kind, s.keyword.as_str(), s.has_where), (StatementKind::Dml, "DELETE", None));
+        let s = classify(&ms, "SELECT 1; CREATE TABLE dbo.t2 (id int); DROP TABLE [dbo].[t3]");
+        assert_eq!(s.keyword, "DROP");
+        assert_eq!(s.objects.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(), ["t2", "t3"]);
+        let s = classify(&ms, "SELECT 1; CREATE TABLE t2 (id int)");
+        assert_eq!(s.kind, StatementKind::Ddl);
+        assert_eq!(classify(&ms, "ALTER DATABASE x SET OFFLINE").keyword, "ALTER DATABASE");
+        // 解析不了的过程式代码：按关键字扫描，字符串和注释里的不算
+        let s = classify(&ms, "IF 1 = 1 BEGIN PRINT 'DROP TABLE t' /* DELETE */ -- TRUNCATE\nEND");
+        assert_eq!(s.keyword, "IF");
+        let s = classify(&ms, "IF OBJECT_ID('t') IS NOT NULL BEGIN DBCC CHECKDB WITH NO_INFOMSGS END");
+        assert_eq!((s.keyword.as_str(), s.has_where), ("DBCC", None));
+        let s = classify(&ms, "WHILE 1 = 0 BEGIN DELETE FROM [t]] x] WHERE 1 = 1 END");
+        assert_eq!((s.keyword.as_str(), s.has_where), ("DELETE", None));
+        assert_eq!(batch_words("SELECT [a]]b], N'c''d', \"e\" /* x /* y */ z */ f"), ["SELECT", "N", "F"]);
+    }
+
+    #[tokio::test]
+    async fn sqlserver_admin_statements_need_confirmation_on_production() {
+        let ms = Dialect::new(Variant::SqlServer);
+        let c = ExecContext { profile_id: "p".into(), environment: Environment::Prod, dialect: ms };
+        for sql in ["KILL 53", "SHUTDOWN", "DBCC SHRINKDATABASE (x)", "RESTORE DATABASE x FROM DISK = 'a'"] {
+            let d = DefaultPolicy.before_execute(&c, &classify(&ms, sql)).await;
+            assert!(matches!(d, Decision::Confirm { .. }), "{sql}");
+        }
+        // 其他库的 KILL 不在此列
+        let my = Dialect::new(Variant::MySql);
+        let c = ExecContext { profile_id: "p".into(), environment: Environment::Prod, dialect: my };
+        assert_eq!(DefaultPolicy.before_execute(&c, &classify(&my, "KILL 53")).await, Decision::Allow);
     }
 
     fn ctx(environment: Environment) -> ExecContext {

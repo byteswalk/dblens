@@ -1,6 +1,10 @@
 //! SQL 语句拆分：处理字符串、注释、PG 的 $$ 引号、MySQL 的 DELIMITER 命令，
 //! 以及 Oracle/达梦的 PL/SQL 块和 `/` 结束符。保留每条语句在原文中的字节范围和起始行号，便于定位出错位置。
 //!
+//! SQL Server 不按 `;` 拆分，而是按单独一行的 `GO` 分批（与 SSMS、sqlcmd 一致），每批整段交给服务器：
+//! `GO` 不区分大小写，前后可有空白，可带次数（`GO 5` 把该批重复 5 次，上限 `MAX_GO_COUNT`）和行尾 `--` 注释；
+//! 字符串、`[…]`、`"…"` 标识符和（可嵌套的）块注释里的 `GO` 不算。
+//!
 //! 可以分块喂入（`StreamSplitter`，执行 SQL 文件用）：跨块保留结束符、PL/SQL 块、字符串和注释的状态，
 //! 从上次停下的位置继续扫描。块末尾不足以判断的结构（被切开的结束符、未闭合的字符串或注释、
 //! 未读到换行的行首命令、PL/SQL 块开头的关键字）等下一块再判断，文本结束时按结束处理；
@@ -18,8 +22,12 @@
 //! - `q''` 的定界符必须是 ASCII 字符。
 //! - 达梦是否支持 `q''` 字符串尚未验证。
 //! - 分块喂入时，跨越多块的单个字符串、注释或 `$$` 函数体，每来一块都从它的开头重新查找结尾。
+//! - SQL Server 不识别 sqlcmd 的其他命令（`:setvar`、`:r` 等），按 SQL 原样发给服务器。
 
 use crate::Family;
+
+/// `GO n` 的次数上限，防止误写的大数把一批执行成千上万次。
+pub const MAX_GO_COUNT: usize = 1000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SqlStatement {
@@ -167,7 +175,8 @@ impl StreamSplitter {
                 Step::No => {}
             }
             let rest = &self.buf.as_bytes()[self.i..];
-            if !self.block {
+            // SQL Server 只按 GO 分批
+            if !self.block && self.family != Family::SqlServer {
                 if rest.starts_with(&self.delimiter) {
                     let end = self.i;
                     self.i += self.delimiter.len();
@@ -228,7 +237,7 @@ impl StreamSplitter {
         self.block = false;
     }
 
-    /// 行首命令：MySQL 的 `DELIMITER xx`，Oracle/达梦单独一行的 `/`。
+    /// 行首命令：MySQL 的 `DELIMITER xx`，Oracle/达梦单独一行的 `/`，SQL Server 单独一行的 `GO [n]`。
     /// 行还没读完时，能确定不是命令就返回 `No`，否则等下一块。
     fn line_command(&mut self, eof: bool) -> Step {
         let b = self.buf.as_bytes();
@@ -263,6 +272,26 @@ impl StreamSplitter {
                     return Step::Done;
                 }
                 Step::No
+            }
+            Family::SqlServer => {
+                if !complete {
+                    let n = head.len().min(2);
+                    let maybe = head[..n].eq_ignore_ascii_case(&b"go"[..n])
+                        && head.get(2).is_none_or(|c| !is_ident_byte(*c));
+                    return if maybe { Step::Wait } else { Step::No };
+                }
+                let Some(count) = go_count(line) else { return Step::No };
+                let before = self.out.len();
+                self.finish_stmt(self.i);
+                // 这一批出现 count 次（count 为 0 时不执行）
+                if self.out.len() > before
+                    && let Some(batch) = self.out.pop()
+                {
+                    self.out.extend(std::iter::repeat_n(batch, count));
+                }
+                self.i = next_line;
+                self.stmt_start = next_line;
+                Step::Done
             }
             _ if self.plsql() => {
                 if !complete {
@@ -311,7 +340,7 @@ impl StreamSplitter {
                     None if !eof => return Step::Wait,
                     c => matches!(c, Some(b'!' | b'+')),
                 };
-                let nested = self.family == Family::Postgres;
+                let nested = matches!(self.family, Family::Postgres | Family::SqlServer);
                 let mut depth = 1;
                 let mut j = i + 2;
                 while j < b.len() && depth > 0 {
@@ -355,6 +384,9 @@ impl StreamSplitter {
             scan_quoted(b, i + 1, b'"', self.family == Family::MySql, eof)
         } else if c == b'`' && self.family == Family::MySql {
             scan_quoted(b, i + 1, b'`', false, eof)
+        } else if c == b'[' && self.family == Family::SqlServer {
+            // 方括号标识符，`]]` 表示一个 `]`
+            scan_quoted(b, i + 1, b']', false, eof)
         } else if matches!(c, b'n' | b'N') && oracle && !prev_is_ident {
             // Oracle 的 nq'X…X' 字符串（national 字符集的 q-quote）
             if need(3) && b.get(i + 1).is_none_or(|c| matches!(c, b'q' | b'Q')) {
@@ -396,6 +428,27 @@ impl StreamSplitter {
             None => Step::Wait,
         }
     }
+}
+
+/// 一行是否是 `GO [n] [-- 注释]`：是则返回次数（没写为 1，超过上限按上限）。
+fn go_count(line: &[u8]) -> Option<usize> {
+    let line = line.trim_ascii();
+    if line.len() < 2 || !line[..2].eq_ignore_ascii_case(b"go") {
+        return None;
+    }
+    let mut rest = &line[2..];
+    if rest.first().is_some_and(|c| !c.is_ascii_whitespace() && *c != b'-') {
+        return None;
+    }
+    rest = rest.trim_ascii_start();
+    let digits = rest.iter().take_while(|c| c.is_ascii_digit()).count();
+    let count = if digits == 0 {
+        1
+    } else {
+        std::str::from_utf8(&rest[..digits]).ok()?.parse::<usize>().unwrap_or(MAX_GO_COUNT).min(MAX_GO_COUNT)
+    };
+    rest = rest[digits..].trim_ascii_start();
+    (rest.is_empty() || rest.starts_with(b"--")).then_some(count)
 }
 
 fn newlines(b: &[u8]) -> usize {
@@ -691,6 +744,48 @@ mod tests {
     }
 
     #[test]
+    fn sqlserver_batches_split_on_go_lines() {
+        let sql = "CREATE TABLE t (id int);\nINSERT INTO t VALUES (1); SELECT 1\n  go  \n\
+                   CREATE PROCEDURE p AS\nBEGIN\n  SELECT 'GO';\n  /* GO\n /* GO */ GO */\nEND\nGo -- 结束\n\
+                   SELECT [go\nGO], \"x\nGO\" FROM t\nGO";
+        let s = split_statements(sql, Family::SqlServer);
+        let t: Vec<&str> = s.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(
+            t,
+            [
+                "CREATE TABLE t (id int);\nINSERT INTO t VALUES (1); SELECT 1",
+                "CREATE PROCEDURE p AS\nBEGIN\n  SELECT 'GO';\n  /* GO\n /* GO */ GO */\nEND",
+                "SELECT [go\nGO], \"x\nGO\" FROM t",
+            ]
+        );
+        assert_eq!((s[0].line, s[1].line, s[2].line), (1, 4, 11));
+        for st in &s {
+            assert_eq!(&sql[st.start..st.end], st.text);
+        }
+    }
+
+    #[test]
+    fn sqlserver_go_count_and_lookalikes() {
+        assert_eq!(
+            texts("INSERT INTO t DEFAULT VALUES\nGO 3\nSELECT 1", Family::SqlServer),
+            [
+                "INSERT INTO t DEFAULT VALUES",
+                "INSERT INTO t DEFAULT VALUES",
+                "INSERT INTO t DEFAULT VALUES",
+                "SELECT 1"
+            ]
+        );
+        assert_eq!(texts("SELECT 1\nGO 0\nSELECT 2", Family::SqlServer), ["SELECT 2"]);
+        assert_eq!(texts("SELECT 1\nGO 99999999999999999999999", Family::SqlServer).len(), MAX_GO_COUNT);
+        // 不是 GO 命令：GOTO、GO 后跟别的、行中间的 GO
+        assert_eq!(texts("GOTO x\nSELECT 1 GO\nGO x\nGO;", Family::SqlServer).len(), 1);
+        assert_eq!(texts("SELECT 1;\nSELECT 2;", Family::SqlServer), ["SELECT 1;\nSELECT 2;"]);
+        assert_eq!(go_count(b"go--x"), Some(1));
+        assert_eq!(go_count(b"  GO 2 -- x "), Some(2));
+        assert_eq!(go_count(b"GOx"), None);
+    }
+
+    #[test]
     fn mysql_bare_delimiter_is_plain_statement() {
         assert_eq!(texts("DELIMITER\nSELECT 1;", Family::MySql), ["DELIMITER\nSELECT 1"]);
     }
@@ -705,7 +800,7 @@ mod tests {
         let sql = "-- 注释;\nSELECT '数据;\\' FROM t; /* 块 */ # 井\nDELIMITER //\n\
                    SELECT $$体;$$, $a$标;$a$, q'[中;]', nq'<x>' FROM DUAL//\nDELIMITER ;\n\
                    SELECT \"双;\", `反;` ;\nBEGIN NULL; END;\n/\n\u{3000}SELECT 1 -- 行尾\u{feff}";
-        let families = [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng];
+        let families = [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng, Family::SqlServer];
         let ends = sql.char_indices().map(|(i, _)| i).chain(std::iter::once(sql.len()));
         for end in ends {
             let prefix = &sql[..end];
@@ -737,7 +832,8 @@ mod tests {
         out
     }
 
-    const FAMILIES: [Family; 4] = [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng];
+    const FAMILIES: [Family; 5] =
+        [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng, Family::SqlServer];
 
     /// 上面各测试用过的文本，加上结构可能恰好被切开的例子。
     const SAMPLES: &[&str] = &[
@@ -777,6 +873,7 @@ mod tests {
         "SELECT 1;\r\nSELECT 2;\r\n/\r\nCREATE OR REPLACE\r\n  PACKAGE pk AS x INT; END;\r\n/\r\n",
         "INSERT INTO t VALUES ('a''b', E'\\\\', $q$x$q$, 'c'); -- 末尾注释",
         "SELECT 1 /*+ hint */; SELECT /*! 2 */; #",
+        "SELECT 1\nGO\nSELECT [a]]\nGO], N'b\nGO' /* x /* GO */\nGO */\n  go 2 -- c\nSELECT 3\ngo",
     ];
 
     #[test]

@@ -25,6 +25,7 @@ const DAMENG: &str = include_str!("../sql/ops/dameng.sql");
 const TIDB: &str = include_str!("../sql/ops/tidb.sql");
 const OCEANBASE: &str = include_str!("../sql/ops/oceanbase.sql");
 const OPENGAUSS: &str = include_str!("../sql/ops/opengauss.sql");
+const SQLSERVER: &str = include_str!("../sql/ops/sqlserver.sql");
 
 /// 运维查询的分类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -115,6 +116,7 @@ fn base_file(family: Family) -> &'static str {
         Family::Postgres => POSTGRES,
         Family::Oracle => ORACLE,
         Family::Dameng => DAMENG,
+        Family::SqlServer => SQLSERVER,
     }
 }
 

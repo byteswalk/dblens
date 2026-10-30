@@ -7,11 +7,12 @@ pub fn quote_ident(family: Family, name: &str) -> String {
     match family {
         Family::MySql => format!("`{}`", name.replace('`', "``")),
         Family::Postgres | Family::Oracle | Family::Dameng => format!("\"{}\"", name.replace('"', "\"\"")),
+        Family::SqlServer => format!("[{}]", name.replace(']', "]]")),
     }
 }
 
 /// 只在必要时加引号：含特殊字符、以数字开头、是保留字，
-/// 或者大小写与数据库的默认折叠方向不一致（PG 折叠为小写，Oracle/达梦折叠为大写）。
+/// 或者大小写与数据库的默认折叠方向不一致（PG 折叠为小写，Oracle/达梦折叠为大写；MySQL、SQL Server 不区分）。
 pub fn ident(family: Family, name: &str) -> String {
     if needs_quote(family, name) { quote_ident(family, name) } else { name.to_string() }
 }
@@ -22,13 +23,14 @@ pub fn placeholder(family: Family, index: usize) -> String {
         Family::Postgres => format!("${index}"),
         Family::Oracle => format!(":{index}"),
         Family::MySql | Family::Dameng => "?".to_string(),
+        Family::SqlServer => format!("@P{index}"),
     }
 }
 
 fn needs_quote(family: Family, name: &str) -> bool {
     let Some(first) = name.chars().next() else { return true };
     let first_ok = match family {
-        Family::MySql | Family::Postgres => first.is_ascii_alphabetic() || first == '_',
+        Family::MySql | Family::Postgres | Family::SqlServer => first.is_ascii_alphabetic() || first == '_',
         Family::Oracle | Family::Dameng => first.is_ascii_alphabetic(),
     };
     if !first_ok {
@@ -39,7 +41,7 @@ fn needs_quote(family: Family, name: &str) -> bool {
         return true;
     }
     let case_ok = match family {
-        Family::MySql => true,
+        Family::MySql | Family::SqlServer => true,
         Family::Postgres => !name.chars().any(|c| c.is_ascii_uppercase()),
         Family::Oracle | Family::Dameng => !name.chars().any(|c| c.is_ascii_lowercase()),
     };
@@ -53,7 +55,196 @@ fn is_reserved(family: Family, upper: &str) -> bool {
     }
     RESERVED.binary_search(&upper).is_ok()
         || (family == Family::Dameng && DAMENG_RESERVED.binary_search(&upper).is_ok())
+        || (family == Family::SqlServer && SQLSERVER_RESERVED.binary_search(&upper).is_ok())
 }
+
+/// SQL Server 的保留字（微软文档"Reserved Keywords"中 SQL Server 一栏），不在 `RESERVED` 中的部分也要加引号。按字节序排列。
+const SQLSERVER_RESERVED: &[&str] = &[
+    "ADD",
+    "ALL",
+    "ALTER",
+    "AND",
+    "ANY",
+    "AS",
+    "ASC",
+    "AUTHORIZATION",
+    "BACKUP",
+    "BEGIN",
+    "BETWEEN",
+    "BREAK",
+    "BROWSE",
+    "BULK",
+    "BY",
+    "CASCADE",
+    "CASE",
+    "CHECK",
+    "CHECKPOINT",
+    "CLOSE",
+    "CLUSTERED",
+    "COALESCE",
+    "COLLATE",
+    "COLUMN",
+    "COMMIT",
+    "COMPUTE",
+    "CONSTRAINT",
+    "CONTAINS",
+    "CONTAINSTABLE",
+    "CONTINUE",
+    "CONVERT",
+    "CREATE",
+    "CROSS",
+    "CURRENT",
+    "CURRENT_DATE",
+    "CURRENT_TIME",
+    "CURRENT_TIMESTAMP",
+    "CURRENT_USER",
+    "CURSOR",
+    "DATABASE",
+    "DBCC",
+    "DEALLOCATE",
+    "DECLARE",
+    "DEFAULT",
+    "DELETE",
+    "DENY",
+    "DESC",
+    "DISK",
+    "DISTINCT",
+    "DISTRIBUTED",
+    "DOUBLE",
+    "DROP",
+    "DUMP",
+    "ELSE",
+    "END",
+    "ERRLVL",
+    "ESCAPE",
+    "EXCEPT",
+    "EXEC",
+    "EXECUTE",
+    "EXISTS",
+    "EXIT",
+    "EXTERNAL",
+    "FETCH",
+    "FILE",
+    "FILLFACTOR",
+    "FOR",
+    "FOREIGN",
+    "FREETEXT",
+    "FREETEXTTABLE",
+    "FROM",
+    "FULL",
+    "FUNCTION",
+    "GOTO",
+    "GRANT",
+    "GROUP",
+    "HAVING",
+    "HOLDLOCK",
+    "IDENTITY",
+    "IDENTITYCOL",
+    "IDENTITY_INSERT",
+    "IF",
+    "IN",
+    "INDEX",
+    "INNER",
+    "INSERT",
+    "INTERSECT",
+    "INTO",
+    "IS",
+    "JOIN",
+    "KEY",
+    "KILL",
+    "LEFT",
+    "LIKE",
+    "LINENO",
+    "LOAD",
+    "MERGE",
+    "NATIONAL",
+    "NOCHECK",
+    "NONCLUSTERED",
+    "NOT",
+    "NULL",
+    "NULLIF",
+    "OF",
+    "OFF",
+    "OFFSETS",
+    "ON",
+    "OPEN",
+    "OPENDATASOURCE",
+    "OPENQUERY",
+    "OPENROWSET",
+    "OPENXML",
+    "OPTION",
+    "OR",
+    "ORDER",
+    "OUTER",
+    "OVER",
+    "PERCENT",
+    "PIVOT",
+    "PLAN",
+    "PRECISION",
+    "PRIMARY",
+    "PRINT",
+    "PROC",
+    "PROCEDURE",
+    "PUBLIC",
+    "RAISERROR",
+    "READ",
+    "READTEXT",
+    "RECONFIGURE",
+    "REFERENCES",
+    "REPLICATION",
+    "RESTORE",
+    "RESTRICT",
+    "RETURN",
+    "REVERT",
+    "REVOKE",
+    "RIGHT",
+    "ROLLBACK",
+    "ROWCOUNT",
+    "ROWGUIDCOL",
+    "RULE",
+    "SAVE",
+    "SCHEMA",
+    "SECURITYAUDIT",
+    "SELECT",
+    "SEMANTICKEYPHRASETABLE",
+    "SEMANTICSIMILARITYDETAILSTABLE",
+    "SEMANTICSIMILARITYTABLE",
+    "SESSION_USER",
+    "SET",
+    "SETUSER",
+    "SHUTDOWN",
+    "SOME",
+    "STATISTICS",
+    "SYSTEM_USER",
+    "TABLE",
+    "TABLESAMPLE",
+    "TEXTSIZE",
+    "THEN",
+    "TO",
+    "TOP",
+    "TRAN",
+    "TRANSACTION",
+    "TRIGGER",
+    "TRUNCATE",
+    "TRY_CONVERT",
+    "TSEQUAL",
+    "UNION",
+    "UNIQUE",
+    "UNPIVOT",
+    "UPDATE",
+    "UPDATETEXT",
+    "USE",
+    "USER",
+    "VALUES",
+    "VARYING",
+    "VIEW",
+    "WAITFOR",
+    "WHEN",
+    "WHERE",
+    "WHILE",
+    "WITH",
+    "WRITETEXT",
+];
 
 /// PostgreSQL、MySQL（8.0/8.4）、Oracle、达梦以及国产库第一批（TiDB 等）的保留字与特殊值函数名（如 CURRENT_USER、SYSDATE）的并集，按字节序排列。
 /// 多加引号不会出错，所以宁多勿少；个别词只在部分方言中保留（如 PUBLIC），由 `is_reserved` 按家族豁免。新增方言时要补充。
@@ -612,6 +803,20 @@ mod tests {
         assert_eq!(placeholder(Family::Postgres, 3), "$3");
         assert_eq!(placeholder(Family::Oracle, 3), ":3");
         assert_eq!(placeholder(Family::Dameng, 3), "?");
+        assert_eq!(placeholder(Family::SqlServer, 3), "@P3");
+    }
+
+    #[test]
+    fn sqlserver_brackets() {
+        assert_eq!(quote_ident(Family::SqlServer, "a]b"), "[a]]b]");
+        assert_eq!(ident(Family::SqlServer, "Orders"), "Orders");
+        assert_eq!(ident(Family::SqlServer, "_x"), "_x");
+        assert_eq!(ident(Family::SqlServer, "order"), "[order]");
+        assert_eq!(ident(Family::SqlServer, "PUBLIC"), "[PUBLIC]");
+        assert_eq!(ident(Family::SqlServer, "IDENTITY_INSERT"), "[IDENTITY_INSERT]");
+        assert_eq!(ident(Family::SqlServer, "x; DROP TABLE t"), "[x; DROP TABLE t]");
+        assert_eq!(ident(Family::SqlServer, "数洞"), "[数洞]");
+        assert!(SQLSERVER_RESERVED.windows(2).all(|w| w[0] < w[1]));
     }
 
     #[test]
@@ -668,7 +873,7 @@ mod tests {
             matches!(cs.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
                 && cs.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
         };
-        for f in [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng] {
+        for f in [Family::MySql, Family::Postgres, Family::Oracle, Family::Dameng, Family::SqlServer] {
             for name in
                 ["a", "A", "a b", "a\"b", "a`b", "x;--", "数洞", "", "_", "1a", "$x", "ORDER", "order"]
             {

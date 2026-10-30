@@ -15,6 +15,8 @@ pub enum Family {
     Oracle,
     #[serde(rename = "dameng")]
     Dameng,
+    #[serde(rename = "sqlserver")]
+    SqlServer,
 }
 
 /// 兼容模式：人大金仓、openGauss 可以按 Oracle 的规则解释 SQL（空串即 NULL、`NUMBER`、`VARCHAR2`、
@@ -75,6 +77,8 @@ pub enum Variant {
     Oracle,
     #[serde(rename = "dameng")]
     Dameng,
+    #[serde(rename = "sqlserver")]
+    SqlServer,
 }
 
 impl Variant {
@@ -90,6 +94,7 @@ impl Variant {
             | Variant::HighGo => Family::Postgres,
             Variant::Oracle => Family::Oracle,
             Variant::Dameng => Family::Dameng,
+            Variant::SqlServer => Family::SqlServer,
         }
     }
 
@@ -108,6 +113,7 @@ impl Variant {
             Variant::HighGo => msg!("variant.highgo"),
             Variant::Oracle => Msg::raw("Oracle"),
             Variant::Dameng => msg!("variant.dameng"),
+            Variant::SqlServer => Msg::raw("SQL Server"),
         }
     }
 
