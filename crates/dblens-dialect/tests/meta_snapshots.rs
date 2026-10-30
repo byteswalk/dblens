@@ -56,6 +56,8 @@ fn every_family_covers_the_common_keys() {
                 MetaKey::DependentViews | MetaKey::Grants => {
                     matches!(v.family(), Family::MySql | Family::Informix)
                 }
+                // 表设计器在 M8b
+                MetaKey::ReferencingKeys => v.family() == Family::Informix,
                 MetaKey::TriggerDdl => v != Variant::Oracle,
                 // OceanBase 没有 information_schema.KEYWORDS；SQL Server、GBase 8s 没有可查的保留字表（用 ident.rs 的清单）
                 MetaKey::ReservedWords => {

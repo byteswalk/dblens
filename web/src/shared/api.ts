@@ -5,7 +5,7 @@ import type { ClientError } from './crash'
 import type { CellValue } from './exec'
 import { currentLang, t } from './i18n'
 
-export type DriverId = 'mysql' | 'postgres' | 'oracle' | 'dameng' | 'sqlserver'
+export type DriverId = 'mysql' | 'postgres' | 'oracle' | 'dameng' | 'sqlserver' | 'informix'
 export type Environment = 'none' | 'dev' | 'test' | 'prod'
 
 /**

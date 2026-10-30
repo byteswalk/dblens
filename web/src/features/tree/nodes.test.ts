@@ -109,3 +109,9 @@ describe('对象树节点', () => {
     expect(routineKindLabel('procedure')).toBe('过程')
   })
 })
+
+describe('GBase 8s', () => {
+  it('分类与 SQL Server 相同，没有物化视图', () => {
+    expect(categoriesFor('informix').map((c) => c.kind)).toEqual(['tables', 'views', 'routines', 'sequences', 'synonyms'])
+  })
+})

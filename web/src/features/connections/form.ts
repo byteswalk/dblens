@@ -33,13 +33,16 @@ export interface ConnectionForm {
   sqlAuth: SqlServerAuth
   instance: string
   trustCert: boolean
+  /** 只用于 GBase 8s：服务器名（必填）、DB_LOCALE。 */
+  serverName: string
+  dbLocale: string
   timeoutSecs: number
   /** 其他驱动参数，一行一个 `键=值`。 */
   extra: string
 }
 
 /** 新建连接时可选的驱动，按界面上的顺序。 */
-export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng', 'sqlserver']
+export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng', 'sqlserver', 'informix']
 
 /** 驱动的显示名称（如「MySQL 系」）。 */
 export function driverLabel(driver: DriverId): string {
@@ -51,7 +54,7 @@ export function driverNote(driver: DriverId): string {
   return t(`connections.driver.${driver}.note`)
 }
 
-export const DEFAULT_PORTS: Record<DriverId, number> = { mysql: 3306, postgres: 5432, oracle: 1521, dameng: 5236, sqlserver: 1433 }
+export const DEFAULT_PORTS: Record<DriverId, number> = { mysql: 3306, postgres: 5432, oracle: 1521, dameng: 5236, sqlserver: 1433, informix: 9088 }
 
 /** 「数据库」一栏在各驱动下的含义。 */
 export function databaseLabel(driver: DriverId): string {
@@ -87,6 +90,8 @@ export function emptyForm(id: ProductId = 'mysql'): ConnectionForm {
     tlsCa: '',
     sqlAuth: 'sql',
     instance: '',
+    serverName: '',
+    dbLocale: '',
     trustCert: false,
     timeoutSecs: 10,
     extra: '',
@@ -106,7 +111,7 @@ export function switchProduct(f: ConnectionForm, id: ProductId): ConnectionForm 
   return { ...switchDriver(f, next.driver), product: id, port }
 }
 
-const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'trust_server_certificate']
+const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'server_name', 'db_locale', 'trust_server_certificate']
 
 export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
   const opts = p.options ?? {}
@@ -132,6 +137,8 @@ export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
     tlsCa: opts.tls_ca ?? '',
     sqlAuth: opts.auth === 'windows' || opts.auth === 'integrated' ? opts.auth : 'sql',
     instance: opts.instance ?? '',
+    serverName: opts.server_name ?? '',
+    dbLocale: opts.db_locale ?? '',
     trustCert: opts.trust_server_certificate === 'true',
     timeoutSecs: p.connect_timeout_secs ?? 10,
     extra,
@@ -153,6 +160,10 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     if (f.sqlAuth !== 'sql') options.auth = f.sqlAuth
     if (f.instance.trim()) options.instance = f.instance.trim()
     if (f.trustCert) options.trust_server_certificate = 'true'
+  }
+  if (f.driver === 'informix') {
+    if (f.serverName.trim()) options.server_name = f.serverName.trim()
+    if (f.dbLocale.trim()) options.db_locale = f.dbLocale.trim()
   }
   return {
     name: f.name.trim(),
@@ -176,6 +187,7 @@ export function validate(f: ConnectionForm): Partial<Record<keyof ConnectionForm
   if (!f.host.trim()) e.host = t('connections.validate.hostRequired')
   if (!Number.isInteger(f.port) || f.port < 1 || f.port > 65535) e.port = t('connections.validate.portRange')
   if (needsCredentials(f) && !f.user.trim()) e.user = t('connections.validate.userRequired')
+  if (f.driver === 'informix' && !f.serverName.trim()) e.serverName = t('connections.validate.serverNameRequired')
   if (f.driver === 'oracle' && !f.database.trim() && !f.oracleSid.trim()) {
     e.database = t('connections.validate.serviceOrSidRequired')
   }

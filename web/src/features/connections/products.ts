@@ -16,6 +16,7 @@ export type ProductId =
   | 'oracle'
   | 'dameng'
   | 'sqlserver'
+  | 'gbase8s'
 
 export interface Product {
   id: ProductId
@@ -35,11 +36,12 @@ export const PRODUCTS: Product[] = [
   { id: 'oracle', driver: 'oracle', port: 1521 },
   { id: 'dameng', driver: 'dameng', port: 5236 },
   { id: 'sqlserver', driver: 'sqlserver', port: 1433 },
+  { id: 'gbase8s', driver: 'informix', port: 9088 },
 ]
 
 /** 界面上的分组：国产库一组，其他一组。 */
 export const PRODUCT_GROUPS: { key: 'domestic' | 'other'; products: ProductId[] }[] = [
-  { key: 'domestic', products: ['dameng', 'kingbase', 'gaussdb', 'opengauss', 'oceanbase', 'tidb'] },
+  { key: 'domestic', products: ['dameng', 'kingbase', 'gaussdb', 'opengauss', 'oceanbase', 'tidb', 'gbase8s'] },
   { key: 'other', products: ['mysql', 'mariadb', 'postgres', 'oracle', 'sqlserver'] },
 ]
 
@@ -49,7 +51,7 @@ export function product(id: ProductId): Product {
 
 /** 只有驱动、没有记下产品（较早保存的连接）时对应的产品。 */
 export function baseProduct(driver: DriverId): ProductId {
-  return driver
+  return driver === 'informix' ? 'gbase8s' : driver
 }
 
 /** 连接配置上记的产品；不认识的值按驱动处理。 */

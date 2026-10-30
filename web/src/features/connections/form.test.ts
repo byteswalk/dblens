@@ -151,15 +151,30 @@ describe('连接表单', () => {
   })
 
   it('驱动名称、字段名、校验信息按调用时的界面语言翻译', async () => {
-    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM', 'SQL Server'])
+    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM', 'SQL Server', 'GBase 8s'])
     try {
       await i18n.changeLanguage('en')
-      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)', 'SQL Server'])
+      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)', 'SQL Server', 'GBase 8s'])
       expect(databaseLabel('oracle')).toBe('Service Name')
       expect(validate(emptyForm()).name).toBe('Enter a connection name')
       expect(validate({ ...emptyForm(), extra: 'bad' }).extra).toBe('Unrecognized line: bad (expected key=value)')
     } finally {
       await i18n.changeLanguage('zh-CN')
     }
+  })
+})
+
+describe('GBase 8s', () => {
+  const gbase = { ...emptyForm(), name: 'g', host: 'h', user: 'u', product: 'gbase8s' as const, driver: 'informix' as const }
+
+  it('服务器名和 DB_LOCALE 进入连接选项', () => {
+    const input = toProfileInput({ ...gbase, serverName: ' gbase01 ', dbLocale: '' })
+    expect(input.options).toMatchObject({ server_name: 'gbase01' })
+    expect(input.options).not.toHaveProperty('db_locale')
+  })
+
+  it('必须填服务器名', () => {
+    expect(validate({ ...gbase, serverName: '' }).serverName).toBeTruthy()
+    expect(validate({ ...gbase, serverName: 'gbase01' }).serverName).toBeUndefined()
   })
 })

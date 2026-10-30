@@ -60,7 +60,8 @@
     "newTable": "New table",
     "exportDoc": "Export Document…",
     "migrate": "Migrate To…",
-    "lint": "Design lint"
+    "lint": "Design lint",
+    "gbaseLater": "GBase 8s does not support this yet; it is planned for M8b"
   },
   "duplicate": {
     "name": "{{name}} copy",

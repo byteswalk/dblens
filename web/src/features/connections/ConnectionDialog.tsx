@@ -166,6 +166,11 @@ export default function ConnectionDialog() {
           <InputNumber style={{ width: 110 }} min={1} max={65535} value={form.port} onChange={(v) => set('port', v ?? 0)} />
         </Space.Compact>
       </Field>
+      {form.driver === 'informix' && (
+        <Field label={t('connections.gbase.serverName')} error={errors.serverName}>
+          <Input value={form.serverName} onChange={(e) => set('serverName', e.target.value)} placeholder="gbase01" />
+        </Field>
+      )}
       {form.driver === 'sqlserver' && (
         <Field label={t('connections.sqlserver.auth')}>
           <Radio.Group
@@ -263,6 +268,11 @@ export default function ConnectionDialog() {
       <Field label={t('connections.advanced.timeout')} error={errors.timeoutSecs}>
         <InputNumber min={1} max={600} value={form.timeoutSecs} onChange={(v) => set('timeoutSecs', v ?? 0)} />
       </Field>
+      {form.driver === 'informix' && (
+        <Field label="DB_LOCALE">
+          <Input value={form.dbLocale} onChange={(e) => set('dbLocale', e.target.value)} placeholder="zh_CN.utf8" />
+        </Field>
+      )}
       {form.driver === 'sqlserver' && (
         <Field label={t('connections.sqlserver.instance')}>
           <Input value={form.instance} onChange={(e) => set('instance', e.target.value)} placeholder={t('connections.sqlserver.instancePlaceholder')} />

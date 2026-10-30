@@ -19,6 +19,10 @@
     "sqlserver": {
       "label": "SQL Server",
       "note": "支持 SQL 账号和 Windows 认证；连接后按库浏览"
+    },
+    "informix": {
+      "label": "GBase 8s",
+      "note": "通过 JDBC 驱动连接，需要 gbasedbtjdbc.jar；连接后按库浏览"
     }
   },
   "product": {
@@ -62,6 +66,10 @@
     "sqlserver": {
       "label": "SQL Server",
       "note": "默认端口 1433；命名实例在「高级」中填写，此时经 SQL Browser 查端口"
+    },
+    "gbase8s": {
+      "label": "GBase 8s",
+      "note": "默认端口 9088；服务器名是实例的 GBASEDBTSERVER"
     }
   },
   "databaseLabel": {
@@ -69,7 +77,8 @@
     "postgres": "数据库",
     "oracle": "服务名",
     "dameng": "模式",
-    "sqlserver": "默认库"
+    "sqlserver": "默认库",
+    "informix": "数据库"
   },
   "validate": {
     "nameRequired": "填写连接名称",
@@ -78,7 +87,8 @@
     "userRequired": "填写用户名",
     "serviceOrSidRequired": "填写服务名或 SID",
     "timeoutRange": "超时在 1–600 秒之间",
-    "extraBadLine": "无法识别的一行：{{line}}（格式为 键=值）"
+    "extraBadLine": "无法识别的一行：{{line}}（格式为 键=值）",
+    "serverNameRequired": "请填写服务器名"
   },
   "env": {
     "none": "无",
@@ -166,5 +176,8 @@
     "instancePlaceholder": "可选，如 SQLEXPRESS；填写后忽略端口",
     "trustCert": "服务器证书",
     "trustCertHint": "信任服务器证书（不校验，同 SSMS 的同名选项）"
+  },
+  "gbase": {
+    "serverName": "服务器名"
   }
 }

@@ -38,6 +38,7 @@ export const VARIANT_ICONS: Record<string, DbIconDef> = {
   oracle: art(ART_ICONS.oracle),
   dameng: art(ART_ICONS.dameng),
   sqlserver: art(ART_ICONS.sqlserver),
+  gbase8s: mark('8s', '#d0202e'),
 }
 
 /** 还没连接过、不知道具体变体时，按驱动大类。 */
@@ -47,6 +48,7 @@ const DRIVER_ICONS: Record<DriverId, string> = {
   oracle: 'oracle',
   dameng: 'dameng',
   sqlserver: 'sqlserver',
+  informix: 'gbase8s',
 }
 
 export function dbIcon(driver: DriverId, variant?: string | null): DbIconDef {
