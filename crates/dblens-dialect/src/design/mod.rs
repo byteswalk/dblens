@@ -8,6 +8,7 @@ mod oracle;
 mod postgres;
 mod rebuild;
 mod sql;
+pub(crate) mod sqlserver;
 
 use std::collections::BTreeMap;
 

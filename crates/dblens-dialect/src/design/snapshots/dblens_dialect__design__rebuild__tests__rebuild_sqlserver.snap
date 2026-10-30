@@ -1,0 +1,29 @@
+---
+source: crates/dblens-dialect/src/design/rebuild.rs
+expression: render(&out)
+---
+CREATE TABLE dbo.orders_dblens_new (
+    amount decimal(10,2) CONSTRAINT DF_orders_dblens_new_amount DEFAULT 0 NULL,
+    id bigint IDENTITY(1,1) NOT NULL,
+    order_code nvarchar(50) NULL
+) ON USERS
+EXEC sys.sp_addextendedproperty N'MS_Description', N'订单', N'SCHEMA', N'dbo', N'TABLE', N'orders_dblens_new'
+EXEC sys.sp_addextendedproperty N'MS_Description', N'金额', N'SCHEMA', N'dbo', N'TABLE', N'orders_dblens_new', N'COLUMN', N'amount'
+SET IDENTITY_INSERT dbo.orders_dblens_new ON
+INSERT INTO dbo.orders_dblens_new (amount, id, order_code) SELECT amount, id, CAST(code AS nvarchar(50)) FROM dbo.orders
+SET IDENTITY_INSERT dbo.orders_dblens_new OFF
+-- COUNT dbo.orders = dbo.orders_dblens_new
+ALTER TABLE dbo.items DROP CONSTRAINT fk_items_order
+▶ DROP TABLE dbo.orders
+EXEC sp_rename N'dbo.orders_dblens_new', N'orders'
+EXEC sp_rename N'dbo.DF_orders_dblens_new_amount', N'DF_orders_amount', N'OBJECT'
+ALTER TABLE dbo.orders ADD CONSTRAINT pk_orders PRIMARY KEY (id)
+ALTER TABLE dbo.orders ADD CONSTRAINT uk_code UNIQUE (order_code)
+ALTER TABLE dbo.orders ADD CONSTRAINT ck_amount CHECK (amount >= 0)
+CREATE INDEX ix_amount ON dbo.orders (amount DESC)
+ALTER TABLE dbo.orders ADD CONSTRAINT fk_parent FOREIGN KEY (order_code) REFERENCES dbo.parent (code) ON DELETE CASCADE
+CREATE TRIGGER dbo.trg ON dbo.orders AFTER INSERT AS BEGIN SET NOCOUNT ON; END;
+ALTER TABLE dbo.items ADD CONSTRAINT fk_items_order FOREIGN KEY (order_code) REFERENCES dbo.orders (order_code) ON DELETE CASCADE
+GRANT SELECT ON dbo.orders TO report
+EXEC sp_refreshview N'dbo.v_orders'
+-- cleanup: DROP TABLE dbo.orders_dblens_new

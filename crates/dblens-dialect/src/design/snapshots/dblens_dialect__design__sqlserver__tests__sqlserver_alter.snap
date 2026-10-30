@@ -1,0 +1,18 @@
+---
+source: crates/dblens-dialect/src/design/sqlserver.rs
+expression: "render(&d.design_sql(\"dbo\", \"orders\",\n&alter_only(&t, \"decimal(12,2)\")).unwrap())"
+---
+[0] ALTER TABLE dbo.orders ADD CONSTRAINT DF_orders_code DEFAULT 'x' FOR code
+[0] IF EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 1 AND major_id = OBJECT_ID(N'dbo.orders') AND minor_id = COLUMNPROPERTY(OBJECT_ID(N'dbo.orders'), N'code', 'ColumnId') AND name = N'MS_Description')
+    EXEC sys.sp_updateextendedproperty N'MS_Description', N'编号', N'SCHEMA', N'dbo', N'TABLE', N'orders', N'COLUMN', N'code';
+ELSE
+    EXEC sys.sp_addextendedproperty N'MS_Description', N'编号', N'SCHEMA', N'dbo', N'TABLE', N'orders', N'COLUMN', N'code';
+[1] ALTER TABLE dbo.orders ALTER COLUMN amount decimal(12,2) NOT NULL
+[1] DECLARE @df sysname = (SELECT dc.name FROM sys.default_constraints dc JOIN sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id WHERE dc.parent_object_id = OBJECT_ID(N'dbo.orders') AND c.name = N'amount');
+IF @df IS NOT NULL
+BEGIN
+    DECLARE @ddl nvarchar(max) = N'ALTER TABLE dbo.orders DROP CONSTRAINT ' + QUOTENAME(@df);
+    EXEC sp_executesql @ddl;
+END;
+[1] IF EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 1 AND major_id = OBJECT_ID(N'dbo.orders') AND minor_id = COLUMNPROPERTY(OBJECT_ID(N'dbo.orders'), N'amount', 'ColumnId') AND name = N'MS_Description')
+    EXEC sys.sp_dropextendedproperty N'MS_Description', N'SCHEMA', N'dbo', N'TABLE', N'orders', N'COLUMN', N'amount';

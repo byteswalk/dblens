@@ -95,7 +95,7 @@ impl Dialect {
         format!("{}_{}{SUFFIX}", &table[..end], short_hash(table))
     }
 
-    /// 建表语句末尾的存储属性：MySQL 的引擎、字符集、排序规则，其他库的表空间。
+    /// 建表语句末尾的存储属性：MySQL 的引擎、字符集、排序规则，SQL Server 的文件组，其他库的表空间。
     fn storage_clause(&self, s: &TableStorage) -> String {
         match self.family() {
             Family::MySql => {
@@ -110,6 +110,9 @@ impl Dialect {
                     out += &format!(" COLLATE = {c}");
                 }
                 out
+            }
+            Family::SqlServer => {
+                s.tablespace.as_ref().map(|t| format!(" ON {}", self.ident(t))).unwrap_or_default()
             }
             _ => s.tablespace.as_ref().map(|t| format!(" TABLESPACE {}", self.ident(t))).unwrap_or_default(),
         }
@@ -199,13 +202,14 @@ impl Dialect {
                 src
             });
         }
-        let dameng_identity =
-            self.family() == Family::Dameng && draft.columns.iter().any(|c| c.auto_increment);
-        if dameng_identity {
+        // 达梦、SQL Server 往自增列写显式值要打开 IDENTITY_INSERT；自增列是新加的（不复制）时不能打开
+        let identity_insert = matches!(self.family(), Family::Dameng | Family::SqlServer)
+            && draft.columns.iter().any(|c| c.auto_increment && old_of(&c.name).is_some());
+        if identity_insert {
             sql(format!("SET IDENTITY_INSERT {q_tmp} ON"));
         }
         sql(format!("INSERT INTO {q_tmp} ({}) SELECT {} FROM {q}", targets.join(", "), sources.join(", ")));
-        if dameng_identity {
+        if identity_insert {
             sql(format!("SET IDENTITY_INSERT {q_tmp} OFF"));
         }
 
@@ -228,11 +232,23 @@ impl Dialect {
         let drop_at = steps.len();
         let mut sql = |s: String| steps.push(RebuildStep::Sql { sql: s });
         sql(format!("DROP TABLE {q}"));
-        sql(if mysql {
-            format!("ALTER TABLE {q_tmp} RENAME TO {q}")
-        } else {
-            format!("ALTER TABLE {q_tmp} RENAME TO {}", self.ident(name))
-        });
+        sql(self.rename_table_sql(schema, &tmp, name)?);
+        // SQL Server：新表上的默认值约束按临时表名命名（约束名在 schema 内不能重复），改回按原表名命名，
+        // 否则下次重建同一张表时会重名
+        if self.family() == Family::SqlServer {
+            for c in draft
+                .columns
+                .iter()
+                .filter(|c| c.default.is_some() && c.generated.is_none() && !c.auto_increment)
+            {
+                let from = self.qualified(Some(schema), &super::sqlserver::df_name(&tmp, &c.name));
+                sql(format!(
+                    "EXEC sp_rename {}, {}, N'OBJECT'",
+                    self.literal(&Value::String(from))?,
+                    self.literal(&Value::String(super::sqlserver::df_name(name, &c.name)))?
+                ));
+            }
+        }
 
         // 6. 约束、索引、外键、触发器
         let mut changes = Vec::new();
@@ -295,10 +311,18 @@ impl Dialect {
             }
         }
         let mut warnings = vec![msg!("design.rebuild.no_writes")];
-        if matches!(self.family(), Family::Oracle | Family::Dameng) && !ctx.views.is_empty() {
+        if matches!(self.family(), Family::Oracle | Family::Dameng | Family::SqlServer)
+            && !ctx.views.is_empty()
+        {
             for v in &ctx.views {
-                let kind = if v.materialized { "MATERIALIZED VIEW" } else { "VIEW" };
-                sql(format!("ALTER {kind} {} COMPILE", self.qualified(Some(&v.schema), &v.name)));
+                let qv = self.qualified(Some(&v.schema), &v.name);
+                if self.family() == Family::SqlServer {
+                    // 视图按名字引用表，刷新它保存的列信息
+                    sql(format!("EXEC sp_refreshview {}", self.literal(&Value::String(qv))?));
+                } else {
+                    let kind = if v.materialized { "MATERIALIZED VIEW" } else { "VIEW" };
+                    sql(format!("ALTER {kind} {qv} COMPILE"));
+                }
             }
             warnings.push(msg!("design.rebuild.views_recompiled", views = view_list()));
         }
@@ -413,6 +437,13 @@ mod tests {
                 "VARCHAR(50)",
                 "CREATE OR REPLACE TRIGGER trg BEFORE INSERT ON orders FOR EACH ROW BEGIN NULL; END;",
             ),
+            (
+                Variant::SqlServer,
+                "dbo",
+                ["bigint", "nvarchar(20)", "decimal(10,2)"],
+                "nvarchar(50)",
+                "CREATE TRIGGER dbo.trg ON dbo.orders AFTER INSERT AS BEGIN SET NOCOUNT ON; END",
+            ),
         ];
         for (v, schema, types, varchar, trigger) in cases {
             let d = Dialect::new(v);
@@ -422,7 +453,7 @@ mod tests {
             if v != Variant::MySql {
                 c.storage = TableStorage { tablespace: Some("USERS".into()), ..Default::default() };
             }
-            if matches!(v, Variant::Oracle | Variant::Dameng) {
+            if matches!(v, Variant::Oracle | Variant::Dameng | Variant::SqlServer) {
                 c.views = vec![DependentView {
                     schema: schema.into(),
                     name: "v_orders".into(),

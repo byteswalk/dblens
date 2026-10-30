@@ -1,0 +1,16 @@
+---
+source: crates/dblens-dialect/src/design/sqlserver.rs
+expression: "render(&d.design_sql(\"dbo\", \"\", &diff).unwrap())"
+---
+[0] CREATE TABLE dbo.orders (
+    id bigint IDENTITY(1,1) NOT NULL,
+    code nvarchar(20) NULL,
+    amount decimal(10,2) CONSTRAINT DF_orders_amount DEFAULT 0 NULL,
+    CONSTRAINT pk_orders PRIMARY KEY (id),
+    CONSTRAINT uk_code UNIQUE (code),
+    CONSTRAINT fk_parent FOREIGN KEY (code) REFERENCES dbo.parent (code) ON DELETE CASCADE,
+    CONSTRAINT ck_amount CHECK (amount >= 0)
+)
+[0] CREATE INDEX ix_amount ON dbo.orders (amount DESC)
+[0] EXEC sys.sp_addextendedproperty N'MS_Description', N'订单', N'SCHEMA', N'dbo', N'TABLE', N'orders'
+[0] EXEC sys.sp_addextendedproperty N'MS_Description', N'金额', N'SCHEMA', N'dbo', N'TABLE', N'orders', N'COLUMN', N'amount'

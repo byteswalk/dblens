@@ -21,9 +21,9 @@ pub(crate) fn stmt(change: usize, sql: String) -> DesignStatement {
 }
 
 impl Dialect {
-    /// 整个改动能否放在一个事务中执行：只有 PG 家族的 DDL 可以回滚。
+    /// 整个改动能否放在一个事务中执行：PG 家族和 SQL Server 的 DDL 可以回滚。
     pub fn design_transactional(&self) -> bool {
-        self.family() == Family::Postgres
+        matches!(self.family(), Family::Postgres | Family::SqlServer)
     }
 
     /// 库确定不支持的改动及原因；不为空时改用重建表。
@@ -72,9 +72,20 @@ impl Dialect {
             Family::MySql => self.mysql_design(schema, table, &diff.changes),
             Family::Postgres => self.pg_design(schema, table, &diff.changes),
             Family::Oracle | Family::Dameng => self.oracle_design(schema, table, &diff.changes),
-            // 表设计器的 SQL Server 支持在 M6b
-            Family::SqlServer => Err(dblens_core::Error::invalid(dblens_core::msg!("sqlserver.later"))),
+            Family::SqlServer => self.sqlserver_design(schema, table, &diff.changes),
         }
+    }
+
+    /// 表改名：MySQL `ALTER TABLE … RENAME TO 带 schema 的新名`；SQL Server `sp_rename`；其他库 `RENAME TO 新名`。
+    pub(crate) fn rename_table_sql(&self, schema: &str, from: &str, to: &str) -> Result<String> {
+        let q = self.qualified(Some(schema), from);
+        Ok(match self.family() {
+            Family::MySql => format!("ALTER TABLE {q} RENAME TO {}", self.qualified(Some(schema), to)),
+            Family::SqlServer => {
+                format!("EXEC sp_rename {}, {}", self.text_literal(&q)?, self.text_literal(to)?)
+            }
+            _ => format!("ALTER TABLE {q} RENAME TO {}", self.ident(to)),
+        })
     }
 
     pub(crate) fn idents(&self, cols: &[String]) -> String {
@@ -316,7 +327,14 @@ mod tests {
     #[test]
     fn every_generated_statement_splits_into_one() {
         let types = ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)"];
-        for v in [Variant::MySql, Variant::MariaDb, Variant::Postgres, Variant::Oracle, Variant::Dameng] {
+        for v in [
+            Variant::MySql,
+            Variant::MariaDb,
+            Variant::Postgres,
+            Variant::Oracle,
+            Variant::Dameng,
+            Variant::SqlServer,
+        ] {
             let d = Dialect::new(v);
             let mut t = table(types);
             // 注释、默认值里带分号、注释符和 `/`
