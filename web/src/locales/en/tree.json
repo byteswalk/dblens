@@ -1,4 +1,16 @@
 {
+  "search": {
+    "title": "Search database",
+    "connection": "Connection",
+    "schema": "Schema",
+    "placeholder": "Table, column or comment",
+    "colTable": "Table",
+    "colColumn": "Column",
+    "colComment": "Comment",
+    "tableHit": "(the table)",
+    "open": "Double-click to open the table data",
+    "limit": "Showing the first 500 results; use a narrower keyword"
+  },
   "category": {
     "tables": "Tables",
     "views": "Views",

@@ -13,8 +13,8 @@ use dblens_dialect::{DdlKind, Relation};
 use dblens_driver::DriverId;
 use dblens_service::{
     ApplyOutcome, ChangeSet, DataOrder, DriverStatus, Favorite, FavoritePatch, GenerateKind, HistoryItem,
-    HistoryQuery, NewFavorite, ObjectKind, Profile, ProfileInput, SecretStatus, ServerSummary, SessionId,
-    SessionInfo,
+    HistoryQuery, NewFavorite, ObjectKind, Profile, ProfileInput, SearchHit, SecretStatus, ServerSummary,
+    SessionId, SessionInfo,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -296,6 +296,21 @@ pub async fn tables(
 ) -> ApiResult<Json<Vec<Table>>> {
     let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     Ok(Json(s.service.metadata.tables(&p, &schema, q.table.as_deref()).await?))
+}
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub q: String,
+}
+
+pub async fn search(
+    State(s): State<AppState>,
+    Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
+    Query(q): Query<SearchQuery>,
+) -> ApiResult<Json<Vec<SearchHit>>> {
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
+    Ok(Json(s.service.metadata.search(&p, &schema, &q.q).await?))
 }
 
 #[derive(Deserialize)]

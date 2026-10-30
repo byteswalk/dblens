@@ -70,6 +70,7 @@
       "quit": "退出",
       "import": "导入数据…",
       "sqlFile": "执行 SQL 文件…",
+      "globalSearch": "全库查找…",
       "openModel": "打开模型…",
       "newModel": "新建模型…",
       "compare": "结构比对…"

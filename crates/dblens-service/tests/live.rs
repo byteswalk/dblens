@@ -175,6 +175,8 @@ async fn full_flow(env: &str) {
     let after = s.metadata.objects(&profile, &live.schema, MetaKey::Tables, None).await.unwrap();
     assert!(after.iter().any(|o| o.name == table), "DDL 后缓存应已失效");
     let detail = s.metadata.tables(&profile, &live.schema, Some(&table)).await.unwrap();
+    let hits = s.metadata.search(&profile, &live.schema, &table).await.unwrap();
+    assert!(hits.iter().any(|h| h.column.is_none() && h.table == table), "{env}：{hits:?}");
     assert_eq!(detail[0].columns.len(), 2);
     assert!(detail[0].primary_key.is_some());
 

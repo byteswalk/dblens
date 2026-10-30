@@ -79,6 +79,7 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/profiles/{id}/schemas", get(routes::schemas))
         .route("/profiles/{id}/schemas/{schema}/objects", get(routes::objects))
         .route("/profiles/{id}/schemas/{schema}/tables", get(routes::tables))
+        .route("/profiles/{id}/schemas/{schema}/search", get(routes::search))
         .route("/profiles/{id}/schemas/{schema}/views", get(routes::views))
         .route("/profiles/{id}/schemas/{schema}/sequences", get(routes::sequences))
         .route("/profiles/{id}/schemas/{schema}/routines", get(routes::routines))

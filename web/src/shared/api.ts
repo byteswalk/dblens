@@ -17,6 +17,13 @@ export function joinCatalog(catalog: string, schema: string): string {
   return `${catalog}${CATALOG_SEP}${schema}`
 }
 
+/** 全库查找的一条结果：`column` 为空时是表。 */
+export interface SearchHit {
+  table: string
+  column: string | null
+  comment: string | null
+}
+
 export function splitCatalog(schema: string): { catalog?: string; schema: string } {
   const i = schema.indexOf(CATALOG_SEP)
   return i < 0 ? { schema } : { catalog: schema.slice(0, i), schema: schema.slice(i + 1) }
@@ -1118,6 +1125,8 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     /** 库列表（只有 SQL Server 有这一层，其他驱动为空）。 */
     catalogs: (id: string, filter?: string) => request<SchemaInfo[]>('GET', `${p(id)}/catalogs${q({ filter })}`),
     /** `catalog`：SQL Server 中列出哪个库的架构，不给时是连接的初始库。 */
+    search: (id: string, schema: string, text: string) =>
+      request<SearchHit[]>('GET', `${s(id, schema)}/search${q({ q: text, catalog: splitCatalog(schema).catalog })}`),
     schemas: (id: string, filter?: string, catalog?: string) =>
       request<SchemaInfo[]>('GET', `${p(id)}/schemas${q({ filter, catalog })}`),
     objects: (id: string, schema: string, kind: ObjectKind, filter?: string) =>

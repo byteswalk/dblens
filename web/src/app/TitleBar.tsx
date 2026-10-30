@@ -35,6 +35,7 @@ import {
   IconPower,
   IconRefresh,
   IconSchema,
+  IconSearch,
   IconSettings,
   IconSquare,
   IconStar,
@@ -51,6 +52,7 @@ import { type EditorCommand, sendCommand } from '../features/editor/commands'
 import { useTabs } from '../features/editor/tabs'
 import { useImportDialogs } from '../features/import/dialog'
 import { useModelDialogs } from '../features/model/dialogs'
+import { useSearchDialog } from '../features/tree/SearchDialog'
 import { useSetting, useSettings } from '../shared/settings'
 import { type WindowAction, desktop, titleBarInset } from '../shared/shell'
 import { THEME_KEY, type ThemePref, parseThemePref } from '../shared/theme'
@@ -66,6 +68,7 @@ const MENU_ICONS: Record<string, Icon> = {
   'new-connection': IconPlug,
   'new-query': IconFilePlus,
   'close-tab': IconX,
+  'global-search': IconSearch,
   'new-table': IconTablePlus,
   import: IconFileImport,
   'sql-file': IconFileCode,
@@ -100,7 +103,7 @@ const MENU_ICONS: Record<string, Icon> = {
 const QUICKBAR_KEY = 'ui.quickbar'
 
 /** 快捷栏的按钮（菜单项的 key），`null` 是分隔线。 */
-const QUICK: (string | null)[] = ['new-connection', 'new-query', null, 'new-table', 'import', 'sql-file', null, 'compare', 'open-model']
+const QUICK: (string | null)[] = ['new-connection', 'new-query', null, 'global-search', 'new-table', 'import', 'sql-file', null, 'compare', 'open-model']
 
 function toAntItems(g: MenuGroup): MenuProps['items'] {
   return g.items.map((i, n) =>
@@ -156,6 +159,11 @@ export default function TitleBar() {
     if (key === 'new-connection') ui.openConnection(null)
     else if (key === 'new-query') newQuery()
     else if (key === 'close-tab') closeActive()
+    else if (key === 'global-search') {
+      const id = ui.selectedProfile ?? (tab?.profileId || undefined) ?? profiles?.[0]?.id
+      if (!id) ui.openConnection(null)
+      else useSearchDialog.getState().open(id)
+    }
     else if (key === 'new-table') {
       // 连接同"导入"；schema 用当前数据标签或设计器标签的，没有时在设计器的"选项"中选
       const id = ui.selectedProfile ?? (tab?.profileId || undefined) ?? profiles?.[0]?.id

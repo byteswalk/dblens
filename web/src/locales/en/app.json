@@ -71,6 +71,7 @@
       "quit": "Exit",
       "import": "Import Data…",
       "sqlFile": "Run SQL File…",
+      "globalSearch": "Search database…",
       "openModel": "Open Model…",
       "newModel": "New Model…",
       "compare": "Compare Schemas…"

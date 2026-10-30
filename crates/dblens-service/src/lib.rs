@@ -45,7 +45,7 @@ pub use import::{
     ImportRequest, NewColumn, NewTable, OnError, ReadWarnings, TextEncoding, Transaction, convert,
     infer_type, new_table, preview_file,
 };
-pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService};
+pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService, SearchHit};
 pub use migrate::{
     DataOptions, MigrationEnd, MigrationMode, MigrationPhase, MigrationPlan, MigrationPreview,
     MigrationProgress, MigrationSummary, Mismatch, OtherObject, TableState, TableView, Verify,

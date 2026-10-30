@@ -17,6 +17,16 @@ use crate::profile::{Profile, scope_of};
 use crate::registry::DriverRegistry;
 use crate::secret::Secrets;
 
+const SEARCH_LIMIT: usize = 500;
+
+/// 全库查找的一条结果：`column` 为空时是表。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SearchHit {
+    pub table: String,
+    pub column: Option<String>,
+    pub comment: Option<String>,
+}
+
 /// 每个连接配置用于浏览元数据的最大连接数。
 pub const METADATA_POOL_SIZE: usize = 2;
 
@@ -267,6 +277,34 @@ impl MetadataService {
     pub async fn schemas(&self, profile: &Profile, filter: Option<&str>) -> Result<Vec<SchemaInfo>> {
         let args = MetaArgs { filter: filter.map(Into::into), ..Default::default() };
         meta::schemas(&*self.rows_or_empty(profile, MetaKey::Schemas, &args).await?)
+    }
+
+    /// 全库查找：schema 下名称或注释含 `q` 的表和列，不分大小写，最多 `SEARCH_LIMIT` 条。
+    pub async fn search(&self, profile: &Profile, schema: &str, q: &str) -> Result<Vec<SearchHit>> {
+        let needle = q.trim().to_lowercase();
+        if needle.is_empty() {
+            return Ok(vec![]);
+        }
+        let hit = |name: &str, comment: Option<&str>| {
+            name.to_lowercase().contains(&needle)
+                || comment.is_some_and(|c| c.to_lowercase().contains(&needle))
+        };
+        let args = MetaArgs { schema: Some(schema.into()), ..Default::default() };
+        let mut out = Vec::new();
+        for r in self.rows_or_empty(profile, MetaKey::Tables, &args).await?.iter() {
+            let (table, comment) = (r.name("name"), r.text("comment"));
+            if hit(&table, comment.as_deref()) {
+                out.push(SearchHit { table, column: None, comment });
+            }
+        }
+        for r in self.rows_or_empty(profile, MetaKey::Columns, &args).await?.iter() {
+            let (column, comment) = (r.name("name"), r.text("comment"));
+            if hit(&column, comment.as_deref()) {
+                out.push(SearchHit { table: r.name("table_name"), column: Some(column), comment });
+            }
+        }
+        out.truncate(SEARCH_LIMIT);
+        Ok(out)
     }
 
     /// 对象树中某个 schema 下的表、视图或物化视图列表。

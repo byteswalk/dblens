@@ -1,4 +1,16 @@
 {
+  "search": {
+    "title": "全库查找",
+    "connection": "连接",
+    "schema": "模式",
+    "placeholder": "表名、列名或注释",
+    "colTable": "表",
+    "colColumn": "列",
+    "colComment": "注释",
+    "tableHit": "（表本身）",
+    "open": "双击打开表数据",
+    "limit": "结果较多，只显示前 500 条，请缩小关键字"
+  },
   "category": {
     "tables": "表",
     "views": "视图",

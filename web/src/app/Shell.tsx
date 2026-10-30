@@ -19,6 +19,7 @@ import FavoritesPanel from '../features/favorites/FavoritesPanel'
 import HistoryPanel from '../features/history/HistoryPanel'
 import ExportDocDialog from '../features/document/ExportDocDialog'
 import ModelDialogs from '../features/model/ModelDialogs'
+import SearchDialog from '../features/tree/SearchDialog'
 import ModelsPanel from '../features/model/ModelsPanel'
 import OpsPanel from '../features/ops/OpsPanel'
 import ObjectTree from '../features/tree/ObjectTree'
@@ -163,6 +164,7 @@ export default function Shell() {
       </div>
       <StatusBar />
       <FavoriteDialog />
+      <SearchDialog />
       <ExportDialog />
       <ImportDialog />
       <SqlFileDialog />
