@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>{{ lb.title }} · {{ target }}</title>
+<style>
+  :root { color-scheme: light; }
+  body { font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; color: #1a1a1a; max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+  h2 { font-size: 1.1rem; margin: 2rem 0 .6rem; border-bottom: 1px solid #ddd; padding-bottom: .3rem; }
+  .meta { color: #555; margin-bottom: 1rem; }
+  .meta div { margin: .15rem 0; }
+  .rate { font-size: 2rem; font-weight: 600; }
+  .tiles { display: flex; gap: .5rem; flex-wrap: wrap; margin: .8rem 0; }
+  .tile { border: 1px solid #ddd; border-radius: 6px; padding: .5rem .9rem; min-width: 4.5rem; }
+  .tile b { display: block; font-size: 1.3rem; }
+  .tile span { color: #666; font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
+  th, td { border: 1px solid #e3e3e3; padding: .4rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #f6f6f6; font-weight: 600; }
+  td.v { white-space: nowrap; }
+  .pass { color: #2a7; }
+  .fail { color: #c33; font-weight: 600; }
+  .unknown, .manual { color: #a70; }
+  .not_applicable { color: #999; }
+  .sug { color: #555; }
+  .obj { font-family: ui-monospace, Consolas, monospace; }
+</style>
+</head>
+<body>
+<h1>{{ lb.title }}</h1>
+<div class="meta">
+  <div>{{ lb.object }}：{{ target }}</div>
+  <div>{{ lb.ruleset }}：{{ ruleset_name }}</div>
+  <div>{{ lb.generated }}：{{ generated }}</div>
+  {% if reviewer %}<div>{{ lb.reviewer }}：{{ reviewer }}</div>{% endif %}
+</div>
+
+{% if summary.pass_rate is not none %}
+<div class="rate">{{ lb.pass_rate }}：{{ summary.pass_rate }}%</div>
+{% endif %}
+<div class="tiles">
+  <div class="tile"><b class="pass">{{ summary.pass }}</b><span>{{ lb.pass }}</span></div>
+  <div class="tile"><b class="fail">{{ summary.fail }}</b><span>{{ lb.fail }}</span></div>
+  <div class="tile"><b class="unknown">{{ summary.unknown }}</b><span>{{ lb.unknown }}</span></div>
+  <div class="tile"><b class="manual">{{ summary.manual }}</b><span>{{ lb.manual }}</span></div>
+  <div class="tile"><b class="not_applicable">{{ summary.not_applicable }}</b><span>{{ lb.not_applicable }}</span></div>
+  <div class="tile"><b>{{ summary.issues }}</b><span>{{ lb.issues }}</span></div>
+</div>
+
+<h2>{{ lb.clause_results }}</h2>
+<table>
+  <thead><tr><th>{{ lb.clause }}</th><th>{{ lb.verdict }}</th><th>{{ lb.reason }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ r.section }} · {{ r.text }}</td>
+      <td class="v {{ r.verdict_slug }}">{{ r.verdict }}</td>
+      <td>{{ r.reason if r.reason else "" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>{{ lb.issue_details }}</h2>
+{% if has_issues %}
+{% for r in rows %}
+{% if r.issues %}
+<h3>{{ r.section }} · {{ r.text }}</h3>
+<table>
+  <thead><tr><th>{{ lb.object_col }}</th><th>{{ lb.message }}</th><th>{{ lb.suggestion }}</th></tr></thead>
+  <tbody>
+  {% for i in r.issues %}
+    <tr>
+      <td class="obj">{{ i.object }}</td>
+      <td>{{ i.message }}</td>
+      <td class="sug">{{ i.suggestion if i.suggestion else "" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endfor %}
+{% else %}
+<p>{{ lb.no_issues }}</p>
+{% endif %}
+</body>
+</html>

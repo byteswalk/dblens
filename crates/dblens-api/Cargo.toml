@@ -11,6 +11,7 @@ base64.workspace = true
 dblens-core.workspace = true
 dblens-dialect.workspace = true
 dblens-driver.workspace = true
+dblens-lint.workspace = true
 dblens-service.workspace = true
 futures.workspace = true
 serde.workspace = true

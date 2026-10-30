@@ -8,6 +8,7 @@ mod documents;
 mod error;
 mod exports;
 mod lang;
+mod lint;
 mod migrations;
 mod models;
 mod routes;
@@ -119,6 +120,19 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/models/{id}/tables/{schema}/{name}/logical-keys", post(diagrams::add_key))
         .route("/models/{id}/tables/{schema}/{name}/logical-keys/{index}", delete(diagrams::delete_key))
         .route("/files/image", post(diagrams::save_image))
+        .route("/lint/rulesets", get(lint::rulesets).post(lint::create_ruleset))
+        .route("/lint/rulesets/import", post(lint::import_ruleset))
+        .route(
+            "/lint/rulesets/{id}",
+            get(lint::ruleset).put(lint::update_ruleset).delete(lint::delete_ruleset),
+        )
+        .route("/lint/rulesets/{id}/reset", post(lint::reset_ruleset))
+        .route("/lint/rulesets/{id}/export", get(lint::export_ruleset))
+        .route("/lint/rules", get(lint::rules))
+        .route("/lint/runs", get(lint::runs).post(lint::start_run))
+        .route("/lint/runs/{id}", get(lint::run).delete(lint::delete_run))
+        .route("/lint/runs/{id}/clauses/{clause}", put(lint::review))
+        .route("/lint/runs/{id}/report", get(lint::report))
         .route("/documents", post(documents::start))
         .route("/documents/check", post(documents::check))
         .route("/documents/templates/export", post(documents::export_template))

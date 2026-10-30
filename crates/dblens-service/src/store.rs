@@ -75,6 +75,23 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX favorites_parent ON favorites(parent_id, position);",
     // 版本 4：新建连接时选的产品（国产库第一批），没有时按驱动显示
     "ALTER TABLE profiles ADD COLUMN product TEXT;",
+    // 版本 5：规范检查（M7a）。规范库和检查记录。
+    // 内置规范的 body 存用户差异（Overrides），自定义规范的 body 存完整规范。
+    "CREATE TABLE lint_rulesets (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        builtin    INTEGER NOT NULL,
+        body       TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE lint_runs (
+        id           TEXT PRIMARY KEY,
+        created_at   INTEGER NOT NULL,
+        target       TEXT NOT NULL,
+        ruleset_name TEXT NOT NULL,
+        body         TEXT NOT NULL
+    );
+    CREATE INDEX lint_runs_at ON lint_runs(created_at);",
 ];
 
 pub(crate) fn db_err(e: rusqlite::Error) -> Error {

@@ -25,6 +25,7 @@ chrono.workspace = true
 csv.workspace = true
 dblens-core.workspace = true
 dblens-dialect.workspace = true
+dblens-lint.workspace = true
 dblens-driver.workspace = true
 dblens-driver-dameng = { workspace = true, optional = true }
 dblens-driver-mysql = { workspace = true, optional = true }

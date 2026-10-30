@@ -34,6 +34,8 @@ pub enum TaskKind {
     Document,
     /// 结构迁移（M5a）。
     Migrate,
+    /// 设计规范检查（M7a）。
+    Lint,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -125,6 +127,8 @@ pub struct TaskStatus {
     pub model: Option<String>,
     /// 迁移（M5b）：迁移记录的编号、当前步骤、每张表的进度。
     pub migration: Option<crate::migrate::MigrationProgress>,
+    /// 规范检查（M7a）：检查记录的编号。
+    pub lint_run: Option<String>,
 }
 
 struct Entry {
@@ -413,6 +417,7 @@ impl TaskManager {
                 remaining: None,
                 model: None,
                 migration: None,
+                lint_run: None,
                 report: None,
             }),
             cancelled: AtomicBool::new(false),

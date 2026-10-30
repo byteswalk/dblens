@@ -12,6 +12,7 @@ pub mod fake;
 mod favorite;
 mod history;
 mod import;
+mod lint;
 mod metadata;
 mod migrate;
 mod model;
@@ -44,6 +45,9 @@ pub use import::{
     ColumnMapping, DEFAULT_BATCH, EmptyAs, FileFormat, FileOptions, FilePreview, FileReader, FileRow,
     ImportRequest, NewColumn, NewTable, OnError, ReadWarnings, TextEncoding, Transaction, convert,
     infer_type, new_table, preview_file,
+};
+pub use lint::{
+    ClauseMeta, LintRequest, LintRun, LintRunSummary, LintSource, ReportFormat, ReviewInput, RulesetSummary,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService, SearchHit};
 pub use migrate::{

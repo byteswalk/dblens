@@ -1,340 +1,1867 @@
 {
   "_version": 2,
-  "api.bad_message": {"zh-CN": "无法解析的消息：%{error}", "en": "Cannot parse the message: %{error}"},
-  "api.bad_setting_key": {"zh-CN": "设置项名称不合法：%{key}", "en": "Invalid setting name: %{key}"},
-  "api.bad_token": {"zh-CN": "缺少或错误的访问令牌", "en": "Missing or wrong access token"},
-  "api.bad_view_kind": {"zh-CN": "kind 只能是 views 或 materialized_views", "en": "kind must be views or materialized_views"},
-  "api.origin_denied": {"zh-CN": "不允许的来源（Origin）", "en": "Origin not allowed"},
-  "api.setting_too_large": {"zh-CN": "设置项 %{key} 的值超过 64 KiB", "en": "The value of setting %{key} exceeds 64 KiB"},
-  "api.still_running": {"zh-CN": "上一段 SQL 还没有执行完", "en": "The previous SQL has not finished yet"},
-  "app.name": {"zh-CN": "DBLens 数洞", "en": "DBLens"},
-  "changes.bad_key": {"zh-CN": "改动的行标识与表 %{table} 的主键（或唯一键）不一致", "en": "The row identity of a change does not match the primary (or unique) key of table %{table}"},
-  "changes.conflict": {"zh-CN": "第 %{n} 个改动没有影响任何行：这一行已被修改或删除，请刷新后再改", "en": "Change %{n} affected no rows: the row has been modified or deleted; refresh and try again"},
-  "changes.empty_update": {"zh-CN": "修改中没有改动的列", "en": "An update has no changed columns"},
-  "changes.generated_column": {"zh-CN": "列 %{column} 是生成列，不能写入", "en": "Column %{column} is generated and cannot be written"},
-  "changes.in_transaction": {"zh-CN": "会话中有未提交的事务，不能提交编辑", "en": "The session has an uncommitted transaction; edits cannot be committed"},
-  "changes.no_key": {"zh-CN": "表 %{table} 没有主键或非空的唯一键，不能编辑", "en": "Table %{table} has no primary key or non-null unique key and cannot be edited"},
-  "changes.not_unique": {"zh-CN": "第 %{n} 个改动影响了 %{count} 行：行标识不唯一", "en": "Change %{n} affected %{count} rows: the row identity is not unique"},
-  "changes.rolled_back": {"zh-CN": "已回滚（同一次提交中的其他改动失败）", "en": "Rolled back (another change in the same commit failed)"},
-  "changes.unknown_column": {"zh-CN": "列 %{column} 不存在", "en": "Column %{column} does not exist"},
-  "compare.apply_missing": {"zh-CN": "找不到 %{name}：模型中的表与比对时不同，请重新比对", "en": "%{name} was not found: the model table differs from the compared one; compare again"},
-  "compare.changed": {"zh-CN": "比对之后结构已有变化，请重新比对", "en": "The schemas changed after the comparison; compare again"},
-  "compare.family_mismatch": {"zh-CN": "两边的数据库类型不同（%{source} 与 %{target}），不能比对", "en": "Cannot compare different database types (%{source} and %{target})"},
-  "compare.rebuild_refused": {"zh-CN": "表 %{table} 不能重建：%{reason}", "en": "Table %{table} cannot be rebuilt: %{reason}"},
-  "ddl.truncated": {"zh-CN": "DDL 超过 64 KB，以上只是开头部分", "en": "The DDL exceeds 64 KB; only the beginning is shown above"},
-  "ddl.unsupported": {"zh-CN": "该数据库不支持查看 %{kind} 的 DDL", "en": "This database does not support viewing the DDL of %{kind}"},
-  "design.bad_rename": {"zh-CN": "列 %{name} 的原名不对", "en": "Column %{name} has an invalid original name"},
-  "design.columns_empty": {"zh-CN": "至少要选一列", "en": "Select at least one column"},
-  "design.conflict": {"zh-CN": "表结构已被修改，请刷新后重新编辑", "en": "The table structure has been changed; reload and edit again"},
-  "design.count_mismatch": {"zh-CN": "行数不一致：原表 %{source} 行，新表 %{target} 行", "en": "Row counts differ: %{source} in the old table, %{target} in the new one"},
-  "design.duplicate": {"zh-CN": "名称 %{name} 重复", "en": "Duplicate name %{name}"},
-  "design.duplicate_column": {"zh-CN": "列 %{column} 重复", "en": "Column %{column} is listed twice"},
-  "design.expression_empty": {"zh-CN": "表达式不能为空", "en": "Expression is required"},
-  "design.has_errors": {"zh-CN": "设计中有错误，请先修正", "en": "The design has errors; fix them first"},
-  "design.name_empty": {"zh-CN": "名称不能为空", "en": "Name is required"},
-  "design.no_changes": {"zh-CN": "没有改动", "en": "There are no changes"},
-  "design.no_columns": {"zh-CN": "表至少要有一列", "en": "A table needs at least one column"},
-  "design.pk_not_null": {"zh-CN": "主键列 %{column} 将设为 NOT NULL", "en": "Primary key column %{column} will be set to NOT NULL"},
-  "design.rebuild.dependent_views": {"zh-CN": "有视图依赖这张表（%{views}），删除旧表会失败；请先处理这些视图", "en": "Views depend on this table (%{views}); dropping the old table would fail. Deal with these views first"},
-  "design.rebuild.no_writes": {"zh-CN": "重建期间不要写入这张表：复制数据之后写入的内容会丢失", "en": "Do not write to this table during the rebuild: data written after the copy will be lost"},
-  "design.rebuild.partitioned": {"zh-CN": "分区表不能重建", "en": "A partitioned table cannot be rebuilt"},
-  "design.rebuild.referenced_column": {"zh-CN": "表 %{table} 的外键引用了列 %{column}，不能删除它", "en": "A foreign key of table %{table} references column %{column}; it cannot be dropped"},
-  "design.rebuild.storage": {"zh-CN": "除表空间外的存储参数不会保留", "en": "Storage parameters other than the tablespace are not kept"},
-  "design.rebuild.views_recompiled": {"zh-CN": "依赖这张表的视图（%{views}）会暂时失效，最后重新编译", "en": "Views depending on this table (%{views}) become invalid for a while and are recompiled at the end"},
-  "design.ref_columns_count": {"zh-CN": "引用列的个数要与外键列相同", "en": "The referenced columns must match the foreign key columns in number"},
-  "design.ref_table_empty": {"zh-CN": "请选择引用的表", "en": "Select the referenced table"},
-  "design.type_empty": {"zh-CN": "类型不能为空", "en": "Type is required"},
-  "design.unknown_column": {"zh-CN": "列 %{column} 不存在", "en": "Column %{column} does not exist"},
-  "design.unnamed_constraint": {"zh-CN": "约束没有名字，无法删除", "en": "The constraint has no name and cannot be dropped"},
-  "design.unsupported.clustered_pk": {"zh-CN": "TiDB 的聚簇主键不能直接删除或更换", "en": "TiDB cannot drop or replace a clustered primary key in place"},
-  "design.unsupported.generated": {"zh-CN": "该库不能修改已有列 %{column} 的生成表达式", "en": "This database cannot change the generation expression of existing column %{column}"},
-  "design.unsupported.identity": {"zh-CN": "该库不能改变已有列 %{column} 的自增属性", "en": "This database cannot change the auto-increment of existing column %{column}"},
-  "design.unsupported.reorder": {"zh-CN": "该库不能调整已有列的顺序或在指定位置加列", "en": "This database cannot reorder existing columns or add a column at a given position"},
-  "design.unsupported.serial": {"zh-CN": "列 %{column} 是 serial 列，不能直接改变自增属性", "en": "Column %{column} is a serial column; its auto-increment cannot be changed directly"},
-  "desktop.bind_failed": {"zh-CN": "无法监听本机端口：%{error}", "en": "Cannot listen on a local port: %{error}"},
-  "desktop.log_dir_failed": {"zh-CN": "无法创建日志目录 %{dir}：%{error}", "en": "Cannot create the log directory %{dir}: %{error}"},
-  "desktop.no_main_window": {"zh-CN": "主窗口不存在", "en": "The main window does not exist"},
-  "dm.alloc_env_failed": {"zh-CN": "dpi_alloc_env 失败", "en": "dpi_alloc_env failed"},
-  "dm.cancel_failed": {"zh-CN": "dpi_cancel 失败，返回码 %{code}", "en": "dpi_cancel failed with return code %{code}"},
-  "dm.load_failed": {"zh-CN": "加载 %{path} 失败：%{error}", "en": "Failed to load %{path}: %{error}"},
-  "dm.missing_functions": {"zh-CN": "缺少 DPI 函数 %{functions}，达梦客户端版本可能过旧", "en": "Missing DPI functions %{functions}; the DM client may be too old"},
-  "dm.no_diagnostics": {"zh-CN": "调用 DPI 失败，且无法读取错误信息", "en": "A DPI call failed and its error information could not be read"},
-  "dm.nul_in_string": {"zh-CN": "字符串中不能包含 \\0 字符", "en": "Strings cannot contain the \\0 character"},
-  "dml.no_insertable_columns": {"zh-CN": "没有可插入的列：%{table}", "en": "No insertable columns: %{table}"},
-  "document.bad_image": {"zh-CN": "ER 图 %{name} 的图片不是 PNG", "en": "The image of ER diagram %{name} is not a PNG"},
-  "document.bad_output": {"zh-CN": "不能写到这个位置：%{path}", "en": "Cannot write to this location: %{path}"},
-  "document.bad_reference": {"zh-CN": "样式来源不是有效的 .docx 文件：%{error}", "en": "The style reference is not a valid .docx file: %{error}"},
-  "document.read_failed": {"zh-CN": "读文件 %{path} 失败：%{error}", "en": "Failed to read %{path}: %{error}"},
-  "document.template_error": {"zh-CN": "模板第 %{line} 行有错：%{error}", "en": "Template error at line %{line}: %{error}"},
-  "document.write_failed": {"zh-CN": "写文档失败：%{error}", "en": "Failed to write the document: %{error}"},
-  "document.xlsx_dictionary_only": {"zh-CN": "xlsx 只能用于数据字典", "en": "xlsx is only available for data dictionaries"},
-  "driver.connect_timeout": {"zh-CN": "连接超时（%{seconds} 秒）", "en": "Connection timed out (%{seconds} s)"},
-  "driver.connection_closed": {"zh-CN": "连接已断开：%{error}", "en": "Connection closed: %{error}"},
-  "driver.lob_read_failed": {"zh-CN": "读取 LOB 失败：%{error}", "en": "Failed to read LOB: %{error}"},
-  "driver.no_result": {"zh-CN": "%{sql} 没有返回结果", "en": "%{sql} returned no result"},
-  "driver.result_unread": {"zh-CN": "上一条语句的结果尚未读完", "en": "The result of the previous statement has not been fully read"},
-  "driver.unbindable_value": {"zh-CN": "该类型的值不能作为参数绑定：%{value}", "en": "This value cannot be bound as a parameter: %{value}"},
-  "driver.worker_gone": {"zh-CN": "连接工作线程已退出", "en": "The connection worker thread has exited"},
-  "driver.worker_spawn_failed": {"zh-CN": "无法创建连接工作线程：%{error}", "en": "Cannot start the connection worker thread: %{error}"},
-  "error.kind.auth": {"zh-CN": "认证失败：%{message}", "en": "Authentication failed: %{message}"},
-  "error.kind.busy": {"zh-CN": "会话正忙：%{message}", "en": "Session busy: %{message}"},
-  "error.kind.cancelled": {"zh-CN": "执行已取消", "en": "Execution cancelled"},
-  "error.kind.connect": {"zh-CN": "连接失败：%{message}", "en": "Connection failed: %{message}"},
-  "error.kind.denied": {"zh-CN": "执行被拒绝：%{reason}", "en": "Execution denied: %{reason}"},
-  "error.kind.driver_unavailable": {"zh-CN": "驱动不可用：%{hint}", "en": "Driver unavailable: %{hint}"},
-  "error.kind.internal": {"zh-CN": "内部错误：%{message}", "en": "Internal error: %{message}"},
-  "error.kind.invalid": {"zh-CN": "无效的输入：%{message}", "en": "Invalid input: %{message}"},
-  "error.kind.locked": {"zh-CN": "密码库已锁定，请先输入主密码", "en": "The password vault is locked; enter the master password first"},
-  "error.kind.not_found": {"zh-CN": "找不到%{what}", "en": "Not found: %{what}"},
-  "error.kind.sql": {"zh-CN": "SQL 错误 [%{code}]：%{message}", "en": "SQL error [%{code}]: %{message}"},
-  "error.kind.timeout": {"zh-CN": "执行超时", "en": "Execution timed out"},
-  "export.bad_delimiter": {"zh-CN": "CSV 分隔符只能是逗号、制表符或分号", "en": "The CSV delimiter must be a comma, tab or semicolon"},
-  "export.bad_path": {"zh-CN": "保存路径无效：%{path}（需要绝对路径，且所在目录存在）", "en": "Invalid save path: %{path} (it must be absolute and its folder must exist)"},
-  "export.binary_cell": {"zh-CN": "二进制 %{bytes} 字节", "en": "binary, %{bytes} bytes"},
-  "export.no_file": {"zh-CN": "这个导出任务没有可下载的文件", "en": "This export has no file to download"},
-  "export.no_table": {"zh-CN": "INSERT 语句需要目标表名", "en": "INSERT statements need a target table name"},
-  "export.not_found": {"zh-CN": "导出任务 %{id} 不存在或已过期", "en": "Export %{id} does not exist or has expired"},
-  "export.not_query": {"zh-CN": "只能导出单条查询语句的结果", "en": "Only the result of a single query can be exported"},
-  "export.path_not_allowed": {"zh-CN": "浏览器模式不能指定保存路径", "en": "A save path cannot be given in browser mode"},
-  "export.too_many": {"zh-CN": "同时最多进行 %{max} 个导出任务，请等其他任务完成", "en": "At most %{max} exports can run at once; wait for one to finish"},
-  "export.write_failed": {"zh-CN": "写导出文件失败：%{error}", "en": "Failed to write the export file: %{error}"},
-  "favorite.folder_has_no_sql": {"zh-CN": "文件夹不能有 SQL", "en": "A folder has no SQL"},
-  "favorite.move_into_self": {"zh-CN": "不能把文件夹移到它自己或它的子文件夹中", "en": "Cannot move a folder into itself or one of its subfolders"},
-  "favorite.name_required": {"zh-CN": "名称不能为空", "en": "The name is required"},
-  "favorite.parent_not_folder": {"zh-CN": "只能放在文件夹中", "en": "Favorites can only be placed in a folder"},
-  "favorite.sql_required": {"zh-CN": "收藏的 SQL 不能为空", "en": "The SQL of a favorite is required"},
-  "generate.needs_primary_key": {"zh-CN": "表 %{table} 没有主键，无法生成按主键定位的语句", "en": "Table %{table} has no primary key, so a statement that locates rows by primary key cannot be generated"},
-  "generate.no_relations": {"zh-CN": "表 %{table} 没有可以连接的外键", "en": "Table %{table} has no foreign keys to join"},
-  "generate.select_only": {"zh-CN": "视图只能生成 SELECT", "en": "Only SELECT can be generated for a view"},
-  "import.bad_delimiter": {"zh-CN": "分隔符必须是 ASCII 字符：%{delimiter}", "en": "The delimiter must be an ASCII character: %{delimiter}"},
-  "import.bad_path": {"zh-CN": "文件不存在：%{path}", "en": "File not found: %{path}"},
-  "import.bad_source_column": {"zh-CN": "文件没有第 %{n} 列", "en": "The file has no column %{n}"},
-  "import.bad_value": {"zh-CN": "列 %{column} 的值“%{value}”不能转换为 %{type_name}", "en": "Value \"%{value}\" in column %{column} cannot be converted to %{type_name}"},
-  "import.duplicate_target": {"zh-CN": "同一个表列被映射了多次", "en": "A table column is mapped more than once"},
-  "import.history": {"zh-CN": "导入 %{file} → %{table}", "en": "Import %{file} → %{table}"},
-  "import.new_table_append": {"zh-CN": "导入到新表只能追加", "en": "Importing into a new table can only append"},
-  "import.no_columns": {"zh-CN": "没有要导入的列", "en": "No columns to import"},
-  "import.no_sheet": {"zh-CN": "工作表不存在：%{sheet}", "en": "Worksheet not found: %{sheet}"},
-  "import.no_upload": {"zh-CN": "上传的文件不存在或已过期：%{id}", "en": "The uploaded file does not exist or has expired: %{id}"},
-  "import.read_failed": {"zh-CN": "读取文件失败：%{error}", "en": "Failed to read the file: %{error}"},
-  "import.report_error": {"zh-CN": "错误", "en": "Error"},
-  "import.report_line": {"zh-CN": "行号", "en": "Line"},
-  "import.row_width": {"zh-CN": "一行有 %{actual} 个值，应为 %{expected} 个", "en": "A row has %{actual} values; expected %{expected}"},
-  "import.too_large": {"zh-CN": "文件超过上传上限 %{limit} MB（可在设置中修改）", "en": "The file exceeds the upload limit of %{limit} MB (can be changed in settings)"},
-  "import.upload_failed": {"zh-CN": "保存上传的文件失败：%{error}", "en": "Failed to save the uploaded file: %{error}"},
-  "import.upsert_needs_key": {"zh-CN": "按主键更新要求表 %{table} 有主键，且主键列都已映射", "en": "Updating by primary key requires table %{table} to have a primary key with all its columns mapped"},
-  "internal.lock_poisoned": {"zh-CN": "内部锁已损坏（%{lock}）", "en": "Internal lock poisoned (%{lock})"},
-  "internal.task_failed": {"zh-CN": "后台任务异常退出（%{task}）：%{error}", "en": "Background task failed (%{task}): %{error}"},
-  "literal.bad_number": {"zh-CN": "不是有效的数字文本，无法生成字面量：%{value}", "en": "Not a valid number, cannot make a literal: %{value}"},
-  "literal.infinity": {"zh-CN": "该方言不支持无穷大的 SQL 字面量", "en": "This dialect has no SQL literal for infinity"},
-  "literal.lob": {"zh-CN": "LOB 预览值不能生成 SQL 字面量", "en": "A LOB preview cannot be turned into an SQL literal"},
-  "literal.nan": {"zh-CN": "该方言不支持 NaN 的 SQL 字面量", "en": "This dialect has no SQL literal for NaN"},
-  "literal.nul": {"zh-CN": "字符串含 NUL 字符，无法生成该方言的字面量", "en": "The string contains a NUL character and cannot be written as a literal in this dialect"},
-  "literal.oracle_too_long": {"zh-CN": "超过 Oracle 字面量长度上限（2000 字节），请改用参数绑定", "en": "Longer than the Oracle literal limit (2000 bytes); use a bound parameter instead"},
-  "literal.unsupported_type": {"zh-CN": "该类型（%{ty}）的值不能生成 SQL 字面量", "en": "Values of this type (%{ty}) cannot be turned into an SQL literal"},
-  "menu.about": {"zh-CN": "关于 DBLens", "en": "About DBLens"},
-  "menu.auto_check": {"zh-CN": "启动时自动检查更新", "en": "Check for updates at startup"},
-  "menu.check_update": {"zh-CN": "检查更新…", "en": "Check for Updates…"},
-  "menu.help": {"zh-CN": "帮助", "en": "Help"},
-  "menu.on_top": {"zh-CN": "窗口置顶", "en": "Always on Top"},
-  "menu.quit": {"zh-CN": "退出", "en": "Quit"},
-  "menu.reset_window": {"zh-CN": "恢复默认窗口位置和大小", "en": "Reset Window Position and Size"},
-  "menu.window": {"zh-CN": "窗口", "en": "Window"},
-  "meta.missing_column": {"zh-CN": "元数据查询 %{key} 的结果缺少列 %{column}", "en": "The result of metadata query %{key} lacks column %{column}"},
-  "meta.no_result_set": {"zh-CN": "元数据查询没有返回结果集", "en": "The metadata query returned no result set"},
-  "meta.syntax_config": {"zh-CN": "模板语法配置错误：%{error}", "en": "Template syntax configuration error: %{error}"},
-  "meta.template_parse": {"zh-CN": "元数据模板 %{key} 解析失败：%{error}", "en": "Failed to parse metadata template %{key}: %{error}"},
-  "meta.template_render": {"zh-CN": "元数据模板 %{key} 渲染失败：%{error}", "en": "Failed to render metadata template %{key}: %{error}"},
-  "meta.unknown_param": {"zh-CN": "元数据模板 %{key} 绑定了未知参数 %{param}", "en": "Metadata template %{key} binds unknown parameter %{param}"},
-  "metadata.not_object_list": {"zh-CN": "%{key} 不是对象列表查询", "en": "%{key} is not an object list query"},
-  "metadata.not_source": {"zh-CN": "%{key} 不是源码查询", "en": "%{key} is not a source query"},
-  "metadata.pool_closed": {"zh-CN": "连接池已关闭", "en": "The connection pool is closed"},
-  "metadata.table_detail_count": {"zh-CN": "表明细查询数量不对", "en": "Wrong number of table detail queries"},
-  "migrate.already_finished": {"zh-CN": "这个迁移已经完成", "en": "This migration has already finished"},
-  "migrate.bad_data_options": {"zh-CN": "数据选项超出范围：每批 100–100000 行、并行 1–4 张表、抽样至多 10000 行", "en": "Data options out of range: batch 100–100000 rows, 1–4 tables in parallel, sample at most 10000 rows"},
-  "migrate.bad_value": {"zh-CN": "列 %{column} 的值不能转换：%{error}", "en": "The value of column %{column} cannot be converted: %{error}"},
-  "migrate.check_dropped": {"zh-CN": "检查约束 %{expression} 不能转换，不迁移", "en": "Check constraint %{expression} cannot be converted; not migrated"},
-  "migrate.data_needs_table": {"zh-CN": "只迁数据时目标中必须已有这些表：%{tables}", "en": "Migrating data only requires these tables to exist in the target: %{tables}"},
-  "migrate.default_dropped": {"zh-CN": "默认值 %{default} 不能转换，不迁移", "en": "Default %{default} cannot be converted; not migrated"},
-  "migrate.existing_unchosen": {"zh-CN": "目标中已有这些表，请选择处理方式：%{tables}", "en": "These tables already exist in the target; choose what to do: %{tables}"},
-  "migrate.fk_action": {"zh-CN": "目标库不支持 %{action}，去掉", "en": "The target does not support %{action}; dropped"},
-  "migrate.fk_outside": {"zh-CN": "引用的表 %{table} 不在迁移范围内，目标中也没有，不迁移", "en": "Referenced table %{table} is neither migrated nor in the target; not migrated"},
-  "migrate.generated_dropped": {"zh-CN": "生成列表达式 %{expression} 不能转换，改为普通列", "en": "Generated column expression %{expression} cannot be converted; migrated as a plain column"},
-  "migrate.identity_unsupported": {"zh-CN": "目标库版本不支持自增（标识列）", "en": "The target database version does not support identity columns"},
-  "migrate.index_expression": {"zh-CN": "索引表达式 %{expression} 不能转换，不迁移", "en": "Index expression %{expression} cannot be converted; not migrated"},
-  "migrate.index_method": {"zh-CN": "目标库不支持索引方法 %{method}，按普通索引建", "en": "The target does not support index method %{method}; created as a plain index"},
-  "migrate.item_column_skipped": {"zh-CN": "用到的列没有迁移，不迁移", "en": "Uses a column that is not migrated; not migrated"},
-  "migrate.key_column_skipped": {"zh-CN": "主键的列没有迁移", "en": "A primary key column is not migrated"},
-  "migrate.lob_index": {"zh-CN": "包含大字段列，目标库不能建索引，不迁移", "en": "Includes a large-object column the target cannot index; not migrated"},
-  "migrate.lob_key": {"zh-CN": "主键包含大字段列，目标库不能建", "en": "The primary key includes a large-object column, which the target cannot index"},
-  "migrate.lob_too_large": {"zh-CN": "列 %{column} 的大字段超过 256 MB，没有读全", "en": "A large value in column %{column} exceeds 256 MB and was not read completely"},
-  "migrate.name_conflict": {"zh-CN": "名字 %{name} 与 %{other} 重名", "en": "Name %{name} conflicts with %{other}"},
-  "migrate.name_too_long": {"zh-CN": "名字 %{name} 超过目标库的长度上限", "en": "Name %{name} exceeds the target's length limit"},
-  "migrate.no_key_append": {"zh-CN": "表 %{table} 没有主键，追加数据时不能续传；请改为清空后导入或重新迁移", "en": "Table %{table} has no primary key, so appending cannot resume; use replace or start over"},
-  "migrate.no_sequences": {"zh-CN": "目标库没有序列，不迁移", "en": "The target database has no sequences; not migrated"},
-  "migrate.not_found": {"zh-CN": "找不到迁移记录 %{id}", "en": "Migration record %{id} not found"},
-  "migrate.nothing": {"zh-CN": "没有要迁移的表或序列", "en": "There are no tables or sequences to migrate"},
-  "migrate.partition": {"zh-CN": "分区不迁移，按普通表建", "en": "Partitioning is not migrated; created as a plain table"},
-  "migrate.record_io": {"zh-CN": "读写迁移记录失败：%{error}", "en": "Failed to read or write the migration record: %{error}"},
-  "migrate.report.adjustments": {"zh-CN": "序列和自增的调整", "en": "Sequence and identity adjustments"},
-  "migrate.report.cancelled": {"zh-CN": "迁移已取消，之后的语句没有执行。", "en": "Migration cancelled; later statements were not run."},
-  "migrate.report.data": {"zh-CN": "数据", "en": "Data"},
-  "migrate.report.data_header": {"zh-CN": "表 | 状态 | 源行数 | 已迁行数 | 跳过 | 用时 | 校验", "en": "Table | State | Source rows | Rows copied | Skipped | Time | Verification"},
-  "migrate.report.failed": {"zh-CN": "迁移中断：%{error}", "en": "Migration stopped: %{error}"},
-  "migrate.report.failures": {"zh-CN": "失败的语句", "en": "Failed statements"},
-  "migrate.report.finished": {"zh-CN": "迁移已完成。", "en": "Migration finished."},
-  "migrate.report.mismatches": {"zh-CN": "%{table} 抽样比对不一致", "en": "Sample differences in %{table}"},
-  "migrate.report.no_ddl": {"zh-CN": "（取不到 DDL）", "en": "(DDL unavailable)"},
-  "migrate.report.notes": {"zh-CN": "映射提示", "en": "Mapping notes"},
-  "migrate.report.others": {"zh-CN": "没有迁移的对象（附源库 DDL，需人工改写）", "en": "Objects not migrated (source DDL attached; rewrite by hand)"},
-  "migrate.report.row_missing": {"zh-CN": "目标中没有这一行", "en": "Row missing in the target"},
-  "migrate.report.script": {"zh-CN": "迁移脚本", "en": "Migration script"},
-  "migrate.report.skipped_rows": {"zh-CN": "跳过的行", "en": "Skipped rows"},
-  "migrate.report.state": {"zh-CN": "%{state}", "en": "%{state}"},
-  "migrate.report.statements": {"zh-CN": "结构语句共 %{total} 条：成功 %{done} 条，失败 %{failed} 条。", "en": "%{total} structure statements: %{done} succeeded, %{failed} failed."},
-  "migrate.report.title": {"zh-CN": "结构迁移：%{source} → %{target}", "en": "Structure migration: %{source} → %{target}"},
-  "migrate.report.unfinished": {"zh-CN": "迁移没有全部完成（有搬运失败的表），修改后可在迁移标签中继续。", "en": "The migration did not finish completely (some tables failed); fix them and continue from the migration tab."},
-  "migrate.report.verify_bad": {"zh-CN": "不一致：应有 %{expected} 行，目标 %{target} 行，%{mismatches} 处值不同", "en": "Mismatch: %{expected} rows expected, %{target} in target, %{mismatches} differing values"},
-  "migrate.report.verify_ok": {"zh-CN": "一致（抽样 %{sampled} 行）", "en": "Matched (%{sampled} rows sampled)"},
-  "migrate.running": {"zh-CN": "这个迁移正在执行", "en": "This migration is already running"},
-  "migrate.same_target": {"zh-CN": "源和目标是同一个 schema", "en": "The source and target are the same schema"},
-  "migrate.sequence_bound": {"zh-CN": "%{bound} 超出 bigint 范围", "en": "%{bound} is outside the bigint range"},
-  "migrate.sequence_exists": {"zh-CN": "目标中已有同名序列，跳过", "en": "A sequence with this name already exists in the target; skipped"},
-  "migrate.serial_sequence": {"zh-CN": "serial 列自带的序列，随自增列一起迁移", "en": "Sequence owned by a serial column; migrated with the identity column"},
-  "migrate.type_lossy": {"zh-CN": "%{from} 映射为 %{to}，取值范围或精度可能改变", "en": "%{from} maps to %{to}; range or precision may change"},
-  "migrate.type_unknown": {"zh-CN": "不认识的类型 %{source}，按文本（%{target}）迁移", "en": "Unrecognized type %{source}; migrated as text (%{target})"},
-  "migrate.unknown_target_type": {"zh-CN": "目标库不认识类型 %{native}", "en": "The target does not recognize type %{native}"},
-  "migrate.unsupported_left": {"zh-CN": "还有 %{count} 项不支持的映射需要处理", "en": "%{count} unsupported mappings still need attention"},
-  "model.bad_file": {"zh-CN": "文件 %{path} 有错：%{error}", "en": "File %{path} is invalid: %{error}"},
-  "model.bad_path": {"zh-CN": "路径无效：%{path}", "en": "Invalid path: %{path}"},
-  "model.conflict": {"zh-CN": "%{name} 的文件已被修改，请重新加载", "en": "The file for %{name} has changed; reload it"},
-  "model.diagram_bad_name": {"zh-CN": "图名 %{name} 不可用（不能为空，也不能是 _all）", "en": "The diagram name %{name} is not allowed (it must not be empty or _all)"},
-  "model.diagram_exists": {"zh-CN": "图 %{name} 已存在", "en": "Diagram %{name} already exists"},
-  "model.dir_not_empty": {"zh-CN": "目录 %{path} 不为空", "en": "Directory %{path} is not empty"},
-  "model.image_data": {"zh-CN": "图片数据无效：%{error}", "en": "Invalid image data: %{error}"},
-  "model.image_ext": {"zh-CN": "图片只能保存为 .svg 或 .png 文件", "en": "Images can only be saved as .svg or .png files"},
-  "model.io_failed": {"zh-CN": "读写 %{path} 失败：%{error}", "en": "Failed to access %{path}: %{error}"},
-  "model.lk_column_missing": {"zh-CN": "列 %{name} 不存在", "en": "Column %{name} does not exist"},
-  "model.lk_count_mismatch": {"zh-CN": "逻辑外键两边的列数必须相同且不为空", "en": "Both sides of a logical key must have the same, non-zero number of columns"},
-  "model.lk_name_exists": {"zh-CN": "名字 %{name} 已被本表的外键或逻辑外键使用", "en": "The name %{name} is already used by a key of this table"},
-  "model.lk_not_found": {"zh-CN": "没有第 %{index} 个逻辑外键", "en": "Logical key %{index} does not exist"},
-  "model.local_only": {"zh-CN": "只有桌面程序和只监听本机地址的浏览器模式可以使用模型", "en": "Models are available only in the desktop app and in browser mode listening on a local address"},
-  "model.no_schemas": {"zh-CN": "没有选择 schema", "en": "No schema selected"},
-  "model.not_a_model": {"zh-CN": "%{path} 不是模型目录（没有 model.yaml）", "en": "%{path} is not a model directory (model.yaml not found)"},
-  "model.read_only": {"zh-CN": "模型文件格式 %{format} 比本程序新，只能查看；请升级数洞", "en": "Model format %{format} is newer than this version supports; it is read-only. Please upgrade DBLens"},
-  "model.script_ext": {"zh-CN": "脚本只能保存为 .sql 文件", "en": "Scripts can only be saved as .sql files"},
-  "model.table_exists": {"zh-CN": "表 %{name} 已存在", "en": "Table %{name} already exists"},
-  "model.yaml_write_failed": {"zh-CN": "生成 YAML 失败：%{error}", "en": "Failed to write YAML: %{error}"},
-  "native.dameng_dpi": {"zh-CN": "达梦 DPI 库", "en": "DM DPI library"},
-  "native.dir_not_absolute": {"zh-CN": "%{lib}目录必须是绝对路径：%{dir}", "en": "The %{lib} directory must be an absolute path: %{dir}"},
-  "native.install.dameng_dpi": {"zh-CN": "请安装达梦客户端（含 DPI 驱动），然后在连接设置中指定 dmdpi 所在目录，或设置 DM_HOME", "en": "Install the DM client (with the DPI driver), then set the directory containing dmdpi in the connection settings, or set DM_HOME"},
-  "native.install.oracle_client": {"zh-CN": "请安装 Oracle Instant Client（Basic 或 Basic Light），然后在连接设置中指定其目录，或设置 ORACLE_HOME / PATH", "en": "Install Oracle Instant Client (Basic or Basic Light), then set its directory in the connection settings, or set ORACLE_HOME / PATH"},
-  "native.not_found": {"zh-CN": "未找到%{lib}（%{file}）。%{install}。已查找：%{tried}", "en": "%{lib} (%{file}) not found. %{install}. Searched: %{tried}"},
-  "native.oracle_client": {"zh-CN": "Oracle 客户端库", "en": "Oracle client library"},
-  "noun.favorite": {"zh-CN": "收藏 %{id}", "en": "favorite %{id}"},
-  "noun.history": {"zh-CN": "历史记录 %{id}", "en": "history entry %{id}"},
-  "noun.model": {"zh-CN": "模型 %{id}", "en": "model %{id}"},
-  "noun.object": {"zh-CN": "%{kind} %{name}", "en": "%{kind} %{name}"},
-  "noun.profile": {"zh-CN": "连接配置 %{id}", "en": "connection profile %{id}"},
-  "noun.session": {"zh-CN": "会话 %{id}", "en": "session %{id}"},
-  "oracle.bad_chars": {"zh-CN": "Oracle %{what}含有不允许的字符：%{value}", "en": "The Oracle %{what} contains characters that are not allowed: %{value}"},
-  "oracle.bad_ipv6": {"zh-CN": "无效的 IPv6 地址：%{host}", "en": "Invalid IPv6 address: %{host}"},
-  "oracle.client_already_loaded": {"zh-CN": "Oracle 客户端已从 %{loaded} 加载，换用 %{dir} 需要重启程序", "en": "The Oracle client is already loaded from %{loaded}; restart the program to use %{dir}"},
-  "oracle.part.host": {"zh-CN": "主机名", "en": "host name"},
-  "oracle.part.service": {"zh-CN": "服务名", "en": "service name"},
-  "oracle.service_required": {"zh-CN": "Oracle 连接需要服务名（URL 路径部分）或 sid 选项", "en": "An Oracle connection needs a service name (the URL path) or the sid option"},
-  "params.invalid_timeout": {"zh-CN": "connect_timeout 不是有效的秒数：%{value}", "en": "connect_timeout is not a valid number of seconds: %{value}"},
-  "params.invalid_tls": {"zh-CN": "tls 选项只能是 disable、require 或 verify：%{value}", "en": "The tls option must be disable, require or verify: %{value}"},
-  "params.invalid_url": {"zh-CN": "无效的连接 URL：%{error}", "en": "Invalid connection URL: %{error}"},
-  "params.missing_host": {"zh-CN": "连接 URL 缺少主机名", "en": "The connection URL has no host name"},
-  "params.tls_unsupported": {"zh-CN": "%{driver} 驱动暂不支持 TLS，请去掉连接选项 tls", "en": "The %{driver} driver does not support TLS yet; remove the tls connection option"},
-  "params.unsupported_scheme": {"zh-CN": "不支持的连接协议：%{scheme}", "en": "Unsupported connection scheme: %{scheme}"},
-  "pg.bad_interval": {"zh-CN": "interval 数据长度应为 16 字节", "en": "interval data must be 16 bytes long"},
-  "pg.bad_numeric": {"zh-CN": "numeric 数据格式不对", "en": "Malformed numeric data"},
-  "pg.numeric_param": {"zh-CN": "暂不支持直接绑定 NUMERIC 参数，请在 SQL 中写成 $1::text::numeric", "en": "NUMERIC parameters cannot be bound directly yet; write $1::text::numeric in the SQL"},
-  "pg.read_column_failed": {"zh-CN": "读取第 %{column} 列（%{ty}）失败：%{error}", "en": "Failed to read column %{column} (%{ty}): %{error}"},
-  "policy.prod_no_where": {"zh-CN": "生产环境：%{keyword} 语句没有 WHERE 条件", "en": "Production: %{keyword} statement without a WHERE clause"},
-  "policy.prod_statement": {"zh-CN": "生产环境：%{keyword} 语句", "en": "Production: %{keyword} statement"},
-  "profile.host_required": {"zh-CN": "主机不能为空", "en": "The host is required"},
-  "profile.name_required": {"zh-CN": "连接名称不能为空", "en": "The connection name is required"},
-  "profile.port_zero": {"zh-CN": "端口不能为 0", "en": "The port cannot be 0"},
-  "profile.timeout_range": {"zh-CN": "连接超时应在 1 到 3600 秒之间", "en": "The connect timeout must be between 1 and 3600 seconds"},
-  "registry.confirm_dir": {"zh-CN": "请先确认客户端库目录", "en": "Confirm the client library directory first"},
-  "registry.dir_not_absolute": {"zh-CN": "客户端库目录必须是绝对路径：%{dir}", "en": "The client library directory must be an absolute path: %{dir}"},
-  "registry.lib_found": {"zh-CN": "找到客户端库目录 %{dir}，确认后即可使用", "en": "Found the client library directory %{dir}; confirm it to use it"},
-  "registry.lib_gone": {"zh-CN": "已确认的目录 %{dir} 中找不到 %{file}，请重新选择", "en": "%{file} is no longer in the confirmed directory %{dir}; choose it again"},
-  "registry.lib_missing": {"zh-CN": "目录 %{dir} 中没有 %{file}", "en": "%{file} is not in the directory %{dir}"},
-  "registry.no_native_lib": {"zh-CN": "%{driver} 驱动不需要原生客户端库", "en": "The %{driver} driver does not need a native client library"},
-  "registry.not_compiled": {"zh-CN": "本程序没有编译 %{driver} 驱动", "en": "This build does not include the %{driver} driver"},
-  "secret.crypto_failed": {"zh-CN": "密码%{what}失败", "en": "Password %{what} failed"},
-  "secret.keyring_delete_failed": {"zh-CN": "删除系统钥匙串中的密码失败：%{error}", "en": "Failed to delete the password from the system keyring: %{error}"},
-  "secret.keyring_read_failed": {"zh-CN": "读取系统钥匙串失败：%{error}", "en": "Failed to read from the system keyring: %{error}"},
-  "secret.keyring_unavailable": {"zh-CN": "系统钥匙串不可用：%{error}", "en": "The system keyring is unavailable: %{error}"},
-  "secret.keyring_write_failed": {"zh-CN": "写入系统钥匙串失败：%{error}", "en": "Failed to write to the system keyring: %{error}"},
-  "secret.master_empty": {"zh-CN": "主密码不能为空", "en": "The master password cannot be empty"},
-  "secret.master_exists": {"zh-CN": "主密码已经设置过", "en": "The master password has already been set"},
-  "secret.master_missing": {"zh-CN": "尚未设置主密码", "en": "No master password has been set"},
-  "secret.master_wrong": {"zh-CN": "主密码错误", "en": "Wrong master password"},
-  "secret.op.decrypt": {"zh-CN": "解密", "en": "decryption"},
-  "secret.op.derive": {"zh-CN": "派生密钥", "en": "key derivation"},
-  "secret.op.encrypt": {"zh-CN": "加密", "en": "encryption"},
-  "server.bad_latest_json": {"zh-CN": "latest.json 格式不对：%{error}", "en": "latest.json is malformed: %{error}"},
-  "server.bad_listen": {"zh-CN": "无效的监听地址：%{value}", "en": "Invalid listen address: %{value}"},
-  "server.bad_version": {"zh-CN": "无效的版本号 %{version}：%{error}", "en": "Invalid version %{version}: %{error}"},
-  "server.bind_failed": {"zh-CN": "无法监听 %{addr}：%{error}", "en": "Cannot listen on %{addr}: %{error}"},
-  "server.data_dir": {"zh-CN": "数据目录：%{dir}", "en": "Data directory: %{dir}"},
-  "server.missing_value": {"zh-CN": "%{arg} 后面缺少参数", "en": "%{arg} needs a value"},
-  "server.new_version": {"zh-CN": "发现新版本 %{version}（当前 %{current}），下载地址：%{url}", "en": "Version %{version} is available (current %{current}); download it from %{url}"},
-  "server.open_url": {"zh-CN": "在浏览器中打开：%{url}", "en": "Open in a browser: %{url}"},
-  "server.start_failed": {"zh-CN": "启动失败：%{error}", "en": "Failed to start: %{error}"},
-  "server.started": {"zh-CN": "DBLens 服务已启动：%{url}", "en": "DBLens server started: %{url}"},
-  "server.token": {"zh-CN": "访问令牌：%{token}", "en": "Access token: %{token}"},
-  "server.unknown_arg": {"zh-CN": "未知参数：%{arg}", "en": "Unknown argument: %{arg}"},
-  "server.update_status": {"zh-CN": "更新源 %{url} 返回 %{status}", "en": "The update source %{url} returned %{status}"},
-  "server.update_unreachable": {"zh-CN": "无法访问更新源 %{url}：%{error}", "en": "Cannot reach the update source %{url}: %{error}"},
-  "server.usage": {"zh-CN": "用法：dblens-server [--listen 地址:端口] [--data-dir 目录] [--web-dir 目录] [--allow-origin 来源]...\n                     [--update-url 地址] [--no-update-check]", "en": "Usage: dblens-server [--listen host:port] [--data-dir dir] [--web-dir dir] [--allow-origin origin]...\n                     [--update-url url] [--no-update-check]"},
-  "session.broken_reconnect": {"zh-CN": "连接已断开，请先重新连接", "en": "The connection is broken; reconnect first"},
-  "session.busy": {"zh-CN": "正在执行，请等待完成或先取消", "en": "A statement is running; wait for it to finish or cancel it first"},
-  "session.disconnected": {"zh-CN": "连接已断开", "en": "The connection is closed"},
-  "session.explain_single": {"zh-CN": "执行计划只能针对一条语句", "en": "An execution plan can only be shown for a single statement"},
-  "session.task_gone": {"zh-CN": "会话任务已退出", "en": "The session task has exited"},
-  "sqlserver.bad_auth": {"zh-CN": "不认识的认证方式：%{value}", "en": "Unknown authentication method: %{value}"},
-  "sqlserver.connection_lost": {"zh-CN": "与 SQL Server 的连接已断开", "en": "The connection to SQL Server was lost"},
-  "sqlserver.windows_auth_only": {"zh-CN": "Windows 认证只能在 Windows 上使用", "en": "Windows authentication is only available on Windows"},
-  "sqlfile.denied": {"zh-CN": "第 %{line} 行的语句被执行策略拒绝，没有执行任何语句：%{reason}\n%{text}", "en": "The statement at line %{line} was denied by the execution policy; nothing was executed: %{reason}\n%{text}"},
-  "sqlfile.history": {"zh-CN": "执行 SQL 文件 %{file}：%{done} 条，失败 %{failed} 条", "en": "Run SQL file %{file}: %{done} statements, %{failed} failed"},
-  "sqlfile.log_failed": {"zh-CN": "第 %{n} 条语句失败（第 %{line} 行）：", "en": "Statement %{n} failed (line %{line}):"},
-  "sqlfile.log_head": {"zh-CN": "连接：%{connection}　schema：%{schema}　文件：%{file}　开始：%{at}", "en": "Connection: %{connection}  Schema: %{schema}  File: %{file}  Started: %{at}"},
-  "sqlfile.log_summary": {"zh-CN": "成功 %{ok} 条，失败 %{failed} 条，影响 %{affected} 行，用时 %{seconds} 秒", "en": "%{ok} succeeded, %{failed} failed, %{affected} rows affected, %{seconds} s"},
-  "store.create_dir_failed": {"zh-CN": "无法创建数据目录 %{dir}：%{error}", "en": "Cannot create the data directory %{dir}: %{error}"},
-  "store.db_error": {"zh-CN": "本地数据库错误：%{error}", "en": "Local database error: %{error}"},
-  "store.no_data_dir": {"zh-CN": "无法确定用户数据目录", "en": "Cannot determine the user data directory"},
-  "store.too_new": {"zh-CN": "本地数据库版本 %{version} 比程序支持的 %{supported} 更新，请升级 DBLens", "en": "The local database version %{version} is newer than this program supports (%{supported}); upgrade DBLens"},
-  "task.no_report": {"zh-CN": "这个任务没有可下载的报告", "en": "This task has no report to download"},
-  "task.no_statement": {"zh-CN": "没有第 %{n} 条失败的语句", "en": "There is no failed statement %{n}"},
-  "task.not_found": {"zh-CN": "任务不存在或已过期：%{id}", "en": "The task does not exist or has expired: %{id}"},
-  "task.not_waiting": {"zh-CN": "任务没有在等待确认", "en": "The task is not waiting for confirmation"},
-  "task.too_many": {"zh-CN": "同时进行的导入和执行任务最多 %{max} 个，请等其他任务结束", "en": "At most %{max} import or execution tasks can run at once; wait for others to finish"},
-  "tls.ca_malformed": {"zh-CN": "CA 证书文件 %{path} 格式错误：%{error}", "en": "The CA certificate file %{path} is malformed: %{error}"},
-  "tls.ca_unreadable": {"zh-CN": "无法读取 CA 证书文件 %{path}：%{error}", "en": "Cannot read the CA certificate file %{path}: %{error}"},
-  "tls.config_error": {"zh-CN": "TLS 配置错误：%{error}", "en": "TLS configuration error: %{error}"},
-  "update.ask_install": {"zh-CN": "现在下载并安装吗？安装完成后程序会自动重启。", "en": "Download and install it now? The program restarts when done."},
-  "update.bad_endpoint": {"zh-CN": "update.json 中的更新源地址无效（%{endpoint}）：%{error}", "en": "Invalid update source in update.json (%{endpoint}): %{error}"},
-  "update.bad_signature": {"zh-CN": "安装包签名校验失败，已取消安装。安装包可能被篡改，或更新源提供的签名不对", "en": "Signature check failed, so the installation was cancelled. The package may have been tampered with, or the update source has a wrong signature"},
-  "update.check_failed": {"zh-CN": "检查更新失败：%{error}", "en": "Checking for updates failed: %{error}"},
-  "update.download_page": {"zh-CN": "请到 %{url} 下载新版本。", "en": "Download the new version from %{url}."},
-  "update.error_with_cause": {"zh-CN": "%{hint}（%{cause}）", "en": "%{hint} (%{cause})"},
-  "update.found": {"zh-CN": "发现新版本 %{version}（当前 %{current}）。", "en": "Version %{version} is available (current %{current})."},
-  "update.install_button": {"zh-CN": "下载并安装", "en": "Download and install"},
-  "update.install_failed": {"zh-CN": "安装更新失败：%{error}", "en": "Installing the update failed: %{error}"},
-  "update.later_button": {"zh-CN": "以后再说", "en": "Later"},
-  "update.needs_https": {"zh-CN": "更新源必须使用 https 地址", "en": "The update source must use an https address"},
-  "update.notes": {"zh-CN": "更新说明：", "en": "Release notes: "},
-  "update.unreachable": {"zh-CN": "无法连接更新源，请检查网络或 update.json 中的地址", "en": "Cannot reach the update source; check the network or the address in update.json"},
-  "update.up_to_date": {"zh-CN": "已是最新版本（%{version}）。", "en": "You have the latest version (%{version})."},
-  "variant.dameng": {"zh-CN": "达梦 DM", "en": "DM (Dameng)"},
-  "variant.highgo": {"zh-CN": "瀚高 HighGo", "en": "HighGo"},
-  "variant.kingbase": {"zh-CN": "人大金仓 KingbaseES", "en": "KingbaseES"},
-  "variant.oceanbase": {"zh-CN": "OceanBase（MySQL 模式）", "en": "OceanBase (MySQL mode)"},
-  "variant.polardb": {"zh-CN": "PolarDB（MySQL 版）", "en": "PolarDB for MySQL"}
+  "api.bad_format": {
+    "zh-CN": "不支持的报告格式：%{format}",
+    "en": "Unsupported report format: %{format}"
+  },
+  "api.bad_message": {
+    "zh-CN": "无法解析的消息：%{error}",
+    "en": "Cannot parse the message: %{error}"
+  },
+  "api.bad_setting_key": {
+    "zh-CN": "设置项名称不合法：%{key}",
+    "en": "Invalid setting name: %{key}"
+  },
+  "api.bad_token": {
+    "zh-CN": "缺少或错误的访问令牌",
+    "en": "Missing or wrong access token"
+  },
+  "api.bad_view_kind": {
+    "zh-CN": "kind 只能是 views 或 materialized_views",
+    "en": "kind must be views or materialized_views"
+  },
+  "api.origin_denied": {
+    "zh-CN": "不允许的来源（Origin）",
+    "en": "Origin not allowed"
+  },
+  "api.setting_too_large": {
+    "zh-CN": "设置项 %{key} 的值超过 64 KiB",
+    "en": "The value of setting %{key} exceeds 64 KiB"
+  },
+  "api.still_running": {
+    "zh-CN": "上一段 SQL 还没有执行完",
+    "en": "The previous SQL has not finished yet"
+  },
+  "app.name": {
+    "zh-CN": "DBLens 数洞",
+    "en": "DBLens"
+  },
+  "changes.bad_key": {
+    "zh-CN": "改动的行标识与表 %{table} 的主键（或唯一键）不一致",
+    "en": "The row identity of a change does not match the primary (or unique) key of table %{table}"
+  },
+  "changes.conflict": {
+    "zh-CN": "第 %{n} 个改动没有影响任何行：这一行已被修改或删除，请刷新后再改",
+    "en": "Change %{n} affected no rows: the row has been modified or deleted; refresh and try again"
+  },
+  "changes.empty_update": {
+    "zh-CN": "修改中没有改动的列",
+    "en": "An update has no changed columns"
+  },
+  "changes.generated_column": {
+    "zh-CN": "列 %{column} 是生成列，不能写入",
+    "en": "Column %{column} is generated and cannot be written"
+  },
+  "changes.in_transaction": {
+    "zh-CN": "会话中有未提交的事务，不能提交编辑",
+    "en": "The session has an uncommitted transaction; edits cannot be committed"
+  },
+  "changes.no_key": {
+    "zh-CN": "表 %{table} 没有主键或非空的唯一键，不能编辑",
+    "en": "Table %{table} has no primary key or non-null unique key and cannot be edited"
+  },
+  "changes.not_unique": {
+    "zh-CN": "第 %{n} 个改动影响了 %{count} 行：行标识不唯一",
+    "en": "Change %{n} affected %{count} rows: the row identity is not unique"
+  },
+  "changes.rolled_back": {
+    "zh-CN": "已回滚（同一次提交中的其他改动失败）",
+    "en": "Rolled back (another change in the same commit failed)"
+  },
+  "changes.unknown_column": {
+    "zh-CN": "列 %{column} 不存在",
+    "en": "Column %{column} does not exist"
+  },
+  "compare.apply_missing": {
+    "zh-CN": "找不到 %{name}：模型中的表与比对时不同，请重新比对",
+    "en": "%{name} was not found: the model table differs from the compared one; compare again"
+  },
+  "compare.changed": {
+    "zh-CN": "比对之后结构已有变化，请重新比对",
+    "en": "The schemas changed after the comparison; compare again"
+  },
+  "compare.family_mismatch": {
+    "zh-CN": "两边的数据库类型不同（%{source} 与 %{target}），不能比对",
+    "en": "Cannot compare different database types (%{source} and %{target})"
+  },
+  "compare.rebuild_refused": {
+    "zh-CN": "表 %{table} 不能重建：%{reason}",
+    "en": "Table %{table} cannot be rebuilt: %{reason}"
+  },
+  "ddl.truncated": {
+    "zh-CN": "DDL 超过 64 KB，以上只是开头部分",
+    "en": "The DDL exceeds 64 KB; only the beginning is shown above"
+  },
+  "ddl.unsupported": {
+    "zh-CN": "该数据库不支持查看 %{kind} 的 DDL",
+    "en": "This database does not support viewing the DDL of %{kind}"
+  },
+  "design.bad_rename": {
+    "zh-CN": "列 %{name} 的原名不对",
+    "en": "Column %{name} has an invalid original name"
+  },
+  "design.columns_empty": {
+    "zh-CN": "至少要选一列",
+    "en": "Select at least one column"
+  },
+  "design.conflict": {
+    "zh-CN": "表结构已被修改，请刷新后重新编辑",
+    "en": "The table structure has been changed; reload and edit again"
+  },
+  "design.count_mismatch": {
+    "zh-CN": "行数不一致：原表 %{source} 行，新表 %{target} 行",
+    "en": "Row counts differ: %{source} in the old table, %{target} in the new one"
+  },
+  "design.duplicate": {
+    "zh-CN": "名称 %{name} 重复",
+    "en": "Duplicate name %{name}"
+  },
+  "design.duplicate_column": {
+    "zh-CN": "列 %{column} 重复",
+    "en": "Column %{column} is listed twice"
+  },
+  "design.expression_empty": {
+    "zh-CN": "表达式不能为空",
+    "en": "Expression is required"
+  },
+  "design.has_errors": {
+    "zh-CN": "设计中有错误，请先修正",
+    "en": "The design has errors; fix them first"
+  },
+  "design.name_empty": {
+    "zh-CN": "名称不能为空",
+    "en": "Name is required"
+  },
+  "design.no_changes": {
+    "zh-CN": "没有改动",
+    "en": "There are no changes"
+  },
+  "design.no_columns": {
+    "zh-CN": "表至少要有一列",
+    "en": "A table needs at least one column"
+  },
+  "design.pk_not_null": {
+    "zh-CN": "主键列 %{column} 将设为 NOT NULL",
+    "en": "Primary key column %{column} will be set to NOT NULL"
+  },
+  "design.rebuild.dependent_views": {
+    "zh-CN": "有视图依赖这张表（%{views}），删除旧表会失败；请先处理这些视图",
+    "en": "Views depend on this table (%{views}); dropping the old table would fail. Deal with these views first"
+  },
+  "design.rebuild.no_writes": {
+    "zh-CN": "重建期间不要写入这张表：复制数据之后写入的内容会丢失",
+    "en": "Do not write to this table during the rebuild: data written after the copy will be lost"
+  },
+  "design.rebuild.partitioned": {
+    "zh-CN": "分区表不能重建",
+    "en": "A partitioned table cannot be rebuilt"
+  },
+  "design.rebuild.referenced_column": {
+    "zh-CN": "表 %{table} 的外键引用了列 %{column}，不能删除它",
+    "en": "A foreign key of table %{table} references column %{column}; it cannot be dropped"
+  },
+  "design.rebuild.storage": {
+    "zh-CN": "除表空间外的存储参数不会保留",
+    "en": "Storage parameters other than the tablespace are not kept"
+  },
+  "design.rebuild.views_recompiled": {
+    "zh-CN": "依赖这张表的视图（%{views}）会暂时失效，最后重新编译",
+    "en": "Views depending on this table (%{views}) become invalid for a while and are recompiled at the end"
+  },
+  "design.ref_columns_count": {
+    "zh-CN": "引用列的个数要与外键列相同",
+    "en": "The referenced columns must match the foreign key columns in number"
+  },
+  "design.ref_table_empty": {
+    "zh-CN": "请选择引用的表",
+    "en": "Select the referenced table"
+  },
+  "design.type_empty": {
+    "zh-CN": "类型不能为空",
+    "en": "Type is required"
+  },
+  "design.unknown_column": {
+    "zh-CN": "列 %{column} 不存在",
+    "en": "Column %{column} does not exist"
+  },
+  "design.unnamed_constraint": {
+    "zh-CN": "约束没有名字，无法删除",
+    "en": "The constraint has no name and cannot be dropped"
+  },
+  "design.unsupported.clustered_pk": {
+    "zh-CN": "TiDB 的聚簇主键不能直接删除或更换",
+    "en": "TiDB cannot drop or replace a clustered primary key in place"
+  },
+  "design.unsupported.generated": {
+    "zh-CN": "该库不能修改已有列 %{column} 的生成表达式",
+    "en": "This database cannot change the generation expression of existing column %{column}"
+  },
+  "design.unsupported.identity": {
+    "zh-CN": "该库不能改变已有列 %{column} 的自增属性",
+    "en": "This database cannot change the auto-increment of existing column %{column}"
+  },
+  "design.unsupported.reorder": {
+    "zh-CN": "该库不能调整已有列的顺序或在指定位置加列",
+    "en": "This database cannot reorder existing columns or add a column at a given position"
+  },
+  "design.unsupported.serial": {
+    "zh-CN": "列 %{column} 是 serial 列，不能直接改变自增属性",
+    "en": "Column %{column} is a serial column; its auto-increment cannot be changed directly"
+  },
+  "desktop.bind_failed": {
+    "zh-CN": "无法监听本机端口：%{error}",
+    "en": "Cannot listen on a local port: %{error}"
+  },
+  "desktop.log_dir_failed": {
+    "zh-CN": "无法创建日志目录 %{dir}：%{error}",
+    "en": "Cannot create the log directory %{dir}: %{error}"
+  },
+  "desktop.no_main_window": {
+    "zh-CN": "主窗口不存在",
+    "en": "The main window does not exist"
+  },
+  "dm.alloc_env_failed": {
+    "zh-CN": "dpi_alloc_env 失败",
+    "en": "dpi_alloc_env failed"
+  },
+  "dm.cancel_failed": {
+    "zh-CN": "dpi_cancel 失败，返回码 %{code}",
+    "en": "dpi_cancel failed with return code %{code}"
+  },
+  "dm.load_failed": {
+    "zh-CN": "加载 %{path} 失败：%{error}",
+    "en": "Failed to load %{path}: %{error}"
+  },
+  "dm.missing_functions": {
+    "zh-CN": "缺少 DPI 函数 %{functions}，达梦客户端版本可能过旧",
+    "en": "Missing DPI functions %{functions}; the DM client may be too old"
+  },
+  "dm.no_diagnostics": {
+    "zh-CN": "调用 DPI 失败，且无法读取错误信息",
+    "en": "A DPI call failed and its error information could not be read"
+  },
+  "dm.nul_in_string": {
+    "zh-CN": "字符串中不能包含 \\0 字符",
+    "en": "Strings cannot contain the \\0 character"
+  },
+  "dml.no_insertable_columns": {
+    "zh-CN": "没有可插入的列：%{table}",
+    "en": "No insertable columns: %{table}"
+  },
+  "document.bad_image": {
+    "zh-CN": "ER 图 %{name} 的图片不是 PNG",
+    "en": "The image of ER diagram %{name} is not a PNG"
+  },
+  "document.bad_output": {
+    "zh-CN": "不能写到这个位置：%{path}",
+    "en": "Cannot write to this location: %{path}"
+  },
+  "document.bad_reference": {
+    "zh-CN": "样式来源不是有效的 .docx 文件：%{error}",
+    "en": "The style reference is not a valid .docx file: %{error}"
+  },
+  "document.read_failed": {
+    "zh-CN": "读文件 %{path} 失败：%{error}",
+    "en": "Failed to read %{path}: %{error}"
+  },
+  "document.template_error": {
+    "zh-CN": "模板第 %{line} 行有错：%{error}",
+    "en": "Template error at line %{line}: %{error}"
+  },
+  "document.write_failed": {
+    "zh-CN": "写文档失败：%{error}",
+    "en": "Failed to write the document: %{error}"
+  },
+  "document.xlsx_dictionary_only": {
+    "zh-CN": "xlsx 只能用于数据字典",
+    "en": "xlsx is only available for data dictionaries"
+  },
+  "driver.connect_timeout": {
+    "zh-CN": "连接超时（%{seconds} 秒）",
+    "en": "Connection timed out (%{seconds} s)"
+  },
+  "driver.connection_closed": {
+    "zh-CN": "连接已断开：%{error}",
+    "en": "Connection closed: %{error}"
+  },
+  "driver.lob_read_failed": {
+    "zh-CN": "读取 LOB 失败：%{error}",
+    "en": "Failed to read LOB: %{error}"
+  },
+  "driver.no_result": {
+    "zh-CN": "%{sql} 没有返回结果",
+    "en": "%{sql} returned no result"
+  },
+  "driver.result_unread": {
+    "zh-CN": "上一条语句的结果尚未读完",
+    "en": "The result of the previous statement has not been fully read"
+  },
+  "driver.unbindable_value": {
+    "zh-CN": "该类型的值不能作为参数绑定：%{value}",
+    "en": "This value cannot be bound as a parameter: %{value}"
+  },
+  "driver.worker_gone": {
+    "zh-CN": "连接工作线程已退出",
+    "en": "The connection worker thread has exited"
+  },
+  "driver.worker_spawn_failed": {
+    "zh-CN": "无法创建连接工作线程：%{error}",
+    "en": "Cannot start the connection worker thread: %{error}"
+  },
+  "error.kind.auth": {
+    "zh-CN": "认证失败：%{message}",
+    "en": "Authentication failed: %{message}"
+  },
+  "error.kind.busy": {
+    "zh-CN": "会话正忙：%{message}",
+    "en": "Session busy: %{message}"
+  },
+  "error.kind.cancelled": {
+    "zh-CN": "执行已取消",
+    "en": "Execution cancelled"
+  },
+  "error.kind.connect": {
+    "zh-CN": "连接失败：%{message}",
+    "en": "Connection failed: %{message}"
+  },
+  "error.kind.denied": {
+    "zh-CN": "执行被拒绝：%{reason}",
+    "en": "Execution denied: %{reason}"
+  },
+  "error.kind.driver_unavailable": {
+    "zh-CN": "驱动不可用：%{hint}",
+    "en": "Driver unavailable: %{hint}"
+  },
+  "error.kind.internal": {
+    "zh-CN": "内部错误：%{message}",
+    "en": "Internal error: %{message}"
+  },
+  "error.kind.invalid": {
+    "zh-CN": "无效的输入：%{message}",
+    "en": "Invalid input: %{message}"
+  },
+  "error.kind.locked": {
+    "zh-CN": "密码库已锁定，请先输入主密码",
+    "en": "The password vault is locked; enter the master password first"
+  },
+  "error.kind.not_found": {
+    "zh-CN": "找不到%{what}",
+    "en": "Not found: %{what}"
+  },
+  "error.kind.sql": {
+    "zh-CN": "SQL 错误 [%{code}]：%{message}",
+    "en": "SQL error [%{code}]: %{message}"
+  },
+  "error.kind.timeout": {
+    "zh-CN": "执行超时",
+    "en": "Execution timed out"
+  },
+  "export.bad_delimiter": {
+    "zh-CN": "CSV 分隔符只能是逗号、制表符或分号",
+    "en": "The CSV delimiter must be a comma, tab or semicolon"
+  },
+  "export.bad_path": {
+    "zh-CN": "保存路径无效：%{path}（需要绝对路径，且所在目录存在）",
+    "en": "Invalid save path: %{path} (it must be absolute and its folder must exist)"
+  },
+  "export.binary_cell": {
+    "zh-CN": "二进制 %{bytes} 字节",
+    "en": "binary, %{bytes} bytes"
+  },
+  "export.no_file": {
+    "zh-CN": "这个导出任务没有可下载的文件",
+    "en": "This export has no file to download"
+  },
+  "export.no_table": {
+    "zh-CN": "INSERT 语句需要目标表名",
+    "en": "INSERT statements need a target table name"
+  },
+  "export.not_found": {
+    "zh-CN": "导出任务 %{id} 不存在或已过期",
+    "en": "Export %{id} does not exist or has expired"
+  },
+  "export.not_query": {
+    "zh-CN": "只能导出单条查询语句的结果",
+    "en": "Only the result of a single query can be exported"
+  },
+  "export.path_not_allowed": {
+    "zh-CN": "浏览器模式不能指定保存路径",
+    "en": "A save path cannot be given in browser mode"
+  },
+  "export.too_many": {
+    "zh-CN": "同时最多进行 %{max} 个导出任务，请等其他任务完成",
+    "en": "At most %{max} exports can run at once; wait for one to finish"
+  },
+  "export.write_failed": {
+    "zh-CN": "写导出文件失败：%{error}",
+    "en": "Failed to write the export file: %{error}"
+  },
+  "favorite.folder_has_no_sql": {
+    "zh-CN": "文件夹不能有 SQL",
+    "en": "A folder has no SQL"
+  },
+  "favorite.move_into_self": {
+    "zh-CN": "不能把文件夹移到它自己或它的子文件夹中",
+    "en": "Cannot move a folder into itself or one of its subfolders"
+  },
+  "favorite.name_required": {
+    "zh-CN": "名称不能为空",
+    "en": "The name is required"
+  },
+  "favorite.parent_not_folder": {
+    "zh-CN": "只能放在文件夹中",
+    "en": "Favorites can only be placed in a folder"
+  },
+  "favorite.sql_required": {
+    "zh-CN": "收藏的 SQL 不能为空",
+    "en": "The SQL of a favorite is required"
+  },
+  "generate.needs_primary_key": {
+    "zh-CN": "表 %{table} 没有主键，无法生成按主键定位的语句",
+    "en": "Table %{table} has no primary key, so a statement that locates rows by primary key cannot be generated"
+  },
+  "generate.no_relations": {
+    "zh-CN": "表 %{table} 没有可以连接的外键",
+    "en": "Table %{table} has no foreign keys to join"
+  },
+  "generate.select_only": {
+    "zh-CN": "视图只能生成 SELECT",
+    "en": "Only SELECT can be generated for a view"
+  },
+  "import.bad_delimiter": {
+    "zh-CN": "分隔符必须是 ASCII 字符：%{delimiter}",
+    "en": "The delimiter must be an ASCII character: %{delimiter}"
+  },
+  "import.bad_path": {
+    "zh-CN": "文件不存在：%{path}",
+    "en": "File not found: %{path}"
+  },
+  "import.bad_source_column": {
+    "zh-CN": "文件没有第 %{n} 列",
+    "en": "The file has no column %{n}"
+  },
+  "import.bad_value": {
+    "zh-CN": "列 %{column} 的值“%{value}”不能转换为 %{type_name}",
+    "en": "Value \"%{value}\" in column %{column} cannot be converted to %{type_name}"
+  },
+  "import.duplicate_target": {
+    "zh-CN": "同一个表列被映射了多次",
+    "en": "A table column is mapped more than once"
+  },
+  "import.history": {
+    "zh-CN": "导入 %{file} → %{table}",
+    "en": "Import %{file} → %{table}"
+  },
+  "import.new_table_append": {
+    "zh-CN": "导入到新表只能追加",
+    "en": "Importing into a new table can only append"
+  },
+  "import.no_columns": {
+    "zh-CN": "没有要导入的列",
+    "en": "No columns to import"
+  },
+  "import.no_sheet": {
+    "zh-CN": "工作表不存在：%{sheet}",
+    "en": "Worksheet not found: %{sheet}"
+  },
+  "import.no_upload": {
+    "zh-CN": "上传的文件不存在或已过期：%{id}",
+    "en": "The uploaded file does not exist or has expired: %{id}"
+  },
+  "import.read_failed": {
+    "zh-CN": "读取文件失败：%{error}",
+    "en": "Failed to read the file: %{error}"
+  },
+  "import.report_error": {
+    "zh-CN": "错误",
+    "en": "Error"
+  },
+  "import.report_line": {
+    "zh-CN": "行号",
+    "en": "Line"
+  },
+  "import.row_width": {
+    "zh-CN": "一行有 %{actual} 个值，应为 %{expected} 个",
+    "en": "A row has %{actual} values; expected %{expected}"
+  },
+  "import.too_large": {
+    "zh-CN": "文件超过上传上限 %{limit} MB（可在设置中修改）",
+    "en": "The file exceeds the upload limit of %{limit} MB (can be changed in settings)"
+  },
+  "import.upload_failed": {
+    "zh-CN": "保存上传的文件失败：%{error}",
+    "en": "Failed to save the uploaded file: %{error}"
+  },
+  "import.upsert_needs_key": {
+    "zh-CN": "按主键更新要求表 %{table} 有主键，且主键列都已映射",
+    "en": "Updating by primary key requires table %{table} to have a primary key with all its columns mapped"
+  },
+  "internal.lock_poisoned": {
+    "zh-CN": "内部锁已损坏（%{lock}）",
+    "en": "Internal lock poisoned (%{lock})"
+  },
+  "internal.task_failed": {
+    "zh-CN": "后台任务异常退出（%{task}）：%{error}",
+    "en": "Background task failed (%{task}): %{error}"
+  },
+  "lint.clause_duplicate": {
+    "zh-CN": "条款编号重复：%{id}",
+    "en": "Duplicate clause id: %{id}"
+  },
+  "lint.clause_empty": {
+    "zh-CN": "条款的编号和文字不能为空",
+    "en": "A clause needs an id and text"
+  },
+  "lint.clause_not_reviewable": {
+    "zh-CN": "该条款不需要人工结论",
+    "en": "This clause does not take a manual verdict"
+  },
+  "lint.fix.add_column": {
+    "zh-CN": "增加该字段",
+    "en": "Add the column"
+  },
+  "lint.fix.add_comment": {
+    "zh-CN": "补充注释",
+    "en": "Add a comment"
+  },
+  "lint.fix.add_index": {
+    "zh-CN": "给外键列建索引",
+    "en": "Index the foreign-key columns"
+  },
+  "lint.fix.add_primary_key": {
+    "zh-CN": "增加主键",
+    "en": "Add a primary key"
+  },
+  "lint.fix.date_type": {
+    "zh-CN": "改用日期时间类型",
+    "en": "Use a date/time type"
+  },
+  "lint.fix.decimal_precision": {
+    "zh-CN": "指定精度和小数位",
+    "en": "Specify precision and scale"
+  },
+  "lint.fix.drop_backup": {
+    "zh-CN": "清理备份表",
+    "en": "Clean up the backup table"
+  },
+  "lint.fix.drop_foreign_key": {
+    "zh-CN": "去掉外键，改由应用保证",
+    "en": "Remove the foreign key; enforce in the app"
+  },
+  "lint.fix.drop_index": {
+    "zh-CN": "去掉该索引",
+    "en": "Remove the index"
+  },
+  "lint.fix.drop_primary_key": {
+    "zh-CN": "去掉主键",
+    "en": "Remove the primary key"
+  },
+  "lint.fix.drop_reserved": {
+    "zh-CN": "去掉预留字段",
+    "en": "Remove the reserved column"
+  },
+  "lint.fix.drop_trigger": {
+    "zh-CN": "去掉触发器",
+    "en": "Remove the trigger"
+  },
+  "lint.fix.english_name": {
+    "zh-CN": "改用英文名",
+    "en": "Use an English name"
+  },
+  "lint.fix.enum_type": {
+    "zh-CN": "改用参数表或编码",
+    "en": "Use a parameter table or code"
+  },
+  "lint.fix.fk_type": {
+    "zh-CN": "统一两端字段类型",
+    "en": "Match the column type on both sides"
+  },
+  "lint.fix.integer_type": {
+    "zh-CN": "改用整数类型",
+    "en": "Use an integer type"
+  },
+  "lint.fix.lob_table": {
+    "zh-CN": "大字段分离到单独的表",
+    "en": "Move large columns to a separate table"
+  },
+  "lint.fix.long_type": {
+    "zh-CN": "改用其他类型",
+    "en": "Use another type"
+  },
+  "lint.fix.money_type": {
+    "zh-CN": "改用定点数类型",
+    "en": "Use a fixed-point type"
+  },
+  "lint.fix.no_auto_increment": {
+    "zh-CN": "去掉自增",
+    "en": "Remove auto-increment"
+  },
+  "lint.fix.not_null": {
+    "zh-CN": "给字段加非空约束",
+    "en": "Make columns NOT NULL where appropriate"
+  },
+  "lint.fix.ordered_key": {
+    "zh-CN": "改用有序或趋势增长的字段作主键",
+    "en": "Use an ordered or increasing key"
+  },
+  "lint.fix.rename": {
+    "zh-CN": "改名以符合规范",
+    "en": "Rename to follow the rule"
+  },
+  "lint.fix.review_object": {
+    "zh-CN": "评估是否必要",
+    "en": "Review whether it is needed"
+  },
+  "lint.fix.same_name": {
+    "zh-CN": "统一字段类型",
+    "en": "Unify the column type"
+  },
+  "lint.fix.shorten": {
+    "zh-CN": "缩短名称",
+    "en": "Shorten the name"
+  },
+  "lint.fix.shorten_varchar": {
+    "zh-CN": "缩短字段长度或拆分",
+    "en": "Shorten or split the columns"
+  },
+  "lint.fix.split_table": {
+    "zh-CN": "拆分表",
+    "en": "Split the table"
+  },
+  "lint.fix.synonym": {
+    "zh-CN": "统一字段命名",
+    "en": "Unify the column naming"
+  },
+  "lint.fix.varchar": {
+    "zh-CN": "改用 VARCHAR",
+    "en": "Use VARCHAR"
+  },
+  "lint.issue.all_nullable": {
+    "zh-CN": "所有字段都可空",
+    "en": "Every column is nullable"
+  },
+  "lint.issue.auto_increment": {
+    "zh-CN": "字段用了自增",
+    "en": "Column is auto-increment"
+  },
+  "lint.issue.backup_table": {
+    "zh-CN": "疑似残留的备份表",
+    "en": "Looks like a leftover backup table"
+  },
+  "lint.issue.bitmap_index": {
+    "zh-CN": "位图索引",
+    "en": "Bitmap index"
+  },
+  "lint.issue.char_bytes": {
+    "zh-CN": "字符型字段累加 %{total} 字节，超过 %{max}",
+    "en": "Character columns total %{total} bytes, over %{max}"
+  },
+  "lint.issue.char_type": {
+    "zh-CN": "字段类型 %{native} 不宜使用",
+    "en": "Column type %{native} is discouraged"
+  },
+  "lint.issue.charset": {
+    "zh-CN": "对象名应由字母、数字、下划线组成，以字母开头",
+    "en": "Object name should use letters, digits and underscores and start with a letter"
+  },
+  "lint.issue.comment_is_name": {
+    "zh-CN": "注释和字段名相同",
+    "en": "Comment is the same as the column name"
+  },
+  "lint.issue.date_as_string": {
+    "zh-CN": "日期时间字段用了字符型",
+    "en": "Date/time column uses a string type"
+  },
+  "lint.issue.dblink": {
+    "zh-CN": "用了 DBLINK",
+    "en": "Uses a DBLINK"
+  },
+  "lint.issue.decimal_precision": {
+    "zh-CN": "小数类型未指定精度",
+    "en": "Decimal type has no precision"
+  },
+  "lint.issue.enum_type": {
+    "zh-CN": "字段用了 ENUM/SET 类型",
+    "en": "Column uses an ENUM/SET type"
+  },
+  "lint.issue.every_column_indexed": {
+    "zh-CN": "几乎每列都建了单列索引",
+    "en": "Nearly every column has its own index"
+  },
+  "lint.issue.fk_type": {
+    "zh-CN": "与 %{table}.%{column} 类型不一致（%{own} / %{other}）",
+    "en": "Type differs from %{table}.%{column} (%{own} / %{other})"
+  },
+  "lint.issue.fk_without_index": {
+    "zh-CN": "外键列 %{columns} 没有索引",
+    "en": "Foreign-key columns %{columns} have no index"
+  },
+  "lint.issue.foreign_key": {
+    "zh-CN": "外键指向 %{table}",
+    "en": "Foreign key references %{table}"
+  },
+  "lint.issue.function_index": {
+    "zh-CN": "函数索引",
+    "en": "Function index"
+  },
+  "lint.issue.has_index": {
+    "zh-CN": "不应建索引",
+    "en": "Should not create indexes"
+  },
+  "lint.issue.has_primary_key": {
+    "zh-CN": "不应建主键",
+    "en": "Should not define a primary key"
+  },
+  "lint.issue.index_columns": {
+    "zh-CN": "组合索引有 %{count} 列，超过 %{max}",
+    "en": "Composite index has %{count} columns, over %{max}"
+  },
+  "lint.issue.index_covered": {
+    "zh-CN": "索引被 %{by} 覆盖",
+    "en": "Index is covered by %{by}"
+  },
+  "lint.issue.index_is_primary_key": {
+    "zh-CN": "索引与主键重复",
+    "en": "Index duplicates the primary key"
+  },
+  "lint.issue.index_on_lob": {
+    "zh-CN": "索引建在大字段 %{column} 上",
+    "en": "Index is on large column %{column}"
+  },
+  "lint.issue.integer_as_decimal": {
+    "zh-CN": "整数用了带小数的类型",
+    "en": "Integer uses a decimal type"
+  },
+  "lint.issue.lob": {
+    "zh-CN": "字段用了大对象类型 %{native}",
+    "en": "Column uses large-object type %{native}"
+  },
+  "lint.issue.long_type": {
+    "zh-CN": "字段用了 LONG 类型",
+    "en": "Column uses the LONG type"
+  },
+  "lint.issue.missing_column": {
+    "zh-CN": "缺少必备字段 %{column}",
+    "en": "Missing required column %{column}"
+  },
+  "lint.issue.money_float": {
+    "zh-CN": "金额类字段用了浮点类型",
+    "en": "Monetary column uses a floating-point type"
+  },
+  "lint.issue.no_column_comment": {
+    "zh-CN": "字段没有注释",
+    "en": "Column has no comment"
+  },
+  "lint.issue.no_primary_key": {
+    "zh-CN": "表没有主键",
+    "en": "Table has no primary key"
+  },
+  "lint.issue.no_table_comment": {
+    "zh-CN": "表没有注释",
+    "en": "Table has no comment"
+  },
+  "lint.issue.not_lower": {
+    "zh-CN": "名称含大写字母",
+    "en": "Name contains uppercase letters"
+  },
+  "lint.issue.not_upper": {
+    "zh-CN": "名称含小写字母",
+    "en": "Name contains lowercase letters"
+  },
+  "lint.issue.pinyin": {
+    "zh-CN": "名称疑似汉语拼音",
+    "en": "Name looks like Hanyu Pinyin"
+  },
+  "lint.issue.pk_auto_increment": {
+    "zh-CN": "主键用了自增列",
+    "en": "Primary key uses an auto-increment column"
+  },
+  "lint.issue.prefix": {
+    "zh-CN": "名称应以 %{prefix} 开头",
+    "en": "Name should start with %{prefix}"
+  },
+  "lint.issue.quoted": {
+    "zh-CN": "名称需要加引号才能引用",
+    "en": "Name must be quoted to be used"
+  },
+  "lint.issue.reserved": {
+    "zh-CN": "名称是保留字",
+    "en": "Name is a reserved word"
+  },
+  "lint.issue.reserved_column": {
+    "zh-CN": "疑似预留字段",
+    "en": "Looks like a reserved placeholder column"
+  },
+  "lint.issue.routine": {
+    "zh-CN": "自定义函数或存储过程",
+    "en": "Custom function or procedure"
+  },
+  "lint.issue.same_name_types": {
+    "zh-CN": "同名字段类型不一致：%{types}",
+    "en": "Same-named columns differ in type: %{types}"
+  },
+  "lint.issue.sequence": {
+    "zh-CN": "序列",
+    "en": "Sequence"
+  },
+  "lint.issue.synonym": {
+    "zh-CN": "字段 %{columns} 注释相同，疑似同义异名",
+    "en": "Columns %{columns} share a comment; possible synonyms"
+  },
+  "lint.issue.temporal_suffix": {
+    "zh-CN": "名称应以 %{suffix} 结尾",
+    "en": "Name should end with %{suffix}"
+  },
+  "lint.issue.too_long": {
+    "zh-CN": "名称长 %{len}，超过 %{max}",
+    "en": "Name length %{len} exceeds %{max}"
+  },
+  "lint.issue.too_many_columns": {
+    "zh-CN": "字段数 %{count}，达到或超过 %{max}",
+    "en": "%{count} columns, at or above %{max}"
+  },
+  "lint.issue.too_many_indexes": {
+    "zh-CN": "索引数 %{count}，超过 %{max}",
+    "en": "%{count} indexes exceed %{max}"
+  },
+  "lint.issue.trigger": {
+    "zh-CN": "表上有触发器",
+    "en": "Table has a trigger"
+  },
+  "lint.issue.varchar_max": {
+    "zh-CN": "有 %{count} 个长度不小于 %{len} 的超长字段，超过 %{max}",
+    "en": "%{count} oversized columns of length %{len}+ exceed %{max}"
+  },
+  "lint.issue.view": {
+    "zh-CN": "视图",
+    "en": "View"
+  },
+  "lint.not_applicable": {
+    "zh-CN": "规则不适用于当前数据库",
+    "en": "The rule does not apply to this database"
+  },
+  "lint.not_builtin": {
+    "zh-CN": "不是内置规范，不能恢复默认",
+    "en": "Not a built-in ruleset; cannot reset"
+  },
+  "lint.report.clause": {
+    "zh-CN": "条款",
+    "en": "Clause"
+  },
+  "lint.report.clause_results": {
+    "zh-CN": "条款结论",
+    "en": "Clause results"
+  },
+  "lint.report.generated": {
+    "zh-CN": "生成时间",
+    "en": "Generated"
+  },
+  "lint.report.issue_details": {
+    "zh-CN": "问题明细",
+    "en": "Issue details"
+  },
+  "lint.report.issues": {
+    "zh-CN": "问题",
+    "en": "Issues"
+  },
+  "lint.report.manual_list": {
+    "zh-CN": "人工确认清单",
+    "en": "Manual review list"
+  },
+  "lint.report.message": {
+    "zh-CN": "问题",
+    "en": "Problem"
+  },
+  "lint.report.no_issues": {
+    "zh-CN": "未发现问题",
+    "en": "No issues found"
+  },
+  "lint.report.object": {
+    "zh-CN": "检查对象",
+    "en": "Target"
+  },
+  "lint.report.object_col": {
+    "zh-CN": "对象",
+    "en": "Object"
+  },
+  "lint.report.pass_rate": {
+    "zh-CN": "条款通过率",
+    "en": "Clause pass rate"
+  },
+  "lint.report.reason": {
+    "zh-CN": "说明",
+    "en": "Note"
+  },
+  "lint.report.reviewer": {
+    "zh-CN": "检查人",
+    "en": "Reviewer"
+  },
+  "lint.report.ruleset": {
+    "zh-CN": "所用规范",
+    "en": "Ruleset"
+  },
+  "lint.report.suggestion": {
+    "zh-CN": "建议",
+    "en": "Suggestion"
+  },
+  "lint.report.summary": {
+    "zh-CN": "统计",
+    "en": "Summary"
+  },
+  "lint.report.title": {
+    "zh-CN": "数据库设计规范检查报告",
+    "en": "Database Design Lint Report"
+  },
+  "lint.report.verdict": {
+    "zh-CN": "结论",
+    "en": "Verdict"
+  },
+  "lint.rule_unknown": {
+    "zh-CN": "未知的规则：%{id}",
+    "en": "Unknown rule: %{id}"
+  },
+  "lint.ruleset_missing": {
+    "zh-CN": "规范 %{id}",
+    "en": "Ruleset %{id}"
+  },
+  "lint.ruleset_name_empty": {
+    "zh-CN": "规范名称不能为空",
+    "en": "The ruleset name cannot be empty"
+  },
+  "lint.run_missing": {
+    "zh-CN": "检查记录 %{id}",
+    "en": "Lint run %{id}"
+  },
+  "lint.section.column": {
+    "zh-CN": "字段",
+    "en": "Column"
+  },
+  "lint.section.consistency": {
+    "zh-CN": "一致性",
+    "en": "Consistency"
+  },
+  "lint.section.constraint": {
+    "zh-CN": "约束",
+    "en": "Constraint"
+  },
+  "lint.section.design": {
+    "zh-CN": "设计",
+    "en": "Design"
+  },
+  "lint.section.distribution": {
+    "zh-CN": "分布式",
+    "en": "Distribution"
+  },
+  "lint.section.index": {
+    "zh-CN": "索引",
+    "en": "Index"
+  },
+  "lint.section.naming": {
+    "zh-CN": "命名",
+    "en": "Naming"
+  },
+  "lint.section.primary_key": {
+    "zh-CN": "主键",
+    "en": "Primary key"
+  },
+  "lint.section.table": {
+    "zh-CN": "表",
+    "en": "Table"
+  },
+  "lint.severity.error": {
+    "zh-CN": "错误",
+    "en": "Error"
+  },
+  "lint.severity.info": {
+    "zh-CN": "提示",
+    "en": "Info"
+  },
+  "lint.severity.warning": {
+    "zh-CN": "警告",
+    "en": "Warning"
+  },
+  "lint.unknown.model_objects": {
+    "zh-CN": "模型文件只含表，无法判断",
+    "en": "The model file has tables only"
+  },
+  "lint.unknown.needs_data": {
+    "zh-CN": "需要查询数据，本次未开启",
+    "en": "Requires querying data, not enabled this run"
+  },
+  "lint.unknown.no_metadata": {
+    "zh-CN": "当前数据库取不到所需元数据",
+    "en": "The required metadata is unavailable for this database"
+  },
+  "lint.verdict.fail": {
+    "zh-CN": "未通过",
+    "en": "Fail"
+  },
+  "lint.verdict.manual": {
+    "zh-CN": "待人工确认",
+    "en": "Needs review"
+  },
+  "lint.verdict.not_applicable": {
+    "zh-CN": "不涉及",
+    "en": "N/A"
+  },
+  "lint.verdict.pass": {
+    "zh-CN": "通过",
+    "en": "Pass"
+  },
+  "lint.verdict.unknown": {
+    "zh-CN": "无法判断",
+    "en": "Undetermined"
+  },
+  "lint.yaml_parse": {
+    "zh-CN": "无法解析 YAML：%{error}",
+    "en": "Cannot parse YAML: %{error}"
+  },
+  "literal.bad_number": {
+    "zh-CN": "不是有效的数字文本，无法生成字面量：%{value}",
+    "en": "Not a valid number, cannot make a literal: %{value}"
+  },
+  "literal.infinity": {
+    "zh-CN": "该方言不支持无穷大的 SQL 字面量",
+    "en": "This dialect has no SQL literal for infinity"
+  },
+  "literal.lob": {
+    "zh-CN": "LOB 预览值不能生成 SQL 字面量",
+    "en": "A LOB preview cannot be turned into an SQL literal"
+  },
+  "literal.nan": {
+    "zh-CN": "该方言不支持 NaN 的 SQL 字面量",
+    "en": "This dialect has no SQL literal for NaN"
+  },
+  "literal.nul": {
+    "zh-CN": "字符串含 NUL 字符，无法生成该方言的字面量",
+    "en": "The string contains a NUL character and cannot be written as a literal in this dialect"
+  },
+  "literal.oracle_too_long": {
+    "zh-CN": "超过 Oracle 字面量长度上限（2000 字节），请改用参数绑定",
+    "en": "Longer than the Oracle literal limit (2000 bytes); use a bound parameter instead"
+  },
+  "literal.unsupported_type": {
+    "zh-CN": "该类型（%{ty}）的值不能生成 SQL 字面量",
+    "en": "Values of this type (%{ty}) cannot be turned into an SQL literal"
+  },
+  "menu.about": {
+    "zh-CN": "关于 DBLens",
+    "en": "About DBLens"
+  },
+  "menu.auto_check": {
+    "zh-CN": "启动时自动检查更新",
+    "en": "Check for updates at startup"
+  },
+  "menu.check_update": {
+    "zh-CN": "检查更新…",
+    "en": "Check for Updates…"
+  },
+  "menu.help": {
+    "zh-CN": "帮助",
+    "en": "Help"
+  },
+  "menu.on_top": {
+    "zh-CN": "窗口置顶",
+    "en": "Always on Top"
+  },
+  "menu.quit": {
+    "zh-CN": "退出",
+    "en": "Quit"
+  },
+  "menu.reset_window": {
+    "zh-CN": "恢复默认窗口位置和大小",
+    "en": "Reset Window Position and Size"
+  },
+  "menu.window": {
+    "zh-CN": "窗口",
+    "en": "Window"
+  },
+  "meta.missing_column": {
+    "zh-CN": "元数据查询 %{key} 的结果缺少列 %{column}",
+    "en": "The result of metadata query %{key} lacks column %{column}"
+  },
+  "meta.no_result_set": {
+    "zh-CN": "元数据查询没有返回结果集",
+    "en": "The metadata query returned no result set"
+  },
+  "meta.syntax_config": {
+    "zh-CN": "模板语法配置错误：%{error}",
+    "en": "Template syntax configuration error: %{error}"
+  },
+  "meta.template_parse": {
+    "zh-CN": "元数据模板 %{key} 解析失败：%{error}",
+    "en": "Failed to parse metadata template %{key}: %{error}"
+  },
+  "meta.template_render": {
+    "zh-CN": "元数据模板 %{key} 渲染失败：%{error}",
+    "en": "Failed to render metadata template %{key}: %{error}"
+  },
+  "meta.unknown_param": {
+    "zh-CN": "元数据模板 %{key} 绑定了未知参数 %{param}",
+    "en": "Metadata template %{key} binds unknown parameter %{param}"
+  },
+  "metadata.not_object_list": {
+    "zh-CN": "%{key} 不是对象列表查询",
+    "en": "%{key} is not an object list query"
+  },
+  "metadata.not_source": {
+    "zh-CN": "%{key} 不是源码查询",
+    "en": "%{key} is not a source query"
+  },
+  "metadata.pool_closed": {
+    "zh-CN": "连接池已关闭",
+    "en": "The connection pool is closed"
+  },
+  "metadata.table_detail_count": {
+    "zh-CN": "表明细查询数量不对",
+    "en": "Wrong number of table detail queries"
+  },
+  "migrate.already_finished": {
+    "zh-CN": "这个迁移已经完成",
+    "en": "This migration has already finished"
+  },
+  "migrate.bad_data_options": {
+    "zh-CN": "数据选项超出范围：每批 100–100000 行、并行 1–4 张表、抽样至多 10000 行",
+    "en": "Data options out of range: batch 100–100000 rows, 1–4 tables in parallel, sample at most 10000 rows"
+  },
+  "migrate.bad_value": {
+    "zh-CN": "列 %{column} 的值不能转换：%{error}",
+    "en": "The value of column %{column} cannot be converted: %{error}"
+  },
+  "migrate.check_dropped": {
+    "zh-CN": "检查约束 %{expression} 不能转换，不迁移",
+    "en": "Check constraint %{expression} cannot be converted; not migrated"
+  },
+  "migrate.data_needs_table": {
+    "zh-CN": "只迁数据时目标中必须已有这些表：%{tables}",
+    "en": "Migrating data only requires these tables to exist in the target: %{tables}"
+  },
+  "migrate.default_dropped": {
+    "zh-CN": "默认值 %{default} 不能转换，不迁移",
+    "en": "Default %{default} cannot be converted; not migrated"
+  },
+  "migrate.existing_unchosen": {
+    "zh-CN": "目标中已有这些表，请选择处理方式：%{tables}",
+    "en": "These tables already exist in the target; choose what to do: %{tables}"
+  },
+  "migrate.fk_action": {
+    "zh-CN": "目标库不支持 %{action}，去掉",
+    "en": "The target does not support %{action}; dropped"
+  },
+  "migrate.fk_outside": {
+    "zh-CN": "引用的表 %{table} 不在迁移范围内，目标中也没有，不迁移",
+    "en": "Referenced table %{table} is neither migrated nor in the target; not migrated"
+  },
+  "migrate.generated_dropped": {
+    "zh-CN": "生成列表达式 %{expression} 不能转换，改为普通列",
+    "en": "Generated column expression %{expression} cannot be converted; migrated as a plain column"
+  },
+  "migrate.identity_unsupported": {
+    "zh-CN": "目标库版本不支持自增（标识列）",
+    "en": "The target database version does not support identity columns"
+  },
+  "migrate.index_expression": {
+    "zh-CN": "索引表达式 %{expression} 不能转换，不迁移",
+    "en": "Index expression %{expression} cannot be converted; not migrated"
+  },
+  "migrate.index_method": {
+    "zh-CN": "目标库不支持索引方法 %{method}，按普通索引建",
+    "en": "The target does not support index method %{method}; created as a plain index"
+  },
+  "migrate.item_column_skipped": {
+    "zh-CN": "用到的列没有迁移，不迁移",
+    "en": "Uses a column that is not migrated; not migrated"
+  },
+  "migrate.key_column_skipped": {
+    "zh-CN": "主键的列没有迁移",
+    "en": "A primary key column is not migrated"
+  },
+  "migrate.lob_index": {
+    "zh-CN": "包含大字段列，目标库不能建索引，不迁移",
+    "en": "Includes a large-object column the target cannot index; not migrated"
+  },
+  "migrate.lob_key": {
+    "zh-CN": "主键包含大字段列，目标库不能建",
+    "en": "The primary key includes a large-object column, which the target cannot index"
+  },
+  "migrate.lob_too_large": {
+    "zh-CN": "列 %{column} 的大字段超过 256 MB，没有读全",
+    "en": "A large value in column %{column} exceeds 256 MB and was not read completely"
+  },
+  "migrate.name_conflict": {
+    "zh-CN": "名字 %{name} 与 %{other} 重名",
+    "en": "Name %{name} conflicts with %{other}"
+  },
+  "migrate.name_too_long": {
+    "zh-CN": "名字 %{name} 超过目标库的长度上限",
+    "en": "Name %{name} exceeds the target's length limit"
+  },
+  "migrate.no_key_append": {
+    "zh-CN": "表 %{table} 没有主键，追加数据时不能续传；请改为清空后导入或重新迁移",
+    "en": "Table %{table} has no primary key, so appending cannot resume; use replace or start over"
+  },
+  "migrate.no_sequences": {
+    "zh-CN": "目标库没有序列，不迁移",
+    "en": "The target database has no sequences; not migrated"
+  },
+  "migrate.not_found": {
+    "zh-CN": "找不到迁移记录 %{id}",
+    "en": "Migration record %{id} not found"
+  },
+  "migrate.nothing": {
+    "zh-CN": "没有要迁移的表或序列",
+    "en": "There are no tables or sequences to migrate"
+  },
+  "migrate.partition": {
+    "zh-CN": "分区不迁移，按普通表建",
+    "en": "Partitioning is not migrated; created as a plain table"
+  },
+  "migrate.record_io": {
+    "zh-CN": "读写迁移记录失败：%{error}",
+    "en": "Failed to read or write the migration record: %{error}"
+  },
+  "migrate.report.adjustments": {
+    "zh-CN": "序列和自增的调整",
+    "en": "Sequence and identity adjustments"
+  },
+  "migrate.report.cancelled": {
+    "zh-CN": "迁移已取消，之后的语句没有执行。",
+    "en": "Migration cancelled; later statements were not run."
+  },
+  "migrate.report.data": {
+    "zh-CN": "数据",
+    "en": "Data"
+  },
+  "migrate.report.data_header": {
+    "zh-CN": "表 | 状态 | 源行数 | 已迁行数 | 跳过 | 用时 | 校验",
+    "en": "Table | State | Source rows | Rows copied | Skipped | Time | Verification"
+  },
+  "migrate.report.failed": {
+    "zh-CN": "迁移中断：%{error}",
+    "en": "Migration stopped: %{error}"
+  },
+  "migrate.report.failures": {
+    "zh-CN": "失败的语句",
+    "en": "Failed statements"
+  },
+  "migrate.report.finished": {
+    "zh-CN": "迁移已完成。",
+    "en": "Migration finished."
+  },
+  "migrate.report.mismatches": {
+    "zh-CN": "%{table} 抽样比对不一致",
+    "en": "Sample differences in %{table}"
+  },
+  "migrate.report.no_ddl": {
+    "zh-CN": "（取不到 DDL）",
+    "en": "(DDL unavailable)"
+  },
+  "migrate.report.notes": {
+    "zh-CN": "映射提示",
+    "en": "Mapping notes"
+  },
+  "migrate.report.others": {
+    "zh-CN": "没有迁移的对象（附源库 DDL，需人工改写）",
+    "en": "Objects not migrated (source DDL attached; rewrite by hand)"
+  },
+  "migrate.report.row_missing": {
+    "zh-CN": "目标中没有这一行",
+    "en": "Row missing in the target"
+  },
+  "migrate.report.script": {
+    "zh-CN": "迁移脚本",
+    "en": "Migration script"
+  },
+  "migrate.report.skipped_rows": {
+    "zh-CN": "跳过的行",
+    "en": "Skipped rows"
+  },
+  "migrate.report.state": {
+    "zh-CN": "%{state}",
+    "en": "%{state}"
+  },
+  "migrate.report.statements": {
+    "zh-CN": "结构语句共 %{total} 条：成功 %{done} 条，失败 %{failed} 条。",
+    "en": "%{total} structure statements: %{done} succeeded, %{failed} failed."
+  },
+  "migrate.report.title": {
+    "zh-CN": "结构迁移：%{source} → %{target}",
+    "en": "Structure migration: %{source} → %{target}"
+  },
+  "migrate.report.unfinished": {
+    "zh-CN": "迁移没有全部完成（有搬运失败的表），修改后可在迁移标签中继续。",
+    "en": "The migration did not finish completely (some tables failed); fix them and continue from the migration tab."
+  },
+  "migrate.report.verify_bad": {
+    "zh-CN": "不一致：应有 %{expected} 行，目标 %{target} 行，%{mismatches} 处值不同",
+    "en": "Mismatch: %{expected} rows expected, %{target} in target, %{mismatches} differing values"
+  },
+  "migrate.report.verify_ok": {
+    "zh-CN": "一致（抽样 %{sampled} 行）",
+    "en": "Matched (%{sampled} rows sampled)"
+  },
+  "migrate.running": {
+    "zh-CN": "这个迁移正在执行",
+    "en": "This migration is already running"
+  },
+  "migrate.same_target": {
+    "zh-CN": "源和目标是同一个 schema",
+    "en": "The source and target are the same schema"
+  },
+  "migrate.sequence_bound": {
+    "zh-CN": "%{bound} 超出 bigint 范围",
+    "en": "%{bound} is outside the bigint range"
+  },
+  "migrate.sequence_exists": {
+    "zh-CN": "目标中已有同名序列，跳过",
+    "en": "A sequence with this name already exists in the target; skipped"
+  },
+  "migrate.serial_sequence": {
+    "zh-CN": "serial 列自带的序列，随自增列一起迁移",
+    "en": "Sequence owned by a serial column; migrated with the identity column"
+  },
+  "migrate.type_lossy": {
+    "zh-CN": "%{from} 映射为 %{to}，取值范围或精度可能改变",
+    "en": "%{from} maps to %{to}; range or precision may change"
+  },
+  "migrate.type_unknown": {
+    "zh-CN": "不认识的类型 %{source}，按文本（%{target}）迁移",
+    "en": "Unrecognized type %{source}; migrated as text (%{target})"
+  },
+  "migrate.unknown_target_type": {
+    "zh-CN": "目标库不认识类型 %{native}",
+    "en": "The target does not recognize type %{native}"
+  },
+  "migrate.unsupported_left": {
+    "zh-CN": "还有 %{count} 项不支持的映射需要处理",
+    "en": "%{count} unsupported mappings still need attention"
+  },
+  "model.bad_file": {
+    "zh-CN": "文件 %{path} 有错：%{error}",
+    "en": "File %{path} is invalid: %{error}"
+  },
+  "model.bad_path": {
+    "zh-CN": "路径无效：%{path}",
+    "en": "Invalid path: %{path}"
+  },
+  "model.conflict": {
+    "zh-CN": "%{name} 的文件已被修改，请重新加载",
+    "en": "The file for %{name} has changed; reload it"
+  },
+  "model.diagram_bad_name": {
+    "zh-CN": "图名 %{name} 不可用（不能为空，也不能是 _all）",
+    "en": "The diagram name %{name} is not allowed (it must not be empty or _all)"
+  },
+  "model.diagram_exists": {
+    "zh-CN": "图 %{name} 已存在",
+    "en": "Diagram %{name} already exists"
+  },
+  "model.dir_not_empty": {
+    "zh-CN": "目录 %{path} 不为空",
+    "en": "Directory %{path} is not empty"
+  },
+  "model.image_data": {
+    "zh-CN": "图片数据无效：%{error}",
+    "en": "Invalid image data: %{error}"
+  },
+  "model.image_ext": {
+    "zh-CN": "图片只能保存为 .svg 或 .png 文件",
+    "en": "Images can only be saved as .svg or .png files"
+  },
+  "model.io_failed": {
+    "zh-CN": "读写 %{path} 失败：%{error}",
+    "en": "Failed to access %{path}: %{error}"
+  },
+  "model.lk_column_missing": {
+    "zh-CN": "列 %{name} 不存在",
+    "en": "Column %{name} does not exist"
+  },
+  "model.lk_count_mismatch": {
+    "zh-CN": "逻辑外键两边的列数必须相同且不为空",
+    "en": "Both sides of a logical key must have the same, non-zero number of columns"
+  },
+  "model.lk_name_exists": {
+    "zh-CN": "名字 %{name} 已被本表的外键或逻辑外键使用",
+    "en": "The name %{name} is already used by a key of this table"
+  },
+  "model.lk_not_found": {
+    "zh-CN": "没有第 %{index} 个逻辑外键",
+    "en": "Logical key %{index} does not exist"
+  },
+  "model.local_only": {
+    "zh-CN": "只有桌面程序和只监听本机地址的浏览器模式可以使用模型",
+    "en": "Models are available only in the desktop app and in browser mode listening on a local address"
+  },
+  "model.no_schemas": {
+    "zh-CN": "没有选择 schema",
+    "en": "No schema selected"
+  },
+  "model.not_a_model": {
+    "zh-CN": "%{path} 不是模型目录（没有 model.yaml）",
+    "en": "%{path} is not a model directory (model.yaml not found)"
+  },
+  "model.read_only": {
+    "zh-CN": "模型文件格式 %{format} 比本程序新，只能查看；请升级数洞",
+    "en": "Model format %{format} is newer than this version supports; it is read-only. Please upgrade DBLens"
+  },
+  "model.script_ext": {
+    "zh-CN": "脚本只能保存为 .sql 文件",
+    "en": "Scripts can only be saved as .sql files"
+  },
+  "model.table_exists": {
+    "zh-CN": "表 %{name} 已存在",
+    "en": "Table %{name} already exists"
+  },
+  "model.yaml_write_failed": {
+    "zh-CN": "生成 YAML 失败：%{error}",
+    "en": "Failed to write YAML: %{error}"
+  },
+  "native.dameng_dpi": {
+    "zh-CN": "达梦 DPI 库",
+    "en": "DM DPI library"
+  },
+  "native.dir_not_absolute": {
+    "zh-CN": "%{lib}目录必须是绝对路径：%{dir}",
+    "en": "The %{lib} directory must be an absolute path: %{dir}"
+  },
+  "native.install.dameng_dpi": {
+    "zh-CN": "请安装达梦客户端（含 DPI 驱动），然后在连接设置中指定 dmdpi 所在目录，或设置 DM_HOME",
+    "en": "Install the DM client (with the DPI driver), then set the directory containing dmdpi in the connection settings, or set DM_HOME"
+  },
+  "native.install.oracle_client": {
+    "zh-CN": "请安装 Oracle Instant Client（Basic 或 Basic Light），然后在连接设置中指定其目录，或设置 ORACLE_HOME / PATH",
+    "en": "Install Oracle Instant Client (Basic or Basic Light), then set its directory in the connection settings, or set ORACLE_HOME / PATH"
+  },
+  "native.not_found": {
+    "zh-CN": "未找到%{lib}（%{file}）。%{install}。已查找：%{tried}",
+    "en": "%{lib} (%{file}) not found. %{install}. Searched: %{tried}"
+  },
+  "native.oracle_client": {
+    "zh-CN": "Oracle 客户端库",
+    "en": "Oracle client library"
+  },
+  "noun.favorite": {
+    "zh-CN": "收藏 %{id}",
+    "en": "favorite %{id}"
+  },
+  "noun.history": {
+    "zh-CN": "历史记录 %{id}",
+    "en": "history entry %{id}"
+  },
+  "noun.model": {
+    "zh-CN": "模型 %{id}",
+    "en": "model %{id}"
+  },
+  "noun.object": {
+    "zh-CN": "%{kind} %{name}",
+    "en": "%{kind} %{name}"
+  },
+  "noun.profile": {
+    "zh-CN": "连接配置 %{id}",
+    "en": "connection profile %{id}"
+  },
+  "noun.session": {
+    "zh-CN": "会话 %{id}",
+    "en": "session %{id}"
+  },
+  "oracle.bad_chars": {
+    "zh-CN": "Oracle %{what}含有不允许的字符：%{value}",
+    "en": "The Oracle %{what} contains characters that are not allowed: %{value}"
+  },
+  "oracle.bad_ipv6": {
+    "zh-CN": "无效的 IPv6 地址：%{host}",
+    "en": "Invalid IPv6 address: %{host}"
+  },
+  "oracle.client_already_loaded": {
+    "zh-CN": "Oracle 客户端已从 %{loaded} 加载，换用 %{dir} 需要重启程序",
+    "en": "The Oracle client is already loaded from %{loaded}; restart the program to use %{dir}"
+  },
+  "oracle.part.host": {
+    "zh-CN": "主机名",
+    "en": "host name"
+  },
+  "oracle.part.service": {
+    "zh-CN": "服务名",
+    "en": "service name"
+  },
+  "oracle.service_required": {
+    "zh-CN": "Oracle 连接需要服务名（URL 路径部分）或 sid 选项",
+    "en": "An Oracle connection needs a service name (the URL path) or the sid option"
+  },
+  "params.invalid_timeout": {
+    "zh-CN": "connect_timeout 不是有效的秒数：%{value}",
+    "en": "connect_timeout is not a valid number of seconds: %{value}"
+  },
+  "params.invalid_tls": {
+    "zh-CN": "tls 选项只能是 disable、require 或 verify：%{value}",
+    "en": "The tls option must be disable, require or verify: %{value}"
+  },
+  "params.invalid_url": {
+    "zh-CN": "无效的连接 URL：%{error}",
+    "en": "Invalid connection URL: %{error}"
+  },
+  "params.missing_host": {
+    "zh-CN": "连接 URL 缺少主机名",
+    "en": "The connection URL has no host name"
+  },
+  "params.tls_unsupported": {
+    "zh-CN": "%{driver} 驱动暂不支持 TLS，请去掉连接选项 tls",
+    "en": "The %{driver} driver does not support TLS yet; remove the tls connection option"
+  },
+  "params.unsupported_scheme": {
+    "zh-CN": "不支持的连接协议：%{scheme}",
+    "en": "Unsupported connection scheme: %{scheme}"
+  },
+  "pg.bad_interval": {
+    "zh-CN": "interval 数据长度应为 16 字节",
+    "en": "interval data must be 16 bytes long"
+  },
+  "pg.bad_numeric": {
+    "zh-CN": "numeric 数据格式不对",
+    "en": "Malformed numeric data"
+  },
+  "pg.numeric_param": {
+    "zh-CN": "暂不支持直接绑定 NUMERIC 参数，请在 SQL 中写成 $1::text::numeric",
+    "en": "NUMERIC parameters cannot be bound directly yet; write $1::text::numeric in the SQL"
+  },
+  "pg.read_column_failed": {
+    "zh-CN": "读取第 %{column} 列（%{ty}）失败：%{error}",
+    "en": "Failed to read column %{column} (%{ty}): %{error}"
+  },
+  "policy.prod_no_where": {
+    "zh-CN": "生产环境：%{keyword} 语句没有 WHERE 条件",
+    "en": "Production: %{keyword} statement without a WHERE clause"
+  },
+  "policy.prod_statement": {
+    "zh-CN": "生产环境：%{keyword} 语句",
+    "en": "Production: %{keyword} statement"
+  },
+  "profile.host_required": {
+    "zh-CN": "主机不能为空",
+    "en": "The host is required"
+  },
+  "profile.name_required": {
+    "zh-CN": "连接名称不能为空",
+    "en": "The connection name is required"
+  },
+  "profile.port_zero": {
+    "zh-CN": "端口不能为 0",
+    "en": "The port cannot be 0"
+  },
+  "profile.timeout_range": {
+    "zh-CN": "连接超时应在 1 到 3600 秒之间",
+    "en": "The connect timeout must be between 1 and 3600 seconds"
+  },
+  "registry.confirm_dir": {
+    "zh-CN": "请先确认客户端库目录",
+    "en": "Confirm the client library directory first"
+  },
+  "registry.dir_not_absolute": {
+    "zh-CN": "客户端库目录必须是绝对路径：%{dir}",
+    "en": "The client library directory must be an absolute path: %{dir}"
+  },
+  "registry.lib_found": {
+    "zh-CN": "找到客户端库目录 %{dir}，确认后即可使用",
+    "en": "Found the client library directory %{dir}; confirm it to use it"
+  },
+  "registry.lib_gone": {
+    "zh-CN": "已确认的目录 %{dir} 中找不到 %{file}，请重新选择",
+    "en": "%{file} is no longer in the confirmed directory %{dir}; choose it again"
+  },
+  "registry.lib_missing": {
+    "zh-CN": "目录 %{dir} 中没有 %{file}",
+    "en": "%{file} is not in the directory %{dir}"
+  },
+  "registry.no_native_lib": {
+    "zh-CN": "%{driver} 驱动不需要原生客户端库",
+    "en": "The %{driver} driver does not need a native client library"
+  },
+  "registry.not_compiled": {
+    "zh-CN": "本程序没有编译 %{driver} 驱动",
+    "en": "This build does not include the %{driver} driver"
+  },
+  "secret.crypto_failed": {
+    "zh-CN": "密码%{what}失败",
+    "en": "Password %{what} failed"
+  },
+  "secret.keyring_delete_failed": {
+    "zh-CN": "删除系统钥匙串中的密码失败：%{error}",
+    "en": "Failed to delete the password from the system keyring: %{error}"
+  },
+  "secret.keyring_read_failed": {
+    "zh-CN": "读取系统钥匙串失败：%{error}",
+    "en": "Failed to read from the system keyring: %{error}"
+  },
+  "secret.keyring_unavailable": {
+    "zh-CN": "系统钥匙串不可用：%{error}",
+    "en": "The system keyring is unavailable: %{error}"
+  },
+  "secret.keyring_write_failed": {
+    "zh-CN": "写入系统钥匙串失败：%{error}",
+    "en": "Failed to write to the system keyring: %{error}"
+  },
+  "secret.master_empty": {
+    "zh-CN": "主密码不能为空",
+    "en": "The master password cannot be empty"
+  },
+  "secret.master_exists": {
+    "zh-CN": "主密码已经设置过",
+    "en": "The master password has already been set"
+  },
+  "secret.master_missing": {
+    "zh-CN": "尚未设置主密码",
+    "en": "No master password has been set"
+  },
+  "secret.master_wrong": {
+    "zh-CN": "主密码错误",
+    "en": "Wrong master password"
+  },
+  "secret.op.decrypt": {
+    "zh-CN": "解密",
+    "en": "decryption"
+  },
+  "secret.op.derive": {
+    "zh-CN": "派生密钥",
+    "en": "key derivation"
+  },
+  "secret.op.encrypt": {
+    "zh-CN": "加密",
+    "en": "encryption"
+  },
+  "server.bad_latest_json": {
+    "zh-CN": "latest.json 格式不对：%{error}",
+    "en": "latest.json is malformed: %{error}"
+  },
+  "server.bad_listen": {
+    "zh-CN": "无效的监听地址：%{value}",
+    "en": "Invalid listen address: %{value}"
+  },
+  "server.bad_version": {
+    "zh-CN": "无效的版本号 %{version}：%{error}",
+    "en": "Invalid version %{version}: %{error}"
+  },
+  "server.bind_failed": {
+    "zh-CN": "无法监听 %{addr}：%{error}",
+    "en": "Cannot listen on %{addr}: %{error}"
+  },
+  "server.data_dir": {
+    "zh-CN": "数据目录：%{dir}",
+    "en": "Data directory: %{dir}"
+  },
+  "server.missing_value": {
+    "zh-CN": "%{arg} 后面缺少参数",
+    "en": "%{arg} needs a value"
+  },
+  "server.new_version": {
+    "zh-CN": "发现新版本 %{version}（当前 %{current}），下载地址：%{url}",
+    "en": "Version %{version} is available (current %{current}); download it from %{url}"
+  },
+  "server.open_url": {
+    "zh-CN": "在浏览器中打开：%{url}",
+    "en": "Open in a browser: %{url}"
+  },
+  "server.start_failed": {
+    "zh-CN": "启动失败：%{error}",
+    "en": "Failed to start: %{error}"
+  },
+  "server.started": {
+    "zh-CN": "DBLens 服务已启动：%{url}",
+    "en": "DBLens server started: %{url}"
+  },
+  "server.token": {
+    "zh-CN": "访问令牌：%{token}",
+    "en": "Access token: %{token}"
+  },
+  "server.unknown_arg": {
+    "zh-CN": "未知参数：%{arg}",
+    "en": "Unknown argument: %{arg}"
+  },
+  "server.update_status": {
+    "zh-CN": "更新源 %{url} 返回 %{status}",
+    "en": "The update source %{url} returned %{status}"
+  },
+  "server.update_unreachable": {
+    "zh-CN": "无法访问更新源 %{url}：%{error}",
+    "en": "Cannot reach the update source %{url}: %{error}"
+  },
+  "server.usage": {
+    "zh-CN": "用法：dblens-server [--listen 地址:端口] [--data-dir 目录] [--web-dir 目录] [--allow-origin 来源]...\n                     [--update-url 地址] [--no-update-check]",
+    "en": "Usage: dblens-server [--listen host:port] [--data-dir dir] [--web-dir dir] [--allow-origin origin]...\n                     [--update-url url] [--no-update-check]"
+  },
+  "session.broken_reconnect": {
+    "zh-CN": "连接已断开，请先重新连接",
+    "en": "The connection is broken; reconnect first"
+  },
+  "session.busy": {
+    "zh-CN": "正在执行，请等待完成或先取消",
+    "en": "A statement is running; wait for it to finish or cancel it first"
+  },
+  "session.disconnected": {
+    "zh-CN": "连接已断开",
+    "en": "The connection is closed"
+  },
+  "session.explain_single": {
+    "zh-CN": "执行计划只能针对一条语句",
+    "en": "An execution plan can only be shown for a single statement"
+  },
+  "session.task_gone": {
+    "zh-CN": "会话任务已退出",
+    "en": "The session task has exited"
+  },
+  "sqlfile.denied": {
+    "zh-CN": "第 %{line} 行的语句被执行策略拒绝，没有执行任何语句：%{reason}\n%{text}",
+    "en": "The statement at line %{line} was denied by the execution policy; nothing was executed: %{reason}\n%{text}"
+  },
+  "sqlfile.history": {
+    "zh-CN": "执行 SQL 文件 %{file}：%{done} 条，失败 %{failed} 条",
+    "en": "Run SQL file %{file}: %{done} statements, %{failed} failed"
+  },
+  "sqlfile.log_failed": {
+    "zh-CN": "第 %{n} 条语句失败（第 %{line} 行）：",
+    "en": "Statement %{n} failed (line %{line}):"
+  },
+  "sqlfile.log_head": {
+    "zh-CN": "连接：%{connection}　schema：%{schema}　文件：%{file}　开始：%{at}",
+    "en": "Connection: %{connection}  Schema: %{schema}  File: %{file}  Started: %{at}"
+  },
+  "sqlfile.log_summary": {
+    "zh-CN": "成功 %{ok} 条，失败 %{failed} 条，影响 %{affected} 行，用时 %{seconds} 秒",
+    "en": "%{ok} succeeded, %{failed} failed, %{affected} rows affected, %{seconds} s"
+  },
+  "sqlserver.bad_auth": {
+    "zh-CN": "不认识的认证方式：%{value}",
+    "en": "Unknown authentication method: %{value}"
+  },
+  "sqlserver.connection_lost": {
+    "zh-CN": "与 SQL Server 的连接已断开",
+    "en": "The connection to SQL Server was lost"
+  },
+  "sqlserver.windows_auth_only": {
+    "zh-CN": "Windows 认证只能在 Windows 上使用",
+    "en": "Windows authentication is only available on Windows"
+  },
+  "store.create_dir_failed": {
+    "zh-CN": "无法创建数据目录 %{dir}：%{error}",
+    "en": "Cannot create the data directory %{dir}: %{error}"
+  },
+  "store.db_error": {
+    "zh-CN": "本地数据库错误：%{error}",
+    "en": "Local database error: %{error}"
+  },
+  "store.no_data_dir": {
+    "zh-CN": "无法确定用户数据目录",
+    "en": "Cannot determine the user data directory"
+  },
+  "store.too_new": {
+    "zh-CN": "本地数据库版本 %{version} 比程序支持的 %{supported} 更新，请升级 DBLens",
+    "en": "The local database version %{version} is newer than this program supports (%{supported}); upgrade DBLens"
+  },
+  "task.no_report": {
+    "zh-CN": "这个任务没有可下载的报告",
+    "en": "This task has no report to download"
+  },
+  "task.no_statement": {
+    "zh-CN": "没有第 %{n} 条失败的语句",
+    "en": "There is no failed statement %{n}"
+  },
+  "task.not_found": {
+    "zh-CN": "任务不存在或已过期：%{id}",
+    "en": "The task does not exist or has expired: %{id}"
+  },
+  "task.not_waiting": {
+    "zh-CN": "任务没有在等待确认",
+    "en": "The task is not waiting for confirmation"
+  },
+  "task.too_many": {
+    "zh-CN": "同时进行的导入和执行任务最多 %{max} 个，请等其他任务结束",
+    "en": "At most %{max} import or execution tasks can run at once; wait for others to finish"
+  },
+  "tls.ca_malformed": {
+    "zh-CN": "CA 证书文件 %{path} 格式错误：%{error}",
+    "en": "The CA certificate file %{path} is malformed: %{error}"
+  },
+  "tls.ca_unreadable": {
+    "zh-CN": "无法读取 CA 证书文件 %{path}：%{error}",
+    "en": "Cannot read the CA certificate file %{path}: %{error}"
+  },
+  "tls.config_error": {
+    "zh-CN": "TLS 配置错误：%{error}",
+    "en": "TLS configuration error: %{error}"
+  },
+  "update.ask_install": {
+    "zh-CN": "现在下载并安装吗？安装完成后程序会自动重启。",
+    "en": "Download and install it now? The program restarts when done."
+  },
+  "update.bad_endpoint": {
+    "zh-CN": "update.json 中的更新源地址无效（%{endpoint}）：%{error}",
+    "en": "Invalid update source in update.json (%{endpoint}): %{error}"
+  },
+  "update.bad_signature": {
+    "zh-CN": "安装包签名校验失败，已取消安装。安装包可能被篡改，或更新源提供的签名不对",
+    "en": "Signature check failed, so the installation was cancelled. The package may have been tampered with, or the update source has a wrong signature"
+  },
+  "update.check_failed": {
+    "zh-CN": "检查更新失败：%{error}",
+    "en": "Checking for updates failed: %{error}"
+  },
+  "update.download_page": {
+    "zh-CN": "请到 %{url} 下载新版本。",
+    "en": "Download the new version from %{url}."
+  },
+  "update.error_with_cause": {
+    "zh-CN": "%{hint}（%{cause}）",
+    "en": "%{hint} (%{cause})"
+  },
+  "update.found": {
+    "zh-CN": "发现新版本 %{version}（当前 %{current}）。",
+    "en": "Version %{version} is available (current %{current})."
+  },
+  "update.install_button": {
+    "zh-CN": "下载并安装",
+    "en": "Download and install"
+  },
+  "update.install_failed": {
+    "zh-CN": "安装更新失败：%{error}",
+    "en": "Installing the update failed: %{error}"
+  },
+  "update.later_button": {
+    "zh-CN": "以后再说",
+    "en": "Later"
+  },
+  "update.needs_https": {
+    "zh-CN": "更新源必须使用 https 地址",
+    "en": "The update source must use an https address"
+  },
+  "update.notes": {
+    "zh-CN": "更新说明：",
+    "en": "Release notes: "
+  },
+  "update.unreachable": {
+    "zh-CN": "无法连接更新源，请检查网络或 update.json 中的地址",
+    "en": "Cannot reach the update source; check the network or the address in update.json"
+  },
+  "update.up_to_date": {
+    "zh-CN": "已是最新版本（%{version}）。",
+    "en": "You have the latest version (%{version})."
+  },
+  "variant.dameng": {
+    "zh-CN": "达梦 DM",
+    "en": "DM (Dameng)"
+  },
+  "variant.highgo": {
+    "zh-CN": "瀚高 HighGo",
+    "en": "HighGo"
+  },
+  "variant.kingbase": {
+    "zh-CN": "人大金仓 KingbaseES",
+    "en": "KingbaseES"
+  },
+  "variant.oceanbase": {
+    "zh-CN": "OceanBase（MySQL 模式）",
+    "en": "OceanBase (MySQL mode)"
+  },
+  "variant.polardb": {
+    "zh-CN": "PolarDB（MySQL 版）",
+    "en": "PolarDB for MySQL"
+  }
 }
