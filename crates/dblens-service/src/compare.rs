@@ -266,7 +266,7 @@ impl Service {
                 })
             }
             CompareSideRef::Database { profile, schema } => {
-                let profile = self.profile(profile)?;
+                let profile = self.feature_profile(profile)?;
                 let dialect = self.metadata.dialect(&profile).await?;
                 // 跳过元数据缓存，以库中最新的结构为准
                 let args = MetaArgs { schema: Some(schema.clone()), ..Default::default() };

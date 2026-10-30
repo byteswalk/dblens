@@ -40,6 +40,8 @@ struct Live {
     compat: Compat,
     /// 测试表所在的 schema。
     schema: String,
+    /// 连接的库（SQL Server 的会话"当前 schema"是库）。
+    database: Option<String>,
 }
 
 const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "dpi_lib_dir"];
@@ -65,7 +67,9 @@ async fn setup(env: &str) -> Option<Live> {
         DriverId::Mysql => params.database.clone().unwrap(),
         DriverId::Postgres => "public".to_string(),
         DriverId::Oracle | DriverId::Dameng => params.user.to_uppercase(),
+        DriverId::SqlServer => "dbo".to_string(),
     };
+    let database = params.database.clone();
     let input = ProfileInput {
         name: env.to_string(),
         driver,
@@ -83,14 +87,14 @@ async fn setup(env: &str) -> Option<Live> {
     eprintln!("{env}：{} {:?} {:?}", summary.variant_name.current(), summary.version_code, summary.version);
     let profile = service.create_profile(input, Some(&params.password)).unwrap();
     let (variant, compat) = (summary.variant, summary.compat);
-    Some(Live { _dir: dir, service, profile_id: profile.id, driver, variant, compat, schema })
+    Some(Live { _dir: dir, service, profile_id: profile.id, driver, variant, compat, schema, database })
 }
 
 impl Live {
     fn dual(&self, expr: &str) -> String {
         match self.driver {
             DriverId::Oracle | DriverId::Dameng => format!("SELECT {expr} FROM DUAL"),
-            DriverId::Mysql | DriverId::Postgres => format!("SELECT {expr}"),
+            DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer => format!("SELECT {expr}"),
         }
     }
 
@@ -189,13 +193,17 @@ async fn workbench_flow(env: &str) {
     let info = s.open_session(&live.profile_id).await.unwrap();
     let id = info.id;
     let schema = info.schema.expect("应读到当前 schema");
-    assert!(schema.eq_ignore_ascii_case(&live.schema), "{schema}");
+    // SQL Server 的会话"当前 schema"是当前库
+    let expected =
+        if live.driver == DriverId::SqlServer { live.database.clone().unwrap() } else { live.schema.clone() };
+    assert!(schema.eq_ignore_ascii_case(&expected), "{schema}");
 
     // 切换 schema 再切回
     let other = match live.driver {
         DriverId::Mysql => "information_schema",
         DriverId::Postgres => "pg_catalog",
         DriverId::Oracle | DriverId::Dameng => "SYS",
+        DriverId::SqlServer => "master",
     };
     s.sessions.set_schema(id, other).await.unwrap();
     assert_eq!(s.sessions.info(id).unwrap().schema.as_deref(), Some(other));
@@ -293,6 +301,69 @@ async fn cancel_flow(env: &str, slow: &str) {
 }
 
 #[tokio::test]
+async fn sqlserver_flow() {
+    full_flow("DBLENS_TEST_SQLSERVER_URL").await;
+}
+
+#[tokio::test]
+async fn sqlserver_workbench() {
+    workbench_flow("DBLENS_TEST_SQLSERVER_URL").await;
+}
+
+#[tokio::test]
+async fn sqlserver_cancel() {
+    cancel_flow("DBLENS_TEST_SQLSERVER_URL", "WAITFOR DELAY '00:00:30'").await;
+}
+
+#[tokio::test]
+async fn sqlserver_objects() {
+    objects_flow("DBLENS_TEST_SQLSERVER_URL").await;
+}
+
+#[tokio::test]
+async fn sqlserver_ops() {
+    ops_flow("DBLENS_TEST_SQLSERVER_URL", &[]).await;
+}
+
+#[tokio::test]
+async fn sqlserver_export() {
+    export_flow("DBLENS_TEST_SQLSERVER_URL").await;
+}
+
+/// SQL Server：库列表、按库浏览（元数据连接以所选库为初始库）、执行计划后会话恢复正常、
+/// 一批里的多个结果集、M6b 之前的功能被拒绝。
+#[tokio::test]
+async fn sqlserver_catalogs_batches_and_gating() {
+    let Some(live) = setup("DBLENS_TEST_SQLSERVER_URL").await else { return };
+    let s = &live.service;
+    let profile = s.profile(&live.profile_id).unwrap();
+    let catalogs = s.metadata.catalogs(&profile, None).await.unwrap();
+    assert!(catalogs.iter().any(|c| c.name == "master" && c.is_system), "{catalogs:?}");
+    let in_master = profile.in_catalog(Some("master"));
+    let tables = s.metadata.objects(&in_master, "dbo", MetaKey::Tables, None).await.unwrap();
+    assert!(
+        tables.iter().any(|t| t.name == "spt_monitor" || t.name.starts_with("spt_")) || tables.is_empty()
+    );
+    let schemas = s.metadata.schemas(&in_master, None).await.unwrap();
+    assert!(schemas.iter().any(|x| x.name == "dbo"), "{schemas:?}");
+
+    let id = s.open_session(&live.profile_id).await.unwrap().id;
+    // 执行计划之后，同一会话的语句照常执行（SHOWPLAN 已关掉）
+    let events = live.submit(id, ExecRequest { explain: true, ..ExecRequest::new("SELECT 1 AS a") }).await;
+    assert!(!events.iter().any(|e| matches!(e, SessionEvent::Failed { .. })), "{events:?}");
+    let v = first_value(&live.run(id, "SELECT 42").await);
+    assert_eq!(v, Value::Int(42));
+    // 用 GO 分成两批，第一批里有两个结果集
+    let events = live.run(id, "SELECT 1 AS a\nSELECT 2 AS b\nGO\nSELECT 3 AS c").await;
+    let starts = events.iter().filter(|e| matches!(e, SessionEvent::ResultStart { .. })).count();
+    assert_eq!(starts, 3, "{events:?}");
+    s.sessions.close(id, false).await.unwrap();
+
+    assert!(matches!(s.design_table(&live.profile_id, "dbo", "t").await, Err(Error::Invalid { .. })));
+    s.delete_profile(&live.profile_id).await.unwrap();
+}
+
+#[tokio::test]
 async fn mysql_flow() {
     full_flow("DBLENS_TEST_MYSQL_URL").await;
 }
@@ -349,6 +420,13 @@ async fn objects_flow(env: &str) {
         DriverId::Mysql => {
             &["DROP VIEW IF EXISTS c2_v", "DROP TABLE IF EXISTS c2_child", "DROP TABLE IF EXISTS c2_parent"]
         }
+        DriverId::SqlServer => &[
+            "DROP VIEW IF EXISTS c2_v",
+            "DROP TABLE IF EXISTS c2_child",
+            "DROP TABLE IF EXISTS c2_parent",
+            "DROP SEQUENCE IF EXISTS c2_seq",
+            "DROP FUNCTION IF EXISTS c2_f",
+        ],
         _ => &[
             "DROP VIEW IF EXISTS c2_v",
             "DROP TABLE IF EXISTS c2_child",
@@ -375,6 +453,15 @@ async fn objects_flow(env: &str) {
             "CREATE VIEW c2_v AS SELECT id, code FROM c2_parent",
             "CREATE SEQUENCE c2_seq START 10 INCREMENT 2",
             "CREATE FUNCTION c2_f() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+        ],
+        DriverId::SqlServer => vec![
+            "CREATE TABLE c2_parent (id INT PRIMARY KEY, code NVARCHAR(10) NOT NULL UNIQUE)",
+            "EXEC sys.sp_addextendedproperty N'MS_Description', N'父表', N'SCHEMA', N'dbo', N'TABLE', N'c2_parent'",
+            "CREATE TABLE c2_child (id INT IDENTITY PRIMARY KEY, parent_id INT, qty INT CHECK (qty > 0), CONSTRAINT c2_fk FOREIGN KEY (parent_id) REFERENCES c2_parent (id) ON DELETE CASCADE)",
+            "CREATE INDEX c2_idx ON c2_child (qty DESC)",
+            "CREATE VIEW c2_v AS SELECT id, code FROM c2_parent",
+            "CREATE SEQUENCE c2_seq START WITH 10 INCREMENT BY 2",
+            "CREATE FUNCTION c2_f() RETURNS int AS BEGIN RETURN 1 END",
         ],
         _ => vec![
             "CREATE TABLE c2_parent (id INT PRIMARY KEY, code VARCHAR(10) NOT NULL UNIQUE)",
@@ -554,6 +641,12 @@ async fn export_flow(env: &str) {
             "SELECT LEVEL AS \"n\" FROM DUAL CONNECT BY LEVEL <= 2500",
             2500,
         ),
+        DriverId::SqlServer => (
+            "SELECT 1 AS id, N'中文' AS name, REPLICATE(CAST(N'数' AS nvarchar(max)), 100000) AS txt, \
+             LEN(REPLICATE(CAST(N'数' AS nvarchar(max)), 100000)) AS len",
+            "SELECT TOP (2500) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n FROM sys.all_columns a CROSS JOIN sys.all_columns b",
+            2500,
+        ),
     };
     let export = |sql: &str, format: ExportFormat, name: &str| {
         let path = dir.path().join(name);
@@ -687,10 +780,17 @@ async fn editing_flow(env: &str) {
             "CREATE TABLE m2_t (id INT IDENTITY(1, 1) PRIMARY KEY, code VARCHAR(10) NOT NULL UNIQUE, \
              name VARCHAR(20), qty INT DEFAULT 5, price DECIMAL(10, 2))"
         }
+        DriverId::SqlServer => {
+            "CREATE TABLE m2_t (id INT IDENTITY(1, 1) PRIMARY KEY, code NVARCHAR(10) NOT NULL UNIQUE, \
+             name NVARCHAR(20), qty INT DEFAULT 5, price DECIMAL(10, 2))"
+        }
     };
     live.run(id, create).await;
     live.run(id, "CREATE TABLE m2_nokey (a INT)").await;
-    for (code, name, qty) in [("A", "'甲'", 1), ("B", "NULL", 2), ("C", "'丙'", 3)] {
+    // SQL Server 的非 Unicode 字面量按库的排序规则转码，中文要写 N''
+    let (jia, bing) =
+        if live.driver == DriverId::SqlServer { ("N'甲'", "N'丙'") } else { ("'甲'", "'丙'") };
+    for (code, name, qty) in [("A", jia, 1), ("B", "NULL", 2), ("C", bing, 3)] {
         live.run(
             id,
             &format!("INSERT INTO m2_t (code, name, qty, price) VALUES ('{code}', {name}, {qty}, 1.50)"),
@@ -701,7 +801,12 @@ async fn editing_flow(env: &str) {
     let id_of = |code: &str| one(format!("SELECT id FROM m2_t WHERE code = '{code}'"));
     let (a, b, c) = (id_of("A").await, id_of("B").await, id_of("C").await);
     let map = |pairs: Vec<(&str, Value)>| pairs.into_iter().map(|(k, v)| (n(k), v)).collect();
-    let set = |changes: Vec<RowChange>| ChangeSet { schema: live.schema.clone(), table: n("m2_t"), changes };
+    let set = |changes: Vec<RowChange>| ChangeSet {
+        catalog: None,
+        schema: live.schema.clone(),
+        table: n("m2_t"),
+        changes,
+    };
 
     // 一次提交：修改 A、删除 B、新增 D（id、qty 留空，用自增和默认值）
     let changes = set(vec![
@@ -748,7 +853,8 @@ async fn editing_flow(env: &str) {
 
     // 冲突：另一个会话先改了 C 的 name，再按旧值提交，整体回滚
     let other = s.open_session(&live.profile_id).await.unwrap().id;
-    live.run(other, "UPDATE m2_t SET name = '别人' WHERE code = 'C'").await;
+    let n_prefix = if live.driver == DriverId::SqlServer { "N" } else { "" };
+    live.run(other, &format!("UPDATE m2_t SET name = {n_prefix}'别人' WHERE code = 'C'")).await;
     s.sessions.close(other, true).await.unwrap();
     let conflict = set(vec![
         RowChange::Update {
@@ -781,6 +887,7 @@ async fn editing_flow(env: &str) {
 
     // 没有主键或唯一键的表不能编辑
     let nokey = ChangeSet {
+        catalog: None,
         schema: live.schema.clone(),
         table: n("m2_nokey"),
         changes: vec![RowChange::Insert { values: map(vec![("a", Value::Int(1))]) }],
@@ -1066,12 +1173,23 @@ async fn sql_file_flow(env: &str) {
              CREATE OR REPLACE PROCEDURE m2b_p IS\nBEGIN\n  INSERT INTO m2b_f VALUES (1);\n  INSERT INTO m2b_f VALUES (2);\nEND;\n/\n\
              BEGIN m2b_p; END;\n/\nINSERT INTO m2b_f VALUES (3);\nDROP PROCEDURE m2b_p;\n"
         }
+        // SQL Server：按 GO 分批，CREATE PROCEDURE 单独一批
+        DriverId::SqlServer => {
+            "DROP TABLE IF EXISTS m2b_f\nDROP PROCEDURE IF EXISTS m2b_p\nCREATE TABLE m2b_f (a INT)\nGO\n\
+             CREATE PROCEDURE m2b_p AS\nBEGIN\n  INSERT INTO m2b_f VALUES (1);\n  INSERT INTO m2b_f VALUES (2);\nEND\nGO\n\
+             EXEC m2b_p\nINSERT INTO m2b_f VALUES (3)\nGO\nDROP PROCEDURE m2b_p\n"
+        }
     };
     let request = |sql: &str, continue_on_error: bool| SqlFileRequest {
         profile_id: live.profile_id.clone(),
         source: upload(s, "脚本.sql", sql),
         encoding: Default::default(),
-        schema: Some(live.schema.clone()),
+        // SQL Server 的"当前 schema"是库
+        schema: Some(if live.driver == DriverId::SqlServer {
+            live.database.clone().unwrap()
+        } else {
+            live.schema.clone()
+        }),
         continue_on_error,
         transaction: false,
     };
@@ -1086,12 +1204,21 @@ async fn sql_file_flow(env: &str) {
         "{env}"
     );
 
-    // 出错时继续：失败的一条记下行号，其余照常执行
-    let script =
-        "INSERT INTO m2b_f VALUES (4);\nINSERT INTO m2b_nope VALUES (1);\nINSERT INTO m2b_f VALUES (5);\n";
+    // 出错时继续：失败的一条记下行号，其余照常执行（SQL Server 按 GO 分批，失败的一批从第 3 行开始）
+    let (script, failed_line) = if live.driver == DriverId::SqlServer {
+        (
+            "INSERT INTO m2b_f VALUES (4)\nGO\nINSERT INTO m2b_nope VALUES (1)\nGO\nINSERT INTO m2b_f VALUES (5)\n",
+            3,
+        )
+    } else {
+        (
+            "INSERT INTO m2b_f VALUES (4);\nINSERT INTO m2b_nope VALUES (1);\nINSERT INTO m2b_f VALUES (5);\n",
+            2,
+        )
+    };
     let st = wait_task(s, &s.start_sql_file(request(script, true), false).await.unwrap()).await;
     assert_eq!((st.state, st.progress.statements_failed), (TaskState::Done, 1), "{env}：{st:?}");
-    assert_eq!(st.failures[0].line, 2, "{env}");
+    assert_eq!(st.failures[0].line, failed_line, "{env}");
     // 出错时停止
     let st = wait_task(s, &s.start_sql_file(request(script, false), false).await.unwrap()).await;
     assert_eq!((st.state, st.progress.statements_done), (TaskState::Failed, 2), "{env}：{st:?}");
@@ -1108,6 +1235,16 @@ async fn sql_file_flow(env: &str) {
     };
     live.submit(id, ExecRequest::new(drop)).await;
     s.sessions.close(id, false).await.unwrap();
+}
+
+#[tokio::test]
+async fn sqlserver_sql_file() {
+    sql_file_flow("DBLENS_TEST_SQLSERVER_URL").await;
+}
+
+#[tokio::test]
+async fn sqlserver_editing() {
+    editing_flow("DBLENS_TEST_SQLSERVER_URL").await;
 }
 
 #[tokio::test]
@@ -1167,6 +1304,8 @@ async fn design_flow(env: &str) {
         DriverId::Postgres => ["bigint", "varchar(20)", "numeric(10,2)", "varchar(40)"],
         DriverId::Oracle => ["NUMBER(19)", "VARCHAR2(20)", "NUMBER(10,2)", "VARCHAR2(40)"],
         DriverId::Dameng => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
+        // 表设计器的 SQL Server 支持在 M6b，这里只为穷尽分支
+        DriverId::SqlServer => ["BIGINT", "NVARCHAR(20)", "DECIMAL(10,2)", "NVARCHAR(40)"],
     };
     let col = |name: &str, native: &str| Column {
         name: n(name),
@@ -1291,6 +1430,7 @@ async fn design_flow(env: &str) {
         DriverId::Oracle | DriverId::Dameng => &[
             "CREATE OR REPLACE TRIGGER m3_trg BEFORE INSERT ON m3_t FOR EACH ROW BEGIN :NEW.remark := 'trg'; END;",
         ],
+        DriverId::SqlServer => &[],
     };
     for sql in trigger {
         live.run(id, sql).await;
@@ -1323,7 +1463,7 @@ async fn design_flow(env: &str) {
         DriverId::Mysql => "INT",
         DriverId::Postgres => "integer",
         DriverId::Oracle => "NUMBER(10)",
-        DriverId::Dameng => "INT",
+        DriverId::Dameng | DriverId::SqlServer => "INT",
     };
     d.columns[4].data_type.native = number.into();
     let req = request(Some("m3_t"), d.clone(), Renames::default(), true, Some(t.fingerprint.clone()));
@@ -1658,7 +1798,7 @@ async fn model_flow(env: &str) {
     let other: Option<&'static str> = match live.driver {
         DriverId::Postgres => Some("m4_b"),
         DriverId::Mysql => Some("dblens_test_m4b"),
-        DriverId::Oracle | DriverId::Dameng => None,
+        DriverId::Oracle | DriverId::Dameng | DriverId::SqlServer => None,
     };
     let created = match other {
         Some(o) => {

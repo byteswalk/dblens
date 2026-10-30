@@ -92,7 +92,7 @@ impl Service {
 
     /// 反向生成：作为任务执行，返回任务 id；结束后模型已打开，任务状态的 `model` 是模型编号。
     pub async fn start_reverse(self: &Arc<Self>, req: ReverseRequest) -> Result<String> {
-        let profile = self.profile(&req.profile_id)?;
+        let profile = self.feature_profile(&req.profile_id)?;
         if req.schemas.is_empty() {
             return Err(Error::invalid(msg!("model.no_schemas")));
         }

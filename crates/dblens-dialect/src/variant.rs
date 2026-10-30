@@ -124,6 +124,7 @@ impl Variant {
             DriverId::Postgres => Variant::Postgres,
             DriverId::Oracle => Variant::Oracle,
             DriverId::Dameng => Variant::Dameng,
+            DriverId::SqlServer => Variant::SqlServer,
         }
     }
 

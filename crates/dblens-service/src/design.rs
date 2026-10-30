@@ -180,7 +180,7 @@ impl Service {
 
     /// 打开设计器：原表（直接从库读取）、存储属性和行数估计、指纹。
     pub async fn design_table(&self, profile_id: &str, schema: &str, name: &str) -> Result<DesignTable> {
-        let profile = self.profile(profile_id)?;
+        let profile = self.feature_profile(profile_id)?;
         let table = self.fresh_table(&profile, schema, name).await?;
         let storage =
             meta::table_storage(&*self.fresh_rows(&profile, MetaKey::TableStorage, schema, name).await?)?;
@@ -217,7 +217,7 @@ impl Service {
     }
 
     async fn prepare_design(&self, profile_id: &str, req: &DesignRequest) -> Result<Prepared> {
-        let profile = self.profile(profile_id)?;
+        let profile = self.feature_profile(profile_id)?;
         let dialect = self.metadata.dialect(&profile).await?;
         let mut draft = req.draft.clone();
         if let Some(name) = &req.name {

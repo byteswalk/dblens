@@ -6,11 +6,12 @@ rust-version.workspace = true
 publish.workspace = true
 
 [features]
-default = ["mysql", "postgres", "oracle", "dameng"]
+default = ["mysql", "postgres", "oracle", "dameng", "sqlserver"]
 mysql = ["dep:dblens-driver-mysql"]
 postgres = ["dep:dblens-driver-postgres"]
 oracle = ["dep:dblens-driver-oracle"]
 dameng = ["dep:dblens-driver-dameng"]
+sqlserver = ["dep:dblens-driver-sqlserver"]
 # 公开测试用的假驱动 `fake`
 testing = []
 
@@ -29,6 +30,7 @@ dblens-driver-dameng = { workspace = true, optional = true }
 dblens-driver-mysql = { workspace = true, optional = true }
 dblens-driver-oracle = { workspace = true, optional = true }
 dblens-driver-postgres = { workspace = true, optional = true }
+dblens-driver-sqlserver = { workspace = true, optional = true }
 directories.workspace = true
 encoding_rs.workspace = true
 encoding_rs_io.workspace = true

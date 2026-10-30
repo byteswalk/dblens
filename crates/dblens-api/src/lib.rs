@@ -75,6 +75,7 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         )
         .route("/profiles/{id}/password", put(routes::set_password))
         .route("/profiles/{id}/refresh", post(routes::refresh))
+        .route("/profiles/{id}/catalogs", get(routes::catalogs))
         .route("/profiles/{id}/schemas", get(routes::schemas))
         .route("/profiles/{id}/schemas/{schema}/objects", get(routes::objects))
         .route("/profiles/{id}/schemas/{schema}/tables", get(routes::tables))

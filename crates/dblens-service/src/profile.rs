@@ -68,6 +68,14 @@ pub struct ProfileInput {
     pub product: Option<Variant>,
 }
 
+/// `Profile::scope` 中连接配置 id 与库名的分隔符。
+pub(crate) const SCOPE_SEP: char = '\u{1f}';
+
+/// 范围是否属于这个连接配置（任何库）。
+pub(crate) fn scope_of(scope: &str, profile_id: &str) -> bool {
+    scope.strip_prefix(profile_id).is_some_and(|rest| rest.is_empty() || rest.starts_with(SCOPE_SEP))
+}
+
 fn default_timeout() -> u64 {
     ConnectParams::DEFAULT_CONNECT_TIMEOUT.as_secs()
 }
@@ -85,6 +93,28 @@ pub struct Profile {
 }
 
 impl Profile {
+    /// 在某个数据库中工作的同一连接配置（SQL Server 的连接 → 数据库 → 架构）：连接时以这个库为初始库。
+    /// 没给库名时原样返回。
+    pub fn in_catalog(&self, catalog: Option<&str>) -> Profile {
+        match catalog.filter(|c| !c.is_empty()) {
+            Some(c) => {
+                let mut p = self.clone();
+                p.input.database = Some(c.to_string());
+                p
+            }
+            None => self.clone(),
+        }
+    }
+
+    /// 元数据连接池和缓存的范围：通常就是连接配置 id；有数据库这一层的驱动（SQL Server）按库分开，
+    /// 写成 `id` + `\u{1f}` + 库名（见 `scope_of`）。
+    pub fn scope(&self) -> String {
+        match (self.input.driver, &self.input.database) {
+            (DriverId::SqlServer, Some(db)) => format!("{}{SCOPE_SEP}{db}", self.id),
+            _ => self.id.clone(),
+        }
+    }
+
     /// 用给定密码组成连接参数。原生库目录由驱动注册表另外补上。
     pub fn params(&self, password: String) -> ConnectParams {
         let p = &self.input;
@@ -106,6 +136,7 @@ pub(crate) fn driver_name(d: DriverId) -> &'static str {
         DriverId::Postgres => "postgres",
         DriverId::Oracle => "oracle",
         DriverId::Dameng => "dameng",
+        DriverId::SqlServer => "sqlserver",
     }
 }
 
@@ -115,6 +146,7 @@ fn parse_driver(s: &str) -> rusqlite::Result<DriverId> {
         "postgres" => Ok(DriverId::Postgres),
         "oracle" => Ok(DriverId::Oracle),
         "dameng" => Ok(DriverId::Dameng),
+        "sqlserver" => Ok(DriverId::SqlServer),
         other => {
             Err(rusqlite::Error::InvalidColumnType(2, format!("driver={other}"), rusqlite::types::Type::Text))
         }

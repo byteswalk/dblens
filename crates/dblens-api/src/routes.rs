@@ -238,12 +238,29 @@ pub struct FilterQuery {
     pub filter: Option<String>,
 }
 
-pub async fn schemas(
+/// 所在的数据库（SQL Server 的连接 → 数据库 → 架构）。不给时用连接配置里的初始库。
+#[derive(Deserialize)]
+pub struct CatalogQuery {
+    pub catalog: Option<String>,
+}
+
+/// 数据库列表（只有 SQL Server 有这一层，其他驱动返回空数组）。
+pub async fn catalogs(
     State(s): State<AppState>,
     Path(id): Path<String>,
     Query(q): Query<FilterQuery>,
 ) -> ApiResult<Json<Vec<SchemaInfo>>> {
     let p = s.service.profile(&id)?;
+    Ok(Json(s.service.metadata.catalogs(&p, q.filter.as_deref()).await?))
+}
+
+pub async fn schemas(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(c): Query<CatalogQuery>,
+    Query(q): Query<FilterQuery>,
+) -> ApiResult<Json<Vec<SchemaInfo>>> {
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     Ok(Json(s.service.metadata.schemas(&p, q.filter.as_deref()).await?))
 }
 
@@ -257,9 +274,10 @@ pub struct ObjectsQuery {
 pub async fn objects(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
     Query(q): Query<ObjectsQuery>,
 ) -> ApiResult<Json<Vec<ObjectInfo>>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     let kind = q.kind.unwrap_or(MetaKey::Tables);
     Ok(Json(s.service.metadata.objects(&p, &schema, kind, q.filter.as_deref()).await?))
 }
@@ -273,9 +291,10 @@ pub struct TablesQuery {
 pub async fn tables(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
     Query(q): Query<TablesQuery>,
 ) -> ApiResult<Json<Vec<Table>>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     Ok(Json(s.service.metadata.tables(&p, &schema, q.table.as_deref()).await?))
 }
 
@@ -288,9 +307,10 @@ pub struct ViewsQuery {
 pub async fn views(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
     Query(q): Query<ViewsQuery>,
 ) -> ApiResult<Json<Vec<View>>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     let kind = q.kind.unwrap_or(MetaKey::Views);
     if !matches!(kind, MetaKey::Views | MetaKey::MaterializedViews) {
         return Err(Error::invalid(msg!("api.bad_view_kind")).into());
@@ -301,24 +321,27 @@ pub async fn views(
 pub async fn sequences(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
 ) -> ApiResult<Json<Vec<Sequence>>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     Ok(Json(s.service.metadata.sequences(&p, &schema).await?))
 }
 
 pub async fn routines(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
 ) -> ApiResult<Json<Vec<Routine>>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     Ok(Json(s.service.metadata.routines(&p, &schema).await?))
 }
 
 pub async fn synonyms(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
 ) -> ApiResult<Json<Vec<Synonym>>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     Ok(Json(s.service.metadata.synonyms(&p, &schema).await?))
 }
 
@@ -334,9 +357,10 @@ pub struct SourceQuery {
 pub async fn source(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
     Query(q): Query<SourceQuery>,
 ) -> ApiResult<Json<Option<String>>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     Ok(Json(s.service.metadata.source(&p, &schema, q.kind, &q.name, q.routine_kind.as_deref()).await?))
 }
 
@@ -359,9 +383,10 @@ pub struct DdlQuery {
 pub async fn ddl(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
     Query(q): Query<DdlQuery>,
 ) -> ApiResult<Json<Value>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     let ddl = s.service.metadata.ddl(&p, &schema, q.kind, &q.name).await?;
     Ok(Json(json!({ "ddl": ddl })))
 }
@@ -382,9 +407,10 @@ pub struct GenerateQuery {
 pub async fn generate(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
     Query(q): Query<GenerateQuery>,
 ) -> ApiResult<Json<Value>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     let reference = q.ref_table.as_deref().map(|t| (q.ref_schema.as_deref().unwrap_or(&schema), t));
     let sql = s.service.metadata.generate(&p, &schema, &q.object, q.object_kind, q.kind, reference).await?;
     Ok(Json(json!({ "sql": sql })))
@@ -398,9 +424,10 @@ pub struct RelationsQuery {
 pub async fn relations(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
     Query(q): Query<RelationsQuery>,
 ) -> ApiResult<Json<Vec<Relation>>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     Ok(Json(s.service.metadata.relations(&p, &schema, &q.table).await?))
 }
 
@@ -418,9 +445,10 @@ pub struct DataSqlBody {
 pub async fn data_sql(
     State(s): State<AppState>,
     Path((id, schema)): Path<(String, String)>,
+    Query(c): Query<CatalogQuery>,
     Json(b): Json<DataSqlBody>,
 ) -> ApiResult<Json<Value>> {
-    let p = s.service.profile(&id)?;
+    let p = s.service.profile(&id)?.in_catalog(c.catalog.as_deref());
     let filter = b.filter.as_deref().map(str::trim).filter(|f| !f.is_empty());
     let sql = s.service.metadata.data_sql(&p, &schema, &b.object, filter, b.order.as_ref(), b.count).await?;
     Ok(Json(json!({ "sql": sql })))

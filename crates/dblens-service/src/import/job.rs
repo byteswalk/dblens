@@ -264,7 +264,7 @@ impl Service {
         table: &str,
         def: &NewTable,
     ) -> Result<String> {
-        let profile = self.profile(profile_id)?;
+        let profile = self.feature_profile(profile_id)?;
         let dialect = self.metadata.dialect(&profile).await?;
         Ok(dialect.create_table_sql(schema, &new_table(&dialect, table, def)?))
     }
@@ -285,7 +285,7 @@ impl Service {
 
     /// 提交导入任务，返回任务 id。提交时检查连接、文件、目标表、映射和执行策略；执行在后台进行。
     pub async fn start_import(self: &Arc<Self>, req: ImportRequest, allow_path: bool) -> Result<String> {
-        let profile = self.profile(&req.profile_id)?;
+        let profile = self.feature_profile(&req.profile_id)?;
         let password = self.secrets.get(&profile.id)?.unwrap_or_default();
         let dialect = self.metadata.dialect(&profile).await?;
         let (table, create_sql) = match &req.create {

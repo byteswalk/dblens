@@ -14,6 +14,8 @@ pub enum DriverId {
     Postgres,
     Oracle,
     Dameng,
+    #[serde(rename = "sqlserver")]
+    SqlServer,
 }
 
 /// 建立连接所需的参数。
@@ -23,7 +25,7 @@ pub struct ConnectParams {
     pub port: u16,
     pub user: String,
     pub password: String,
-    /// MySQL：默认库；PG：数据库名；Oracle：服务名；达梦：可为空。
+    /// MySQL：默认库；PG：数据库名；Oracle：服务名；达梦：可为空；SQL Server：登录后的初始库，可为空。
     pub database: Option<String>,
     /// 驱动特有的选项。
     pub options: BTreeMap<String, String>,
@@ -48,7 +50,7 @@ impl ConnectParams {
     pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
     /// 解析 `scheme://user:pass@host:port/database?k=v`。主要用于测试和命令行。
-    /// 支持的 scheme：mysql、mariadb、postgres、postgresql、oracle、dm、dameng。
+    /// 支持的 scheme：mysql、mariadb、postgres、postgresql、oracle、dm、dameng、sqlserver、mssql。
     /// 选项 `connect_timeout` 的单位为秒。
     pub fn from_url(s: &str) -> Result<(DriverId, ConnectParams)> {
         let u = url::Url::parse(s).map_err(|e| Error::connect(msg!("params.invalid_url", error = e)))?;
@@ -57,6 +59,7 @@ impl ConnectParams {
             "postgres" | "postgresql" => (DriverId::Postgres, 5432),
             "oracle" => (DriverId::Oracle, 1521),
             "dm" | "dameng" => (DriverId::Dameng, 5236),
+            "sqlserver" | "mssql" => (DriverId::SqlServer, 1433),
             other => return Err(Error::connect(msg!("params.unsupported_scheme", scheme = other))),
         };
         let decode = |v: &str| percent_decode_str(v).decode_utf8_lossy().into_owned();
@@ -179,7 +182,19 @@ mod tests {
         assert_eq!((id, p.port, p.database), (DriverId::Postgres, 5432, None));
         assert_eq!(ConnectParams::from_url("oracle://u:p@h/ORCLPDB1").unwrap().1.port, 1521);
         assert_eq!(ConnectParams::from_url("dm://SYSDBA:p@h").unwrap().0, DriverId::Dameng);
+        let (id, p) = ConnectParams::from_url("mssql://sa:p@h/app?auth=windows").unwrap();
+        assert_eq!((id, p.port, p.options["auth"].as_str()), (DriverId::SqlServer, 1433, "windows"));
         assert_eq!(ConnectParams::from_url("dm://SYSDBA:p@h").unwrap().1.port, 5236);
+    }
+
+    #[test]
+    fn driver_ids_match_web_names() {
+        let names: Vec<String> =
+            [DriverId::Mysql, DriverId::Postgres, DriverId::Oracle, DriverId::Dameng, DriverId::SqlServer]
+                .iter()
+                .map(|d| serde_json::to_string(d).unwrap())
+                .collect();
+        assert_eq!(names, ["\"mysql\"", "\"postgres\"", "\"oracle\"", "\"dameng\"", "\"sqlserver\""]);
     }
 
     #[test]

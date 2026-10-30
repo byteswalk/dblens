@@ -176,8 +176,8 @@ fn problems(plan: &MigrationPlan, draft: &MigrationDraft) -> Vec<Msg> {
 impl Service {
     /// 读两端的结构。`fresh`：跳过元数据缓存（开始执行前以库中最新的结构为准）。
     async fn load_migration(&self, plan: &MigrationPlan, fresh: bool) -> Result<Loaded> {
-        let source = self.profile(&plan.source.profile)?;
-        let target = self.profile(&plan.target.profile)?;
+        let source = self.feature_profile(&plan.source.profile)?;
+        let target = self.feature_profile(&plan.target.profile)?;
         let source_dialect = self.metadata.dialect(&source).await?;
         let target_dialect = self.metadata.dialect(&target).await?;
         let schemas = self.metadata.schemas(&target, None).await?;
@@ -483,8 +483,8 @@ impl Service {
 
     /// 作为任务执行迁移记录，返回任务 id。结束后刷新目标的元数据缓存、保存记录、写迁移报告。
     async fn launch(self: &Arc<Self>, record: MigrationRecord) -> Result<String> {
-        let source = self.profile(&record.plan.source.profile)?;
-        let target = self.profile(&record.plan.target.profile)?;
+        let source = self.feature_profile(&record.plan.source.profile)?;
+        let target = self.feature_profile(&record.plan.target.profile)?;
         let source_dialect = self.metadata.dialect(&source).await?;
         let target_dialect = self.metadata.dialect(&target).await?;
         let source_password = self.secrets.get(&source.id)?.unwrap_or_default();

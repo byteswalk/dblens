@@ -1,7 +1,7 @@
 //! 接口的实库测试。设置对应的环境变量时运行，否则直接通过：
 //! DBLENS_TEST_MYSQL_URL、DBLENS_TEST_MARIADB_URL、DBLENS_TEST_PG_URL、DBLENS_TEST_ORACLE_URL、DBLENS_TEST_DM_URL；
 //! 国产库第一批：DBLENS_TEST_TIDB_URL、DBLENS_TEST_OCEANBASE_URL、DBLENS_TEST_OPENGAUSS_URL、
-//! DBLENS_TEST_OPENGAUSS_A_URL、DBLENS_TEST_KINGBASE_URL、DBLENS_TEST_KINGBASE_PG_URL。
+//! DBLENS_TEST_OPENGAUSS_A_URL、DBLENS_TEST_KINGBASE_URL、DBLENS_TEST_KINGBASE_PG_URL；DBLENS_TEST_SQLSERVER_URL。
 //!
 //! 通过 REST 保存连接配置（MySQL、MariaDB、PG 的测试库开了 TLS，要求走 TLS）、测试连接、浏览元数据、打开会话，
 //! 再通过 WebSocket 分批取回 900 行结果。
@@ -145,6 +145,10 @@ async fn flow(env: &str, tls: bool) {
             "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 900) SELECT n FROM t ORDER BY n"
         }
         DriverId::Oracle | DriverId::Dameng => "SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 900 ORDER BY 1",
+        DriverId::SqlServer => {
+            "SELECT TOP (900) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n \
+             FROM sys.all_columns a CROSS JOIN sys.all_columns b ORDER BY n"
+        }
     };
     ws.send(Message::Text(json!({"type": "exec", "sql": sql, "max_rows": 400}).to_string().into()))
         .await
@@ -177,6 +181,50 @@ async fn flow(env: &str, tls: bool) {
     assert_eq!(st, StatusCode::NO_CONTENT);
     let (st, _) = call(&app, "DELETE", &format!("/api/profiles/{id}"), None).await;
     assert_eq!(st, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn sqlserver() {
+    flow("DBLENS_TEST_SQLSERVER_URL", true).await;
+}
+
+/// SQL Server 的数据库层：库列表；按库取架构和对象（`catalog` 参数）；M6b 之前的功能返回 400。
+#[tokio::test]
+async fn sqlserver_catalogs() {
+    let Ok(url) = std::env::var("DBLENS_TEST_SQLSERVER_URL") else { return };
+    let (driver, params) = ConnectParams::from_url(&url).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(dir.path()).unwrap());
+    let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
+    secrets.init_vault("主密码").unwrap();
+    let registry = Arc::new(DriverRegistry::new(store.clone()));
+    let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
+    let app = router(service, ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files: false });
+    let profile = json!({
+        "name": "mssql", "driver": driver, "host": params.host, "port": params.port, "user": params.user,
+        "database": params.database, "options": params.options, "environment": "test",
+    });
+    let (st, p) =
+        call(&app, "POST", "/api/profiles", Some(json!({"profile": profile, "password": params.password})))
+            .await;
+    assert_eq!(st, StatusCode::CREATED, "{p}");
+    let id = p["id"].as_str().unwrap();
+    let (st, cats) = call(&app, "GET", &format!("/api/profiles/{id}/catalogs"), None).await;
+    assert_eq!(st, StatusCode::OK, "{cats}");
+    assert!(
+        cats.as_array().unwrap().iter().any(|c| c["name"] == "master" && c["is_system"] == true),
+        "{cats}"
+    );
+    let (st, schemas) = call(&app, "GET", &format!("/api/profiles/{id}/schemas?catalog=master"), None).await;
+    assert_eq!(st, StatusCode::OK, "{schemas}");
+    assert!(schemas.as_array().unwrap().iter().any(|s| s["name"] == "dbo"), "{schemas}");
+    let (st, t) =
+        call(&app, "GET", &format!("/api/profiles/{id}/schemas/sys/objects?catalog=msdb&kind=views"), None)
+            .await;
+    assert_eq!(st, StatusCode::OK, "{t}");
+    let (st, e) =
+        call(&app, "GET", &format!("/api/profiles/{id}/design/table?schema=dbo&name=t"), None).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST, "{e}");
 }
 
 #[tokio::test]

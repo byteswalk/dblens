@@ -11,6 +11,9 @@ use crate::session::{ApplyOutcome, SessionId};
 /// 前端提交的改动集。
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ChangeSet {
+    /// 所在的库（SQL Server）：表结构从这个库读取。
+    #[serde(default)]
+    pub catalog: Option<String>,
     pub schema: String,
     pub table: String,
     pub changes: Vec<RowChange>,
@@ -18,6 +21,7 @@ pub struct ChangeSet {
 
 impl Service {
     async fn change_statements(&self, profile: &Profile, set: &ChangeSet) -> Result<Vec<ChangeStatement>> {
+        let profile = &profile.in_catalog(set.catalog.as_deref());
         let dialect = self.metadata.dialect(profile).await?;
         let table = self
             .metadata

@@ -68,6 +68,7 @@ async fn setup(envs: [&str; 2]) -> Option<(Arc<Service>, Vec<End>, tempfile::Tem
             DriverId::Mysql => params.database.clone().unwrap(),
             DriverId::Postgres => "public".to_string(),
             DriverId::Oracle | DriverId::Dameng => params.user.to_uppercase(),
+            DriverId::SqlServer => "dbo".to_string(),
         };
         let input = ProfileInput {
             name: env.to_string(),
@@ -126,6 +127,7 @@ fn drops(end: &End, names: &[String], seq: &str) -> Vec<String> {
             }
             DriverId::Dameng | DriverId::Postgres => format!("DROP TABLE IF EXISTS \"{n}\" CASCADE"),
             DriverId::Mysql => format!("DROP TABLE IF EXISTS `{n}`"),
+            DriverId::SqlServer => format!("DROP TABLE IF EXISTS [{n}]"),
         })
         .collect();
     out.push(match end.driver {
@@ -134,6 +136,7 @@ fn drops(end: &End, names: &[String], seq: &str) -> Vec<String> {
         ),
         DriverId::Dameng | DriverId::Postgres => format!("DROP SEQUENCE IF EXISTS \"{seq}\""),
         DriverId::Mysql => "SELECT 1".into(),
+        DriverId::SqlServer => format!("DROP SEQUENCE IF EXISTS [{seq}]"),
     });
     out
 }
@@ -143,6 +146,8 @@ fn source_ddl(end: &End, p: &str) -> Vec<String> {
     let opengauss = end.variant == Variant::OpenGauss;
     let n = ROWS;
     match end.driver {
+        // SQL Server 的迁移在 M6b，路线中没有它
+        DriverId::SqlServer => vec![],
         DriverId::Mysql => vec![
             format!(
                 "CREATE TABLE {p}_cust (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL DEFAULT 'n/a' COMMENT 'name', \

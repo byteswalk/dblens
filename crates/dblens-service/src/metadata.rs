@@ -1,5 +1,6 @@
 //! 元数据浏览（设计文档 5.3、6.4 节）：每个连接配置一个小连接池（默认 2 个连接），不会被编辑器里正在跑的
 //! 长查询堵住；查询结果按（连接配置、查询种类、参数）缓存，手动刷新或执行 DDL 后失效。
+//! 有数据库这一层的驱动（SQL Server）按库分开连接池和缓存（`Profile::scope`），查询在连接的初始库中执行。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -12,13 +13,14 @@ use dblens_driver::{Connection, collect_all};
 use tokio::sync::Semaphore;
 
 use crate::policy::ObjectRef;
-use crate::profile::Profile;
+use crate::profile::{Profile, scope_of};
 use crate::registry::DriverRegistry;
 use crate::secret::Secrets;
 
 /// 每个连接配置用于浏览元数据的最大连接数。
 pub const METADATA_POOL_SIZE: usize = 2;
 
+/// （`Profile::scope`、查询种类、参数）。
 type CacheKey = (String, MetaKey, MetaArgs);
 
 /// 元数据查询结果的缓存。
@@ -42,10 +44,10 @@ impl MetadataCache {
         }
     }
 
-    /// 丢掉一条缓存的查询结果（下次重新查询）。
+    /// 丢掉一条缓存的查询结果（这个连接配置的所有库中的，下次重新查询）。
     pub fn forget(&self, profile_id: &str, key: MetaKey, args: &MetaArgs) {
         if let Ok(mut e) = self.entries.lock() {
-            e.remove(&(profile_id.to_string(), key, args.clone()));
+            e.retain(|(p, k, a), _| !(scope_of(p, profile_id) && *k == key && a == args));
         }
     }
 
@@ -62,14 +64,14 @@ impl MetadataCache {
     pub fn invalidate(&self, profile_id: &str, schema: Option<&str>) {
         let Ok(mut e) = self.entries.lock() else { return };
         e.retain(|(p, key, args), _| {
-            if p != profile_id {
+            if !scope_of(p, profile_id) {
                 return true;
             }
             match schema {
                 None => false,
                 Some(s) => {
                     let same = args.schema.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(s));
-                    !(same || *key == MetaKey::Schemas)
+                    !(same || matches!(key, MetaKey::Schemas | MetaKey::Catalogs))
                 }
             }
         });
@@ -119,14 +121,17 @@ impl MetadataService {
             .clone())
     }
 
-    /// 关闭某个连接配置的元数据连接并清掉缓存（连接配置被修改或删除时调用）。
+    /// 关闭某个连接配置（所有库）的元数据连接并清掉缓存（连接配置被修改或删除时调用）。
     pub async fn forget(&self, profile_id: &str) -> Result<()> {
-        let pool = self
-            .pools
-            .lock()
-            .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pools")))?
-            .remove(profile_id);
-        if let Some(pool) = pool {
+        let pools: Vec<Arc<Pool>> = {
+            let mut all = self
+                .pools
+                .lock()
+                .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pools")))?;
+            let keys: Vec<String> = all.keys().filter(|k| scope_of(k, profile_id)).cloned().collect();
+            keys.iter().filter_map(|k| all.remove(k)).collect()
+        };
+        for pool in pools {
             let idle: Vec<_> = pool.idle.lock().map(|mut v| v.drain(..).collect()).unwrap_or_default();
             for (conn, _) in idle {
                 let _ = conn.close().await;
@@ -154,11 +159,11 @@ impl MetadataService {
         args: &MetaArgs,
         build: impl FnOnce(&Dialect) -> Result<Option<MetaQuery>>,
     ) -> Result<Option<Arc<MetaRows>>> {
-        let cache_key = (profile.id.clone(), key, args.clone());
+        let cache_key = (profile.scope(), key, args.clone());
         if let Some(rows) = self.cache.get(&cache_key) {
             return Ok(Some(rows));
         }
-        let pool = self.pool(&profile.id)?;
+        let pool = self.pool(&profile.scope())?;
         let _permit =
             pool.permits.acquire().await.map_err(|_| Error::internal(msg!("metadata.pool_closed")))?;
         let idle = pool
@@ -218,7 +223,7 @@ impl MetadataService {
 
     /// 连接的方言（取一次连接上的识别结果）。
     pub async fn dialect(&self, profile: &Profile) -> Result<Dialect> {
-        let pool = self.pool(&profile.id)?;
+        let pool = self.pool(&profile.scope())?;
         if let Some((_, d)) = pool
             .idle
             .lock()
@@ -236,6 +241,15 @@ impl MetadataService {
             .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "pool")))?
             .push((conn, dialect));
         Ok(dialect)
+    }
+
+    /// 数据库列表（只有 SQL Server 有这一层，其他驱动返回空）。
+    pub async fn catalogs(&self, profile: &Profile, filter: Option<&str>) -> Result<Vec<SchemaInfo>> {
+        let args = MetaArgs { filter: filter.map(Into::into), ..Default::default() };
+        match self.rows(profile, MetaKey::Catalogs, &args).await? {
+            Some(rows) => meta::schemas(&rows),
+            None => Ok(vec![]),
+        }
     }
 
     pub async fn schemas(&self, profile: &Profile, filter: Option<&str>) -> Result<Vec<SchemaInfo>> {

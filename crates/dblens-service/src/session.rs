@@ -864,6 +864,13 @@ impl Actor {
                     break;
                 }
             }
+            // SQL Server 的执行计划打开了会话级开关，无论成败都要关掉，否则之后的语句都只返回计划
+            if req.explain
+                && let Some(cleanup) = ctx.dialect.explain_cleanup()
+                && let Ok(mut stream) = conn.execute(cleanup, &[]).await
+            {
+                while let Ok(Some(_)) = stream.next(100).await {}
+            }
             let outcome = match &result {
                 Ok(()) => Outcome::Succeeded { affected },
                 Err(Error::Cancelled) => Outcome::Cancelled,

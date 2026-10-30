@@ -204,7 +204,7 @@ impl Service {
                 }
             }
             DocSource::Database { profile, schema } => {
-                let p = self.profile(profile)?;
+                let p = self.feature_profile(profile)?;
                 // 跳过元数据缓存，以库中最新的结构为准
                 let args = MetaArgs { schema: Some(schema.clone()), ..Default::default() };
                 for key in MetaKey::TABLE_DETAIL.into_iter().chain([MetaKey::Views]) {

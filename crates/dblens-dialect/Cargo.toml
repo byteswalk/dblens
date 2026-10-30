@@ -17,6 +17,7 @@ dblens-driver-dameng.workspace = true
 dblens-driver-mysql.workspace = true
 dblens-driver-oracle.workspace = true
 dblens-driver-postgres.workspace = true
+dblens-driver-sqlserver.workspace = true
 insta.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
