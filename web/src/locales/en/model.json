@@ -31,6 +31,7 @@
     "openTitle": "Open Model",
     "createTitle": "New Model",
     "reverseTitle": "Reverse-engineer a Model from a Database",
+    "oneCatalog": "The selected schemas must be in the same database",
     "path": "Model directory",
     "pathHint": "A directory on the server's machine",
     "emptyDir": "The directory must not exist or must be empty",

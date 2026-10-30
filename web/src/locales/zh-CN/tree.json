@@ -46,8 +46,7 @@
     "exportData": "导出数据…",
     "newTable": "新建表",
     "exportDoc": "导出文档…",
-    "migrate": "迁移到…",
-    "sqlServerLater": "SQL Server 的这项功能将在后续版本支持"
+    "migrate": "迁移到…"
   },
   "duplicate": {
     "name": "{{name}} 副本",

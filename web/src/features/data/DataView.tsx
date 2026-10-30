@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import DbIcon from '../../shared/DbIcon'
-import { type ChangeSet, type Profile, errorText, exportSource, schemaLabel, supportsWrites } from '../../shared/api'
+import { type ChangeSet, type Profile, errorText, exportSource, schemaLabel } from '../../shared/api'
 import ResultsPanel from '../results/ResultsPanel'
 import { useQueryActions } from '../editor/actions'
 import { runnerFor, useTabRuntime } from '../editor/runner'
@@ -239,7 +239,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           <Button
             size="small"
             icon={<IconUpload size={14} />}
-            disabled={!profile || !supportsWrites(profile.driver)}
+            disabled={!profile}
             onClick={() =>
               useImportDialogs
                 .getState()
@@ -253,7 +253,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           <Button
             size="small"
             icon={<IconTableOptions size={14} />}
-            disabled={!profile || !supportsWrites(profile.driver)}
+            disabled={!profile}
             onClick={() => useTabs.getState().openDesign(tab.profileId, { schema: data.schema, table: data.object })}
           >
             {t('editor.data.design')}

@@ -3,7 +3,7 @@
 // 右键菜单（M1a）：连接 —— 编辑、复制、删除、刷新；其他节点 —— 复制名称、刷新。
 // 对象节点另有（M1c2）："查看数据"（数据标签，也可双击打开）、"查看 DDL"（弹出只读预览）、
 // "生成 SQL"（插入到当前编辑器）。
-// SQL Server（M6a）：连接下先列库，库下是架构；表设计器、导入、文档导出、比对、保存为模型、迁移的入口置灰。
+// SQL Server（M6a）：连接下先列库，库下是架构。
 
 import { App, Dropdown, Input, type MenuProps, Tree } from 'antd'
 import type { DataNode, EventDataNode } from 'antd/es/tree'
@@ -41,7 +41,6 @@ import {
   exportSource,
   joinCatalog,
   schemaLabel,
-  supportsWrites,
 } from '../../shared/api'
 import DbIcon from '../../shared/DbIcon'
 import { profileKind } from '../connections/form'
@@ -323,29 +322,19 @@ export default function ObjectTree() {
           ]
         : []
 
-  // 下面几个是函数声明而不是箭头函数常量：上面的 menuItems 在渲染时就会调用它们
-  /** 连接是否支持写入类功能（M6b 之前的 SQL Server 不支持）；不支持时这些菜单项置灰并说明。 */
-  function writable(profileId: string) {
-    return supportsWrites(profiles.find((p) => p.id === profileId)?.driver ?? 'mysql')
-  }
-  function later(key: string, label: string, enabled: boolean) {
-    return enabled ? { key, label } : { key, label: <span title={t('tree.menu.sqlServerLater')}>{label}</span>, disabled: true }
-  }
-
   /** schema 节点：新建表、导入到新表、执行 SQL 文件，后面接分隔线。 */
   function schemaItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 's') return []
-    const w = writable(k.profileId)
     return [
-      later('new-table', t('tree.menu.newTable'), w),
-      later('import-new', t('tree.menu.importNew'), w),
+      { key: 'new-table', label: t('tree.menu.newTable') },
+      { key: 'import-new', label: t('tree.menu.importNew') },
       { key: 'sql-file', label: t('tree.menu.sqlFile') },
       { type: 'divider' },
       { key: 'er', label: t('tree.menu.er') },
-      later('compare-model', t('tree.menu.compareModel'), w),
-      later('save-model', t('tree.menu.saveAsModel'), w),
-      later('export-doc', t('tree.menu.exportDoc'), w),
-      later('migrate', t('tree.menu.migrate'), w),
+      { key: 'compare-model', label: t('tree.menu.compareModel') },
+      { key: 'save-model', label: t('tree.menu.saveAsModel') },
+      { key: 'export-doc', label: t('tree.menu.exportDoc') },
+      { key: 'migrate', label: t('tree.menu.migrate') },
       { type: 'divider' },
     ]
   }
@@ -355,10 +344,9 @@ export default function ObjectTree() {
     if (k.type !== 'o') return []
     const items: NonNullable<MenuProps['items']> = []
     const target = targetKind(k.kind)
-    const w = writable(k.profileId)
     if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
-    if (target === 'table') items.push(later('design', t('tree.menu.design'), w))
-    if (target === 'table') items.push(later('import', t('tree.menu.import'), w))
+    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design') })
+    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import') })
     if (target) items.push({ key: 'export-data', label: t('tree.menu.exportData') })
     if (ddlKind(k.kind, k.routineKind)) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     if (target) {

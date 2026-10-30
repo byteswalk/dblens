@@ -51,9 +51,40 @@ export function exportSource(
   return { sql }
 }
 
-/** M6b 之前 SQL Server 不支持的功能（表设计器、导入、文档导出、结构对比、迁移、保存为模型）。 */
-export function supportsWrites(driver: DriverId): boolean {
-  return driver !== 'sqlserver'
+/**
+ * 带 schema 的请求对象在发给后端前拆开合成的 schema：架构留在 `schema`，库放进 `catalog`（M6b 设计文档第 6 节）。
+ * 不带库时原样返回。
+ */
+export function withCatalog<T extends { schema: string }>(x: T): T & { catalog?: string } {
+  const s = splitCatalog(x.schema)
+  return s.catalog === undefined ? x : { ...x, schema: s.schema, catalog: s.catalog }
+}
+
+/** 比对的一边：连接一侧拆开合成的 schema。 */
+function compareSide(side: CompareSideRef): CompareSideRef {
+  return side.kind === 'database' ? withCatalog(side) : side
+}
+
+function compareRequest(req: CompareRequest): CompareRequest {
+  return { ...req, source: compareSide(req.source), target: compareSide(req.target) }
+}
+
+/** 迁移方案的两端拆开合成的 schema（保存的方案文件中库和架构也分开存）。 */
+export function planEnds(plan: MigrationPlan): MigrationPlan {
+  return { ...plan, source: withCatalog(plan.source), target: withCatalog(plan.target) }
+}
+
+/** 从库反向生成模型：SQL Server 的几个架构必须在同一个库中（模型中的 schema 不带库）。 */
+function reverseRequest(req: ReverseRequest): ReverseRequest & { catalog?: string } {
+  const parts = req.schemas.map(splitCatalog)
+  const catalogs = new Set(parts.map((s) => s.catalog))
+  if (catalogs.size > 1) throw new Error(t('model.dialog.oneCatalog'))
+  const catalog = parts[0]?.catalog
+  return { ...req, schemas: parts.map((s) => s.schema), ...(catalog === undefined ? {} : { catalog }) }
+}
+
+function documentRequest(req: DocumentRequest): DocumentRequest {
+  return req.source.kind === 'database' ? { ...req, source: withCatalog(req.source) } : req
 }
 
 /** 服务端的错误对象（dblens_core::Error），按 kind 区分。 */
@@ -482,7 +513,9 @@ export interface SqlFileRequest {
 /** 结构迁移（M5a）：迁移的一端。 */
 export interface MigrationEnd {
   profile: string
+  /** 界面中为合成的 schema（SQL Server 带库），请求和保存时拆成 `catalog` + `schema`。 */
   schema: string
+  catalog?: string
 }
 
 export type NameCase = 'keep' | 'lower' | 'upper'
@@ -1176,8 +1209,8 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
       request<FilePreview>('POST', '/imports/preview', { source, file }),
     /** 新建表的建表语句预览。 */
     importDdl: async (id: string, schema: string, table: string, create: NewTable) =>
-      (await request<{ sql: string }>('POST', `${p(id)}/imports/ddl`, { schema, table, create })).sql,
-    startImport: async (req: ImportRequest) => (await request<{ id: string }>('POST', '/imports', req)).id,
+      (await request<{ sql: string }>('POST', `${p(id)}/imports/ddl`, withCatalog({ schema, table, create }))).sql,
+    startImport: async (req: ImportRequest) => (await request<{ id: string }>('POST', '/imports', withCatalog(req))).id,
     startSqlFile: async (req: SqlFileRequest) => (await request<{ id: string }>('POST', '/sql-files', req)).id,
     task: (id: string) => request<TaskStatus>('GET', `/tasks/${encodeURIComponent(id)}`),
     /** 进行中的任务取消；已结束的删除记录和报告。 */
@@ -1193,15 +1226,17 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
       (await request<{ sql: string }>('GET', `/tasks/${encodeURIComponent(id)}/statements/${n}`)).sql,
     designCaps: (id: string) => request<DesignCaps>('GET', `${p(id)}/design/caps`),
     designTable: (id: string, schema: string, name: string) =>
-      request<DesignTableResult>('GET', `${p(id)}/design/table${q({ schema, name })}`),
-    previewDesign: (id: string, req: DesignRequest) => request<DesignPreview>('POST', `${p(id)}/design/preview`, req),
+      request<DesignTableResult>('GET', `${p(id)}/design/table${q({ ...withCatalog({ schema }), name })}`),
+    previewDesign: (id: string, req: DesignRequest) =>
+      request<DesignPreview>('POST', `${p(id)}/design/preview`, withCatalog(req)),
     applyDesign: async (id: string, req: DesignRequest) =>
-      (await request<{ id: string }>('POST', `${p(id)}/design/apply`, req)).id,
+      (await request<{ id: string }>('POST', `${p(id)}/design/apply`, withCatalog(req))).id,
     models: () => request<{ open: ModelSummary[]; recent: string[] }>('GET', '/models'),
     openModel: (path: string) => request<ModelSummary>('POST', '/models/open', { path }),
     createModel: (path: string, name: string, database: ModelDatabase) =>
       request<ModelSummary>('POST', '/models', { path, name, database }),
-    startReverse: async (req: ReverseRequest) => (await request<{ id: string }>('POST', '/models/reverse', req)).id,
+    startReverse: async (req: ReverseRequest) =>
+      (await request<{ id: string }>('POST', '/models/reverse', reverseRequest(req))).id,
     /** 重新加载并返回模型信息。 */
     model: (id: string) => request<ModelSummary>('GET', m(id)),
     closeModel: (id: string) => request<null>('DELETE', m(id)),
@@ -1234,20 +1269,23 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
       request<{ fingerprint: string }>('DELETE', `${mt(id, schema, table)}/logical-keys/${index}`),
     /** 桌面版：把导出的图片（base64）写到"另存为"选的 .svg、.png 文件。 */
     saveImage: (path: string, data: string) => request<null>('POST', '/files/image', { path, data }),
-    startDocument: async (req: DocumentRequest) => (await request<{ id: string }>('POST', '/documents', req)).id,
+    startDocument: async (req: DocumentRequest) =>
+      (await request<{ id: string }>('POST', '/documents', documentRequest(req))).id,
     /** 开始前检查：模板语法、样式来源、输出位置。 */
     checkDocument: async (req: DocumentRequest) =>
-      (await request<{ problems: DocumentProblem[] }>('POST', '/documents/check', req)).problems,
+      (await request<{ problems: DocumentProblem[] }>('POST', '/documents/check', documentRequest(req))).problems,
     /** 把内置模板写到指定路径（桌面版）。 */
     exportDocTemplate: (format: 'html' | 'markdown', path: string) =>
       request<null>('POST', '/documents/templates/export', { format, path }),
     /** 整个 schema 的表明细（库的 ER 图）。 */
     schemaTables: (id: string, schema: string) => request<DesignTableModel[]>('GET', `${s(id, schema)}/tables`),
-    compare: (req: CompareRequest) => request<CompareResult>('POST', '/compare', req),
+    compare: (req: CompareRequest) => request<CompareResult>('POST', '/compare', compareRequest(req)),
     /** 结构迁移：读结构、转换、检查、生成脚本，不执行。 */
-    previewMigration: (plan: MigrationPlan) => request<MigrationPreview>('POST', '/migrations/preview', plan),
+    previewMigration: (plan: MigrationPlan) =>
+      request<MigrationPreview>('POST', '/migrations/preview', planEnds(plan)),
     /** 开始迁移，返回任务 id。 */
-    startMigration: async (plan: MigrationPlan) => (await request<{ id: string }>('POST', '/migrations', plan)).id,
+    startMigration: async (plan: MigrationPlan) =>
+      (await request<{ id: string }>('POST', '/migrations', planEnds(plan))).id,
     /** 没有完成的迁移。 */
     unfinishedMigrations: () => request<MigrationSummary[]>('GET', '/migrations'),
     /** 继续一个没有完成的迁移，返回任务 id。 */
@@ -1255,9 +1293,12 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
       (await request<{ id: string }>('POST', `/migrations/${encodeURIComponent(id)}/resume`)).id,
     /** 放弃：删除迁移记录（不动目标库）。 */
     discardMigration: (id: string) => request<null>('DELETE', `/migrations/${encodeURIComponent(id)}`),
-    syncPreview: (req: SyncRequest) => request<SyncPreview>('POST', '/compare/preview', req),
+    syncPreview: (req: SyncRequest) =>
+      request<SyncPreview>('POST', '/compare/preview', { ...req, compare: compareRequest(req.compare) }),
     /** 同步：目标是库时返回任务 id；目标是模型时已经写完，返回 null。 */
-    sync: async (req: SyncRequest) => (await request<{ task: string | null }>('POST', '/compare/sync', req)).task,
+    sync: async (req: SyncRequest) =>
+      (await request<{ task: string | null }>('POST', '/compare/sync', { ...req, compare: compareRequest(req.compare) }))
+        .task,
     /** 桌面版：把同步脚本写到"另存为"选的 .sql 文件。 */
     saveScript: (path: string, text: string) => request<null>('POST', '/compare/script', { path, text }),
     openSession: (profileId: string) => request<SessionInfo>('POST', '/sessions', { profile_id: profileId }),

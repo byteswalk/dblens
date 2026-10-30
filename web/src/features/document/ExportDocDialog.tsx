@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import { DEFAULT_DIAGRAM, type DocFormat, type DocumentProblem, errorText } from '../../shared/api'
+import { DEFAULT_DIAGRAM, type DocFormat, type DocumentProblem, errorText, schemaLabel } from '../../shared/api'
 import { useSettings } from '../../shared/settings'
 import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
@@ -98,7 +98,7 @@ function Dialog({ target }: { target: DocTarget }) {
         {
           schema: target.schema,
           name: DEFAULT_DIAGRAM,
-          title: target.schema,
+          title: schemaLabel(target.schema),
           description: null,
           tables: picked.map((table) => ({ table, logical_keys: [] })),
           display: large ? 'names' : 'columns',

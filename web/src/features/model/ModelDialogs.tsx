@@ -9,7 +9,8 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
-import { type Compat, type TaskStatus, errorText, supportsWrites } from '../../shared/api'
+import { type Compat, type TaskStatus, errorText } from '../../shared/api'
+import { schemaOptions } from '../../shared/schemaOptions'
 import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
 import { PRODUCTS, type ProductId, productLabel } from '../connections/products'
@@ -146,10 +147,11 @@ function ReverseDialog() {
   useEffect(() => {
     if (!profileId && profiles.length) setProfileId(profiles[0].id)
   }, [profileId, profiles])
+  const profile = profiles.find((p) => p.id === profileId)
   const { data: all = [] } = useQuery({
-    queryKey: ['schemas', profileId],
-    queryFn: () => withVault(api, () => api.schemas(profileId!)),
-    enabled: !!profileId,
+    queryKey: ['schema-options', profileId],
+    queryFn: () => withVault(api, () => schemaOptions(api, profile!)),
+    enabled: !!profile,
   })
 
   // 执行中：轮询任务状态；完成后打开模型
@@ -204,11 +206,11 @@ function ReverseDialog() {
               setProfileId(v)
               setSchemas([])
             }}
-            options={profiles.filter((p) => supportsWrites(p.driver)).map((p) => ({ value: p.id, label: p.name }))}
+            options={profiles.map((p) => ({ value: p.id, label: p.name }))}
           />
         </Form.Item>
         <Form.Item label={t('model.dialog.schemas')}>
-          <Select mode="multiple" value={schemas} onChange={setSchemas} options={all.map((s) => ({ value: s.name }))} />
+          <Select mode="multiple" value={schemas} onChange={setSchemas} options={all} />
         </Form.Item>
         <Form.Item label={t('model.dialog.path')} extra={t('model.dialog.emptyDir')}>
           <PathField value={path} onChange={setPath} />

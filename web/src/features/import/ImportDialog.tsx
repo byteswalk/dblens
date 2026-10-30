@@ -21,7 +21,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import type { FileOptions, ImportRequest, WriteMode } from '../../shared/api'
+import { type FileOptions, type ImportRequest, type WriteMode, schemaLabel } from '../../shared/api'
 import { cellText } from '../../shared/exec'
 import { withVault } from '../connections/vault'
 import FileField, { type PickedFile } from './FileField'
@@ -198,7 +198,7 @@ export default function ImportDialog() {
         title: t('import.options.prodTitle'),
         content: (
           <div>
-            <div>{t('import.options.prodContent', { table: `${schema}.${targetTable}`, mode: t(`import.options.modes.${mode}`) })}</div>
+            <div>{t('import.options.prodContent', { table: `${schemaLabel(schema)}.${targetTable}`, mode: t(`import.options.modes.${mode}`) })}</div>
             {mode === 'replace' && <div className="err">{t('import.options.replaceWarn')}</div>}
           </div>
         ),

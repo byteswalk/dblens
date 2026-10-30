@@ -63,12 +63,14 @@ describe('变更摘要', () => {
       { kind: 'count_check' as const, source: 'old', target: 'new', changes: [] },
       { kind: 'sql' as const, sql: 'CREATE TRIGGER x BEGIN NULL; END;', changes: [] },
     ]
-    const text = scriptOf(steps, true)
+    const text = scriptOf(steps, 'oracle')
     expect(text.split('\n\n')).toEqual([
       'CREATE TABLE t (a INT);',
       expect.stringMatching(/^-- 核对行数：old 与 new/),
       'CREATE TRIGGER x BEGIN NULL; END;\n/',
     ])
-    expect(scriptOf(steps.slice(2), false)).toBe('CREATE TRIGGER x BEGIN NULL; END;')
+    expect(scriptOf(steps.slice(2), 'mysql')).toBe('CREATE TRIGGER x BEGIN NULL; END;')
+    // SQL Server：每条之后一行 GO
+    expect(scriptOf(steps.slice(2), 'sqlserver')).toBe('CREATE TRIGGER x BEGIN NULL; END;\nGO')
   })
 })

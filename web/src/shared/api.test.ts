@@ -10,7 +10,7 @@ import {
   schemaLabel,
   sessionSchema,
   splitCatalog,
-  supportsWrites,
+  withCatalog,
 } from './api'
 import i18n from './i18n'
 
@@ -93,7 +93,20 @@ describe('createApi', () => {
     expect(exportSource(joinCatalog('a]b', 'dbo'), 'order', 'id > 1', { column: 'id', desc: true })).toEqual({
       sql: 'SELECT * FROM [a]]b].[dbo].[order] WHERE (id > 1) ORDER BY [id] DESC',
     })
-    expect([supportsWrites('sqlserver'), supportsWrites('postgres')]).toEqual([false, true])
+  })
+
+  it('M6b 的请求把合成的 schema 拆成库和架构', async () => {
+    expect(withCatalog({ schema: 'public', table: 't' })).toEqual({ schema: 'public', table: 't' })
+    expect(withCatalog({ schema: joinCatalog('sales', 'dbo'), table: 't' })).toEqual({ schema: 'dbo', table: 't', catalog: 'sales' })
+    const { fn, calls } = fakeFetch(200, { id: 'x' })
+    const api = createApi('tok', fn)
+    const end = (schema: string) => ({ profile: 'p', schema })
+    await api.startMigration({ source: end(joinCatalog('a', 'dbo')), target: end('public') } as never)
+    const body = JSON.parse(calls[0].init?.body as string)
+    expect([body.source, body.target]).toEqual([{ profile: 'p', schema: 'dbo', catalog: 'a' }, { profile: 'p', schema: 'public' }])
+    await api.startReverse({ profile_id: 'p', schemas: [joinCatalog('a', 'dbo'), joinCatalog('a', 'hr')], path: 'x', name: 'm' })
+    expect(JSON.parse(calls[1].init?.body as string)).toMatchObject({ schemas: ['dbo', 'hr'], catalog: 'a' })
+    await expect(api.startReverse({ profile_id: 'p', schemas: [joinCatalog('a', 'dbo'), joinCatalog('b', 'dbo')], path: 'x', name: 'm' })).rejects.toThrow()
   })
 
   it('204 没有响应体', async () => {

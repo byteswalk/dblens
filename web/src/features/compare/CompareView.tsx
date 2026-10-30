@@ -21,7 +21,7 @@ import type {
   SyncRequest,
   TableStatus,
 } from '../../shared/api'
-import { supportsWrites } from '../../shared/api'
+import { schemaOptions } from '../../shared/schemaOptions'
 import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
 import { useQueryActions } from '../editor/actions'
@@ -74,16 +74,19 @@ function SidePicker({ label, value, profiles, onChange }: {
     queryFn: () => api.modelTables(model!.id),
     enabled: !!model,
   })
-  const profile = value?.kind === 'database' ? value.profile : null
+  const profile = value?.kind === 'database' ? profiles.find((p) => p.id === value.profile) : undefined
   const { data: dbSchemas = [] } = useQuery({
-    queryKey: ['schemas', profile],
-    queryFn: () => withVault(api, () => api.schemas(profile!)),
+    queryKey: ['schema-options', profile?.id],
+    queryFn: () => withVault(api, () => schemaOptions(api, profile!)),
     enabled: !!profile,
   })
   const schemas =
     value?.kind === 'model'
-      ? [...new Set([...(model?.info.schemas ?? []), ...modelTables.map((x) => x.schema)])]
-      : dbSchemas.map((s) => s.name)
+      ? [...new Set([...(model?.info.schemas ?? []), ...modelTables.map((x) => x.schema)])].map((s) => ({
+          value: s,
+          label: s,
+        }))
+      : dbSchemas
   return (
     <Space.Compact>
       <span className="compare-side-label">{label}</span>
@@ -116,7 +119,7 @@ function SidePicker({ label, value, profiles, onChange }: {
           placeholder={t('model.compare.pickProfile')}
           value={value?.kind === 'database' ? value.profile : undefined}
           onChange={(p) => onChange({ kind: 'database', profile: p, schema: '' })}
-          options={profiles.filter((p) => supportsWrites(p.driver)).map((p) => ({ value: p.id, label: p.name }))}
+          options={profiles.map((p) => ({ value: p.id, label: p.name }))}
         />
       )}
       <Select
@@ -127,7 +130,7 @@ function SidePicker({ label, value, profiles, onChange }: {
         disabled={!value}
         value={value?.schema || undefined}
         onChange={(schema) => value && onChange({ ...value, schema })}
-        options={schemas.map((s) => ({ value: s }))}
+        options={schemas}
       />
     </Space.Compact>
   )

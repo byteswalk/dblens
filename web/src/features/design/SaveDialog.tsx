@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import { type DesignRequest, type Profile } from '../../shared/api'
+import { type DesignRequest, type Profile, schemaLabel } from '../../shared/api'
 import { useQueryActions } from '../editor/actions'
 import SqlBox from './SqlBox'
 import { describeChange, scriptOf } from './summary'
@@ -34,11 +34,10 @@ export default function SaveDialog({ profile, request, onRebuild, onReload, onCl
     gcTime: 0,
     retry: false,
   })
-  const plsql = profile.driver === 'oracle' || profile.driver === 'dameng'
-  const script = p ? scriptOf(p.statements, plsql) : ''
+  const script = p ? scriptOf(p.statements, profile.driver) : ''
   const blocked =
     !p || p.errors.length > 0 || p.conflict || !!p.rebuild.refused || !!p.denied || p.statements.length === 0
-  const name = `${request.schema}.${request.draft.name}`
+  const name = `${schemaLabel(request.schema)}.${request.draft.name}`
   const execute = async () => {
     setStarting(true)
     try {

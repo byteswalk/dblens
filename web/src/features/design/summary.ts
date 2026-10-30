@@ -1,6 +1,6 @@
 // 变更列表的可读摘要（保存确认框中列出），以及复制、在查询标签中打开用的脚本文本。
 
-import type { DesignColumn, DesignStep, TableChange } from '../../shared/api'
+import type { DesignColumn, DesignStep, DriverId, TableChange } from '../../shared/api'
 import { t } from '../../shared/i18n'
 
 const list = (cols: string[]) => cols.join(', ')
@@ -68,12 +68,17 @@ function alterLines(from: DesignColumn, to: DesignColumn): string[] {
   return out
 }
 
-/** 预览中的语句拼成脚本：每条以 `;` 结束（PL/SQL 块之后加一行 `/`），由程序执行的核对行数写成注释。 */
-export function scriptOf(steps: DesignStep[], plsql: boolean): string {
+/**
+ * 预览中的语句拼成脚本：每条以 `;` 结束（Oracle、达梦的 PL/SQL 块之后加一行 `/`；SQL Server 每条之后加一行 `GO`），
+ * 由程序执行的核对行数写成注释。
+ */
+export function scriptOf(steps: DesignStep[], driver: DriverId): string {
+  const plsql = driver === 'oracle' || driver === 'dameng'
   return steps
     .map((s) => {
       if (s.kind === 'count_check') return `-- ${t('design.save.countCheck', { source: s.source, target: s.target })}`
       const sql = s.sql.trimEnd()
+      if (driver === 'sqlserver') return `${sql}\nGO`
       if (sql.endsWith(';')) return plsql ? `${sql}\n/` : sql
       return `${sql};`
     })

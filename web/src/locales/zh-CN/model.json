@@ -31,6 +31,7 @@
     "openTitle": "打开模型",
     "createTitle": "新建模型",
     "reverseTitle": "从库反向生成模型",
+    "oneCatalog": "反向生成时所选的架构必须在同一个库中",
     "path": "模型目录",
     "pathHint": "服务所在机器上的目录",
     "emptyDir": "目录必须不存在或为空",

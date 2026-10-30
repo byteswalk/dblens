@@ -46,8 +46,7 @@
     "exportData": "Export Data…",
     "newTable": "New table",
     "exportDoc": "Export Document…",
-    "migrate": "Migrate To…",
-    "sqlServerLater": "This feature is not yet available for SQL Server"
+    "migrate": "Migrate To…"
   },
   "duplicate": {
     "name": "{{name}} copy",

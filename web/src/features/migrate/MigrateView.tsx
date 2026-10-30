@@ -22,8 +22,9 @@ import {
   type Profile,
   type TaskStatus,
   errorText,
-  supportsWrites,
+  planEnds,
 } from '../../shared/api'
+import { schemaOptions } from '../../shared/schemaOptions'
 import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
 import SqlBox from '../design/SqlBox'
@@ -56,10 +57,11 @@ function EndPicker({ label, value, profiles, onChange }: {
 }) {
   const api = useApi()
   const { t } = useTranslation()
+  const profile = profiles.find((p) => p.id === value.profile)
   const { data: schemas = [] } = useQuery({
-    queryKey: ['schemas', value.profile],
-    queryFn: () => withVault(api, () => api.schemas(value.profile)),
-    enabled: !!value.profile,
+    queryKey: ['schema-options', value.profile],
+    queryFn: () => withVault(api, () => schemaOptions(api, profile!)),
+    enabled: !!profile,
   })
   return (
     <Space.Compact>
@@ -70,7 +72,7 @@ function EndPicker({ label, value, profiles, onChange }: {
         placeholder={t('migrate.pickProfile')}
         value={value.profile || undefined}
         onChange={(profile) => onChange({ profile, schema: '' })}
-        options={profiles.filter((p) => supportsWrites(p.driver)).map((p) => ({ value: p.id, label: p.name }))}
+        options={profiles.map((p) => ({ value: p.id, label: p.name }))}
       />
       <Select
         size="small"
@@ -80,7 +82,7 @@ function EndPicker({ label, value, profiles, onChange }: {
         disabled={!value.profile}
         value={value.schema || undefined}
         onChange={(schema) => onChange({ ...value, schema })}
-        options={schemas.map((s) => ({ value: s.name }))}
+        options={schemas}
       />
     </Space.Compact>
   )
@@ -322,7 +324,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
         </Button>
         <span className="grow" />
         <Button size="small" icon={<IconFolderOpen size={16} />} onClick={() => file.current?.click()}>{t('migrate.openPlan')}</Button>
-        <Button size="small" icon={<IconDeviceFloppy size={16} />} onClick={() => download('migration-plan.json', JSON.stringify(plan, null, 2), 'application/json')}>
+        <Button size="small" icon={<IconDeviceFloppy size={16} />} onClick={() => download('migration-plan.json', JSON.stringify(planEnds(plan), null, 2), 'application/json')}>
           {t('migrate.savePlan')}
         </Button>
         <input ref={file} type="file" accept=".json" hidden onChange={(e) => void openPlan(e.target.files?.[0]).finally(() => (e.target.value = ''))} />

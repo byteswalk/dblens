@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
-import { type DesignRequest, type ModelDesignRequest, type Profile, type TaskStatus, errorText } from '../../shared/api'
+import { type DesignRequest, type ModelDesignRequest, type Profile, type TaskStatus, errorText, schemaLabel } from '../../shared/api'
 import { withVault } from '../connections/vault'
 import { useQueryActions } from '../editor/actions'
 import { type QueryTab, useTabs } from '../editor/tabs'
@@ -229,7 +229,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
       <div className="row toolbar">
         <b>
           {modelQ.data && `${modelQ.data.info.name} / `}
-          {isNew ? t('design.newTable') : `${target.schema}.${target.table}`}
+          {isNew ? t('design.newTable') : `${schemaLabel(target.schema)}.${target.table}`}
         </b>
         {profile && <span className="muted">{profile.name}</span>}
         {modelQ.data?.read_only && <span className="err">{t('model.readOnly')}</span>}
@@ -344,7 +344,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
                     {p.statements.length > 0 && (
                       <Alert type="info" showIcon message={t(p.transactional ? 'design.sql.transactional' : 'design.sql.autocommit')} />
                     )}
-                    <SqlBox sql={scriptOf(p.statements, profile!.driver === 'oracle' || profile!.driver === 'dameng')} driver={profile!.driver} height="calc(100vh - 360px)" />
+                    <SqlBox sql={scriptOf(p.statements, profile!.driver)} driver={profile!.driver} height="calc(100vh - 360px)" />
                   </>
                 )}
               </div>

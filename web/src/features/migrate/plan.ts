@@ -13,6 +13,7 @@ import type {
   NoteLevel,
   TableOverride,
 } from '../../shared/api'
+import { joinCatalog } from '../../shared/api'
 
 export const DEFAULT_DATA: DataOptions = { batch_size: 1000, parallel: 2, on_error: 'stop', sample: 0 }
 
@@ -141,11 +142,18 @@ const isEnd = (v: unknown): v is MigrationEnd =>
   typeof (v as MigrationEnd)?.profile === 'string' && typeof (v as MigrationEnd).schema === 'string'
 const isList = (v: unknown) => v === null || (Array.isArray(v) && v.every((x) => typeof x === 'string'))
 
+/** 方案文件中库和架构分开存（`planEnds`），读回时合成界面用的 schema。 */
+function joinEnd(e: MigrationEnd): MigrationEnd {
+  return { profile: e.profile, schema: e.catalog ? joinCatalog(e.catalog, e.schema) : e.schema }
+}
+
 /** 解析另存的方案；格式不对时返回 null。缺的设置项补默认值。 */
 export function parsePlan(text: string): MigrationPlan | null {
   try {
     const v = JSON.parse(text) as Partial<MigrationPlan>
     if (!isEnd(v.source) || !isEnd(v.target) || !isList(v.tables ?? null) || !isList(v.sequences ?? null)) return null
+    v.source = joinEnd(v.source)
+    v.target = joinEnd(v.target)
     const base = emptyPlan(v.source)
     const s = (v.settings ?? {}) as Partial<MigrationPlan['settings']>
     return {
