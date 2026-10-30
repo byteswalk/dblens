@@ -1310,6 +1310,7 @@ dependencies = [
  "dblens-driver",
  "libloading 0.9.0",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

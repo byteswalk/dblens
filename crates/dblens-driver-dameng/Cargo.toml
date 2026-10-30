@@ -13,6 +13,7 @@ dblens-core.workspace = true
 dblens-driver.workspace = true
 libloading.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 dblens-driver = { workspace = true, features = ["conformance"] }
