@@ -18,12 +18,27 @@
     "report": "导出报告",
     "issue_count": "{{count}} 个问题",
     "save_review": "保存",
-    "review_note": "说明（可选）"
+    "review_note": "说明（可选）",
+    "waived_count": "已豁免 {{count}} 个",
+    "waive": "豁免",
+    "waive_menu": "豁免此对象…",
+    "waive_title": "豁免 {{object}}",
+    "waive_reason": "写明原因（必填）。该对象以后检查这条条款时也会跳过。",
+    "waive_hint": "在问题上右键可以豁免",
+    "unwaive": "撤销",
+    "format": {
+      "html": "HTML",
+      "docx": "Word",
+      "xlsx": "Excel",
+      "checklist": "Excel 自查表"
+    }
   },
   "report": {
     "reviewer": "检查人",
     "pass_rate": "通过率",
     "issues": "问题",
+    "waived": "已豁免",
+    "waive_reason": "豁免原因",
     "clause": "条款",
     "verdict": "结论",
     "reason": "说明",
@@ -68,7 +83,7 @@
     "copy_name": "{{name}} 副本",
     "export": "导出",
     "reset": "恢复默认",
-    "reset_confirm": "恢复为内置默认值，丢弃改动？",
+    "reset_confirm": "恢复为内置默认值，丢弃改动和例外？",
     "delete": "删除",
     "delete_confirm": "删除这份规范？",
     "add_clause": "加人工条款",
@@ -76,6 +91,7 @@
     "severity": "级别",
     "rules": "规则",
     "manual": "人工",
-    "unknown_rule": "未知规则"
+    "unknown_rule": "未知规则",
+    "exceptions": "例外"
   }
 }

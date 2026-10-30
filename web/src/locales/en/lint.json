@@ -18,12 +18,27 @@
     "report": "Export report",
     "issue_count": "{{count}} issues",
     "save_review": "Save",
-    "review_note": "Note (optional)"
+    "review_note": "Note (optional)",
+    "waived_count": "{{count}} waived",
+    "waive": "Waive",
+    "waive_menu": "Waive this object…",
+    "waive_title": "Waive {{object}}",
+    "waive_reason": "Give a reason (required). Future checks will also skip this object for this clause.",
+    "waive_hint": "Right-click an issue to waive it",
+    "unwaive": "Undo",
+    "format": {
+      "html": "HTML",
+      "docx": "Word",
+      "xlsx": "Excel",
+      "checklist": "Excel checklist"
+    }
   },
   "report": {
     "reviewer": "Reviewer",
     "pass_rate": "Pass rate",
     "issues": "Issues",
+    "waived": "Waived",
+    "waive_reason": "Waiver reason",
     "clause": "Clause",
     "verdict": "Verdict",
     "reason": "Note",
@@ -68,7 +83,7 @@
     "copy_name": "{{name}} copy",
     "export": "Export",
     "reset": "Reset",
-    "reset_confirm": "Reset to the built-in defaults and discard changes?",
+    "reset_confirm": "Reset to the built-in defaults and discard changes and exceptions?",
     "delete": "Delete",
     "delete_confirm": "Delete this ruleset?",
     "add_clause": "Add clause",
@@ -76,6 +91,7 @@
     "severity": "Severity",
     "rules": "Rules",
     "manual": "Manual",
-    "unknown_rule": "Unknown rule"
+    "unknown_rule": "Unknown rule",
+    "exceptions": "Exceptions"
   }
 }
