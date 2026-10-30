@@ -18,6 +18,7 @@ import {
   driverNote,
   emptyForm,
   fromProfile,
+  needsCredentials,
   serverText,
   supportsTls,
   serverNotes,
@@ -165,10 +166,31 @@ export default function ConnectionDialog() {
           <InputNumber style={{ width: 110 }} min={1} max={65535} value={form.port} onChange={(v) => set('port', v ?? 0)} />
         </Space.Compact>
       </Field>
-      <Field label={t('connections.general.user')} error={errors.user}>
-        <Input value={form.user} onChange={(e) => set('user', e.target.value)} autoComplete="off" />
-      </Field>
-      <Field label={t('connections.general.password')}>
+      {form.driver === 'sqlserver' && (
+        <Field label={t('connections.sqlserver.auth')}>
+          <Radio.Group
+            value={form.sqlAuth}
+            onChange={(e) => set('sqlAuth', e.target.value)}
+            options={(['sql', 'windows', 'integrated'] as const).map((value) => ({ value, label: t(`connections.sqlserver.authOption.${value}`) }))}
+          />
+          {form.sqlAuth !== 'sql' && (
+            <div className="muted" style={{ marginTop: 4 }}>
+              {t(form.sqlAuth === 'windows' ? 'connections.sqlserver.windowsHint' : 'connections.sqlserver.integratedHint')}
+            </div>
+          )}
+        </Field>
+      )}
+      {needsCredentials(form) && (
+        <Field label={t('connections.general.user')} error={errors.user}>
+          <Input
+            value={form.user}
+            onChange={(e) => set('user', e.target.value)}
+            autoComplete="off"
+            placeholder={form.driver === 'sqlserver' && form.sqlAuth === 'windows' ? 'HOST\\user' : undefined}
+          />
+        </Field>
+      )}
+      {needsCredentials(form) && <Field label={t('connections.general.password')}>
         <Space.Compact style={{ width: '100%' }}>
           <Input.Password
             value={form.password}
@@ -180,7 +202,7 @@ export default function ConnectionDialog() {
         <Checkbox checked={form.savePassword} onChange={(e) => set('savePassword', e.target.checked)} style={{ marginTop: 4 }}>
           {t('connections.general.savePassword')}
         </Checkbox>
-      </Field>
+      </Field>}
       <Field label={databaseLabel(form.driver)} error={errors.database}>
         <Input
           value={form.database}
@@ -224,6 +246,13 @@ export default function ConnectionDialog() {
           <Input value={form.tlsCa} onChange={(e) => set('tlsCa', e.target.value)} placeholder={t('connections.tls.caPlaceholder')} />
         </Field>
       )}
+      {form.driver === 'sqlserver' && (
+        <Field label={t('connections.sqlserver.trustCert')}>
+          <Checkbox checked={form.trustCert} onChange={(e) => set('trustCert', e.target.checked)}>
+            {t('connections.sqlserver.trustCertHint')}
+          </Checkbox>
+        </Field>
+      )}
     </>
   ) : (
     <Alert type="info" showIcon message={t('connections.tls.unsupported', { driver: driverLabel(form.driver) })} />
@@ -234,6 +263,11 @@ export default function ConnectionDialog() {
       <Field label={t('connections.advanced.timeout')} error={errors.timeoutSecs}>
         <InputNumber min={1} max={600} value={form.timeoutSecs} onChange={(v) => set('timeoutSecs', v ?? 0)} />
       </Field>
+      {form.driver === 'sqlserver' && (
+        <Field label={t('connections.sqlserver.instance')}>
+          <Input value={form.instance} onChange={(e) => set('instance', e.target.value)} placeholder={t('connections.sqlserver.instancePlaceholder')} />
+        </Field>
+      )}
       {form.driver === 'oracle' && (
         <Field label="SID">
           <Input value={form.oracleSid} onChange={(e) => set('oracleSid', e.target.value)} placeholder={t('connections.advanced.sidPlaceholder')} />

@@ -3,7 +3,7 @@
 
 import { graphlib, layout as dagreLayout } from '@dagrejs/dagre'
 
-import type { DesignTableModel, ErDisplay, ErPosition, ErTable } from '../../shared/api'
+import { type DesignTableModel, type ErDisplay, type ErPosition, type ErTable, splitCatalog } from '../../shared/api'
 
 export const NODE_WIDTH = 240
 export const HEADER_HEIGHT = 30
@@ -85,8 +85,10 @@ export function nodeHeight(columns: number, external: number): number {
   return HEADER_HEIGHT + columns * ROW_HEIGHT + external * EXTERNAL_HEIGHT + 6
 }
 
-/** 表和外键换算成节点和连线。`schema` 是图所在的 schema（外键不写 schema 时指它）。 */
-export function buildGraph(tables: ErTable[], display: ErDisplay, schema: string): Graph {
+/** 表和外键换算成节点和连线。`schema` 是图所在的 schema（外键不写 schema 时指它）；SQL Server 的"库 + 架构"
+ * 只取架构名与外键比较。 */
+export function buildGraph(tables: ErTable[], display: ErDisplay, graphSchema: string): Graph {
+  const schema = splitCatalog(graphSchema).schema
   const names = new Set(tables.map((t) => t.table.name))
   const nodes: ErNode[] = []
   const edges: ErEdge[] = []

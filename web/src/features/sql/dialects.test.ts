@@ -26,6 +26,10 @@ describe('sqlDialect', () => {
     expect(sqlDialect('mysql', 'tidb', 'oracle')).toMatchObject({ dialect: 'mysql' })
   })
 
+  it('SQL Server 用 T-SQL 语法（标准档）', () => {
+    expect(sqlDialect('sqlserver', 'sqlserver')).toEqual({ dialect: 'tsql', strict: true, grammar: 'T-SQL' })
+  })
+
   it('变体未知时按驱动选解析器，按兼容档处理', () => {
     expect(sqlDialect('oracle', null)).toEqual({ dialect: 'plsql', strict: false, grammar: 'Oracle' })
     expect(sqlDialect('mysql')).toEqual({ dialect: 'mysql', strict: false, grammar: 'MySQL' })

@@ -9,6 +9,8 @@ node_modules/
 /web/dist/
 # 生成的 PL/SQL 解析器（web/scripts/gen-plsql.mjs）
 /web/src/features/sql/plsql/gen/
+# 生成的 T-SQL 解析器（web/scripts/gen-tsql.mjs）
+/web/src/features/sql/tsql/gen/
 # tauri-build 生成的权限描述
 /crates/dblens-desktop/gen/
 # tauri-build 按 build.rs 中的命令列表自动生成的权限定义

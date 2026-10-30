@@ -1,4 +1,5 @@
-// 按语法族懒加载解析器：每种是一个单独的块，用到时才下载（MySQL、PG 各约 0.35 MB，PL/SQL 约 1.4 MB，gzip 后）。
+// 按语法族懒加载解析器：每种是一个单独的块，用到时才下载（MySQL、PG 各约 0.35 MB，PL/SQL 约 1.4 MB，gzip 后；
+// T-SQL 与 PL/SQL 相近）。
 
 import type { Dialect, SqlParser } from './types'
 
@@ -16,6 +17,9 @@ export function loadParser(d: Dialect): Promise<SqlParser> {
         break
       case 'plsql':
         p = import('./plsql/parser').then((m) => m.plsql)
+        break
+      case 'tsql':
+        p = import('./tsql/parser').then((m) => m.tsql)
         break
     }
     // 加载失败时不缓存，下次重试

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { joinCatalog } from '../../shared/api'
 import i18n from '../../shared/i18n'
 import {
   type NodeKey,
@@ -33,6 +34,26 @@ describe('对象树节点', () => {
     ]
     for (const k of keys) expect(decodeKey(encodeKey(k))).toEqual(k)
     expect(() => decodeKey('x\u0001y')).toThrow('无法识别')
+  })
+
+  it('SQL Server 的库节点和库中的架构（M6a）', () => {
+    const s = joinCatalog('销售', 'dbo')
+    for (const k of [
+      { type: 'd', profileId: 'p', catalog: '销售' },
+      { type: 'g', profileId: 'p', catalog: '销售' },
+      { type: 'g', profileId: 'p' },
+      { type: 's', profileId: 'p', schema: s },
+    ] as NodeKey[]) {
+      expect(decodeKey(encodeKey(k))).toEqual(k)
+    }
+    expect(categoriesFor('sqlserver').map((c) => c.kind)).toEqual(['tables', 'views', 'routines', 'sequences', 'synonyms'])
+    expect(qualifiedName({ type: 'o', profileId: 'p', schema: s, kind: 'tables', name: 't' })).toBe('销售.dbo.t')
+    const db: NodeKey = { type: 'd', profileId: 'p', catalog: '销售' }
+    expect(isWithin({ type: 's', profileId: 'p', schema: s }, db)).toBe(true)
+    expect(isWithin({ type: 's', profileId: 'p', schema: joinCatalog('其他', 'dbo') }, db)).toBe(false)
+    expect(isWithin({ type: 's', profileId: 'p', schema: s }, { type: 'g', profileId: 'p', catalog: '销售' })).toBe(true)
+    expect(isWithin({ type: 's', profileId: 'p', schema: s }, { type: 'g', profileId: 'p' })).toBe(false)
+    expect(isWithin(db, { type: 'c', profileId: 'p' })).toBe(true)
   })
 
   it('过滤按名称或注释，不区分大小写', () => {

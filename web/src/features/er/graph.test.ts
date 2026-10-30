@@ -74,6 +74,17 @@ describe('ER 图的节点和连线', () => {
     expect(orders.height).toBe(nodeHeight(6, 1))
   })
 
+  it('SQL Server 的图：schema 是"库 + 架构"，外键写的架构名照样算图内', () => {
+    const sample2 = sample().map((t) => ({
+      ...t,
+      table: { ...t.table, foreign_keys: t.table.foreign_keys.map((k) => (k.ref_schema ? k : { ...k, ref_schema: 'dbo' })) },
+    }))
+    const g = buildGraph(sample2, 'keys', 'salesdbo')
+    expect(g.edges.map((e) => e.id)).toEqual(['fk:orders:0', 'fk:orders:1', 'lk:items:0'])
+    expect(g.nodes[1].data.external).toEqual(['→ crm.regions'])
+    expect(g.nodes[0].data.columns.map((c) => c.name)).toEqual(['id', 'code'])
+  })
+
   it('主题图中没有的表列在节点上；只显示键列、只显示表名', () => {
     const [customers, orders] = sample()
     const g = buildGraph([orders], 'columns', 'public')

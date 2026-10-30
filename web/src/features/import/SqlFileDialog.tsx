@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import type { TextEncoding } from '../../shared/api'
+import { type TextEncoding, sessionSchema } from '../../shared/api'
 import { withVault } from '../connections/vault'
 import FileField, { type PickedFile } from './FileField'
 import { useImportDialogs } from './dialog'
@@ -31,16 +31,16 @@ export default function SqlFileDialog() {
   useEffect(() => {
     if (!target) return
     setFile(null)
-    setSchema(target.schema)
+    setSchema(target.schema === null ? null : sessionSchema(target.schema))
     setError(null)
   }, [target])
 
   const { data: profiles = [] } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
   const profile = profiles.find((p) => p.id === profileId)
   const schemas = useQuery({
-    queryKey: ['schemas', profileId],
-    queryFn: () => withVault(api, () => api.schemas(profileId)),
-    enabled: !!target,
+    queryKey: ['schemas', profileId, profile?.driver],
+    queryFn: () => withVault(api, () => (profile?.driver === 'sqlserver' ? api.catalogs(profileId) : api.schemas(profileId))),
+    enabled: !!target && !!profile,
   })
 
   const submit = async () => {

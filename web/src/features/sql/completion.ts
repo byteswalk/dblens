@@ -28,7 +28,7 @@ const ORDER: Record<ItemKind, string> = {
   keyword: '4',
 }
 
-/** 名称需要时加引号：含特殊字符、是 PL/SQL 中的非大写名称或 PG 中的非小写名称。 */
+/** 名称需要时加引号：含特殊字符、是 PL/SQL 中的非大写名称或 PG 中的非小写名称；SQL Server 用方括号。 */
 export function quoteIdent(name: string, d: Dialect): string {
   const plain = /^[A-Za-z_][A-Za-z0-9_$#]*$/.test(name)
   switch (d) {
@@ -38,6 +38,8 @@ export function quoteIdent(name: string, d: Dialect): string {
       return plain && name === name.toLowerCase() ? name : `"${name.replaceAll('"', '""')}"`
     case 'plsql':
       return plain && name === name.toUpperCase() ? name : `"${name.replaceAll('"', '""')}"`
+    case 'tsql':
+      return plain ? name : `[${name.replaceAll(']', ']]')}]`
   }
 }
 

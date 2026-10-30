@@ -15,6 +15,10 @@
     "dameng": {
       "label": "达梦 DM",
       "note": "需要达梦 DPI 客户端库"
+    },
+    "sqlserver": {
+      "label": "SQL Server",
+      "note": "支持 SQL 账号和 Windows 认证；连接后按库浏览"
     }
   },
   "product": {
@@ -50,13 +54,18 @@
     "dameng": {
       "label": "达梦 DM",
       "note": "需要达梦 DPI 客户端库"
+    },
+    "sqlserver": {
+      "label": "SQL Server",
+      "note": "默认端口 1433；命名实例在「高级」中填写，此时经 SQL Browser 查端口"
     }
   },
   "databaseLabel": {
     "mysql": "数据库",
     "postgres": "数据库",
     "oracle": "服务名",
-    "dameng": "模式"
+    "dameng": "模式",
+    "sqlserver": "默认库"
   },
   "validate": {
     "nameRequired": "填写连接名称",
@@ -136,5 +145,19 @@
     "again": "再输入一次",
     "masterRequired": "输入主密码",
     "mismatch": "两次输入的主密码不一致"
+  },
+  "sqlserver": {
+    "auth": "认证",
+    "authOption": {
+      "sql": "SQL 账号",
+      "windows": "Windows 账号",
+      "integrated": "当前 Windows 用户"
+    },
+    "windowsHint": "用户名写成 域或机器名\\用户（NTLM）；只能在 Windows 上使用",
+    "integratedHint": "用运行 DBLens 服务的 Windows 账号登录，不需要用户名和密码；浏览器访问时是服务端的账号，不是浏览器所在电脑的账号。只能在 Windows 上使用",
+    "instance": "实例名",
+    "instancePlaceholder": "可选，如 SQLEXPRESS；填写后忽略端口",
+    "trustCert": "服务器证书",
+    "trustCertHint": "信任服务器证书（不校验，同 SSMS 的同名选项）"
   }
 }

@@ -56,9 +56,11 @@ export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
   const api = useApi()
   const { t } = useTranslation()
   const { message, modal } = App.useApp()
+  const driver = profiles.find((p) => p.id === tab.profileId)?.driver
+  // SQL Server 的会话按库切换（USE），下拉框列出库
   const { data: schemas } = useQuery({
-    queryKey: ['schema-list', tab.profileId],
-    queryFn: () => api.schemas(tab.profileId),
+    queryKey: ['schema-list', tab.profileId, driver],
+    queryFn: () => (driver === 'sqlserver' ? api.catalogs(tab.profileId) : api.schemas(tab.profileId)),
   })
   const guard = (p: Promise<unknown>) => p.catch((e: unknown) => message.error(e instanceof Error ? e.message : String(e)))
   const s = rt.session
@@ -115,7 +117,7 @@ export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
         size="small"
         variant="filled"
         showSearch
-        placeholder="schema"
+        placeholder={driver === 'sqlserver' ? t('editor.toolbar.database') : 'schema'}
         value={s?.schema ?? undefined}
         onChange={(v: string) => guard(runner.setSchema(v))}
         disabled={rt.running}

@@ -20,7 +20,8 @@
     "inTransaction": "Uncommitted transaction",
     "format": "Format (Shift+Alt+F)",
     "explain": "Explain Plan",
-    "favorite": "Add to Favorites (Ctrl+D)"
+    "favorite": "Add to Favorites (Ctrl+D)",
+    "database": "database"
   },
   "switchProfile": {
     "title": "Switch Connection",

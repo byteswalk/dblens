@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import DbIcon from '../../shared/DbIcon'
-import { type ChangeSet, type Profile, errorText } from '../../shared/api'
+import { type ChangeSet, type Profile, errorText, exportSource, schemaLabel, supportsWrites } from '../../shared/api'
 import ResultsPanel from '../results/ResultsPanel'
 import { useQueryActions } from '../editor/actions'
 import { runnerFor, useTabRuntime } from '../editor/runner'
@@ -120,7 +120,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
     setCounting(true)
     try {
       const sql = await api.dataSql(tab.profileId, data.schema, { object: data.object, filter: data.filter, count: true })
-      setTotal(await countRows(api, tab.profileId, sql))
+      setTotal(await countRows(api, tab.profileId, sql, data.schema))
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -190,7 +190,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
       <div className="row toolbar">
         {profile && <DbIcon driver={profile.driver} variant={rt.session?.variant ?? profile.variant} />}
         <span>{profile?.name}</span>
-        <span className="muted">{data.schema}</span>
+        <span className="muted">{schemaLabel(data.schema)}</span>
         <span className="sep" />
         <Input
           size="small"
@@ -226,9 +226,9 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           onClick={() =>
             useExportDialog.getState().open({
               profileId: tab.profileId,
-              source: { data: { schema: data.schema, object: data.object, filter: data.filter, order: data.order } },
+              source: exportSource(data.schema, data.object, data.filter, data.order),
               baseName: data.object,
-              table: `${data.schema}.${data.object}`,
+              table: `${schemaLabel(data.schema)}.${data.object}`,
               inTransaction: false,
             })
           }
@@ -239,7 +239,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           <Button
             size="small"
             icon={<IconUpload size={14} />}
-            disabled={!profile}
+            disabled={!profile || !supportsWrites(profile.driver)}
             onClick={() =>
               useImportDialogs
                 .getState()
@@ -253,7 +253,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           <Button
             size="small"
             icon={<IconTableOptions size={14} />}
-            disabled={!profile}
+            disabled={!profile || !supportsWrites(profile.driver)}
             onClick={() => useTabs.getState().openDesign(tab.profileId, { schema: data.schema, table: data.object })}
           >
             {t('editor.data.design')}

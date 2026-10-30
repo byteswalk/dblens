@@ -16,6 +16,7 @@ const VARIANTS = [
   'highgo',
   'oracle',
   'dameng',
+  'sqlserver',
 ]
 
 describe('数据库图标', () => {

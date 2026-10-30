@@ -6,7 +6,7 @@
 
 import { create } from 'zustand'
 
-import { type Api, ApiError, type SessionInfo } from '../../shared/api'
+import { type Api, ApiError, type SessionInfo, splitCatalog } from '../../shared/api'
 import {
   DEFAULT_MAX_ROWS,
   type ExecOptions,
@@ -144,6 +144,9 @@ export class Runner {
       const tab = useTabs.getState().tabs.find((x) => x.id === this.tabId)
       if (!tab) throw new Error(t('editor.runner.tabClosed'))
       session = await withVault(this.api, () => this.api.openSession(tab.profileId))
+      // SQL Server 的数据标签：对象可能在别的库中，先把会话切过去
+      const catalog = tab.data && splitCatalog(tab.data.schema).catalog
+      if (catalog !== undefined) session = await this.api.setSchema(session.id, tab.data!.schema)
     }
     this.patch({ session, error: null })
     this.socket = new ExecSocket(

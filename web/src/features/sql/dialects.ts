@@ -11,10 +11,10 @@ export interface SqlDialect {
   /** 标准档：语法错误按错误（红色）标出。 */
   strict: boolean
   /** 检查所用语法的名称，兼容档的提示中说明。 */
-  grammar: 'MySQL' | 'PostgreSQL' | 'Oracle'
+  grammar: 'MySQL' | 'PostgreSQL' | 'Oracle' | 'T-SQL'
 }
 
-const STRICT = new Set(['mysql', 'mariadb', 'postgres', 'oracle'])
+const STRICT = new Set(['mysql', 'mariadb', 'postgres', 'oracle', 'sqlserver'])
 
 export function sqlDialect(driver: DriverId, variant?: string | null, compat?: Compat | null): SqlDialect {
   const strict = !!variant && STRICT.has(variant)
@@ -27,5 +27,7 @@ export function sqlDialect(driver: DriverId, variant?: string | null, compat?: C
     case 'oracle':
     case 'dameng':
       return { dialect: 'plsql', strict, grammar: 'Oracle' }
+    case 'sqlserver':
+      return { dialect: 'tsql', strict, grammar: 'T-SQL' }
   }
 }

@@ -6,8 +6,11 @@ import { type FormatOptionsWithLanguage, format } from 'sql-formatter'
 import type { Compat, DriverId } from '../../shared/api'
 import { t } from '../../shared/i18n'
 
-/** Monaco 的语言：MySQL 系、PG 系用 Monaco 自带的规则，Oracle、达梦和 PG 系的 Oracle 兼容模式用 plsql（monaco.ts 注册）。 */
-export function editorLanguage(driver: DriverId, compat?: Compat | null): 'mysql' | 'pgsql' | 'plsql' {
+/**
+ * Monaco 的语言：MySQL 系、PG 系用 Monaco 自带的规则，Oracle、达梦和 PG 系的 Oracle 兼容模式用 plsql（monaco.ts 注册），
+ * SQL Server 用 Monaco 自带的 sql（按 T-SQL 的关键字）。
+ */
+export function editorLanguage(driver: DriverId, compat?: Compat | null): 'mysql' | 'pgsql' | 'plsql' | 'sql' {
   if (driver === 'postgres' && compat === 'oracle') return 'plsql'
   switch (driver) {
     case 'mysql':
@@ -17,6 +20,8 @@ export function editorLanguage(driver: DriverId, compat?: Compat | null): 'mysql
     case 'oracle':
     case 'dameng':
       return 'plsql'
+    case 'sqlserver':
+      return 'sql'
   }
 }
 
@@ -38,6 +43,8 @@ export function formatterLanguage(driver: DriverId, variant?: string | null): Fo
     case 'oracle':
     case 'dameng':
       return 'plsql'
+    case 'sqlserver':
+      return 'transactsql'
   }
 }
 
@@ -63,6 +70,7 @@ const VARIANT_NAMES: Record<string, string> = {
   gaussdb: 'GaussDB',
   highgo: 'HighGo',
   oracle: 'Oracle',
+  sqlserver: 'SQL Server',
 }
 
 /** 变体的简短名称（状态栏、对象树用）；达梦的名称随界面语言。不认识的变体返回 undefined。 */

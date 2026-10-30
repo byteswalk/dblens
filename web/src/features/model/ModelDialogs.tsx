@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
-import { type Compat, type TaskStatus, errorText } from '../../shared/api'
+import { type Compat, type TaskStatus, errorText, supportsWrites } from '../../shared/api'
 import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
 import { PRODUCTS, type ProductId, productLabel } from '../connections/products'
@@ -204,7 +204,7 @@ function ReverseDialog() {
               setProfileId(v)
               setSchemas([])
             }}
-            options={profiles.map((p) => ({ value: p.id, label: p.name }))}
+            options={profiles.filter((p) => supportsWrites(p.driver)).map((p) => ({ value: p.id, label: p.name }))}
           />
         </Form.Item>
         <Form.Item label={t('model.dialog.schemas')}>

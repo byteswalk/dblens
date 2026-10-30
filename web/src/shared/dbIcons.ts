@@ -33,6 +33,8 @@ export const VARIANT_ICONS: Record<string, DbIconDef> = {
   highgo: mark('HG', '#0091d5'),
   oracle: mark('ORA', '#c74634'),
   dameng: mark('DM', '#c8102e'),
+  // simple-icons 没有微软的产品图标
+  sqlserver: mark('MS', '#cc2927'),
 }
 
 /** 还没连接过、不知道具体变体时，按驱动大类。 */
@@ -41,6 +43,7 @@ const DRIVER_ICONS: Record<DriverId, string> = {
   postgres: 'postgres',
   oracle: 'oracle',
   dameng: 'dameng',
+  sqlserver: 'sqlserver',
 }
 
 export function dbIcon(driver: DriverId, variant?: string | null): DbIconDef {

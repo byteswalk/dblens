@@ -1,5 +1,5 @@
 // Monaco 的初始化（M1 设计文档 2.1 节）：从本地打包的 monaco-editor 加载（不走 CDN，离线可用），
-// 只用编辑器自身的 worker；注册 PL/SQL 高亮（Oracle、达梦）和跟随界面主题的两套配色。
+// 只用编辑器自身的 worker；注册 PL/SQL 高亮（Oracle、达梦）和跟随界面主题的两套配色。SQL Server 用自带的 sql 语言。
 // 只由懒加载的工作区引入，不进入首屏。
 
 import { loader } from '@monaco-editor/react'

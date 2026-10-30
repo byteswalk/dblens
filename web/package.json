@@ -5,11 +5,11 @@
   "type": "module",
   "packageManager": "pnpm@11.8.0",
   "scripts": {
-    "gen": "node scripts/gen-plsql.mjs",
-    "dev": "node scripts/gen-plsql.mjs && vite",
-    "build": "node scripts/gen-plsql.mjs && tsc --noEmit && vite build",
-    "test": "node scripts/gen-plsql.mjs && vitest run",
-    "typecheck": "node scripts/gen-plsql.mjs && tsc --noEmit",
+    "gen": "node scripts/gen-plsql.mjs && node scripts/gen-tsql.mjs",
+    "dev": "node scripts/gen-plsql.mjs && node scripts/gen-tsql.mjs && vite",
+    "build": "node scripts/gen-plsql.mjs && node scripts/gen-tsql.mjs && tsc --noEmit && vite build",
+    "test": "node scripts/gen-plsql.mjs && node scripts/gen-tsql.mjs && vitest run",
+    "typecheck": "node scripts/gen-plsql.mjs && node scripts/gen-tsql.mjs && tsc --noEmit",
     "tauri": "cd .. && tauri",
     "package": "cd .. && tauri build --config crates/dblens-desktop/tauri.bundle.json"
   },

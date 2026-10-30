@@ -15,6 +15,10 @@
     "dameng": {
       "label": "DM (Dameng)",
       "note": "Requires the DM DPI client library"
+    },
+    "sqlserver": {
+      "label": "SQL Server",
+      "note": "SQL logins and Windows authentication; browse by database after connecting"
     }
   },
   "product": {
@@ -50,13 +54,18 @@
     "dameng": {
       "label": "Dameng DM",
       "note": "Requires the Dameng DPI client library"
+    },
+    "sqlserver": {
+      "label": "SQL Server",
+      "note": "Default port 1433; set a named instance under Advanced to look up the port through SQL Browser"
     }
   },
   "databaseLabel": {
     "mysql": "Database",
     "postgres": "Database",
     "oracle": "Service Name",
-    "dameng": "Schema"
+    "dameng": "Schema",
+    "sqlserver": "Default database"
   },
   "validate": {
     "nameRequired": "Enter a connection name",
@@ -136,5 +145,19 @@
     "again": "Confirm Password",
     "masterRequired": "Enter the master password",
     "mismatch": "The passwords do not match"
+  },
+  "sqlserver": {
+    "auth": "Authentication",
+    "authOption": {
+      "sql": "SQL login",
+      "windows": "Windows account",
+      "integrated": "Current Windows user"
+    },
+    "windowsHint": "Write the user name as DOMAIN-or-HOST\\user (NTLM); available on Windows only",
+    "integratedHint": "Logs in as the Windows account running the DBLens service, without a user name or password; in browser mode that is the server's account, not the browser machine's. Available on Windows only",
+    "instance": "Instance",
+    "instancePlaceholder": "Optional, e.g. SQLEXPRESS; the port is ignored when set",
+    "trustCert": "Server certificate",
+    "trustCertHint": "Trust the server certificate (no validation, like the SSMS option)"
   }
 }

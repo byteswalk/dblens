@@ -3,11 +3,13 @@
 // 右键菜单（M1a）：连接 —— 编辑、复制、删除、刷新；其他节点 —— 复制名称、刷新。
 // 对象节点另有（M1c2）："查看数据"（数据标签，也可双击打开）、"查看 DDL"（弹出只读预览）、
 // "生成 SQL"（插入到当前编辑器）。
+// SQL Server（M6a）：连接下先列库，库下是架构；表设计器、导入、文档导出、比对、保存为模型、迁移的入口置灰。
 
 import { App, Dropdown, Input, type MenuProps, Tree } from 'antd'
 import type { DataNode, EventDataNode } from 'antd/es/tree'
 import {
   IconColumns,
+  IconDatabase,
   IconEye,
   IconFolder,
   IconFunction,
@@ -31,7 +33,16 @@ import { useImportDialogs } from '../import/dialog'
 import { useDocExport } from '../document/dialog'
 import { emptyPlan } from '../migrate/plan'
 import { useModelDialogs } from '../model/dialogs'
-import type { Api, Environment, Profile, RoutineInfo } from '../../shared/api'
+import {
+  type Api,
+  type Environment,
+  type Profile,
+  type RoutineInfo,
+  exportSource,
+  joinCatalog,
+  schemaLabel,
+  supportsWrites,
+} from '../../shared/api'
 import DbIcon from '../../shared/DbIcon'
 import { profileKind } from '../connections/form'
 import { withVault } from '../connections/vault'
@@ -95,16 +106,28 @@ const CATEGORY_ICON: Record<CategoryKind, ReactNode> = {
 async function loadChildren(api: Api, profiles: Profile[], k: NodeKey): Promise<Loaded['items']> {
   switch (k.type) {
     case 'c':
+    case 'd':
     case 'g': {
-      const schemas = await api.schemas(k.profileId)
+      const driver = profiles.find((p) => p.id === k.profileId)?.driver
+      // SQL Server：连接下是库（系统库排在后面），库下才是架构
+      if (k.type === 'c' && driver === 'sqlserver') {
+        return (await api.catalogs(k.profileId)).map((c) => ({
+          key: encodeKey({ type: 'd', profileId: k.profileId, catalog: c.name }),
+          label: c.name,
+          extra: c.is_system ? 'system' : undefined,
+          leaf: false,
+        }))
+      }
+      const catalog = k.type === 'd' || k.type === 'g' ? k.catalog : undefined
+      const schemas = await api.schemas(k.profileId, undefined, catalog)
       const pick = schemas.filter((s) => s.is_system === (k.type === 'g'))
       const items: Loaded['items'] = pick.map((s) => ({
-        key: encodeKey({ type: 's', profileId: k.profileId, schema: s.name }),
+        key: encodeKey({ type: 's', profileId: k.profileId, schema: catalog === undefined ? s.name : joinCatalog(catalog, s.name) }),
         label: s.name,
         leaf: false,
       }))
-      if (k.type === 'c' && schemas.some((s) => s.is_system)) {
-        items.push({ key: encodeKey({ type: 'g', profileId: k.profileId }), label: '', leaf: false })
+      if (k.type !== 'g' && schemas.some((s) => s.is_system)) {
+        items.push({ key: encodeKey({ type: 'g', profileId: k.profileId, catalog }), label: '', leaf: false })
       }
       return items
     }
@@ -195,9 +218,14 @@ export default function ObjectTree() {
     [api, profiles, qc],
   )
 
-  /** 刷新一个节点：清后端元数据缓存，丢掉它下面已加载和已展开的内容，再重新取。系统分组按整个连接刷新。 */
+  /** 刷新一个节点：清后端元数据缓存，丢掉它下面已加载和已展开的内容，再重新取。系统分组按所在的连接或库刷新。 */
   const refresh = async (node: NodeKey) => {
-    const k: NodeKey = node.type === 'g' ? { type: 'c', profileId: node.profileId } : node
+    const k: NodeKey =
+      node.type === 'g'
+        ? node.catalog === undefined
+          ? { type: 'c', profileId: node.profileId }
+          : { type: 'd', profileId: node.profileId, catalog: node.catalog }
+        : node
     const key = encodeKey(k)
     await api.refresh(k.profileId, 'schema' in k ? k.schema : null).catch(() => {})
     // 补全用的元数据一并失效
@@ -234,9 +262,9 @@ export default function ObjectTree() {
       return items.map((i) => {
         const k = decodeKey(i.key)
         const icon =
-          k.type === 's' ? <IconSchema size={16} /> : k.type === 'g' || k.type === 'k' ? <IconFolder size={16} /> : k.type === 'o' ? CATEGORY_ICON[k.kind] : i.pk ? <IconKey size={16} color="var(--warn)" /> : <IconColumns size={16} />
+          k.type === 'd' ? <IconDatabase size={16} /> : k.type === 's' ? <IconSchema size={16} /> : k.type === 'g' || k.type === 'k' ? <IconFolder size={16} /> : k.type === 'o' ? CATEGORY_ICON[k.kind] : i.pk ? <IconKey size={16} color="var(--warn)" /> : <IconColumns size={16} />
         const label = k.type === 'k' ? categoryLabel(k.kind) : k.type === 'g' ? t('tree.node.system') : i.label
-        const extra = i.routineKind ? routineKindLabel(i.routineKind) : i.extra
+        const extra = i.routineKind ? routineKindLabel(i.routineKind) : i.extra === 'system' ? t('tree.node.system') : i.extra
         const count = k.type === 'k' && loaded[i.key] && !loaded[i.key].error ? loaded[i.key].items.length : null
         return {
           key: i.key,
@@ -295,19 +323,29 @@ export default function ObjectTree() {
           ]
         : []
 
+  // 下面几个是函数声明而不是箭头函数常量：上面的 menuItems 在渲染时就会调用它们
+  /** 连接是否支持写入类功能（M6b 之前的 SQL Server 不支持）；不支持时这些菜单项置灰并说明。 */
+  function writable(profileId: string) {
+    return supportsWrites(profiles.find((p) => p.id === profileId)?.driver ?? 'mysql')
+  }
+  function later(key: string, label: string, enabled: boolean) {
+    return enabled ? { key, label } : { key, label: <span title={t('tree.menu.sqlServerLater')}>{label}</span>, disabled: true }
+  }
+
   /** schema 节点：新建表、导入到新表、执行 SQL 文件，后面接分隔线。 */
   function schemaItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 's') return []
+    const w = writable(k.profileId)
     return [
-      { key: 'new-table', label: t('tree.menu.newTable') },
-      { key: 'import-new', label: t('tree.menu.importNew') },
+      later('new-table', t('tree.menu.newTable'), w),
+      later('import-new', t('tree.menu.importNew'), w),
       { key: 'sql-file', label: t('tree.menu.sqlFile') },
       { type: 'divider' },
       { key: 'er', label: t('tree.menu.er') },
-      { key: 'compare-model', label: t('tree.menu.compareModel') },
-      { key: 'save-model', label: t('tree.menu.saveAsModel') },
-      { key: 'export-doc', label: t('tree.menu.exportDoc') },
-      { key: 'migrate', label: t('tree.menu.migrate') },
+      later('compare-model', t('tree.menu.compareModel'), w),
+      later('save-model', t('tree.menu.saveAsModel'), w),
+      later('export-doc', t('tree.menu.exportDoc'), w),
+      later('migrate', t('tree.menu.migrate'), w),
       { type: 'divider' },
     ]
   }
@@ -317,9 +355,10 @@ export default function ObjectTree() {
     if (k.type !== 'o') return []
     const items: NonNullable<MenuProps['items']> = []
     const target = targetKind(k.kind)
+    const w = writable(k.profileId)
     if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
-    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design') })
-    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import') })
+    if (target === 'table') items.push(later('design', t('tree.menu.design'), w))
+    if (target === 'table') items.push(later('import', t('tree.menu.import'), w))
     if (target) items.push({ key: 'export-data', label: t('tree.menu.exportData') })
     if (ddlKind(k.kind, k.routineKind)) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     if (target) {
@@ -355,7 +394,7 @@ export default function ObjectTree() {
       else if (key === 'design' && k.type === 'o') useTabs.getState().openDesign(k.profileId, { schema: k.schema, table: k.name })
       else if (key === 'new-table' && k.type === 's') useTabs.getState().openDesign(k.profileId, { schema: k.schema, table: null })
       else if (key === 'er' && k.type === 's') {
-        useTabs.getState().openEr({ kind: 'database', profile: k.profileId, schema: k.schema }, `${k.schema} · ER`)
+        useTabs.getState().openEr({ kind: 'database', profile: k.profileId, schema: k.schema }, `${schemaLabel(k.schema)} · ER`)
       } else if (key === 'compare-model' && k.type === 's') {
         useTabs.getState().openCompare({ source: null, target: { kind: 'database', profile: k.profileId, schema: k.schema } })
       } else if (key === 'save-model' && k.type === 's') useModelDialogs.getState().openReverse({ profileId: k.profileId, schema: k.schema })
@@ -370,9 +409,9 @@ export default function ObjectTree() {
       } else if (key === 'export-data' && k.type === 'o') {
         useExportDialog.getState().open({
           profileId: k.profileId,
-          source: { data: { schema: k.schema, object: k.name } },
+          source: exportSource(k.schema, k.name),
           baseName: k.name,
-          table: `${k.schema}.${k.name}`,
+          table: `${schemaLabel(k.schema)}.${k.name}`,
           inTransaction: false,
         })
       }

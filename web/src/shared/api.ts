@@ -4,8 +4,57 @@
 import type { CellValue } from './exec'
 import { currentLang, t } from './i18n'
 
-export type DriverId = 'mysql' | 'postgres' | 'oracle' | 'dameng'
+export type DriverId = 'mysql' | 'postgres' | 'oracle' | 'dameng' | 'sqlserver'
 export type Environment = 'none' | 'dev' | 'test' | 'prod'
+
+/**
+ * SQL Server 有库这一层（连接 → 库 → 架构）。界面上把库和架构合成一个 schema 字符串传递（对象树、数据标签等），
+ * 请求后端时拆开：架构进路径，库进 `catalog` 参数。分隔符不会出现在库名中。
+ */
+export const CATALOG_SEP = '\u001f'
+
+export function joinCatalog(catalog: string, schema: string): string {
+  return `${catalog}${CATALOG_SEP}${schema}`
+}
+
+export function splitCatalog(schema: string): { catalog?: string; schema: string } {
+  const i = schema.indexOf(CATALOG_SEP)
+  return i < 0 ? { schema } : { catalog: schema.slice(0, i), schema: schema.slice(i + 1) }
+}
+
+/** 给人看的 schema：带库时写成 `库.架构`。 */
+export function schemaLabel(schema: string): string {
+  const s = splitCatalog(schema)
+  return s.catalog === undefined ? s.schema : `${s.catalog}.${s.schema}`
+}
+
+/** 会话的"当前 schema"：SQL Server 是当前库（USE），其余是 schema。合成的 schema 取其中的库。 */
+export function sessionSchema(schema: string): string {
+  return splitCatalog(schema).catalog ?? schema
+}
+
+/**
+ * 导出表数据的来源。SQL Server 的合成 schema（库不是连接的初始库）：导出在新连接上执行，按三段名写成查询。
+ */
+export function exportSource(
+  schema: string,
+  object: string,
+  filter?: string,
+  order?: { column: string; desc: boolean } | null,
+): ExportSource {
+  const s = splitCatalog(schema)
+  if (s.catalog === undefined) return { data: { schema, object, filter, order } }
+  const q = (n: string) => `[${n.replaceAll(']', ']]')}]`
+  let sql = `SELECT * FROM ${q(s.catalog)}.${q(s.schema)}.${q(object)}`
+  if (filter?.trim()) sql += ` WHERE (${filter})`
+  if (order) sql += ` ORDER BY ${q(order.column)} ${order.desc ? 'DESC' : 'ASC'}`
+  return { sql }
+}
+
+/** M6b 之前 SQL Server 不支持的功能（表设计器、导入、文档导出、结构对比、迁移、保存为模型）。 */
+export function supportsWrites(driver: DriverId): boolean {
+  return driver !== 'sqlserver'
+}
 
 /** 服务端的错误对象（dblens_core::Error），按 kind 区分。 */
 export interface ErrorBody {
@@ -251,9 +300,16 @@ export type RowChange =
   | { kind: 'delete'; key: Record<string, CellValue> }
 
 export interface ChangeSet {
+  /** 可以是合成的 schema（SQL Server），请求时拆出库。 */
   schema: string
   table: string
   changes: RowChange[]
+}
+
+/** 改动集发给后端时拆出库（SQL Server）。 */
+function changeBody(set: ChangeSet) {
+  const s = splitCatalog(set.schema)
+  return { ...set, schema: s.schema, catalog: s.catalog ?? null }
 }
 
 /** 改动集的执行结果：失败时已整体回滚，`failed.index` 是失败的改动序号。 */
@@ -998,7 +1054,9 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     `${m(id)}/diagrams/${encodeURIComponent(schema)}/${encodeURIComponent(name)}`
   const mt = (id: string, schema: string, name: string) =>
     `${m(id)}/tables/${encodeURIComponent(schema)}/${encodeURIComponent(name)}`
-  const s = (id: string, schema: string) => `${p(id)}/schemas/${encodeURIComponent(schema)}`
+  const s = (id: string, schema: string) => `${p(id)}/schemas/${encodeURIComponent(splitCatalog(schema).schema)}`
+  /** 合成的 schema 中的库，放进查询参数。 */
+  const cat = (schema: string) => splitCatalog(schema).catalog
   const q = (params: Record<string, string | undefined>) => {
     const entries = Object.entries(params).filter((e): e is [string, string] => e[1] !== undefined && e[1] !== '')
     return entries.length ? `?${new URLSearchParams(entries)}` : ''
@@ -1024,16 +1082,23 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     deleteProfile: (id: string) => request<null>('DELETE', p(id)),
     testConnection: (profile: ProfileInput, password: string) =>
       request<ServerSummary>('POST', '/profiles/test', { profile, password }),
-    schemas: (id: string, filter?: string) => request<SchemaInfo[]>('GET', `${p(id)}/schemas${q({ filter })}`),
+    /** 库列表（只有 SQL Server 有这一层，其他驱动为空）。 */
+    catalogs: (id: string, filter?: string) => request<SchemaInfo[]>('GET', `${p(id)}/catalogs${q({ filter })}`),
+    /** `catalog`：SQL Server 中列出哪个库的架构，不给时是连接的初始库。 */
+    schemas: (id: string, filter?: string, catalog?: string) =>
+      request<SchemaInfo[]>('GET', `${p(id)}/schemas${q({ filter, catalog })}`),
     objects: (id: string, schema: string, kind: ObjectKind, filter?: string) =>
-      request<ObjectInfo[]>('GET', `${s(id, schema)}/objects${q({ kind, filter })}`),
+      request<ObjectInfo[]>('GET', `${s(id, schema)}/objects${q({ kind, filter, catalog: cat(schema) })}`),
     table: async (id: string, schema: string, table: string) =>
-      (await request<TableInfo[]>('GET', `${s(id, schema)}/tables${q({ table })}`))[0] ?? null,
-    sequences: (id: string, schema: string) => request<SequenceInfo[]>('GET', `${s(id, schema)}/sequences`),
-    routines: (id: string, schema: string) => request<RoutineInfo[]>('GET', `${s(id, schema)}/routines`),
-    synonyms: (id: string, schema: string) => request<SynonymInfo[]>('GET', `${s(id, schema)}/synonyms`),
+      (await request<TableInfo[]>('GET', `${s(id, schema)}/tables${q({ table, catalog: cat(schema) })}`))[0] ?? null,
+    sequences: (id: string, schema: string) =>
+      request<SequenceInfo[]>('GET', `${s(id, schema)}/sequences${q({ catalog: cat(schema) })}`),
+    routines: (id: string, schema: string) =>
+      request<RoutineInfo[]>('GET', `${s(id, schema)}/routines${q({ catalog: cat(schema) })}`),
+    synonyms: (id: string, schema: string) =>
+      request<SynonymInfo[]>('GET', `${s(id, schema)}/synonyms${q({ catalog: cat(schema) })}`),
     ddl: async (id: string, schema: string, kind: DdlKind, name: string) =>
-      (await request<{ ddl: string }>('GET', `${s(id, schema)}/ddl${q({ kind, name })}`)).ddl,
+      (await request<{ ddl: string }>('GET', `${s(id, schema)}/ddl${q({ kind, name, catalog: cat(schema) })}`)).ddl,
     generate: async (id: string, schema: string, g: GenerateParams) =>
       (
         await request<{ sql: string }>(
@@ -1042,17 +1107,19 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
             object: g.object,
             object_kind: g.objectKind,
             kind: g.kind,
-            ref_schema: g.ref?.schema,
+            ref_schema: g.ref && splitCatalog(g.ref.schema).schema,
             ref_table: g.ref?.table,
+            catalog: cat(schema),
           })}`,
         )
       ).sql,
     relations: (id: string, schema: string, table: string) =>
-      request<Relation[]>('GET', `${s(id, schema)}/relations${q({ table })}`),
+      request<Relation[]>('GET', `${s(id, schema)}/relations${q({ table, catalog: cat(schema) })}`),
     dataSql: async (id: string, schema: string, d: DataSqlParams) =>
-      (await request<{ sql: string }>('POST', `${s(id, schema)}/data-sql`, d)).sql,
+      (await request<{ sql: string }>('POST', `${s(id, schema)}/data-sql${q({ catalog: cat(schema) })}`, d)).sql,
     /** 清掉后端的元数据缓存；不给 schema 时清整个连接的。 */
-    refresh: (id: string, schema: string | null) => request<null>('POST', `${p(id)}/refresh`, { schema }),
+    refresh: (id: string, schema: string | null) =>
+      request<null>('POST', `${p(id)}/refresh`, { schema: schema === null ? null : splitCatalog(schema).schema }),
     history: (p: HistoryParams = {}) =>
       request<HistoryItem[]>(
         'GET',
@@ -1073,9 +1140,9 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     deleteFavorite: (id: string) => request<null>('DELETE', `/favorites/${encodeURIComponent(id)}`),
     ops: (id: string) => request<OpsQuery[]>('GET', `${p(id)}/ops`),
     previewChanges: (id: string, set: ChangeSet) =>
-      request<{ index: number; sql: string }[]>('POST', `${p(id)}/changes/preview`, set),
+      request<{ index: number; sql: string }[]>('POST', `${p(id)}/changes/preview`, changeBody(set)),
     applyChanges: (sessionId: number, set: ChangeSet) =>
-      request<ApplyOutcome>('POST', `/sessions/${sessionId}/changes`, set),
+      request<ApplyOutcome>('POST', `/sessions/${sessionId}/changes`, changeBody(set)),
     startExport: async (req: ExportRequest) => (await request<{ id: string }>('POST', '/exports', req)).id,
     exportStatus: (id: string) => request<ExportStatus>('GET', `/exports/${encodeURIComponent(id)}`),
     /** 进行中的导出取消；已结束的删除记录。 */
@@ -1201,7 +1268,9 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     commit: (id: number) => request<SessionInfo>('POST', `/sessions/${id}/commit`),
     rollback: (id: number) => request<SessionInfo>('POST', `/sessions/${id}/rollback`),
     reconnect: (id: number) => request<SessionInfo>('POST', `/sessions/${id}/reconnect`),
-    setSchema: (id: number, schema: string) => request<SessionInfo>('POST', `/sessions/${id}/schema`, { schema }),
+    /** 切换会话的当前 schema；合成的 schema（SQL Server）切到其中的库。 */
+    setSchema: (id: number, schema: string) =>
+      request<SessionInfo>('POST', `/sessions/${id}/schema`, { schema: sessionSchema(schema) }),
     /** 会话的 WebSocket 地址。浏览器的 WebSocket 不能带请求头，令牌和语言放在查询参数里。 */
     wsUrl: (sessionId: number, loc: { protocol: string; host: string } = window.location) =>
       `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/api/sessions/${sessionId}/ws?token=${encodeURIComponent(token)}&lang=${currentLang()}`,

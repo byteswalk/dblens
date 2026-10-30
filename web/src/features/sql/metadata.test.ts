@@ -44,6 +44,21 @@ describe('metaReader', () => {
     expect(await m.schemas()).toEqual(['HR'])
   })
 
+  it('SQL Server：在会话的当前库中取架构和对象（M6a）', async () => {
+    const api = fakeApi()
+    const calls: string[] = []
+    api.schemas = (_id, _f, catalog) => {
+      calls.push(`schemas ${catalog}`)
+      return Promise.resolve([{ name: 'dbo', is_system: false }])
+    }
+    const m = metaReader(new QueryClient(), api, 'p1', 'sqlserver', 'sales')
+    await m.objects('dbo')
+    expect(api.calls).toEqual(['objects sales\u001fdbo tables', 'objects sales\u001fdbo views', 'synonyms sales\u001fdbo', 'sequences sales\u001fdbo'])
+    expect(await m.schemas()).toEqual(['dbo'])
+    expect(calls).toEqual(['schemas sales'])
+    expect(defaultSchema('sqlserver', 'sa', 'sales')).toBe('dbo')
+  })
+
   it('MySQL 不取同义词和序列', async () => {
     const api = fakeApi()
     await metaReader(new QueryClient(), api, 'p1', 'mysql').objects('db')
@@ -66,7 +81,7 @@ describe('metaReader', () => {
       const api = fakeApi()
       api.table = () => new Promise(() => {})
       api.schemas = () => Promise.reject(new Error('locked'))
-      const m = metaReader(new QueryClient(), api, 'p1', 'mysql', 100)
+      const m = metaReader(new QueryClient(), api, 'p1', 'mysql', null, 100)
       const cols = m.columns('db', 't')
       await vi.advanceTimersByTimeAsync(101)
       await expect(cols).resolves.toEqual([])

@@ -53,6 +53,19 @@ describe('连接表单', () => {
     expect(o.options).toEqual({ sid: 'ORCL' })
   })
 
+  it('SQL Server：认证方式、实例名、信任证书放进 options，当前 Windows 用户不要求用户名（M6a）', () => {
+    const f = { ...switchProduct(emptyForm(), 'sqlserver'), name: 'ms', sqlAuth: 'windows' as const, user: 'HOST\\u', instance: 'SQLEXPRESS', trustCert: true, tls: 'require' as const }
+    expect(f.port).toBe(1433)
+    const input = toProfileInput(f)
+    expect(input.options).toEqual({ auth: 'windows', instance: 'SQLEXPRESS', trust_server_certificate: 'true', tls: 'require' })
+    const back = fromProfile({ id: 'x', ...input }, false)
+    expect([back.sqlAuth, back.instance, back.trustCert, back.extra]).toEqual(['windows', 'SQLEXPRESS', true, ''])
+    const integrated = { ...f, sqlAuth: 'integrated' as const, user: '' }
+    expect(validate(integrated).user).toBeUndefined()
+    expect(validate({ ...f, user: '' }).user).toBeDefined()
+    expect(toProfileInput({ ...f, sqlAuth: 'sql' }).options?.auth).toBeUndefined()
+  })
+
   it('从已保存的配置还原表单，已知选项拆回各自的字段', () => {
     const p: Profile = {
       id: 'p1',
@@ -138,10 +151,10 @@ describe('连接表单', () => {
   })
 
   it('驱动名称、字段名、校验信息按调用时的界面语言翻译', async () => {
-    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM'])
+    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM', 'SQL Server'])
     try {
       await i18n.changeLanguage('en')
-      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)'])
+      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)', 'SQL Server'])
       expect(databaseLabel('oracle')).toBe('Service Name')
       expect(validate(emptyForm()).name).toBe('Enter a connection name')
       expect(validate({ ...emptyForm(), extra: 'bad' }).extra).toBe('Unrecognized line: bad (expected key=value)')

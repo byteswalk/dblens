@@ -162,7 +162,12 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
       .catch(() => {})
       .then(() => qc.invalidateQueries({ queryKey: metaKey(profile.id) }))
   }, [rt.running, rt.exec, profile, api, qc])
-  const meta = useMemo(() => (profile ? metaReader(qc, api, profile.id, profile.driver) : null), [qc, api, profile?.id, profile?.driver])
+  // SQL Server：会话的当前 schema 是库，补全在这个库的架构中查找
+  const catalog = profile?.driver === 'sqlserver' ? (rt.session?.schema ?? profile.database) : null
+  const meta = useMemo(
+    () => (profile ? metaReader(qc, api, profile.id, profile.driver, catalog) : null),
+    [qc, api, profile?.id, profile?.driver, catalog],
+  )
   const sql = useMemo(
     () =>
       profile && meta
@@ -170,7 +175,10 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
             driver: profile.driver,
             variant: rt.session?.variant ?? profile.variant,
             compat: rt.session?.compat,
-            schema: rt.session?.schema ?? defaultSchema(profile.driver, profile.user, profile.database),
+            schema:
+              profile.driver === 'sqlserver'
+                ? defaultSchema(profile.driver, profile.user, profile.database)
+                : (rt.session?.schema ?? defaultSchema(profile.driver, profile.user, profile.database)),
             meta,
           }
         : null,

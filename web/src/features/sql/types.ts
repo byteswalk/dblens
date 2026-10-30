@@ -1,7 +1,7 @@
 // SQL 语言服务（M1b2 设计文档第 4 节）的公共类型：worker 与主线程之间传递的数据。
 
-/** 解析器的语法族：MySQL 系、PG 系用 dt-sql-parser，Oracle 和达梦用 PL/SQL 语法。 */
-export type Dialect = 'mysql' | 'postgres' | 'plsql'
+/** 解析器的语法族：MySQL 系、PG 系用 dt-sql-parser，Oracle 和达梦用 PL/SQL 语法，SQL Server 用 T-SQL 语法。 */
+export type Dialect = 'mysql' | 'postgres' | 'plsql' | 'tsql'
 
 /** 错误文字的语言（dt-sql-parser 的取值）。 */
 export type ParserLocale = 'zh_CN' | 'en_US'

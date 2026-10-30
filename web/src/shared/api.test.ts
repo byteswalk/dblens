@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
-import { ApiError, type FetchFn, createApi, errorText } from './api'
+import {
+  ApiError,
+  type FetchFn,
+  createApi,
+  errorText,
+  exportSource,
+  joinCatalog,
+  schemaLabel,
+  sessionSchema,
+  splitCatalog,
+  supportsWrites,
+} from './api'
 import i18n from './i18n'
 
 function fakeFetch(status: number, body: unknown) {
@@ -52,6 +63,37 @@ describe('createApi', () => {
       filter: 'a > 1',
       order: { column: 'a', desc: true },
     })
+  })
+
+  it('SQL Server 的合成 schema：架构进路径，库进 catalog 参数（M6a）', async () => {
+    const { fn, calls } = fakeFetch(200, [])
+    const api = createApi('tok', fn)
+    const s = joinCatalog('销售', 'dbo')
+    expect(splitCatalog(s)).toEqual({ catalog: '销售', schema: 'dbo' })
+    expect(splitCatalog('dbo')).toEqual({ schema: 'dbo' })
+    expect([schemaLabel(s), schemaLabel('hr'), sessionSchema(s), sessionSchema('hr')]).toEqual(['销售.dbo', 'hr', '销售', 'hr'])
+    await api.objects('p', s, 'tables')
+    expect(calls[0].url).toBe('/api/profiles/p/schemas/dbo/objects?kind=tables&catalog=%E9%94%80%E5%94%AE')
+    await api.catalogs('p')
+    expect(calls[1].url).toBe('/api/profiles/p/catalogs')
+    await api.schemas('p', undefined, 'master')
+    expect(calls[2].url).toBe('/api/profiles/p/schemas?catalog=master')
+    await api.dataSql('p', s, { object: 't' }).catch(() => {})
+    expect(calls[3].url).toBe('/api/profiles/p/schemas/dbo/data-sql?catalog=%E9%94%80%E5%94%AE')
+    await api.previewChanges('p', { schema: s, table: 't', changes: [] })
+    expect(JSON.parse(calls[4].init?.body as string)).toEqual({ schema: 'dbo', catalog: '销售', table: 't', changes: [] })
+    await api.setSchema(1, s).catch(() => {})
+    expect(JSON.parse(calls[5].init?.body as string)).toEqual({ schema: '销售' })
+    await api.refresh('p', s)
+    expect(JSON.parse(calls[6].init?.body as string)).toEqual({ schema: 'dbo' })
+  })
+
+  it('导出 SQL Server 别的库中的表按三段名写成查询', () => {
+    expect(exportSource('hr', 't')).toEqual({ data: { schema: 'hr', object: 't', filter: undefined, order: undefined } })
+    expect(exportSource(joinCatalog('a]b', 'dbo'), 'order', 'id > 1', { column: 'id', desc: true })).toEqual({
+      sql: 'SELECT * FROM [a]]b].[dbo].[order] WHERE (id > 1) ORDER BY [id] DESC',
+    })
+    expect([supportsWrites('sqlserver'), supportsWrites('postgres')]).toEqual([false, true])
   })
 
   it('204 没有响应体', async () => {

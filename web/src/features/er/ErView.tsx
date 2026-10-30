@@ -31,7 +31,7 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'r
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import { type DesignTableModel, type ErDiagram, type ErDisplay, type ErPosition, type ErTable, DEFAULT_DIAGRAM } from '../../shared/api'
+import { type DesignTableModel, type ErDiagram, type ErDisplay, type ErPosition, type ErTable, DEFAULT_DIAGRAM, schemaLabel } from '../../shared/api'
 import { useSetting } from '../../shared/settings'
 import { desktop } from '../../shared/shell'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../../shared/theme'
@@ -315,7 +315,7 @@ function Canvas({ tab }: { tab: QueryTab }) {
   const isTopic = tableList !== 'all'
   const title = isModel
     ? `${modelQ.data?.info.name ?? ''} / ${schema} · ${diagramName === DEFAULT_DIAGRAM ? t('er.defaultDiagram') : diagramName}`
-    : `${schema} · ${t('er.readOnly')}`
+    : `${schemaLabel(schema)} · ${t('er.readOnly')}`
   return (
     <div className="er-view" data-er-tab={tab.id} onKeyDown={onKeyDown} tabIndex={-1}>
       <div className="row toolbar" style={{ gap: 6, flexWrap: 'wrap' }}>

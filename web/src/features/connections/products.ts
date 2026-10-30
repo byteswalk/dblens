@@ -14,6 +14,7 @@ export type ProductId =
   | 'opengauss'
   | 'oracle'
   | 'dameng'
+  | 'sqlserver'
 
 export interface Product {
   id: ProductId
@@ -32,6 +33,7 @@ export const PRODUCTS: Product[] = [
   { id: 'opengauss', driver: 'postgres', port: 5432 },
   { id: 'oracle', driver: 'oracle', port: 1521 },
   { id: 'dameng', driver: 'dameng', port: 5236 },
+  { id: 'sqlserver', driver: 'sqlserver', port: 1433 },
 ]
 
 export function product(id: ProductId): Product {

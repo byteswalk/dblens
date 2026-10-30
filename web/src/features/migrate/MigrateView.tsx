@@ -22,6 +22,7 @@ import {
   type Profile,
   type TaskStatus,
   errorText,
+  supportsWrites,
 } from '../../shared/api'
 import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
@@ -69,7 +70,7 @@ function EndPicker({ label, value, profiles, onChange }: {
         placeholder={t('migrate.pickProfile')}
         value={value.profile || undefined}
         onChange={(profile) => onChange({ profile, schema: '' })}
-        options={profiles.map((p) => ({ value: p.id, label: p.name }))}
+        options={profiles.filter((p) => supportsWrites(p.driver)).map((p) => ({ value: p.id, label: p.name }))}
       />
       <Select
         size="small"

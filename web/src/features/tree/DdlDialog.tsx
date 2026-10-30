@@ -7,7 +7,7 @@ import { App, Button, Modal, Spin } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import type { DdlKind, DriverId } from '../../shared/api'
+import { type DdlKind, type DriverId, schemaLabel } from '../../shared/api'
 import { useSetting } from '../../shared/settings'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark } from '../../shared/theme'
 import { useQueryActions } from '../editor/actions'
@@ -42,7 +42,7 @@ export default function DdlDialog({ target, onClose }: { target: DdlTarget; onCl
     <Modal
       open
       width={820}
-      title={t('tree.ddl.title', { name: `${schema}.${name}` })}
+      title={t('tree.ddl.title', { name: `${schemaLabel(schema)}.${name}` })}
       onCancel={onClose}
       footer={[
         <Button

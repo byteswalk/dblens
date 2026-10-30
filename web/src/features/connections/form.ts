@@ -7,6 +7,9 @@ import { type ProductId, baseProduct, product, productLabel, productOf } from '.
 
 export type TlsMode = 'disable' | 'require' | 'verify'
 
+/** SQL Server 的认证方式：SQL 账号、指定 Windows 账号、当前 Windows 用户（服务端进程的身份）。 */
+export type SqlServerAuth = 'sql' | 'windows' | 'integrated'
+
 export interface ConnectionForm {
   name: string
   /** 选的产品；驱动由产品决定。 */
@@ -26,13 +29,17 @@ export interface ConnectionForm {
   color: string
   tls: TlsMode
   tlsCa: string
+  /** 只用于 SQL Server：认证方式、命名实例、信任服务器证书。 */
+  sqlAuth: SqlServerAuth
+  instance: string
+  trustCert: boolean
   timeoutSecs: number
   /** 其他驱动参数，一行一个 `键=值`。 */
   extra: string
 }
 
 /** 新建连接时可选的驱动，按界面上的顺序。 */
-export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng']
+export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng', 'sqlserver']
 
 /** 驱动的显示名称（如「MySQL 系」）。 */
 export function driverLabel(driver: DriverId): string {
@@ -44,16 +51,21 @@ export function driverNote(driver: DriverId): string {
   return t(`connections.driver.${driver}.note`)
 }
 
-export const DEFAULT_PORTS: Record<DriverId, number> = { mysql: 3306, postgres: 5432, oracle: 1521, dameng: 5236 }
+export const DEFAULT_PORTS: Record<DriverId, number> = { mysql: 3306, postgres: 5432, oracle: 1521, dameng: 5236, sqlserver: 1433 }
 
 /** 「数据库」一栏在各驱动下的含义。 */
 export function databaseLabel(driver: DriverId): string {
   return t(`connections.databaseLabel.${driver}`)
 }
 
-/** 只有 MySQL 系、PG 系支持 TLS 选项（M0-4b）。 */
+/** MySQL 系、PG 系（M0-4b）和 SQL Server 支持 TLS 选项。 */
 export function supportsTls(driver: DriverId): boolean {
-  return driver === 'mysql' || driver === 'postgres'
+  return driver === 'mysql' || driver === 'postgres' || driver === 'sqlserver'
+}
+
+/** 当前 Windows 用户认证不需要填用户名和密码。 */
+export function needsCredentials(f: Pick<ConnectionForm, 'driver' | 'sqlAuth'>): boolean {
+  return !(f.driver === 'sqlserver' && f.sqlAuth === 'integrated')
 }
 
 export function emptyForm(id: ProductId = 'mysql'): ConnectionForm {
@@ -73,6 +85,9 @@ export function emptyForm(id: ProductId = 'mysql'): ConnectionForm {
     color: '',
     tls: 'disable',
     tlsCa: '',
+    sqlAuth: 'sql',
+    instance: '',
+    trustCert: false,
     timeoutSecs: 10,
     extra: '',
   }
@@ -91,7 +106,7 @@ export function switchProduct(f: ConnectionForm, id: ProductId): ConnectionForm 
   return { ...switchDriver(f, next.driver), product: id, port }
 }
 
-const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid']
+const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'trust_server_certificate']
 
 export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
   const opts = p.options ?? {}
@@ -115,6 +130,9 @@ export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
     color: p.color ?? '',
     tls,
     tlsCa: opts.tls_ca ?? '',
+    sqlAuth: opts.auth === 'windows' || opts.auth === 'integrated' ? opts.auth : 'sql',
+    instance: opts.instance ?? '',
+    trustCert: opts.trust_server_certificate === 'true',
     timeoutSecs: p.connect_timeout_secs ?? 10,
     extra,
   }
@@ -131,6 +149,11 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     if (f.tls === 'verify' && f.tlsCa.trim()) options.tls_ca = f.tlsCa.trim()
   }
   if (f.driver === 'oracle' && f.oracleSid.trim()) options.sid = f.oracleSid.trim()
+  if (f.driver === 'sqlserver') {
+    if (f.sqlAuth !== 'sql') options.auth = f.sqlAuth
+    if (f.instance.trim()) options.instance = f.instance.trim()
+    if (f.trustCert) options.trust_server_certificate = 'true'
+  }
   return {
     name: f.name.trim(),
     driver: f.driver,
@@ -152,7 +175,7 @@ export function validate(f: ConnectionForm): Partial<Record<keyof ConnectionForm
   if (!f.name.trim()) e.name = t('connections.validate.nameRequired')
   if (!f.host.trim()) e.host = t('connections.validate.hostRequired')
   if (!Number.isInteger(f.port) || f.port < 1 || f.port > 65535) e.port = t('connections.validate.portRange')
-  if (!f.user.trim()) e.user = t('connections.validate.userRequired')
+  if (needsCredentials(f) && !f.user.trim()) e.user = t('connections.validate.userRequired')
   if (f.driver === 'oracle' && !f.database.trim() && !f.oracleSid.trim()) {
     e.database = t('connections.validate.serviceOrSidRequired')
   }

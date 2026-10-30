@@ -20,7 +20,8 @@
     "inTransaction": "有未提交的事务",
     "format": "格式化（Shift+Alt+F）",
     "explain": "执行计划",
-    "favorite": "收藏（Ctrl+D）"
+    "favorite": "收藏（Ctrl+D）",
+    "database": "库"
   },
   "switchProfile": {
     "title": "切换连接",

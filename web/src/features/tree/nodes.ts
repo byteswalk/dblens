@@ -1,7 +1,8 @@
 // 对象树的节点结构（设计文档 7.3 节）：连接 → schema → 分类（表、视图……）→ 对象 →（表的）列。
+// SQL Server 多一层库（M6a）：连接 → 库 → 架构 → …，架构节点的 schema 是库和架构合成的（见 api.ts 的 joinCatalog）。
 // 懒加载：展开时才向后端取下一层。这里只放纯逻辑，单独测试。
 
-import type { DriverId, ObjectKind, RoutineInfo } from '../../shared/api'
+import { type DriverId, type ObjectKind, type RoutineInfo, schemaLabel, splitCatalog } from '../../shared/api'
 import { t } from '../../shared/i18n'
 
 export type CategoryKind = ObjectKind | 'routines' | 'sequences' | 'synonyms'
@@ -33,23 +34,27 @@ export function categoriesFor(driver: DriverId): Category[] {
       ? ['tables', 'views', 'routines']
       : driver === 'postgres'
         ? ['tables', 'views', 'materialized_views', 'routines', 'sequences']
-        : ['tables', 'views', 'materialized_views', 'routines', 'sequences', 'synonyms']
+        : driver === 'sqlserver'
+          ? ['tables', 'views', 'routines', 'sequences', 'synonyms']
+          : ['tables', 'views', 'materialized_views', 'routines', 'sequences', 'synonyms']
   return kinds.map((kind) => ({ kind, label: categoryLabel(kind) }))
 }
 
 /**
  * 节点的键。各段用 `\u0001` 连接（数据库对象名里不会出现），开头是节点类型：
  * - `c` 连接：c、profileId
+ * - `d` 库（SQL Server）：d、profileId、catalog
  * - `s` schema：s、profileId、schema
- * - `g` 系统 schema 分组：g、profileId
+ * - `g` 系统 schema 分组：g、profileId，库中的分组另有 catalog
  * - `k` 分类：k、profileId、schema、kind
  * - `o` 对象：o、profileId、schema、kind、name，程序另有 routineKind（包和包体同名，靠它区分）
  * - `l` 列：l、profileId、schema、table、column
  */
 export type NodeKey =
   | { type: 'c'; profileId: string }
+  | { type: 'd'; profileId: string; catalog: string }
   | { type: 's'; profileId: string; schema: string }
-  | { type: 'g'; profileId: string }
+  | { type: 'g'; profileId: string; catalog?: string }
   | { type: 'k'; profileId: string; schema: string; kind: CategoryKind }
   | {
       type: 'o'
@@ -66,8 +71,11 @@ const SEP = '\u0001'
 export function encodeKey(k: NodeKey): string {
   switch (k.type) {
     case 'c':
-    case 'g':
       return [k.type, k.profileId].join(SEP)
+    case 'g':
+      return [k.type, k.profileId, ...(k.catalog === undefined ? [] : [k.catalog])].join(SEP)
+    case 'd':
+      return [k.type, k.profileId, k.catalog].join(SEP)
     case 's':
       return [k.type, k.profileId, k.schema].join(SEP)
     case 'k':
@@ -85,7 +93,9 @@ export function decodeKey(s: string): NodeKey {
     case 'c':
       return { type, profileId }
     case 'g':
-      return { type, profileId }
+      return a === undefined ? { type, profileId } : { type, profileId, catalog: a }
+    case 'd':
+      return { type, profileId, catalog: a }
     case 's':
       return { type, profileId, schema: a }
     case 'k':
@@ -120,15 +130,17 @@ export function routineKindLabel(kind: RoutineInfo['kind']): string {
   return key ? t(`tree.routineKind.${key}`) : kind
 }
 
-/** 复制名称时用的限定名：schema.对象，列为 表.列。名字原样输出，不加引号。 */
+/** 复制名称时用的限定名：schema.对象（SQL Server 为 库.架构.对象），列为 表.列。名字原样输出，不加引号。 */
 export function qualifiedName(k: NodeKey): string {
   switch (k.type) {
     case 'o':
-      return `${k.schema}.${k.name}`
+      return `${schemaLabel(k.schema)}.${k.name}`
     case 'l':
       return `${k.table}.${k.column}`
     case 's':
-      return k.schema
+      return schemaLabel(k.schema)
+    case 'd':
+      return k.catalog
     default:
       return ''
   }
@@ -137,11 +149,15 @@ export function qualifiedName(k: NodeKey): string {
 /** child 是否在 parent 之下（不含 parent 自己）。刷新 parent 时，它下面已加载的内容都要丢掉。 */
 export function isWithin(child: NodeKey, parent: NodeKey): boolean {
   if (child.profileId !== parent.profileId) return false
+  const catalogOf = (c: NodeKey) =>
+    c.type === 'd' || c.type === 'g' ? c.catalog : 'schema' in c ? splitCatalog(c.schema).catalog : undefined
   switch (parent.type) {
     case 'c':
       return child.type !== 'c'
+    case 'd':
+      return child.type !== 'c' && child.type !== 'd' && catalogOf(child) === parent.catalog
     case 'g':
-      return child.type === 's'
+      return child.type === 's' && catalogOf(child) === parent.catalog
     case 's':
       return (child.type === 'k' || child.type === 'o' || child.type === 'l') && child.schema === parent.schema
     case 'k':

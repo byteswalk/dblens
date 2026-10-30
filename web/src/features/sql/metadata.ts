@@ -6,7 +6,7 @@
 
 import type { QueryClient } from '@tanstack/react-query'
 
-import type { Api, DriverId } from '../../shared/api'
+import { type Api, type DriverId, joinCatalog } from '../../shared/api'
 
 export interface MetaObject {
   name: string
@@ -49,21 +49,30 @@ function within<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
   })
 }
 
-export function metaReader(qc: QueryClient, api: MetaApi, profileId: string, driver: DriverId, waitMs = 1500): MetaReader {
+/**
+ * `catalog`：SQL Server 会话的当前库。读取的架构都在这个库中（与对象树的合成 schema 相同，缓存也共用）。
+ */
+export function metaReader(
+  qc: QueryClient,
+  api: MetaApi,
+  profileId: string,
+  driver: DriverId,
+  catalog?: string | null,
+  waitMs = 1500,
+): MetaReader {
   const get = <T>(key: unknown[], fn: () => Promise<T>, fallback: T) =>
     within(qc.fetchQuery({ queryKey: key, queryFn: fn, staleTime: Infinity }), waitMs, fallback)
-  const plsql = driver === 'oracle' || driver === 'dameng'
-  return {
-    schemas: () => get([...metaKey(profileId), '#schemas'], async () => (await api.schemas(profileId)).map((s) => s.name), []),
-    objects: (schema) =>
+  const withSynonyms = driver === 'oracle' || driver === 'dameng' || driver === 'sqlserver'
+  const inner = { schemas: () => get([...metaKey(profileId), '#schemas', catalog ?? ''], async () => (await api.schemas(profileId, undefined, catalog ?? undefined)).map((s) => s.name), []),
+    objects: (schema: string) =>
       get(
         [...metaKey(profileId, schema), 'objects'],
         async () => {
           const [tables, views, synonyms, sequences] = await Promise.all([
             api.objects(profileId, schema, 'tables'),
             api.objects(profileId, schema, 'views'),
-            plsql ? api.synonyms(profileId, schema) : Promise.resolve([]),
-            plsql ? api.sequences(profileId, schema) : Promise.resolve([]),
+            withSynonyms ? api.synonyms(profileId, schema) : Promise.resolve([]),
+            withSynonyms ? api.sequences(profileId, schema) : Promise.resolve([]),
           ])
           return [
             ...tables.map((o): MetaObject => ({ name: o.name, kind: 'table', comment: o.comment })),
@@ -74,7 +83,7 @@ export function metaReader(qc: QueryClient, api: MetaApi, profileId: string, dri
         },
         [],
       ),
-    columns: (schema, table) =>
+    columns: (schema: string, table: string) =>
       get(
         [...metaKey(profileId, schema), 'columns', table],
         async () =>
@@ -85,12 +94,21 @@ export function metaReader(qc: QueryClient, api: MetaApi, profileId: string, dri
           })),
         [],
       ),
-    functions: (schema) =>
+    functions: (schema: string) =>
       get(
         [...metaKey(profileId, schema), 'functions'],
         async () => (await api.routines(profileId, schema)).filter((r) => r.kind === 'function').map((r) => r.name),
         [],
       ),
+  }
+  if (driver !== 'sqlserver' || !catalog) return inner
+  // SQL Server：补全按架构名取元数据，请求时带上当前库
+  const at = (schema: string) => joinCatalog(catalog, schema)
+  return {
+    schemas: inner.schemas,
+    objects: (schema) => inner.objects(at(schema)),
+    columns: (schema, table) => inner.columns(at(schema), table),
+    functions: (schema) => inner.functions(at(schema)),
   }
 }
 
@@ -100,7 +118,10 @@ export function findName<T extends { name: string } | string>(items: T[], name: 
   return items.find((x) => n(x) === name) ?? items.find((x) => n(x).toUpperCase() === name.toUpperCase())
 }
 
-/** 没有打开会话时的当前 schema：MySQL 系是连接配置里的库，PG 系是 public，Oracle 和达梦是用户名（大写）。 */
+/**
+ * 补全用的当前 schema：MySQL 系是连接配置里的库，PG 系是 public，Oracle 和达梦是用户名（大写），
+ * SQL Server 是 dbo（会话的当前库另作 `metaReader` 的 catalog）。
+ */
 export function defaultSchema(driver: DriverId, user: string, database?: string | null): string | null {
   switch (driver) {
     case 'mysql':
@@ -110,5 +131,7 @@ export function defaultSchema(driver: DriverId, user: string, database?: string 
     case 'oracle':
     case 'dameng':
       return user.toUpperCase()
+    case 'sqlserver':
+      return 'dbo'
   }
 }

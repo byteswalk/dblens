@@ -21,6 +21,7 @@ import type {
   SyncRequest,
   TableStatus,
 } from '../../shared/api'
+import { supportsWrites } from '../../shared/api'
 import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
 import { useQueryActions } from '../editor/actions'
@@ -115,7 +116,7 @@ function SidePicker({ label, value, profiles, onChange }: {
           placeholder={t('model.compare.pickProfile')}
           value={value?.kind === 'database' ? value.profile : undefined}
           onChange={(p) => onChange({ kind: 'database', profile: p, schema: '' })}
-          options={profiles.map((p) => ({ value: p.id, label: p.name }))}
+          options={profiles.filter((p) => supportsWrites(p.driver)).map((p) => ({ value: p.id, label: p.name }))}
         />
       )}
       <Select
