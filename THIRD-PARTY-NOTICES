@@ -6,4 +6,8 @@ clients/jre/
   各模块的许可和声明见 clients/jre/legal/。
   OpenJDK 源码：https://openjdk.org/
 
-JDBC 驱动不随包发布：GBase 8s、达梦的驱动要由用户从厂商处取得，并放到设置中指定的目录。
+clients/jdbc/ojdbc11.jar
+  Oracle JDBC 驱动，未修改，许可为 Oracle Free Use Terms and Conditions：
+  https://www.oracle.com/downloads/licenses/oracle-free-license.html
+
+GBase 8s、达梦的 JDBC 驱动不随包发布，要由用户从厂商处取得，并放到设置中指定的目录。

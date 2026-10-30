@@ -178,3 +178,18 @@ describe('GBase 8s', () => {
     expect(validate({ ...gbase, serverName: 'gbase01' }).serverName).toBeUndefined()
   })
 })
+
+describe('JDBC 客户端', () => {
+  it('Oracle 选 JDBC 时写入选项，读回来不变', () => {
+    const f = { ...emptyForm('oracle'), name: 'o', host: 'h', user: 'u', database: 's', client: 'jdbc' as const, jdbcDir: 'D:\\jdbc' }
+    const input = toProfileInput(f)
+    expect(input.options).toMatchObject({ client: 'jdbc', jdbc_dir: 'D:\\jdbc' })
+    const back = fromProfile({ ...input, id: '1', variant: null } as Profile, false)
+    expect((back.client, back.jdbcDir)).toBe('D:\\jdbc')
+  })
+
+  it('默认用原生客户端，不写选项', () => {
+    const input = toProfileInput({ ...emptyForm('dameng'), name: 'd', host: 'h', user: 'u' })
+    expect(input.options).not.toHaveProperty('client')
+  })
+})

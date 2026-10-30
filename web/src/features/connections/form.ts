@@ -10,6 +10,8 @@ export type TlsMode = 'disable' | 'require' | 'verify'
 /** SQL Server 的认证方式：SQL 账号、指定 Windows 账号、当前 Windows 用户（服务端进程的身份）。 */
 export type SqlServerAuth = 'sql' | 'windows' | 'integrated'
 
+export type ClientKind = 'native' | 'jdbc'
+
 export interface ConnectionForm {
   name: string
   /** 选的产品；驱动由产品决定。 */
@@ -33,6 +35,9 @@ export interface ConnectionForm {
   sqlAuth: SqlServerAuth
   instance: string
   trustCert: boolean
+  /** 只用于 Oracle、达梦：用原生客户端还是 JDBC 驱动；JDBC 驱动所在目录（留空用内置的）。 */
+  client: ClientKind
+  jdbcDir: string
   /** 只用于 GBase 8s：服务器名（必填）、DB_LOCALE。 */
   serverName: string
   dbLocale: string
@@ -90,6 +95,8 @@ export function emptyForm(id: ProductId = 'mysql'): ConnectionForm {
     tlsCa: '',
     sqlAuth: 'sql',
     instance: '',
+    client: 'native',
+    jdbcDir: '',
     serverName: '',
     dbLocale: '',
     trustCert: false,
@@ -111,7 +118,7 @@ export function switchProduct(f: ConnectionForm, id: ProductId): ConnectionForm 
   return { ...switchDriver(f, next.driver), product: id, port }
 }
 
-const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'server_name', 'db_locale', 'trust_server_certificate']
+const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'client', 'jdbc_dir', 'server_name', 'db_locale', 'trust_server_certificate']
 
 export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
   const opts = p.options ?? {}
@@ -137,6 +144,8 @@ export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
     tlsCa: opts.tls_ca ?? '',
     sqlAuth: opts.auth === 'windows' || opts.auth === 'integrated' ? opts.auth : 'sql',
     instance: opts.instance ?? '',
+    client: opts.client === 'jdbc' ? 'jdbc' : 'native',
+    jdbcDir: opts.jdbc_dir ?? '',
     serverName: opts.server_name ?? '',
     dbLocale: opts.db_locale ?? '',
     trustCert: opts.trust_server_certificate === 'true',
@@ -160,6 +169,10 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     if (f.sqlAuth !== 'sql') options.auth = f.sqlAuth
     if (f.instance.trim()) options.instance = f.instance.trim()
     if (f.trustCert) options.trust_server_certificate = 'true'
+  }
+  if ((f.driver === 'oracle' || f.driver === 'dameng') && f.client === 'jdbc') {
+    options.client = 'jdbc'
+    if (f.jdbcDir.trim()) options.jdbc_dir = f.jdbcDir.trim()
   }
   if (f.driver === 'informix') {
     if (f.serverName.trim()) options.server_name = f.serverName.trim()

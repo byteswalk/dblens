@@ -179,5 +179,12 @@
   },
   "gbase": {
     "serverName": "服务器名"
+  },
+  "client": {
+    "label": "客户端",
+    "native": "原生客户端",
+    "jdbc": "JDBC 驱动",
+    "dir": "JDBC 驱动目录",
+    "dirPlaceholder": "留空时用内置的驱动"
   }
 }

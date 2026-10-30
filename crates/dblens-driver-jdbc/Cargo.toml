@@ -15,4 +15,5 @@ tracing.workspace = true
 
 [dev-dependencies]
 dblens-driver = { workspace = true, features = ["conformance"] }
+chrono.workspace = true
 tokio.workspace = true

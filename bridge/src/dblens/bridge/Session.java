@@ -31,10 +31,21 @@ final class Session {
         endExec();
         String sql = Frame.str(in);
         int n = in.readInt();
-        PreparedStatement p = conn.prepareStatement(sql);
-        current = p;
-        for (int i = 1; i <= n; i++) Values.bind(p, i, in);
-        boolean hasRs = p.execute();
+        // 没有参数时不走预编译：语句可以是任何 DDL，也不能让驱动改写 { } 转义
+        Statement p;
+        boolean hasRs;
+        if (n == 0) {
+            p = conn.createStatement();
+            current = p;
+            p.setEscapeProcessing(false);
+            hasRs = p.execute(sql);
+        } else {
+            PreparedStatement ps = conn.prepareStatement(sql);
+            p = ps;
+            current = ps;
+            for (int i = 1; i <= n; i++) Values.bind(ps, i, in);
+            hasRs = ps.execute();
+        }
         Frame.Out o = new Frame.Out();
         if (!hasRs) {
             o.d.writeLong(Math.max(p.getUpdateCount(), 0));

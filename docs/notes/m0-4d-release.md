@@ -52,7 +52,7 @@ GBase 8s 经 Java 桥接连接，安装包要带桥接程序和精简 JRE。
 - `pnpm package` 先运行 `scripts/build-bridge.mjs`、`scripts/prepare-clients.mjs`，生成被 git 忽略的 `clients-staging/`，再打进安装包。
 - 这个目录按当前平台生成，每个平台要各打一次。
 - `dblens-server` 的压缩包要把 `clients-staging/` 改名为 `clients/`，放到程序旁边。
-- JDBC 驱动不随包发布。只有确认许可后，才把它写进 `scripts/clients.manifest.json` 的 `jdbc`（文件名和 SHA-256），文件放在 `DBLENS_CLIENTS_DIR`。
+- `scripts/clients.manifest.json` 的 `jdbc` 列出随包发布的驱动（文件名和 SHA-256），文件放在 `DBLENS_CLIENTS_DIR`，打包时校验。目前只有 ojdbc11（Oracle Free Use Terms 允许再分发），从 Maven Central 的 `com.oracle.database.jdbc:ojdbc11` 取。GBase 8s、达梦的驱动没有再分发授权，不要加进来。
 
 ## 发布流程
 

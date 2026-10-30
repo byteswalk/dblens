@@ -420,10 +420,6 @@
     "zh-CN": "%{field} 的值无效：%{value}",
     "en": "Invalid value for %{field}: %{value}"
   },
-  "gbase.jar_missing": {
-    "zh-CN": "在 %{dir} 找不到 gbasedbtjdbc.jar。请从 https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE 下载，改名后放到这个目录，或在设置中指定目录",
-    "en": "gbasedbtjdbc.jar was not found in %{dir}. Download it from https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE, rename it and put it in this folder, or choose a folder in Settings"
-  },
   "gbase.later": {
     "zh-CN": "GBase 8s 暂不支持这项功能，计划在 M8b 提供",
     "en": "GBase 8s does not support this yet; it is planned for M8b"
@@ -527,6 +523,10 @@
   "jdbc.bridge_exited": {
     "zh-CN": "Java 桥接进程已退出，请重新连接",
     "en": "The Java bridge process has exited. Please reconnect"
+  },
+  "jdbc.jar_missing": {
+    "zh-CN": "在 %{dir} 找不到 JDBC 驱动（%{jar}*.jar）。请从数据库厂商处取得驱动，放到这个目录，或在连接配置中指定目录",
+    "en": "No JDBC driver (%{jar}*.jar) was found in %{dir}. Get the driver from the database vendor and put it in this folder, or set the folder in the connection"
   },
   "jdbc.runtime_missing": {
     "zh-CN": "找不到内置的 Java 运行环境或桥接程序，请重新安装 DBLens",

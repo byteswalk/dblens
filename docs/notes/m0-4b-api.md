@@ -352,3 +352,9 @@
 - 服务端每发出一个装满 `max_rows` 行的 `rows`，就停下等 `fetch_more`。
 - 一批不满，说明结果集已取完，服务端会直接发后面的事件。
 - WebSocket 断开时，正在执行的语句会被取消，会话恢复空闲。
+
+## JDBC 桥接（M8a）
+
+- 新增驱动 id `informix`（GBase 8s），连接选项 `server_name`（必填）、`db_locale`。
+- 驱动 jar 目录走 `/api/drivers/informix/lib-dir`，和原生客户端相同。
+- Oracle、达梦的连接选项 `client=jdbc` 改走桥接，`jdbc_dir` 指定驱动目录；不填时用程序自带的 `clients/jdbc/`。

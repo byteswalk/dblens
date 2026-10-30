@@ -1,7 +1,7 @@
 // 新建 / 编辑连接（M1 设计稿第 2 部分）：左侧选数据库类型，右侧"常规 / SSL/TLS / 高级"三个标签。
 // Oracle、达梦缺客户端库时，在对话框里直接确认目录。密码默认保存（系统钥匙串或主密码加密的本地密码库）。
 
-import { Alert, App, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Space, Tabs } from 'antd'
+import { Alert, App, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Segmented, Space, Tabs } from 'antd'
 import { IconCircleCheck, IconPlug } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useState } from 'react'
@@ -12,6 +12,7 @@ import { useUi } from '../../app/ui'
 import DbIcon from '../../shared/DbIcon'
 import type { DriverId, Environment, ServerSummary } from '../../shared/api'
 import {
+  type ClientKind,
   type ConnectionForm,
   databaseLabel,
   driverLabel,
@@ -268,6 +269,20 @@ export default function ConnectionDialog() {
       <Field label={t('connections.advanced.timeout')} error={errors.timeoutSecs}>
         <InputNumber min={1} max={600} value={form.timeoutSecs} onChange={(v) => set('timeoutSecs', v ?? 0)} />
       </Field>
+      {(form.driver === 'oracle' || form.driver === 'dameng') && (
+        <Field label={t('connections.client.label')}>
+          <Segmented
+            value={form.client}
+            onChange={(v) => set('client', v as ClientKind)}
+            options={(['native', 'jdbc'] as const).map((value) => ({ value, label: t(`connections.client.${value}`) }))}
+          />
+        </Field>
+      )}
+      {(form.driver === 'oracle' || form.driver === 'dameng') && form.client === 'jdbc' && (
+        <Field label={t('connections.client.dir')}>
+          <Input value={form.jdbcDir} onChange={(e) => set('jdbcDir', e.target.value)} placeholder={t('connections.client.dirPlaceholder')} />
+        </Field>
+      )}
       {form.driver === 'informix' && (
         <Field label="DB_LOCALE">
           <Input value={form.dbLocale} onChange={(e) => set('dbLocale', e.target.value)} placeholder="zh_CN.utf8" />

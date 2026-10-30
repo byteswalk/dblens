@@ -4,32 +4,40 @@ use dblens_core::{Result, Value};
 use dblens_driver::blocking::{BlockingConnection, BlockingExec};
 use dblens_driver::{CancelHandle, ColumnMeta, ExecEvent, ServerInfo};
 
-use crate::error::{expect, protocol};
+use crate::error::{Flavor, expect, protocol};
 use crate::frame::{Column, Req, Resp};
 use crate::process::Bridge;
 
 pub(crate) struct JdbcConnection {
     pub(crate) bridge: Arc<Bridge>,
     pub(crate) id: u64,
+    pub(crate) flavor: Flavor,
 }
 
 impl JdbcConnection {
+    /// 执行一条不关心结果的语句。
+    pub(crate) fn run(&self, sql: &str) -> Result<()> {
+        let (k, b) = self.bridge.call(&Req::Execute { conn: self.id, sql: sql.into(), params: vec![] })?;
+        expect(k, &b, 0, self.flavor)?;
+        self.simple(Req::EndExec { conn: self.id })
+    }
+
     fn simple(&self, req: Req) -> Result<()> {
         let (k, b) = self.bridge.call(&req)?;
-        match expect(k, &b, 0)? {
+        match expect(k, &b, 0, self.flavor)? {
             Resp::Ok => Ok(()),
             _ => Err(protocol()),
         }
     }
 
     pub(crate) fn cancel_handle(&self) -> CancelHandle {
-        let (bridge, id) = (self.bridge.clone(), self.id);
+        let (bridge, id, flavor) = (self.bridge.clone(), self.id, self.flavor);
         CancelHandle::new(move || {
             let bridge = bridge.clone();
             async move {
                 tokio::task::spawn_blocking(move || {
                     let (k, b) = bridge.call(&Req::Cancel { conn: id })?;
-                    expect(k, &b, 0).map(|_| ())
+                    expect(k, &b, 0, flavor).map(|_| ())
                 })
                 .await
                 .map_err(|e| dblens_core::Error::internal(e.to_string()))?
@@ -70,7 +78,9 @@ impl BlockingExec for Exec<'_> {
             Stage::Rows(n) => {
                 let (k, b) =
                     self.conn.bridge.call(&Req::Fetch { conn: self.conn.id, max_rows: max_rows as u32 })?;
-                let Resp::Rows { done, rows } = expect(k, &b, n)? else { return Err(protocol()) };
+                let Resp::Rows { done, rows } = expect(k, &b, n, self.conn.flavor)? else {
+                    return Err(protocol());
+                };
                 self.stage = if done { Stage::End } else { Stage::Rows(n) };
                 if rows.is_empty() {
                     self.stage = Stage::Done;
@@ -98,7 +108,7 @@ impl BlockingConnection for JdbcConnection {
     fn execute<'a>(&'a mut self, sql: &'a str, params: &'a [Value]) -> Result<Box<dyn BlockingExec + 'a>> {
         let (k, b) =
             self.bridge.call(&Req::Execute { conn: self.id, sql: sql.into(), params: params.to_vec() })?;
-        let stage = match expect(k, &b, 0)? {
+        let stage = match expect(k, &b, 0, self.flavor)? {
             Resp::Result(cols) => Stage::Start(cols.into_iter().map(meta).collect()),
             Resp::Affected(n) => Stage::Affected(n),
             _ => return Err(protocol()),
@@ -128,7 +138,7 @@ impl BlockingConnection for JdbcConnection {
 
     fn server_info(&mut self) -> Result<ServerInfo> {
         let (k, b) = self.bridge.call(&Req::ServerInfo { conn: self.id })?;
-        match expect(k, &b, 0)? {
+        match expect(k, &b, 0, self.flavor)? {
             Resp::ServerInfo { product, version } => Ok(ServerInfo { product, version }),
             _ => Err(protocol()),
         }

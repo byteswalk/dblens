@@ -14,7 +14,7 @@
 - 只做 8s。GBase 8a、8c、8t 是别的产品，不在范围内。
 - 表单只列 GBase 8s。驱动叫 `informix`，因为协议来自 Informix；IBM Informix 未实测，不列入产品，也不做产品识别。
 - 不用 CSDK、ODBC，不自己实现 SQLI 协议。
-- Oracle、达梦的现有驱动不动。桥接在 GBase 上稳定后，再单独评估 Oracle 换 ojdbc。
+- Oracle、达梦的原生驱动保留；连接选项 `client=jdbc` 时改走桥接（实现时用户追加，见 `docs/notes/m8a-gbase8s.md`）。
 
 ## 3. JDBC 实测结论
 

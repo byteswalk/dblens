@@ -55,14 +55,15 @@ async fn setup(env: &str) -> Option<Live> {
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
     secrets.init_vault("测试主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
-    for option in LIB_OPTIONS {
-        if let Some(lib) = params.options.get(option) {
+    let via_jdbc = params.options.get("client").is_some_and(|c| c == "jdbc");
+    for option in LIB_OPTIONS.iter().filter(|_| !via_jdbc) {
+        if let Some(lib) = params.options.get(*option) {
             registry.set_lib_dir(driver, Some(Path::new(lib))).unwrap();
         }
     }
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
     let mut options = params.options.clone();
-    options.retain(|k, _| !LIB_OPTIONS.contains(&k.as_str()));
+    options.retain(|k, _| via_jdbc || !LIB_OPTIONS.contains(&k.as_str()));
     let schema = match driver {
         DriverId::Mysql => params.database.clone().unwrap(),
         DriverId::Postgres => "public".to_string(),
@@ -321,6 +322,41 @@ async fn cancel_flow(env: &str, slow: &str) {
 #[tokio::test]
 async fn gbase8s_flow() {
     full_flow("DBLENS_TEST_GBASE_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_jdbc_flow() {
+    full_flow("DBLENS_TEST_ORACLE_JDBC_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_jdbc_objects() {
+    objects_flow("DBLENS_TEST_ORACLE_JDBC_URL").await;
+}
+
+#[tokio::test]
+async fn oracle_jdbc_ops() {
+    ops_flow("DBLENS_TEST_ORACLE_JDBC_URL", &[]).await;
+}
+
+#[tokio::test]
+async fn oracle_jdbc_editing() {
+    editing_flow("DBLENS_TEST_ORACLE_JDBC_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_jdbc_flow() {
+    full_flow("DBLENS_TEST_DM_JDBC_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_jdbc_objects() {
+    objects_flow("DBLENS_TEST_DM_JDBC_URL").await;
+}
+
+#[tokio::test]
+async fn dameng_jdbc_editing() {
+    editing_flow("DBLENS_TEST_DM_JDBC_URL").await;
 }
 
 /// 会话的当前 schema 是当前库，可以切换；GBase 8s 没有执行计划和出错位置。

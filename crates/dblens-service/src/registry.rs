@@ -79,6 +79,13 @@ fn display_name(id: DriverId) -> Msg {
 pub struct DriverRegistry {
     store: Arc<Store>,
     drivers: Vec<Box<dyn Driver>>,
+    /// 连接选项 `client=jdbc` 时改用的驱动（达梦、Oracle），不需要原生客户端。
+    jdbc_drivers: Vec<Box<dyn Driver>>,
+}
+
+/// 这个连接走 JDBC 桥接，不用原生客户端。
+fn uses_jdbc(profile: &Profile) -> bool {
+    profile.input.options.get("client").is_some_and(|c| c == "jdbc")
 }
 
 impl DriverRegistry {
@@ -98,12 +105,31 @@ impl DriverRegistry {
             #[cfg(feature = "informix")]
             Box::new(dblens_driver_jdbc::GbaseDriver),
         ];
-        Self::with_drivers(store, drivers)
+        let mut registry = Self::with_drivers(store, drivers);
+        #[cfg(feature = "informix")]
+        {
+            registry.jdbc_drivers = vec![
+                Box::new(dblens_driver_jdbc::DamengJdbcDriver),
+                Box::new(dblens_driver_jdbc::OracleJdbcDriver),
+            ];
+        }
+        registry
     }
 
     /// 指定驱动集合，供测试注入假驱动。
     pub fn with_drivers(store: Arc<Store>, drivers: Vec<Box<dyn Driver>>) -> Self {
-        Self { store, drivers }
+        Self { store, drivers, jdbc_drivers: Vec::new() }
+    }
+
+    /// 这个连接配置要用的驱动。
+    pub fn driver_for(&self, profile: &Profile) -> Result<&dyn Driver> {
+        let id = profile.input.driver;
+        if uses_jdbc(profile)
+            && let Some(d) = self.jdbc_drivers.iter().find(|d| d.id() == id)
+        {
+            return Ok(d.as_ref());
+        }
+        self.driver(id)
     }
 
     pub fn driver(&self, id: DriverId) -> Result<&dyn Driver> {
@@ -191,7 +217,7 @@ impl DriverRegistry {
     pub fn connect_params(&self, profile: &Profile, password: String) -> Result<ConnectParams> {
         let id = profile.input.driver;
         let mut params = profile.params(password);
-        if let Some((_, option)) = native_lib(id) {
+        if let Some((_, option)) = native_lib(id).filter(|_| !uses_jdbc(profile)) {
             let status = self.status(id)?;
             match (status.available, status.lib_dir) {
                 (true, Some(dir)) => {
@@ -224,7 +250,7 @@ impl DriverRegistry {
         password: String,
     ) -> Result<(Box<dyn Connection>, Dialect, Option<String>)> {
         let params = self.connect_params(profile, password)?;
-        let driver = self.driver(profile.input.driver)?;
+        let driver = self.driver_for(profile)?;
         let mut conn = driver.connect(&params).await?;
         let info = conn.server_info().await?;
         let mut dialect = Dialect::detect(driver.id(), &info);

@@ -179,5 +179,12 @@
   },
   "gbase": {
     "serverName": "Server name"
+  },
+  "client": {
+    "label": "Client",
+    "native": "Native client",
+    "jdbc": "JDBC driver",
+    "dir": "JDBC driver folder",
+    "dirPlaceholder": "Leave empty to use the bundled driver"
   }
 }

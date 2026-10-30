@@ -2,7 +2,7 @@
 
 use std::io::{self, Read, Write};
 
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 use dblens_core::{Error, LobPreview, Result, Row, Value, msg};
 
 /// 单帧上限：防止协议错位时按乱码长度分配内存。
@@ -231,6 +231,7 @@ impl Cur<'_> {
                 truncated: self.u8()? != 0,
             }),
             11 => Value::Other { type_name: self.string()?, text: self.string()? },
+            12 => Value::DateTimeTz(DateTime::parse_from_rfc3339(&self.string()?).map_err(|_| bad())?),
             _ => return Err(bad()),
         })
     }
@@ -287,7 +288,7 @@ pub fn read_frame(r: &mut impl Read) -> io::Result<(u64, u8, Vec<u8>)> {
     r.read_exact(&mut head)?;
     let len = u32::from_be_bytes(head[..4].try_into().expect("定长")) as usize;
     if !(9..=MAX_FRAME).contains(&len) {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "帧长度异常"));
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "bad frame length"));
     }
     let mut body = vec![0; len - 9];
     r.read_exact(&mut body)?;
