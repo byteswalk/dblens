@@ -4,7 +4,7 @@
 
 import { App, Dropdown, type MenuProps } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { IconCheck, IconCopy, IconDatabase, IconMinus, IconPin, IconSquare, IconX } from '@tabler/icons-react'
+import { IconCheck, IconCopy, IconMinus, IconPin, IconSquare, IconX } from '@tabler/icons-react'
 import { type MouseEvent, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -18,6 +18,7 @@ import { type WindowAction, desktop, titleBarInset } from '../shared/shell'
 import { THEME_KEY, type ThemePref, parseThemePref } from '../shared/theme'
 import { type MenuGroup, buildMenus } from './menus'
 import { useApi } from './context'
+import logo from './logo.svg'
 import { type SideKey, useUi } from './ui'
 import { useShellInfo } from './useShellInfo'
 
@@ -122,7 +123,7 @@ export default function TitleBar() {
 
   return (
     <div className="row titlebar" onMouseDown={onMouseDown} style={{ paddingLeft: titleBarInset(info?.platform) }}>
-      <IconDatabase size={16} className="logo" />
+      <img src={logo} width={16} height={16} alt="" className="logo" />
       <div className="row" data-no-drag>
         {menus.map((g) => (
           <Dropdown key={g.label} trigger={['click']} menu={{ items: toAntItems(g), onClick: (e) => run(e.key) }}>

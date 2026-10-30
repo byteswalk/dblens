@@ -20,11 +20,12 @@ const VARIANTS = [
 ]
 
 describe('数据库图标', () => {
-  it('每个变体都有图标：开源 logo 是 SVG 路径，其余是字标', () => {
+  it('每个变体都有图标：官方 logo 或官方标识，其余是字标', () => {
     expect(Object.keys(VARIANT_ICONS).sort()).toEqual([...VARIANTS].sort())
     for (const v of ['mysql', 'mariadb', 'tidb', 'postgres']) expect(VARIANT_ICONS[v].kind).toBe('logo')
-    expect(dbIcon('dameng', 'dameng')).toEqual({ kind: 'mark', text: 'DM', color: '#c8102e' })
-    expect(dbIcon('postgres', 'kingbase')).toMatchObject({ kind: 'mark', text: 'KES' })
+    for (const v of ['oceanbase', 'kingbase', 'opengauss', 'oracle', 'dameng', 'sqlserver'])
+      expect(VARIANT_ICONS[v].kind).toBe('art')
+    expect(dbIcon('postgres', 'gaussdb')).toEqual({ kind: 'mark', text: 'GS', color: '#c7000b' })
   })
 
   it('不知道变体时按驱动大类，认不出的变体也按驱动', () => {

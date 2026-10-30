@@ -578,7 +578,8 @@ body {
 }
 
 /* 数据库图标（shared/DbIcon.tsx）：logo 用品牌色填充；字标是品牌色底板加白字。暗色主题下换用 --db-icon-dark */
-.db-icon {
+.db-icon,
+.db-icon-art {
   flex: none;
   vertical-align: -2px;
 }
