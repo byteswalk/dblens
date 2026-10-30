@@ -148,7 +148,19 @@ impl MetadataService {
         key: MetaKey,
         args: &MetaArgs,
     ) -> Result<Option<Arc<MetaRows>>> {
-        self.run(profile, key, args, |d| d.meta_query(key, args)).await
+        let result = self.run(profile, key, args, |d| d.meta_query(key, args)).await;
+        // -2106：旧版 DM8 没有某个系统视图，改用不依赖它的查询
+        let (Err(Error::Sql { code, .. }), Some(fallback)) = (&result, key.fallback()) else { return result };
+        if code != "-2106" {
+            return result;
+        }
+        match self.run(profile, key, args, |d| d.meta_query(fallback, args)).await? {
+            Some(rows) => {
+                tracing::warn!(query = key.as_str(), "系统视图缺失，已改用简化查询");
+                Ok(Some(rows))
+            }
+            None => result,
+        }
     }
 
     /// 执行 `build` 生成的查询，按（连接配置、`key`、`args`）缓存。`build` 返回 None 时不执行，返回 None。

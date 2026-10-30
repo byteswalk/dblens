@@ -41,6 +41,33 @@ WHERE t.OWNER = {{ bind("schema") }}
 {% endif %}
 ORDER BY t.TABLE_NAME
 
+-- [tables_basic]
+-- The `*_basic` queries are fallbacks for older DM8 builds (seen on 0x7000c) that lack the materialized view and
+-- index expression views: metadata retries with them when the full query fails with -2106.
+SELECT t.TABLE_NAME AS "name",
+       tc.COMMENTS AS "comment",
+       (SELECT p.PARTITIONING_TYPE || ' ('
+               || (SELECT LISTAGG(k.COLUMN_NAME, ', ') WITHIN GROUP (ORDER BY k.COLUMN_POSITION)
+                   FROM ALL_PART_KEY_COLUMNS k
+                   WHERE k.OWNER = p.OWNER AND k.NAME = p.TABLE_NAME AND k.OBJECT_TYPE = 'TABLE')
+               || ')'
+        FROM ALL_PART_TABLES p
+        WHERE p.OWNER = t.OWNER AND p.TABLE_NAME = t.TABLE_NAME) AS "partition"
+FROM ALL_TABLES t
+LEFT JOIN ALL_TAB_COMMENTS tc ON tc.OWNER = t.OWNER AND tc.TABLE_NAME = t.TABLE_NAME
+WHERE t.OWNER = {{ bind("schema") }}
+  AND COALESCE(t.TEMPORARY, 'N') <> 'Y'
+  AND t.TABLE_NAME NOT LIKE 'BM$!_%' ESCAPE '!'
+  AND t.TABLE_NAME NOT LIKE 'MTAB$!_%' ESCAPE '!'
+{% if table %}
+  AND t.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+{% if filter %}
+  AND (UPPER(t.TABLE_NAME) LIKE UPPER({{ bind("filter") }}) ESCAPE '!'
+       OR UPPER(tc.COMMENTS) LIKE UPPER({{ bind("filter") }}) ESCAPE '!')
+{% endif %}
+ORDER BY t.TABLE_NAME
+
 -- [views]
 SELECT v.VIEW_NAME AS "name", tc.COMMENTS AS "comment"
 FROM ALL_VIEWS v
@@ -64,6 +91,9 @@ WHERE m.OWNER = {{ bind("schema") }}
        OR UPPER(tc.COMMENTS) LIKE UPPER({{ bind("filter") }}) ESCAPE '!')
 {% endif %}
 ORDER BY m.MVIEW_NAME
+
+-- [materialized_views_basic]
+SELECT CAST(NULL AS VARCHAR) AS "name", CAST(NULL AS VARCHAR) AS "comment" FROM DUAL WHERE 1 = 0
 
 -- [sequences]
 -- ALL_SEQUENCES has no START WITH and its LAST_NUMBER is the cache high-water mark, so START WITH / INCREMENT come
@@ -239,6 +269,33 @@ WHERE i.OWNER = {{ bind("schema") }}
 {% endif %}
 ORDER BY i.TABLE_NAME, i.INDEX_NAME, ic.POS
 
+-- [indexes_basic]
+-- Function-based indexes are not listed: their expressions are unknown here.
+SELECT i.TABLE_NAME AS "table_name",
+       i.INDEX_NAME AS "index_name",
+       CASE WHEN i.UNIQUENESS = 'UNIQUE' THEN 'Y' ELSE 'N' END AS "is_unique",
+       REPLACE(i.INDEX_TYPE, 'FUNCTION-BASED ', '') AS "method",
+       ic.EXPR AS "column_expr",
+       CAST(ic.POS AS INT) AS "position",
+       ic.DSC AS "descending"
+FROM ALL_INDEXES i
+JOIN (SELECT x.INDEX_OWNER AS OWN, x.INDEX_NAME AS INAME, x.COLUMN_NAME AS EXPR, x.COLUMN_POSITION AS POS,
+             CASE WHEN x.DESCEND = 'DESC' THEN 'Y' ELSE 'N' END AS DSC
+      FROM ALL_IND_COLUMNS x
+      WHERE x.INDEX_OWNER = {{ bind("schema") }} AND x.COLUMN_POSITION > 0
+{% if table %}
+        AND x.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+     ) ic ON ic.OWN = i.OWNER AND ic.INAME = i.INDEX_NAME
+WHERE i.OWNER = {{ bind("schema") }}
+  AND i.GENERATED = 'N'
+  AND i.TABLE_NAME NOT LIKE 'BM$!_%' ESCAPE '!'
+  AND i.TABLE_NAME NOT LIKE 'MTAB$!_%' ESCAPE '!'
+{% if table %}
+  AND i.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+ORDER BY i.TABLE_NAME, i.INDEX_NAME, ic.POS
+
 -- [triggers]
 -- TRIGGER_BODY holds the complete CREATE [OR REPLACE] TRIGGER statement as the user typed it, so definition is the full DDL.
 -- TRIGGERING_EVENT looks like 'INSERT OR UPDATE' (and 'UPDATE OF' columns are separate); it is rebuilt in INSERT, UPDATE, DELETE order.
@@ -270,6 +327,11 @@ UNION ALL
 SELECT m.QUERY
 FROM ALL_MVIEWS m
 WHERE m.OWNER = {{ bind("schema") }} AND m.MVIEW_NAME = {{ bind("name") }}
+
+-- [view_definition_basic]
+SELECT v.TEXT AS "definition"
+FROM ALL_VIEWS v
+WHERE v.OWNER = {{ bind("schema") }} AND v.VIEW_NAME = {{ bind("name") }}
 
 -- [routine_source]
 -- DM's ALL_SOURCE has ONE row per object (LINE is NULL) whose TEXT is the whole CREATE OR REPLACE statement.

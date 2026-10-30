@@ -361,6 +361,16 @@ mod tests {
     }
 
     #[test]
+    fn only_dameng_has_the_basic_tables_query() {
+        let args = MetaArgs { schema: Some("S".into()), ..MetaArgs::default() };
+        let q = Dialect::new(Variant::Dameng).meta_query(MetaKey::TablesBasic, &args).unwrap().unwrap();
+        assert!(q.sql.contains("ALL_PART_TABLES") && !q.sql.contains("ALL_MVIEWS"), "{}", q.sql);
+        let q = Dialect::new(Variant::Dameng).meta_query(MetaKey::IndexesBasic, &args).unwrap().unwrap();
+        assert!(!q.sql.contains("ALL_IND_EXPRESSIONS"), "{}", q.sql);
+        assert!(Dialect::new(Variant::Oracle).meta_query(MetaKey::TablesBasic, &args).unwrap().is_none());
+    }
+
+    #[test]
     fn meta_query_is_none_when_the_dialect_lacks_the_key() {
         let probe =
             Dialect::new(Variant::MySql).meta_query(MetaKey::VariantProbe, &MetaArgs::default()).unwrap();

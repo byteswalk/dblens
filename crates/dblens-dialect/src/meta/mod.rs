@@ -58,6 +58,11 @@ pub enum MetaKey {
     TableStorage,
     /// 触发器的完整 DDL（只有 Oracle：`triggers` 的 definition 只有触发器体）。
     TriggerDdl,
+    // 以下是退路（只有达梦）：旧版 DM8 缺少 ALL_MVIEWS、ALL_IND_EXPRESSIONS 时用，见 `fallback`。不在 `ALL` 中。
+    TablesBasic,
+    MaterializedViewsBasic,
+    IndexesBasic,
+    ViewDefinitionBasic,
 }
 
 impl MetaKey {
@@ -96,6 +101,17 @@ impl MetaKey {
         MetaKey::Triggers,
     ];
 
+    /// 这个查询报系统视图不存在时改用的查询。
+    pub fn fallback(self) -> Option<MetaKey> {
+        match self {
+            MetaKey::Tables => Some(MetaKey::TablesBasic),
+            MetaKey::MaterializedViews => Some(MetaKey::MaterializedViewsBasic),
+            MetaKey::Indexes => Some(MetaKey::IndexesBasic),
+            MetaKey::ViewDefinition => Some(MetaKey::ViewDefinitionBasic),
+            _ => None,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             MetaKey::Catalogs => "catalogs",
@@ -121,6 +137,10 @@ impl MetaKey {
             MetaKey::Grants => "grants",
             MetaKey::TableStorage => "table_storage",
             MetaKey::TriggerDdl => "trigger_ddl",
+            MetaKey::TablesBasic => "tables_basic",
+            MetaKey::MaterializedViewsBasic => "materialized_views_basic",
+            MetaKey::IndexesBasic => "indexes_basic",
+            MetaKey::ViewDefinitionBasic => "view_definition_basic",
         }
     }
 }
