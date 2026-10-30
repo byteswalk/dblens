@@ -1140,6 +1140,92 @@ body {
   stroke-width: 2;
   opacity: 1;
 }
+.er-topics {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  width: 200px;
+  max-height: 46%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: 12px;
+  overflow: hidden;
+}
+.er-topics-h {
+  padding: 5px 8px;
+  font-weight: 600;
+  background: var(--hover);
+}
+.er-topics-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+.er-topic {
+  gap: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.er-topic:hover {
+  background: var(--hover);
+}
+.er-topic.on {
+  background: var(--sel);
+  font-weight: 600;
+}
+.er-topic-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.er-topic-btn {
+  display: inline-flex;
+  cursor: pointer;
+  color: var(--text-2);
+  padding: 1px;
+}
+.er-topic-btn:hover {
+  color: var(--text);
+}
+.er-topic .del {
+  visibility: hidden;
+}
+.er-topic:hover .del {
+  visibility: visible;
+}
+.er-more {
+  height: 22px;
+  line-height: 22px;
+  padding: 0 8px 0 26px;
+  font-size: 11px;
+  color: var(--text-2);
+  border-top: 1px dashed var(--border);
+}
+.er-junction {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  padding: 0 5px;
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+}
+.er-card rect {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+.er-card text {
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--accent);
+}
 .er-menu {
   position: fixed;
   z-index: 1050;

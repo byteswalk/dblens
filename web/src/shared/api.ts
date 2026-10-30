@@ -991,7 +991,7 @@ export interface LogicalKey {
   comment?: string | null
 }
 
-export type ErDisplay = 'columns' | 'keys' | 'names'
+export type ErDisplay = 'columns' | 'keys' | 'names' | 'relations'
 
 export interface ErPosition {
   x: number

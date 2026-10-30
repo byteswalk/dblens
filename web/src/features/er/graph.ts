@@ -27,6 +27,10 @@ export interface ErNodeData extends Record<string, unknown> {
   /** 文件有错（只显示名字）。 */
   error: string | null
   columns: ErColumn[]
+  /** 关系视图中没画出来的列数。 */
+  more: number
+  /** 多对多的中间表：连接的两张表。 */
+  junction: [string, string] | null
   /** 在图上显示注释（不显示时悬停也能看到）。 */
   showComments: boolean
   /** 引用图外的表（其他 schema、主题图中没有的表）："→ crm.customers"。 */
@@ -47,6 +51,9 @@ export interface ErEdge {
   sourceHandle: string
   targetHandle: string
   logical: boolean
+  /** 两端的基数：外键列唯一时是一对一，否则多对一。 */
+  sourceCard: '1' | 'N'
+  targetCard: '1'
   /** 按列名推测出来的，数据库和模型里都没有这个外键。 */
   inferred: boolean
   /** 复合外键的列数（大于 1 时显示）。 */
@@ -88,6 +95,8 @@ function keyColumns(t: Inferred, all: Inferred[], schema: string): Set<string> {
   }
   return s
 }
+
+const keysOf = (x: Inferred): KeyLike[] => [...x.table.foreign_keys, ...x.logical_keys, ...(x.inferred_keys ?? [])]
 
 /** 列类型的大类：推测外键时两边要同类。 */
 function typeClass(native: string): string {
@@ -138,6 +147,26 @@ export function nodeHeight(columns: number, external: number): number {
   return HEADER_HEIGHT + columns * ROW_HEIGHT + external * EXTERNAL_HEIGHT + 6
 }
 
+const sameColumns = (a: string[], b: string[]) => a.length === b.length && a.every((c) => b.includes(c))
+
+/** 外键列本身唯一（主键或唯一键）时一条记录只对应一条，是一对一。 */
+function isUniqueKey(t: DesignTableModel, columns: string[]): boolean {
+  if (t.primary_key && sameColumns(t.primary_key.columns, columns)) return true
+  if (t.uniques.some((u) => sameColumns(u.columns, columns))) return true
+  return t.indexes.some((x) => x.unique && sameColumns(x.columns.map((c) => c.name), columns))
+}
+
+/** 中间表：主键由两个以上外键列组成，或除了键列最多只有一列，且指向两张不同的表。 */
+function junctionOf(t: DesignTableModel, keys: KeyLike[]): [string, string] | null {
+  const refs = [...new Set(keys.map((k) => k.ref_table))]
+  if (refs.length < 2) return null
+  const fkCols = new Set(keys.flatMap((k) => k.columns))
+  const pk = t.primary_key?.columns ?? []
+  const pkInKeys = pk.length >= 2 && pk.every((c) => fkCols.has(c))
+  const rest = t.columns.filter((c) => !fkCols.has(c.name) && !pk.includes(c.name)).length
+  return pkInKeys || rest <= 1 ? [refs[0], refs[1]] : null
+}
+
 /** 表和外键换算成节点和连线。`schema` 是图所在的 schema（外键不写 schema 时指它）；SQL Server 的"库 + 架构"
  * 只取架构名与外键比较。 */
 export function buildGraph(
@@ -156,7 +185,7 @@ export function buildGraph(
     const tab = t.table
     const fkCols = new Set([...tab.foreign_keys, ...t.logical_keys, ...(t.inferred_keys ?? [])].flatMap((k) => k.columns))
     const pk = new Set(tab.primary_key?.columns ?? [])
-    const shown = display === 'names' ? new Set<string>() : display === 'keys' ? keyColumns(t, tables, schema) : null
+    const shown = display === 'names' ? new Set<string>() : display === 'keys' || display === 'relations' ? keyColumns(t, tables, schema) : null
     const columns = t.error
       ? []
       : tab.columns
@@ -177,7 +206,7 @@ export function buildGraph(
       const targetVisible = new Set(
         display === 'names'
           ? []
-          : display === 'keys'
+          : display === 'keys' || display === 'relations'
             ? [...keyColumns(target, tables, schema)]
             : target.table.columns.map((c) => c.name),
       )
@@ -190,6 +219,8 @@ export function buildGraph(
         targetHandle: handle(k.ref_columns[0], into, targetVisible),
         logical: kind !== 'fk',
         inferred: kind === 'ik',
+        sourceCard: isUniqueKey(tab, k.columns) ? '1' : 'N',
+        targetCard: '1',
         count: k.columns.length,
         title: k.name ? `${k.name}: ${pairs}` : pairs,
         logicalIndex: kind === 'lk' ? index : null,
@@ -198,11 +229,13 @@ export function buildGraph(
     tab.foreign_keys.forEach((k, i) => add(k, 'fk', i))
     t.logical_keys.forEach((k, i) => add(k, 'lk', i))
     t.inferred_keys?.forEach((k, i) => add(k, 'ik', i))
+    const more = display === 'relations' && !t.error ? tab.columns.length - columns.length : 0
+    const junction = display === 'relations' ? junctionOf(tab, keysOf(t)) : null
     nodes.push({
       id: tab.name,
-      data: { name: tab.name, comment: tab.comment, error: t.error ? t.error.message : null, columns, showComments: comments, external },
+      data: { name: tab.name, comment: tab.comment, error: t.error ? t.error.message : null, columns, more, junction, showComments: comments, external },
       width: NODE_WIDTH,
-      height: nodeHeight(columns.length, external.length),
+      height: nodeHeight(columns.length + (more ? 1 : 0), external.length),
     })
   }
   return { nodes, edges }
@@ -322,23 +355,43 @@ export function layoutPages(
   return { positions, pages }
 }
 
+const TOPIC_GAP = 70
+const TOPIC_ROW_WIDTH = 2400
+
 /**
- * 按表名自动分业务主题：表名按下划线分段，大多数表共用的第一段是系统前缀（如 SZSS_），
- * 取下一段作主题；只有一张表的主题和分不出的表归入 `other`。返回 表名 → 主题。
+ * 按业务主题排：每个主题自成一块，块内表不重叠，块与块之间留出边框和主题名的位置。
+ * 块从左到右排，放不下时换行。
  */
-export function tableGroups(names: string[], other: string): Map<string, string> {
-  const parts = names.map((n) => n.toUpperCase().split('_').filter(Boolean))
-  const firsts = new Map<string, number>()
-  for (const p of parts) firsts.set(p[0] ?? '', (firsts.get(p[0] ?? '') ?? 0) + 1)
-  const common = Math.max(0, ...firsts.values())
-  const index = names.length >= 4 && common / names.length >= 0.6 ? 1 : 0
-  const keyOf = (p: string[]) => (p.length > index + 1 || (index === 0 && p.length > 1) ? p[index] : other)
-  const counts = new Map<string, number>()
-  for (const p of parts) counts.set(keyOf(p), (counts.get(keyOf(p)) ?? 0) + 1)
-  return new Map(names.map((n, i) => {
-    const key = keyOf(parts[i])
-    return [n, (counts.get(key) ?? 0) >= 2 ? key : other]
-  }))
+export function layoutTopics(graph: Graph, groups: Map<string, string>): Record<string, ErPosition> {
+  const buckets = new Map<string, ErNode[]>()
+  for (const n of graph.nodes) {
+    const key = groups.get(n.id) ?? ''
+    buckets.set(key, [...(buckets.get(key) ?? []), n])
+  }
+  const blocks = [...buckets.values()].sort((a, b) => b.length - a.length)
+  const positions: Record<string, ErPosition> = {}
+  let [x, y, rowHeight] = [0, 0, 0]
+  for (const nodes of blocks) {
+    const cols = Math.min(5, Math.ceil(Math.sqrt(nodes.length)))
+    const heights = new Array<number>(cols).fill(0)
+    const placed: [ErNode, number, number][] = []
+    for (const n of linkedOrder(nodes, graph.edges)) {
+      const col = heights.indexOf(Math.min(...heights))
+      placed.push([n, col * (NODE_WIDTH + PAGE_GAP), heights[col]])
+      heights[col] += n.height + PAGE_GAP
+    }
+    const width = cols * NODE_WIDTH + (cols - 1) * PAGE_GAP
+    const height = Math.max(...heights) - PAGE_GAP
+    if (x > 0 && x + width > TOPIC_ROW_WIDTH) {
+      x = 0
+      y += rowHeight + TOPIC_GAP
+      rowHeight = 0
+    }
+    for (const [n, dx, dy] of placed) positions[n.id] = { x: x + dx, y: y + dy }
+    x += width + TOPIC_GAP
+    rowHeight = Math.max(rowHeight, height)
+  }
+  return positions
 }
 
 /** 主题的边框：同一主题同一页的表围成一块。 */

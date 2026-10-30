@@ -4,7 +4,7 @@ import { type Edge, MarkerType } from '@xyflow/react'
 
 import type { ErPosition } from '../../shared/api'
 import ErEdgeLine from './ErEdgeLine'
-import { type ErPage, type Graph, NODE_WIDTH } from './graph'
+import { type ErEdge, type ErPage, type Graph, NODE_WIDTH } from './graph'
 import TableNode, { FrameNode, type FrameNodeType, type TableNodeType } from './TableNode'
 
 export const NODE_TYPES = { table: TableNode, frame: FrameNode }
@@ -47,6 +47,7 @@ export function flowEdges(
   columns: (count: number) => string,
   positions: Record<string, ErPosition> = {},
   inferredLabel = '',
+  cardLabel?: (e: ErEdge) => string,
 ): Edge[] {
   const sides = graph.edges.map((e) => {
     const [a, b] = [positions[e.source], positions[e.target]]
@@ -79,7 +80,8 @@ export function flowEdges(
       className,
       markerEnd: { type: MarkerType.ArrowClosed },
       data: {
-        title: e.inferred ? `${inferredLabel} ${e.title}` : e.title,
+        title: `${cardLabel ? `${cardLabel(e)}  ` : ''}${e.inferred ? `${inferredLabel} ` : ''}${e.title}`,
+        cards: cardLabel ? [e.sourceCard, e.targetCard] : undefined,
         logicalIndex: e.logicalIndex,
         lane: n - ((counts.get(key) ?? 1) - 1) / 2,
       },

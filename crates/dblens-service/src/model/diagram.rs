@@ -67,6 +67,8 @@ pub enum DiagramDisplay {
     Columns,
     Keys,
     Names,
+    /// 只画涉及关系的列，其余列合计成一行。
+    Relations,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

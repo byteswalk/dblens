@@ -1,4 +1,11 @@
 {
+  "relation": {
+    "more": "其余 {{count}} 个字段",
+    "junction": "多对多",
+    "oneToOne": "一对一",
+    "manyToOne": "多对一"
+  },
+  "copyFallback": "无法写入剪贴板，已改为保存文件",
   "comments": "显示注释",
   "copied": "已复制为图片",
   "pageNo": "第 {{n}} 页",
@@ -6,7 +13,13 @@
     "label": "业务主题",
     "hint": "按表名自动分组，分不出的归入其他",
     "all": "全部主题",
-    "other": "其他"
+    "other": "其他",
+    "new": "新主题",
+    "add": "新建主题",
+    "reset": "恢复自动分组",
+    "delete": "删除主题（表归入其他）",
+    "editHint": "单击只看这个主题，双击改名",
+    "moveTo": "移到主题"
   },
   "inferred": {
     "label": "推测外键",
@@ -30,7 +43,8 @@
   "display": {
     "columns": "全部列",
     "keys": "键列",
-    "names": "表名"
+    "names": "表名",
+    "relations": "关系"
   },
   "layout": {
     "title": "自动布局",

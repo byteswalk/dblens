@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { DesignForeignKey, DesignTableModel, ErTable, LogicalKey } from '../../shared/api'
-import { HEADER_HEIGHT, ROW_HEIGHT, TABLE_HANDLE, buildGraph, inferKeys, layout, layoutPage, layoutPages, tableGroups, nodeHeight, searchTables } from './graph'
+import { HEADER_HEIGHT, ROW_HEIGHT, TABLE_HANDLE, buildGraph, inferKeys, layout, layoutPage, layoutPages, layoutTopics, nodeHeight, searchTables } from './graph'
 import { dataUrlBase64, imageName } from './export'
 
 const fk = (columns: string[], ref_table: string, ref_columns: string[], extra: Partial<DesignForeignKey> = {}): DesignForeignKey => ({
@@ -76,21 +76,6 @@ describe('推测外键', () => {
   })
 })
 
-describe('业务主题', () => {
-  it('去掉公共前缀，只有一张的和分不出的归其他', () => {
-    const g = tableGroups(['SZSS_BASE_A', 'SZSS_BASE_B', 'SZSS_JOB_A', 'SZSS_JOB_B', 'SZSS_LOG_A', 'OTHER'], '其他')
-    expect(g.get('SZSS_BASE_A')).toBe('BASE')
-    expect(g.get('SZSS_JOB_B')).toBe('JOB')
-    expect(g.get('SZSS_LOG_A')).toBe('其他')
-    expect(g.get('OTHER')).toBe('其他')
-  })
-
-  it('没有公共前缀时用第一段', () => {
-    const g = tableGroups(['sys_user', 'sys_role', 'biz_order', 'biz_item', 'log'], '其他')
-    expect([g.get('sys_user'), g.get('biz_item'), g.get('log')]).toEqual(['SYS', 'BIZ', '其他'])
-  })
-})
-
 describe('A4 多页', () => {
   const big = buildGraph(Array.from({ length: 40 }, (_, i) => er(table(`t${i}`, Array.from({ length: 20 }, (_, c) => `c${c}`)))), 'columns', 'public')
 
@@ -103,6 +88,52 @@ describe('A4 多页', () => {
       expect(page).toBeDefined()
       expect(p.y + n.height).toBeLessThanOrEqual(page.height)
     }
+  })
+})
+
+describe('关系视图', () => {
+  const key = (ref: string, col: string) => ({ name: null, columns: [col], ref_schema: null, ref_table: ref, ref_columns: ['id'], on_update: null, on_delete: null })
+  const pk = (t: DesignTableModel, cols: string[]) => ({ ...t, primary_key: { name: null, columns: cols } })
+
+  it('只画键列，其余合计；外键唯一时一对一', () => {
+    const user = pk(table('user', ['id', 'a', 'b']), ['id'])
+    const order = pk(table('ord', ['id', 'user_id', 'x', 'y'], [key('user', 'user_id')]), ['id'])
+    const profile = pk(table('profile', ['user_id', 'x'], [key('user', 'user_id')]), ['user_id'])
+    const g = buildGraph([user, order, profile].map((t) => er(t)), 'relations', 'public')
+    const ord = g.nodes.find((n) => n.id === 'ord')!
+    expect(ord.data.columns.map((c) => c.name)).toEqual(['id', 'user_id'])
+    expect(ord.data.more).toBe(2)
+    expect(ord.height).toBe(nodeHeight(3, 0))
+    expect(g.edges.map((e) => [e.source, e.sourceCard])).toEqual([['ord', 'N'], ['profile', '1']])
+  })
+
+  it('两个外键组成主键的是多对多中间表', () => {
+    const a = pk(table('a', ['id']), ['id'])
+    const b = pk(table('b', ['id']), ['id'])
+    const ab = pk(table('ab', ['a_id', 'b_id'], [key('a', 'a_id'), key('b', 'b_id')]), ['a_id', 'b_id'])
+    const g = buildGraph([a, b, ab].map((t) => er(t)), 'relations', 'public')
+    expect(g.nodes.find((n) => n.id === 'ab')!.data.junction).toEqual(['a', 'b'])
+    expect(g.nodes.find((n) => n.id === 'a')!.data.junction).toBeNull()
+  })
+})
+
+describe('按主题布局', () => {
+  it('主题之间不重叠', () => {
+    const tables = Array.from({ length: 12 }, (_, i) => er(table(`t${i}`, ['id', 'a', 'b'])))
+    const g = buildGraph(tables, 'columns', 'public')
+    const groups = new Map(g.nodes.map((n, i) => [n.id, `g${i % 3}`]))
+    const p = layoutTopics(g, groups)
+    const box = (id: string) => {
+      const ns = g.nodes.filter((n) => groups.get(n.id) === id)
+      return {
+        l: Math.min(...ns.map((n) => p[n.id].x)),
+        r: Math.max(...ns.map((n) => p[n.id].x + n.width)),
+        t: Math.min(...ns.map((n) => p[n.id].y)),
+        b: Math.max(...ns.map((n) => p[n.id].y + n.height)),
+      }
+    }
+    const [a, b] = [box('g0'), box('g1')]
+    expect(a.r < b.l || b.r < a.l || a.b < b.t || b.b < a.t).toBe(true)
   })
 })
 

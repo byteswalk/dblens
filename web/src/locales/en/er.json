@@ -1,4 +1,11 @@
 {
+  "relation": {
+    "more": "{{count}} more columns",
+    "junction": "M:N",
+    "oneToOne": "One to one",
+    "manyToOne": "Many to one"
+  },
+  "copyFallback": "Could not write to the clipboard; saved to a file instead",
   "comments": "Comments",
   "copied": "Copied as image",
   "pageNo": "Page {{n}}",
@@ -6,7 +13,13 @@
     "label": "Topics",
     "hint": "Group tables by name automatically; the rest go to Other",
     "all": "All topics",
-    "other": "Other"
+    "other": "Other",
+    "new": "New topic",
+    "add": "New topic",
+    "reset": "Restore automatic grouping",
+    "delete": "Delete topic (tables go to Other)",
+    "editHint": "Click to show only this topic, double-click to rename",
+    "moveTo": "Move to topic"
   },
   "inferred": {
     "label": "Inferred keys",
@@ -31,7 +44,8 @@
   "display": {
     "columns": "All columns",
     "keys": "Key columns",
-    "names": "Names"
+    "names": "Names",
+    "relations": "Relations"
   },
   "layout": {
     "title": "Auto Layout",

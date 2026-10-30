@@ -4,6 +4,7 @@
 import { IconKey, IconLink } from '@tabler/icons-react'
 import { Handle, type Node, type NodeProps, Position } from '@xyflow/react'
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { type ErNodeData, TABLE_HANDLE } from './graph'
 
@@ -20,6 +21,7 @@ function SideHandles({ id }: { id: string }) {
 }
 
 function TableNode({ data, selected }: NodeProps<TableNodeType>) {
+  const { t } = useTranslation()
   return (
     <div className={`er-table${selected ? ' selected' : ''}${data.error ? ' error' : ''}`} title={data.error ?? data.comment ?? undefined}>
       <div className="er-table-h">
@@ -29,6 +31,11 @@ function TableNode({ data, selected }: NodeProps<TableNodeType>) {
           {data.name}
           {data.showComments && data.comment && <span className="er-comment"> {data.comment}</span>}
         </span>
+        {data.junction && (
+          <span className="er-junction" title={`${data.junction[0]} ↔ ${data.junction[1]}`}>
+            {t('er.relation.junction')}
+          </span>
+        )}
         <Handle type="source" position={Position.Right} id={`${TABLE_HANDLE}:out`} className="er-handle" />
       </div>
       {data.columns.map((c) => (
@@ -43,6 +50,7 @@ function TableNode({ data, selected }: NodeProps<TableNodeType>) {
           <Handle type="source" position={Position.Right} id={`${c.name}:out`} className="er-handle" />
         </div>
       ))}
+      {data.more > 0 && <div className="er-more">{t('er.relation.more', { count: data.more })}</div>}
       {data.external.map((x) => (
         <div key={x} className="er-external muted">
           {x}
