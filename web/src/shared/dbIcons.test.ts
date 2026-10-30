@@ -25,7 +25,8 @@ describe('数据库图标', () => {
     for (const v of ['mysql', 'mariadb', 'tidb', 'postgres']) expect(VARIANT_ICONS[v].kind).toBe('logo')
     for (const v of ['oceanbase', 'kingbase', 'opengauss', 'oracle', 'dameng', 'sqlserver'])
       expect(VARIANT_ICONS[v].kind).toBe('art')
-    expect(dbIcon('postgres', 'gaussdb')).toEqual({ kind: 'mark', text: 'GS', color: '#c7000b' })
+    expect(dbIcon('postgres', 'gaussdb').kind).toBe('logo')
+    expect(dbIcon('postgres', 'highgo')).toEqual({ kind: 'mark', text: 'HG', color: '#0091d5' })
   })
 
   it('不知道变体时按驱动大类，认不出的变体也按驱动', () => {

@@ -119,7 +119,7 @@ export default function SqlEditor({ path, language, defaultValue, marks, sql, on
         automaticLayout: true,
         tabSize: 2,
         fixedOverflowWidgets: true,
-        renderLineHighlight: 'line',
+        renderLineHighlight: 'none',
         // 只用 SQL 补全，不补文中出现过的词
         wordBasedSuggestions: 'off',
       }}

@@ -12,6 +12,7 @@ export type ProductId =
   | 'postgres'
   | 'kingbase'
   | 'opengauss'
+  | 'gaussdb'
   | 'oracle'
   | 'dameng'
   | 'sqlserver'
@@ -22,7 +23,6 @@ export interface Product {
   port: number
 }
 
-/** 界面上的顺序：按驱动分组，标准库在前。 */
 export const PRODUCTS: Product[] = [
   { id: 'mysql', driver: 'mysql', port: 3306 },
   { id: 'mariadb', driver: 'mysql', port: 3306 },
@@ -31,9 +31,16 @@ export const PRODUCTS: Product[] = [
   { id: 'postgres', driver: 'postgres', port: 5432 },
   { id: 'kingbase', driver: 'postgres', port: 54321 },
   { id: 'opengauss', driver: 'postgres', port: 5432 },
+  { id: 'gaussdb', driver: 'postgres', port: 8000 },
   { id: 'oracle', driver: 'oracle', port: 1521 },
   { id: 'dameng', driver: 'dameng', port: 5236 },
   { id: 'sqlserver', driver: 'sqlserver', port: 1433 },
+]
+
+/** 界面上的分组：国产库一组，其他一组。 */
+export const PRODUCT_GROUPS: { key: 'domestic' | 'other'; products: ProductId[] }[] = [
+  { key: 'domestic', products: ['dameng', 'kingbase', 'gaussdb', 'opengauss', 'oceanbase', 'tidb'] },
+  { key: 'other', products: ['mysql', 'mariadb', 'postgres', 'oracle', 'sqlserver'] },
 ]
 
 export function product(id: ProductId): Product {

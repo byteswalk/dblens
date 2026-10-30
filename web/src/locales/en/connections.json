@@ -47,6 +47,10 @@
       "label": "openGauss",
       "note": "SHA256 authentication supported; A (Oracle) and PG compatibility are detected per database"
     },
+    "gaussdb": {
+      "label": "GaussDB",
+      "note": "Default port 8000; uses the PG protocol. Tested on the developer edition, not the cloud service. The initial user cannot connect remotely, so create another user"
+    },
     "oracle": {
       "label": "Oracle",
       "note": "Requires Oracle Instant Client"
@@ -94,7 +98,10 @@
     "test": "Test Connection",
     "cancel": "Cancel",
     "save": "Save",
-    "driverType": "Database",
+    "group": {
+      "domestic": "Chinese databases",
+      "other": "Other databases"
+    },
     "created": "Connection created",
     "saved": "Connection saved",
     "testOk": "Connected: {{server}}, detected as {{variant}}",

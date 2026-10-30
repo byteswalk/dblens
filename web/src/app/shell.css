@@ -3,8 +3,10 @@
 :root,
 .er-canvas[data-theme='light'] {
   --bg: #f3f3f4;
+  --bar: #f4f4f5;
   --panel: #ffffff;
-  --panel-2: #f7f7f8;
+  --panel-2: #fafafa;
+  --mark: #1f1f23;
   --hover: #ececee;
   --sel: #dbe8fb;
   --border: #dcdce0;
@@ -63,8 +65,10 @@
   --scroll: #4a4a52;
   --scroll-hover: #62626c;
   --bg: #18181b;
+  --bar: #141416;
   --panel: #1f1f23;
-  --panel-2: #26262b;
+  --panel-2: #1a1a1d;
+  --mark: #e6e6ea;
   --hover: #2e2e34;
   --sel: #23395e;
   --border: #33333a;
@@ -112,9 +116,9 @@ body {
 
 /* 标题栏 */
 .titlebar {
-  height: 38px;
+  height: 34px;
   flex: none;
-  background: var(--panel-2);
+  background: var(--bar);
   border-bottom: 1px solid var(--border);
   position: relative;
 }
@@ -160,9 +164,9 @@ body {
 
 /* 活动栏、侧栏 */
 .activity {
-  width: 48px;
+  width: 44px;
   flex: none;
-  background: var(--panel-2);
+  background: var(--bar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -171,12 +175,11 @@ body {
   gap: 4px;
 }
 .activity .a {
-  width: 38px;
+  width: 44px;
   height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
   color: var(--text-2);
   position: relative;
   cursor: pointer;
@@ -185,23 +188,53 @@ body {
   background: var(--hover);
 }
 .activity .a.on {
-  color: var(--accent);
+  color: var(--text);
 }
 .activity .a.on::before {
   content: '';
   position: absolute;
-  left: -4px;
+  left: 0;
   top: 8px;
   bottom: 8px;
   width: 2px;
-  background: var(--accent);
-  border-radius: 2px;
+  background: var(--mark);
+}
+/* 快捷栏 */
+.quickbar {
+  height: 38px;
+  flex: none;
+  gap: 2px;
+  padding: 0 10px;
+  background: var(--bar);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.quickbar .q {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: 4px;
+  color: var(--text-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.quickbar .q:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.quickbar .sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 8px;
+  background: var(--border);
 }
 .side {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--panel);
+  background: var(--panel-2);
   border-right: 1px solid var(--border);
 }
 .side-h {
@@ -341,11 +374,27 @@ body {
   background: var(--accent);
 }
 
+/* 对象树：箭头紧贴内容，缩进收窄 */
+.tree .ant-tree-switcher {
+  width: 16px;
+  margin-inline-end: 0;
+}
+.tree .ant-tree-indent-unit {
+  width: 12px;
+}
+.tree .ant-tree-node-content-wrapper {
+  padding-inline: 2px;
+}
 /* 对象树：节点标题一行显示，过长时省略 */
 .tree .ant-tree-node-content-wrapper {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.product-group {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  margin: 8px 0 4px 2px;
 }
 .env-tag {
   display: inline-block;
@@ -437,7 +486,7 @@ body {
   height: 28px;
   flex: none;
   font-size: var(--fs-sm);
-  background: var(--panel-2);
+  background: var(--bar);
   border-top: 1px solid var(--border);
   padding: 0 10px;
   gap: 16px;
@@ -503,6 +552,8 @@ body {
 .tab.on {
   background: var(--panel);
   color: var(--text);
+  border-top-color: var(--mark);
+  font-weight: 600;
 }
 .tab .x {
   color: var(--muted);

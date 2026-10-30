@@ -1,7 +1,7 @@
 // 数据库图标（M1i 设计文档第 6 节）：simple-icons 有的用它的官方 logo（CC0），
 // 没有的用 dbIconArt.ts 中的官方标识，都没有矢量图的才用品牌主色加字标。图标只用来标识连接类型。
 
-import { siMariadb, siMysql, siPostgresql, siTidb } from 'simple-icons'
+import { siHuawei, siMariadb, siMysql, siPostgresql, siTidb } from 'simple-icons'
 
 import type { DriverId } from './api'
 import { ART_ICONS, type ArtIcon } from './dbIconArt'
@@ -33,7 +33,7 @@ export const VARIANT_ICONS: Record<string, DbIconDef> = {
   postgres: logo(siPostgresql, '#7f9cf0'),
   kingbase: art(ART_ICONS.kingbase),
   opengauss: art(ART_ICONS.opengauss),
-  gaussdb: mark('GS', '#c7000b'),
+  gaussdb: logo(siHuawei, '#ff4d55'),
   highgo: mark('HG', '#0091d5'),
   oracle: art(ART_ICONS.oracle),
   dameng: art(ART_ICONS.dameng),

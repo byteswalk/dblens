@@ -47,6 +47,10 @@
       "label": "openGauss",
       "note": "支持 SHA256 认证；A（Oracle 兼容）与 PG 兼容模式按库自动识别"
     },
+    "gaussdb": {
+      "label": "GaussDB",
+      "note": "默认端口 8000；走 PG 协议，已用开发者版实测，云版未测；初始用户不能远程连接，要另建用户"
+    },
     "oracle": {
       "label": "Oracle",
       "note": "需要 Oracle Instant Client"
@@ -94,7 +98,10 @@
     "test": "测试连接",
     "cancel": "取消",
     "save": "保存",
-    "driverType": "数据库",
+    "group": {
+      "domestic": "国产数据库",
+      "other": "其他数据库"
+    },
     "created": "连接已创建",
     "saved": "连接已保存",
     "testOk": "连接成功：{{server}}，识别为 {{variant}}",

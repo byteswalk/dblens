@@ -56,7 +56,9 @@
     "minimize": "Minimize",
     "maximize": "Maximize",
     "restore": "Restore",
-    "close": "Close"
+    "close": "Close",
+    "hideQuickbar": "Hide quick bar",
+    "showQuickbar": "Show quick bar"
   },
   "menu": {
     "file": {

@@ -26,7 +26,7 @@ import {
   toProfileInput,
   validate,
 } from './form'
-import { PRODUCTS, productLabel, productNote } from './products'
+import { PRODUCT_GROUPS, product, productLabel, productNote } from './products'
 import { withVault } from './vault'
 
 type Errors = ReturnType<typeof validate>
@@ -304,24 +304,26 @@ export default function ConnectionDialog() {
     >
       <div className="row" style={{ alignItems: 'stretch', minHeight: 430 }}>
         <div style={{ width: 170, borderRight: '1px solid var(--border)', paddingRight: 8, marginRight: 16 }}>
-          <div className="muted" style={{ marginBottom: 6 }}>
-            {t('connections.dialog.driverType')}
-          </div>
-          {PRODUCTS.map((p) => (
-            <div
-              key={p.id}
-              className="row"
-              onClick={() => setForm((f) => switchProduct(f, p.id))}
-              style={{
-                gap: 8,
-                padding: '5px 10px',
-                borderRadius: 4,
-                cursor: 'pointer',
-                background: form.product === p.id ? 'var(--sel)' : undefined,
-              }}
-            >
-              <DbIcon driver={p.driver} variant={p.id} size={16} />
-              {productLabel(p.id)}
+          {PRODUCT_GROUPS.map((g) => (
+            <div key={g.key}>
+              <div className="product-group">{t(`connections.dialog.group.${g.key}`)}</div>
+              {g.products.map(product).map((p) => (
+                <div
+                  key={p.id}
+                  className="row"
+                  onClick={() => setForm((f) => switchProduct(f, p.id))}
+                  style={{
+                    gap: 8,
+                    padding: '4px 10px',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    background: form.product === p.id ? 'var(--sel)' : undefined,
+                  }}
+                >
+                  <DbIcon driver={p.driver} variant={p.id} size={16} />
+                  {productLabel(p.id)}
+                </div>
+              ))}
             </div>
           ))}
           <div className="muted" style={{ marginTop: 12, lineHeight: 1.5 }}>

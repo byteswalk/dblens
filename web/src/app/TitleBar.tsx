@@ -4,7 +4,43 @@
 
 import { App, Dropdown, type MenuProps } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { IconCheck, IconCopy, IconMinus, IconPin, IconSquare, IconX } from '@tabler/icons-react'
+import {
+  type Icon,
+  IconAlignLeft,
+  IconBell,
+  IconCheck,
+  IconChevronDown,
+  IconChevronUp,
+  IconCopy,
+  IconDatabase,
+  IconDeviceDesktop,
+  IconDownload,
+  IconFileCode,
+  IconFileImport,
+  IconFilePlus,
+  IconFolderOpen,
+  IconGitCompare,
+  IconHistory,
+  IconInfoCircle,
+  IconListTree,
+  IconMinus,
+  IconMoon,
+  IconPin,
+  IconPlayerPlay,
+  IconPlayerStop,
+  IconPlayerTrackNext,
+  IconPlug,
+  IconPower,
+  IconRefresh,
+  IconSchema,
+  IconSettings,
+  IconSquare,
+  IconStar,
+  IconSun,
+  IconTablePlus,
+  IconTool,
+  IconX,
+} from '@tabler/icons-react'
 import { type MouseEvent, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -24,6 +60,44 @@ import { useShellInfo } from './useShellInfo'
 
 const RELEASES = 'https://github.com/byteswalk/dblens/releases'
 
+const MENU_ICONS: Record<string, Icon> = {
+  'new-connection': IconPlug,
+  'new-query': IconFilePlus,
+  'close-tab': IconX,
+  'new-table': IconTablePlus,
+  import: IconFileImport,
+  'sql-file': IconFileCode,
+  'open-model': IconFolderOpen,
+  'new-model': IconSchema,
+  compare: IconGitCompare,
+  settings: IconSettings,
+  quit: IconPower,
+  'side:db': IconDatabase,
+  'side:models': IconSchema,
+  'side:history': IconHistory,
+  'side:favorites': IconStar,
+  'side:ops': IconTool,
+  'theme:system': IconDeviceDesktop,
+  'theme:light': IconSun,
+  'theme:dark': IconMoon,
+  'sql:run-current': IconPlayerPlay,
+  'sql:run-all': IconPlayerTrackNext,
+  'sql:cancel': IconPlayerStop,
+  'sql:format': IconAlignLeft,
+  'sql:explain': IconListTree,
+  'sql:favorite': IconStar,
+  'window:on-top': IconPin,
+  'window:reset': IconRefresh,
+  'help:check-update': IconDownload,
+  'help:auto-check': IconBell,
+  'help:about': IconInfoCircle,
+}
+
+const QUICKBAR_KEY = 'ui.quickbar'
+
+/** 快捷栏的按钮（菜单项的 key），`null` 是分隔线。 */
+const QUICK: (string | null)[] = ['new-connection', 'new-query', null, 'new-table', 'import', 'sql-file', null, 'compare', 'open-model']
+
 function toAntItems(g: MenuGroup): MenuProps['items'] {
   return g.items.map((i, n) =>
     i === 'divider'
@@ -34,11 +108,17 @@ function toAntItems(g: MenuGroup): MenuProps['items'] {
             <span className="row" style={{ gap: 24, minWidth: 180 }}>
               <span className="grow">{i.label}</span>
               {i.shortcut && <span className="muted">{i.shortcut}</span>}
+              {i.checked && <IconCheck size={14} color="var(--accent)" />}
             </span>
           ),
-          icon: <IconCheck size={14} style={{ visibility: i.checked ? 'visible' : 'hidden' }} />,
+          icon: <MenuIcon id={i.key} />,
         },
   )
+}
+
+function MenuIcon({ id }: { id: string }) {
+  const Glyph = MENU_ICONS[id]
+  return Glyph ? <Glyph size={16} /> : <span style={{ display: 'inline-block', width: 16 }} />
 }
 
 export default function TitleBar() {
@@ -123,7 +203,11 @@ export default function TitleBar() {
     act(e.detail === 2 ? 'toggle_maximize' : 'start_dragging')
   }
 
+  const quickShown = useSetting(QUICKBAR_KEY) !== 'off'
+  const toggleQuick = () => useSettings.getState().set(QUICKBAR_KEY, quickShown ? 'off' : null)
+
   return (
+    <>
     <div className="row titlebar" onMouseDown={onMouseDown} style={{ paddingLeft: titleBarInset(info?.platform) }}>
       <img src={logo} width={16} height={16} alt="" className="logo" />
       <div className="row" data-no-drag>
@@ -135,6 +219,15 @@ export default function TitleBar() {
       </div>
       <span className="title">{title}</span>
       <span className="grow" />
+      <div className="row" data-no-drag>
+        <span
+          className="tb-btn"
+          title={t(quickShown ? 'app.titleBar.hideQuickbar' : 'app.titleBar.showQuickbar')}
+          onClick={toggleQuick}
+        >
+          {quickShown ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+        </span>
+      </div>
       {desktop && (
         <div className="row" data-no-drag>
           <span
@@ -160,5 +253,21 @@ export default function TitleBar() {
         </div>
       )}
     </div>
+    {quickShown && (
+      <div className="row quickbar">
+        {QUICK.map((key, n) => {
+          if (key === null) return <span key={n} className="sep" />
+          const entry = menus.flatMap((g) => g.items).find((i) => i !== 'divider' && i.key === key)
+          if (!entry || entry === 'divider') return null
+          return (
+            <span key={key} className="q" onClick={() => run(key)}>
+              <MenuIcon id={key} />
+              {entry.label.replace(/[…]$/, '')}
+            </span>
+          )
+        })}
+      </div>
+    )}
+    </>
   )
 }
