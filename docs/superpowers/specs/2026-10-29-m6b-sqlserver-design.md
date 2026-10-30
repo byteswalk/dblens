@@ -26,6 +26,7 @@ M6a 让 SQL Server 能连、能看、能查，写入类功能对它置灰。M6b 
 | 拆分 | 五块功能作为一个里程碑：共用同一套方言层改动（变更语句、批量写入、`IDENTITY_INSERT`、脚本分隔） |
 | 默认值约束的名字 | 执行时查：生成的语句从 `sys.default_constraints` 查出名字再删除；不改公共模型，脚本拿到别的库也能用 |
 | 设计器建的默认值 | 显式命名 `DF_表名_列名` |
+| 库名的传递 | 各请求加可选的 `catalog` 字段（第 6 节） |
 | 迁移的实库路线 | SQL Server 与 MySQL、PG、Oracle、达梦互迁（8 条），另加以 SQL Server 为目标的续传、跳过各 1 条 |
 
 ## 3. 表设计器
@@ -111,14 +112,28 @@ IF @df IS NOT NULL EXEC (N'ALTER TABLE [架构].[表] DROP CONSTRAINT ' + QUOTEN
 
 ### 5.4 结构迁移
 
-M6a 已有 SQL Server 的类型映射、序列与自增、`NEXT VALUE FOR` 默认值、名字长度（128）和大小写规则。取消拦截，按第 7 节的路线实测。
+M6a 已有 SQL Server 的类型映射、序列与自增、`NEXT VALUE FOR` 默认值、名字长度（128）和大小写规则。取消拦截，按第 8 节的路线实测。
 
-## 6. 取消拦截
+## 6. 库名的传递（2026-10-29 写计划时补充，用户确认）
+
+M6b 的功能都以"连接 + schema"定位对象，SQL Server 还要知道在哪个库。沿用 M6a 的做法（元数据接口的 `?catalog=`、改动集的 `catalog`），
+各请求加可选的 `catalog` 字段（其他库不填，行为不变）：
+- 设计器：读原表、预览、执行三个接口；
+- 导入：导入请求、新建表的建表语句；
+- 比对：数据库一侧（`CompareSideRef::Database`）；
+- 迁移：两端（`MigrationEnd`）；
+- 模型：从库反向生成；
+- 文档导出：数据库来源。
+
+服务层用 `Profile::in_catalog` 得到指向该库的连接配置。SQL Server 的会话"当前 schema"是库：执行前切换 schema 的地方（设计器、导入等）对 SQL Server 切换到库，
+不把架构名当库名。保存的迁移方案、比对标签、模型文件中库和架构分开存，旧数据没有 `catalog` 时按空处理。前端在发请求时把合成的 schema 拆成库和架构（M6a 的 `splitCatalog`）。
+
+## 7. 取消拦截
 
 - 后端：去掉 `Service::feature_profile`（改回直接取连接配置），删去词条 `sqlserver.later`。
 - 前端：去掉 `supportsWrites` 及据此置灰的菜单项、提示和来源/目标列表的过滤。
 
-## 7. 测试
+## 8. 测试
 
 - 第一个任务是依赖审查：全部直接依赖升到最新稳定版（发布满 7 天），全量测试，单独提交。
 - 单元测试：各类变更的语句（默认值约束的查删、`sp_rename`、扩展属性）、重建脚本、2000 个参数的拆分、多行 `MERGE`、脚本的 `GO` 分隔、导入时自增列的包裹。
@@ -132,6 +147,6 @@ M6a 已有 SQL Server 的类型映射、序列与自增、`NEXT VALUE FOR` 默�
 - 兼容：在 Win11 测试虚拟机（192.168.139.103）的 SQL Server 2025 Express 上再跑一遍 SQL Server 的实库测试（中文环境、中文报错）。
 - 浏览器实测：设计器、导入、比对、文档导出、迁移各在 SQL Server 上走一遍，菜单不再置灰。
 
-## 8. 说明文档
+## 9. 说明文档
 
 `docs/notes/m6b-sqlserver.md`：结构、与本设计不一致的地方、已知限制、验证情况。
