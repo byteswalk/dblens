@@ -29,10 +29,9 @@ const THEME_PRIMARY: Partial<Record<Theme, { colorPrimary: string }>> = {
 function Themed() {
   const systemDark = useSystemDark()
   const theme = resolveTheme(parseThemePref(useSetting(THEME_KEY)), systemDark)
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-    document.documentElement.dataset.tone = isDarkTheme(theme) ? 'dark' : 'light'
-  }, [theme])
+  // 在渲染时写，不放进 effect：子组件（结果表格）渲染时要从 CSS 变量读到新主题的颜色
+  document.documentElement.dataset.theme = theme
+  document.documentElement.dataset.tone = isDarkTheme(theme) ? 'dark' : 'light'
   const lang = resolveLang(parseLangPref(useSetting(LANG_KEY)))
   useEffect(() => applyLang(lang), [lang])
   const algorithm = isDarkTheme(theme) ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm

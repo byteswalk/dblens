@@ -28,6 +28,25 @@ const ErView = lazy(() => import('../er/ErView'))
 // 迁移标签的 DDL 预览带 Monaco
 const MigrateView = lazy(() => import('../migrate/MigrateView'))
 
+/** 按住标签横向拖动：移过别的标签时换位。不用 HTML5 拖放：Tauri 的窗口拖放会拦截它。 */
+function startTabDrag(id: string, startX: number) {
+  let dragging = false
+  const move = (e: globalThis.MouseEvent) => {
+    if (!dragging && Math.abs(e.clientX - startX) < 6) return
+    dragging = true
+    document.body.style.cursor = 'grabbing'
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-tab-id]')?.dataset.tabId
+    if (over && over !== id) useTabs.getState().moveTab(id, over)
+  }
+  const up = () => {
+    document.body.style.cursor = ''
+    window.removeEventListener('mousemove', move)
+    window.removeEventListener('mouseup', up)
+  }
+  window.addEventListener('mousemove', move)
+  window.addEventListener('mouseup', up)
+}
+
 function TabTitle({ tab, active, envClass, profileName, profile }: {
   tab: QueryTab
   active: boolean
@@ -65,8 +84,10 @@ function TabTitle({ tab, active, envClass, profileName, profile }: {
             e.preventDefault()
             void closeQuery(tab.id)
           }
+          if (e.button === 0 && !(e.target as HTMLElement).closest('.x')) startTabDrag(tab.id, e.clientX)
         }}
         title={`${tab.title} · ${profileName}`}
+        data-tab-id={tab.id}
       >
         {tab.er ? (
           <IconAffiliate size={16} />
@@ -128,7 +149,12 @@ export default function Workspace() {
   }, [active, tabs.length])
   // 竖向滚轮横向滚动标签
   const onWheel = (e: WheelEvent) => {
-    if (strip.current && e.deltaX === 0) strip.current.scrollLeft += e.deltaY
+    const el = strip.current
+    if (!el || e.deltaX !== 0 || e.deltaY === 0) return
+    const lefts = [...el.children].map((c) => (c as HTMLElement).offsetLeft - el.offsetLeft)
+    const next =
+      e.deltaY > 0 ? lefts.find((x) => x > el.scrollLeft + 1) : lefts.filter((x) => x < el.scrollLeft - 1).at(-1)
+    if (next !== undefined) el.scrollLeft = next
   }
 
   // 模型的设计器标签、比对标签不绑定连接

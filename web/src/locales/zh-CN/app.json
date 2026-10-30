@@ -21,9 +21,7 @@
     "clearHistoryConfirm": "清空全部执行历史？此操作不能撤销。"
   },
   "theme": {
-    "system": "跟随系统",
-    "light": "亮色",
-    "dark": "暗色"
+    "system": "跟随系统"
   },
   "side": {
     "db": "数据库",

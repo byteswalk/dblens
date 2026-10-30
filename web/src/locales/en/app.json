@@ -21,9 +21,7 @@
     "clearHistoryConfirm": "Clear all query history? This cannot be undone."
   },
   "theme": {
-    "system": "System",
-    "light": "Light",
-    "dark": "Dark"
+    "system": "System"
   },
   "side": {
     "db": "Database",

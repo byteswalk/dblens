@@ -7,7 +7,7 @@ import { createRoot } from 'react-dom/client'
 
 import type { Api, DocDiagramImage, ErDisplay, ErPosition, ErTable } from '../../shared/api'
 import { renderImage } from '../er/export'
-import { NODE_TYPES, flowEdges, flowNodes } from '../er/flow'
+import { EDGE_TYPES, NODE_TYPES, flowEdges, flowNodes } from '../er/flow'
 import { buildGraph, layout } from '../er/graph'
 import { pixelRatio } from './options'
 
@@ -43,8 +43,9 @@ async function draw(job: DiagramJob, columns: (n: number) => string): Promise<{ 
         <ReactFlowProvider>
           <ReactFlow
             nodes={flowNodes(graph, positions)}
-            edges={flowEdges(graph, columns)}
+            edges={flowEdges(graph, columns, positions)}
             nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
             colorMode="light"
             nodesDraggable={false}
             nodesConnectable={false}

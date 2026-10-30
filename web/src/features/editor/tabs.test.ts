@@ -4,6 +4,18 @@ import i18n from '../../shared/i18n'
 import { useSettings } from '../../shared/settings'
 import { TABS_KEY, markRun, parseTabs, persistTabs, takeRun, useTabs } from './tabs'
 
+describe('标签换位', () => {
+  it('移到目标位置，顺序保持', () => {
+    useTabs.setState({ tabs: [], active: null })
+    const { open, moveTab } = useTabs.getState()
+    const [a, b, c] = [open('p'), open('p'), open('p')]
+    moveTab(c, a)
+    expect(useTabs.getState().tabs.map((x) => x.id)).toEqual([c, a, b])
+    moveTab(c, b)
+    expect(useTabs.getState().tabs.map((x) => x.id)).toEqual([a, b, c])
+  })
+})
+
 describe('标签页', () => {
   beforeEach(() => useTabs.getState().restore(undefined))
 

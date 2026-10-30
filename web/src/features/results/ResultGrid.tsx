@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type ResultSet, cellText } from '../../shared/exec'
 import { type Order, nextOrder, sortedTitle } from '../data/sort'
 import { useSetting } from '../../shared/settings'
-import { THEME_KEY } from '../../shared/theme'
+import { THEME_KEY, useSystemDark } from '../../shared/theme'
 import CellViewer, { type ViewedCell } from './CellViewer'
 import { isNumeric } from './cell'
 import { shouldFetchMore } from './results'
@@ -48,6 +48,7 @@ export function sortedRows(r: ResultSet, order: Order | undefined): number[] {
 /** 表格配色取自外壳的 CSS 变量，主题切换时重新读取。 */
 export function useGridTheme(): Partial<Theme> {
   const pref = useSetting(THEME_KEY)
+  const systemDark = useSystemDark()
   const dark = document.documentElement.dataset.theme
   return useMemo(() => {
     const css = getComputedStyle(document.documentElement)
@@ -70,7 +71,7 @@ export function useGridTheme(): Partial<Theme> {
       headerFontStyle: '600 13px',
       markerFontStyle: '12px',
     }
-  }, [pref, dark]) // 主题变化时重新读取
+  }, [pref, dark, systemDark]) // 主题变化时重新读取
 }
 
 export interface ResultGridProps {

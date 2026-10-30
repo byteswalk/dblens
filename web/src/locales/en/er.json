@@ -1,4 +1,18 @@
 {
+  "comments": "Comments",
+  "copied": "Copied as image",
+  "pageNo": "Page {{n}}",
+  "groups": {
+    "label": "Topics",
+    "hint": "Group tables by name automatically; the rest go to Other",
+    "all": "All topics",
+    "other": "Other"
+  },
+  "inferred": {
+    "label": "Inferred keys",
+    "hint": "Guess relations from column names and types; drawn dashed and never written to the database",
+    "tip": "Inferred:"
+  },
   "diagrams": "ER Diagrams",
   "defaultDiagram": "All Tables",
   "readOnly": "Read-only",
@@ -22,7 +36,11 @@
   "layout": {
     "title": "Auto Layout",
     "horizontal": "Left to right",
-    "vertical": "Top to bottom"
+    "vertical": "Top to bottom",
+    "a4PagesPortrait": "A4 portrait, multiple pages",
+    "a4PagesLandscape": "A4 landscape, multiple pages",
+    "a4Portrait": "A4 portrait, one page",
+    "a4Landscape": "A4 landscape, one page"
   },
   "export": {
     "title": "Export",
@@ -37,6 +55,7 @@
     "openDefault": "Open ER Diagram",
     "newDiagram": "New Topic Diagram…",
     "design": "Open in Designer",
+    "copyImage": "Copy as image",
     "remove": "Remove from Diagram",
     "data": "View Data",
     "newTable": "New Table"

@@ -65,8 +65,10 @@ export default function SettingsDialog() {
             onChange={(e) => useSettings.getState().set(THEME_KEY, e.target.value)}
             options={[
               { value: 'system', label: t('app.theme.system') },
-              { value: 'light', label: t('app.theme.light') },
-              { value: 'dark', label: t('app.theme.dark') },
+              { value: 'light', label: t('app.menu.view.themeLight') },
+              { value: 'dark', label: t('app.menu.view.themeDark') },
+              { value: 'slate', label: t('app.menu.view.themeSlate') },
+              { value: 'rose', label: t('app.menu.view.themeRose') },
             ]}
           />
         </Form.Item>

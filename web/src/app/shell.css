@@ -269,7 +269,6 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--panel-2);
-  border-right: 1px solid var(--border);
 }
 .side-h {
   height: 38px;
@@ -399,9 +398,17 @@ body {
   font-family: var(--mono);
   font-size: var(--fs-mono);
 }
+/* 分隔条画成 1px 的线，可拖动的范围靠伪元素放宽 */
 .splitter {
-  width: 4px;
-  background: transparent;
+  position: relative;
+  width: 1px;
+  background: var(--border);
+}
+.splitter::after {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+  z-index: 5;
 }
 .splitter:hover,
 .splitter[data-separator-state='drag'] {
@@ -549,6 +556,7 @@ body {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  scroll-snap-type: x proximity;
 }
 .tab-strip::-webkit-scrollbar {
   display: none;
@@ -566,6 +574,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   cursor: pointer;
+  scroll-snap-align: start;
 }
 .tab .tab-title {
   min-width: 0;
@@ -583,16 +592,23 @@ body {
 .tab svg {
   flex: none;
 }
+/* 当前标签滚到边上时贴住，始终看得见 */
 .tab.on {
+  position: sticky;
+  left: 0;
+  right: 0;
+  z-index: 1;
   background: var(--panel);
   color: var(--text);
   border-top-color: var(--mark);
+  border-left: 1px solid var(--border);
   font-weight: 600;
 }
 .tab .x {
   color: var(--muted);
   display: inline-flex;
   border-radius: 3px;
+  margin-left: auto;
 }
 .tab .x:hover {
   background: var(--hover);
@@ -652,8 +668,15 @@ body {
   border-radius: 50%;
 }
 .splitter-h {
-  height: 4px;
+  position: relative;
+  height: 1px;
   background: var(--border);
+}
+.splitter-h::after {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+  z-index: 5;
 }
 .splitter-h:hover,
 .splitter-h[data-separator-state='drag'] {
@@ -988,6 +1011,11 @@ body {
 .er-canvas {
   position: relative;
   min-height: 0;
+  background: var(--bar);
+}
+.er-canvas .er-col-name.muted,
+.er-canvas .er-col-type {
+  color: var(--text-2);
 }
 .er-empty {
   position: absolute;
@@ -1000,8 +1028,9 @@ body {
 }
 .er-table {
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 16%, transparent);
   font-size: 12px;
   overflow: hidden;
 }
@@ -1017,8 +1046,8 @@ body {
   line-height: 30px;
   padding: 0 8px;
   font-weight: 600;
-  background: var(--panel-2);
-  border-bottom: 1px solid var(--border);
+  background: var(--hover);
+  border-bottom: 1px solid var(--border-strong);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1063,10 +1092,73 @@ body {
   width: 6px !important;
   height: 6px !important;
   min-width: 0 !important;
-  opacity: 0.4;
+  opacity: 0;
+}
+/* 连接点平时不显示，能连线时悬停在表上才出现 */
+.er-table:hover .er-handle.connectable:not(.side) {
+  opacity: 0.6;
+}
+.er-comment {
+  font-weight: 400;
+  color: var(--text-2);
+  margin-left: 4px;
+}
+.react-flow__node-frame {
+  pointer-events: none !important;
+}
+.er-frame {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.er-frame.page {
+  background: var(--panel);
+  border: 1px dashed var(--border-strong);
+}
+.er-frame.group {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-weight: 600;
+}
+.er-handle.side {
+  opacity: 0;
+  pointer-events: none;
 }
 .er-edge.logical path {
   stroke-dasharray: 6 4;
+}
+.er-edge.inferred path {
+  stroke-dasharray: 3 4;
+  opacity: 0.75;
+}
+.er-edge.on path {
+  stroke: var(--accent);
+  stroke-width: 2;
+  opacity: 1;
+}
+.er-menu {
+  position: fixed;
+  z-index: 1050;
+  min-width: 150px;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--text) 22%, transparent);
+  overflow: hidden;
+}
+.er-menu .ant-menu {
+  border-inline-end: none !important;
+  background: transparent;
+}
+.er-menu .ant-menu-item {
+  height: 32px;
+  line-height: 32px;
+  margin: 2px;
+  width: auto;
 }
 .er-tip {
   position: fixed;

@@ -157,6 +157,8 @@ export function parseTabs(raw: string | undefined): Persisted {
 }
 
 interface TabsState extends Persisted {
+  /** 把标签 id 移到 before 所在的位置。 */
+  moveTab(id: string, before: string): void
   /** 新建标签并切换过去，返回它的 id。 */
   open(profileId: string, sql?: string): string
   /** 打开对象的数据标签：已经打开过时切换过去。返回标签的 id。 */
@@ -280,6 +282,14 @@ export const useTabs = create<TabsState>()((set, get) => ({
     set({ tabs: rest, active: next })
   },
   activate: (active) => set({ active }),
+  moveTab: (id, before) => {
+    const tabs = [...get().tabs]
+    const from = tabs.findIndex((x) => x.id === id)
+    const to = tabs.findIndex((x) => x.id === before)
+    if (from < 0 || to < 0 || from === to) return
+    tabs.splice(to, 0, tabs.splice(from, 1)[0])
+    set({ tabs })
+  },
   setSql: (id, sql) => set({ tabs: get().tabs.map((t) => (t.id === id ? { ...t, sql } : t)) }),
   setProfile: (id, profileId) => set({ tabs: get().tabs.map((t) => (t.id === id ? { ...t, profileId } : t)) }),
   restore: (raw) => set(parseTabs(raw)),

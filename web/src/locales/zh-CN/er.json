@@ -1,4 +1,18 @@
 {
+  "comments": "显示注释",
+  "copied": "已复制为图片",
+  "pageNo": "第 {{n}} 页",
+  "groups": {
+    "label": "业务主题",
+    "hint": "按表名自动分组，分不出的归入其他",
+    "all": "全部主题",
+    "other": "其他"
+  },
+  "inferred": {
+    "label": "推测外键",
+    "hint": "按列名和类型推测表间关系，用虚线画出，不写进数据库",
+    "tip": "推测："
+  },
   "diagrams": "ER 图",
   "defaultDiagram": "全部表",
   "readOnly": "只读",
@@ -21,7 +35,11 @@
   "layout": {
     "title": "自动布局",
     "horizontal": "横向重排",
-    "vertical": "纵向重排"
+    "vertical": "纵向重排",
+    "a4PagesPortrait": "A4 纵向多页",
+    "a4PagesLandscape": "A4 横向多页",
+    "a4Portrait": "A4 纵向单页",
+    "a4Landscape": "A4 横向单页"
   },
   "export": {
     "title": "导出",
@@ -36,6 +54,7 @@
     "openDefault": "打开 ER 图",
     "newDiagram": "新建主题图…",
     "design": "用设计器打开",
+    "copyImage": "复制为图片",
     "remove": "从图中移除",
     "data": "查看数据",
     "newTable": "新建表"
