@@ -13,6 +13,7 @@ ORDER BY 2, 1
 SELECT DISTINCT TRIM(owner) AS name,
        CASE WHEN owner IN ('gbasedbt', 'informix') THEN 't' ELSE 'f' END::BOOLEAN AS is_system
 FROM systables
+WHERE tabtype <> ' '
 ORDER BY 2, 1
 
 -- [tables] [String("HR"), String("EMP"), String("%员工%"), String("%员工%")]

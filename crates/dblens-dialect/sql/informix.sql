@@ -1,4 +1,5 @@
--- GBase 8s (Informix family) metadata queries. tabid >= 100 are user objects; names are fixed CHAR, so TRIM them.
+-- GBase 8s (Informix family) metadata queries. tabid >= 100 are user objects, except the internal rows with a blank
+-- tabtype (GL_COLLATE, GL_CTYPE, VERSION); names are fixed CHAR, so TRIM them.
 -- Every query runs in the CURRENT database: the service connects to the catalog it wants.
 -- Columns: type_text and nullable are placeholders; meta::coltype decodes coltype, collength and extended_type.
 -- Key and index columns live in part1..part16 (negative = descending), expanded here by a template loop.
@@ -17,6 +18,7 @@ ORDER BY 2, 1
 SELECT DISTINCT TRIM(owner) AS name,
        CASE WHEN owner IN ('gbasedbt', 'informix') THEN 't' ELSE 'f' END::BOOLEAN AS is_system
 FROM systables
+WHERE tabtype <> ' '
 ORDER BY 2, 1
 
 -- [tables]
