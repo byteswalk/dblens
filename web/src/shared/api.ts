@@ -358,6 +358,75 @@ export interface ApplyOutcome {
 }
 
 /** 一条运维查询（M1c3）。 */
+export type PrincipalKind = 'user' | 'role' | 'login' | 'group'
+export type GrantScope = 'global' | 'database' | 'schema' | 'object' | 'column'
+export type EffectiveState = 'allowed' | 'denied' | 'conditional'
+export type PrivNote = 'needs_set_role' | 'not_default_role' | 'public_grant' | 'implicit' | 'any_privilege' | 'partial_revokes' | 'deny_override' | 'host_wildcard'
+
+export interface Principal {
+  id: string
+  name: string
+  host: string | null
+  kind: PrincipalKind
+  level: 'server' | 'database'
+  can_login: boolean | null
+  locked: boolean | null
+  expires_at: string | null
+  builtin: boolean
+  attrs: [string, string][]
+}
+
+export interface Membership {
+  member: string
+  role: string
+  admin_option: boolean
+  inherits: boolean | null
+  default_role: boolean | null
+}
+
+export interface PrivilegeGrant {
+  grantee: string
+  scope: GrantScope
+  target: { database: string | null; schema: string | null; object_kind: string | null; object: string | null; column: string | null }
+  privilege: string
+  effect: 'grant' | 'deny' | 'implicit'
+  grantable: boolean
+  grantor: string | null
+}
+
+export interface EffectivePrivilege {
+  grant: PrivilegeGrant
+  via: string[]
+  state: EffectiveState
+  notes: PrivNote[]
+}
+
+export interface ObjectAccess {
+  principal: string
+  privilege: EffectivePrivilege
+}
+
+/** 读到的范围。`missing` 是后端按请求语言给出的文字。 */
+export type Coverage = { state: 'complete' } | { state: 'partial'; missing: string[] }
+
+export interface PrivilegeOverview {
+  principals: Principal[]
+  memberships: Membership[]
+  public: string[]
+  coverage: Coverage
+}
+
+export interface PrincipalPrivileges {
+  direct: PrivilegeGrant[]
+  effective: EffectivePrivilege[]
+  coverage: Coverage
+}
+
+export interface ObjectAccessReport {
+  access: ObjectAccess[]
+  coverage: Coverage
+}
+
 export interface OpsQuery {
   key: string
   name: string
@@ -1310,6 +1379,12 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
       request<Favorite>('PUT', `/favorites/${encodeURIComponent(id)}`, patch),
     deleteFavorite: (id: string) => request<null>('DELETE', `/favorites/${encodeURIComponent(id)}`),
     ops: (id: string) => request<OpsQuery[]>('GET', `${p(id)}/ops`),
+    privilegeOverview: (id: string, catalog?: string) =>
+      request<PrivilegeOverview>('GET', `${p(id)}/privileges${q({ catalog })}`),
+    principalPrivileges: (id: string, principal: string, catalog?: string) =>
+      request<PrincipalPrivileges>('GET', `${p(id)}/privileges/principal${q({ principal, catalog })}`),
+    objectAccess: (id: string, schema: string, object: string, catalog?: string) =>
+      request<ObjectAccessReport>('GET', `${p(id)}/privileges/object${q({ schema, object, catalog })}`),
     previewChanges: (id: string, set: ChangeSet) =>
       request<{ index: number; sql: string }[]>('POST', `${p(id)}/changes/preview`, changeBody(set)),
     applyChanges: (sessionId: number, set: ChangeSet) =>

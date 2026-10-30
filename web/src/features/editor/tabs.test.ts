@@ -235,3 +235,23 @@ describe('标签栏滚轮', () => {
     expect(wheelTarget(lefts, 3, 100, 0, true)).toBe(100)
   })
 })
+
+describe('账号权限标签', () => {
+  beforeEach(() => useTabs.getState().restore(undefined))
+
+  it('同一连接只开一个，重复打开时更新定位', () => {
+    const { openPrivileges } = useTabs.getState()
+    const a = openPrivileges('p1', '用户与权限')
+    const b = openPrivileges('p1', '用户与权限', { schema: 'hr', object: 'emp' })
+    expect(b).toBe(a)
+    expect(useTabs.getState().tabs.find((x) => x.id === a)?.privileges?.focus).toEqual({ schema: 'hr', object: 'emp' })
+    expect(openPrivileges('p2', '用户与权限')).not.toBe(a)
+  })
+
+  it('保存的标签能恢复，格式不对的丢弃', () => {
+    const tab = { id: 'a', title: 't', profileId: 'p', sql: '', privileges: {} }
+    expect(parseTabs(JSON.stringify({ tabs: [tab] })).tabs).toHaveLength(1)
+    const bad = { ...tab, privileges: { focus: { schema: 1 } } }
+    expect(parseTabs(JSON.stringify({ tabs: [bad] })).tabs).toHaveLength(0)
+  })
+})

@@ -6,6 +6,7 @@
 // 比对标签（M4a 设计文档第 7 节）：带 compare 的标签，两边是模型或连接的一个 schema；也不绑定连接。
 // ER 图标签（M4b 设计文档 4.1 节）：带 er 的标签，模型的一张图（不绑定连接）或连接的一个 schema（只读）。
 // 迁移标签（M5a 设计文档第 5 节）：带 migrate 的标签，内容是整个迁移方案（一并保存，切换标签不丢）；不绑定连接。
+// 账号权限标签（M9 设计文档第 8 节）：带 privileges 的标签，同一连接只开一个；focus 是对象反查的目标。
 
 import { create } from 'zustand'
 
@@ -64,10 +65,23 @@ export interface QueryTab {
   migrate?: MigrationPlan
   /** 有值时是规范检查标签：规范库或某次检查的结果。 */
   lint?: LintTab
+  /** 有值时是账号权限标签。 */
+  privileges?: PrivilegesTab
 }
 
 /** 规范检查标签：规范库，或某次检查的结果。 */
 export type LintTab = { view: 'library' } | { view: 'run'; run: string }
+
+/** 账号权限标签。`focus` 有值时显示这个对象的访问者。schema 是合成值，SQL Server 含库名。 */
+export interface PrivilegesTab {
+  focus?: { schema: string; object: string }
+}
+
+function isPrivilegesTab(v: unknown): v is PrivilegesTab {
+  const p = v as PrivilegesTab | null
+  if (typeof p !== 'object' || p === null) return false
+  return p.focus === undefined || (typeof p.focus?.schema === 'string' && typeof p.focus.object === 'string')
+}
 
 function isLintTab(v: unknown): v is LintTab {
   const l = v as LintTab | null
@@ -154,7 +168,8 @@ export function parseTabs(raw: string | undefined): Persisted {
         (t.compare === undefined || isCompareTarget(t.compare)) &&
         (t.er === undefined || isErTarget(t.er)) &&
         (t.migrate === undefined || isMigratePlan(t.migrate)) &&
-        (t.lint === undefined || isLintTab(t.lint)),
+        (t.lint === undefined || isLintTab(t.lint)) &&
+        (t.privileges === undefined || isPrivilegesTab(t.privileges)),
     )
     // 迁移标签的方案补上后来加的项（M5b 的模式、数据选项），格式不对的丢掉
     for (const t of tabs) {
@@ -194,6 +209,10 @@ interface TabsState extends Persisted {
   openLintLibrary(title: string): string
   /** 打开某次检查的结果标签：已打开时切换过去。返回标签的 id。 */
   openLintRun(run: string, title: string): string
+  /** 打开连接的账号权限标签：已打开时切换过去。`focus` 有值时定位到对象。返回标签的 id。 */
+  openPrivileges(profileId: string, title: string, focus?: PrivilegesTab['focus']): string
+  /** 修改定位：undefined 回到按主体浏览。 */
+  setPrivilegesFocus(id: string, focus: PrivilegesTab['focus']): void
   /** 修改数据标签的过滤条件和排序。 */
   setData(id: string, patch: Pick<DataTarget, 'filter' | 'order'>): void
   close(id: string): void
@@ -307,6 +326,22 @@ export const useTabs = create<TabsState>()((set, get) => ({
     set({ tabs: [...tabs, tab], active: tab.id })
     return tab.id
   },
+  openPrivileges: (profileId, title, focus) => {
+    const { tabs } = get()
+    const same = tabs.find((x) => x.privileges && x.profileId === profileId)
+    if (same) {
+      set({
+        active: same.id,
+        tabs: focus ? tabs.map((x) => (x.id === same.id ? { ...x, privileges: { focus } } : x)) : tabs,
+      })
+      return same.id
+    }
+    const tab: QueryTab = { id: newId(), title, profileId, sql: '', privileges: focus ? { focus } : {} }
+    set({ tabs: [...tabs, tab], active: tab.id })
+    return tab.id
+  },
+  setPrivilegesFocus: (id, focus) =>
+    set({ tabs: get().tabs.map((x) => (x.id === id && x.privileges ? { ...x, privileges: focus ? { focus } : {} } : x)) }),
   setData: (id, patch) =>
     set({ tabs: get().tabs.map((x) => (x.id === id && x.data ? { ...x, data: { ...x.data, ...patch } } : x)) }),
   close: (id) => {
