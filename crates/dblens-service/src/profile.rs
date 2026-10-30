@@ -106,11 +106,11 @@ impl Profile {
         }
     }
 
-    /// 元数据连接池和缓存的范围：通常就是连接配置 id；有数据库这一层的驱动（SQL Server）按库分开，
+    /// 元数据连接池和缓存的范围：通常就是连接配置 id；有数据库这一层的驱动（SQL Server、GBase 8s）按库分开，
     /// 写成 `id` + `\u{1f}` + 库名（见 `scope_of`）。
     pub fn scope(&self) -> String {
         match (self.input.driver, &self.input.database) {
-            (DriverId::SqlServer, Some(db)) => format!("{}{SCOPE_SEP}{db}", self.id),
+            (DriverId::SqlServer | DriverId::Informix, Some(db)) => format!("{}{SCOPE_SEP}{db}", self.id),
             _ => self.id.clone(),
         }
     }
@@ -137,6 +137,7 @@ pub(crate) fn driver_name(d: DriverId) -> &'static str {
         DriverId::Oracle => "oracle",
         DriverId::Dameng => "dameng",
         DriverId::SqlServer => "sqlserver",
+        DriverId::Informix => "informix",
     }
 }
 
@@ -147,6 +148,7 @@ fn parse_driver(s: &str) -> rusqlite::Result<DriverId> {
         "oracle" => Ok(DriverId::Oracle),
         "dameng" => Ok(DriverId::Dameng),
         "sqlserver" => Ok(DriverId::SqlServer),
+        "informix" => Ok(DriverId::Informix),
         other => {
             Err(rusqlite::Error::InvalidColumnType(2, format!("driver={other}"), rusqlite::types::Type::Text))
         }

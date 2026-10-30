@@ -1460,9 +1460,17 @@
     "zh-CN": "%{lib}目录必须是绝对路径：%{dir}",
     "en": "The %{lib} directory must be an absolute path: %{dir}"
   },
+  "native.gbase_jdbc": {
+    "zh-CN": "GBase 8s JDBC 驱动",
+    "en": "GBase 8s JDBC driver"
+  },
   "native.install.dameng_dpi": {
     "zh-CN": "请安装达梦客户端（含 DPI 驱动），然后在连接设置中指定 dmdpi 所在目录，或设置 DM_HOME",
     "en": "Install the DM client (with the DPI driver), then set the directory containing dmdpi in the connection settings, or set DM_HOME"
+  },
+  "native.install.gbase_jdbc": {
+    "zh-CN": "请从 https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE 下载 gbasedbtjdbc，改名为 gbasedbtjdbc.jar 后放到一个目录，再在设置中选择该目录",
+    "en": "Download gbasedbtjdbc from https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE, rename it to gbasedbtjdbc.jar, put it in a folder and choose that folder in Settings"
   },
   "native.install.oracle_client": {
     "zh-CN": "请安装 Oracle Instant Client（Basic 或 Basic Light），然后在连接设置中指定其目录，或设置 ORACLE_HOME / PATH",

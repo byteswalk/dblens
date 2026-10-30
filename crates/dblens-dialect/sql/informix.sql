@@ -14,10 +14,10 @@ WHERE UPPER(name) LIKE UPPER({{ bind("filter") }}) ESCAPE '!'
 ORDER BY 2, 1
 
 -- [schemas]
-SELECT DISTINCT TRIM(owner) AS name, 'f'::BOOLEAN AS is_system
+SELECT DISTINCT TRIM(owner) AS name,
+       CASE WHEN owner IN ('gbasedbt', 'informix') THEN 't' ELSE 'f' END::BOOLEAN AS is_system
 FROM systables
-WHERE tabid >= 100
-ORDER BY 1
+ORDER BY 2, 1
 
 -- [tables]
 SELECT TRIM(t.tabname) AS name, c.comments AS comment, CAST(NULL AS VARCHAR(1)) AS partition

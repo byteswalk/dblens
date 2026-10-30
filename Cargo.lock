@@ -1431,6 +1431,7 @@ dependencies = [
  "dblens-dialect",
  "dblens-driver",
  "dblens-driver-dameng",
+ "dblens-driver-jdbc",
  "dblens-driver-mysql",
  "dblens-driver-oracle",
  "dblens-driver-postgres",

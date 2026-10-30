@@ -24,6 +24,7 @@ pub fn family_key(family: Family) -> &'static str {
         Family::Oracle => "oracle",
         Family::Dameng => "dameng",
         Family::SqlServer => "sqlserver",
+        Family::Informix => "informix",
     }
 }
 

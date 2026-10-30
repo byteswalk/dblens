@@ -10,6 +10,8 @@ use dblens_core::{Error, Msg, Result, msg};
 pub enum NativeLib {
     OracleClient,
     DamengDpi,
+    /// GBase 8s 的 JDBC 驱动。不是原生库，但同样由用户放置、在设置中确认目录。
+    GbaseJdbc,
 }
 
 impl NativeLib {
@@ -34,6 +36,7 @@ impl NativeLib {
                     "libdmdpi.so"
                 }
             }
+            NativeLib::GbaseJdbc => "gbasedbtjdbc.jar",
         }
     }
 
@@ -41,6 +44,7 @@ impl NativeLib {
         match self {
             NativeLib::OracleClient => msg!("native.oracle_client"),
             NativeLib::DamengDpi => msg!("native.dameng_dpi"),
+            NativeLib::GbaseJdbc => msg!("native.gbase_jdbc"),
         }
     }
 
@@ -48,6 +52,7 @@ impl NativeLib {
         match self {
             NativeLib::OracleClient => msg!("native.install.oracle_client"),
             NativeLib::DamengDpi => msg!("native.install.dameng_dpi"),
+            NativeLib::GbaseJdbc => msg!("native.install.gbase_jdbc"),
         }
     }
 
@@ -56,6 +61,7 @@ impl NativeLib {
         match self {
             NativeLib::OracleClient => &[("ORACLE_HOME", &["", "bin", "lib"])],
             NativeLib::DamengDpi => &[("DM_HOME", &["bin", "drivers/dpi"])],
+            NativeLib::GbaseJdbc => &[],
         }
     }
 
@@ -90,6 +96,7 @@ impl NativeLib {
                     &["/opt/dmdbms/bin", "/home/dmdba/dmdbms/bin", "/dm8/bin"]
                 }
             }
+            NativeLib::GbaseJdbc => &[],
         }
     }
 }

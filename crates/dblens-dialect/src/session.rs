@@ -37,7 +37,7 @@ pub fn current_schema(family: Family) -> &'static str {
         Family::Postgres => "SELECT current_schema()",
         Family::Oracle | Family::Dameng => "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL",
         Family::SqlServer => "SELECT DB_NAME()",
-        Family::Informix => "SELECT DBINFO('dbname') FROM sysmaster:sysdual",
+        Family::Informix => "SELECT TRIM(DBINFO('dbname')) FROM sysmaster:sysdual",
     }
 }
 

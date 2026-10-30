@@ -56,6 +56,7 @@ fn native_lib(id: DriverId) -> Option<(NativeLib, &'static str)> {
     match id {
         DriverId::Oracle => Some((NativeLib::OracleClient, "oracle_client_lib_dir")),
         DriverId::Dameng => Some((NativeLib::DamengDpi, "dpi_lib_dir")),
+        DriverId::Informix => Some((NativeLib::GbaseJdbc, "jdbc_dir")),
         DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer => None,
     }
 }
@@ -71,6 +72,7 @@ fn display_name(id: DriverId) -> Msg {
         DriverId::Oracle => Msg::raw("Oracle"),
         DriverId::Dameng => msg!("variant.dameng"),
         DriverId::SqlServer => Msg::raw("SQL Server"),
+        DriverId::Informix => msg!("variant.gbase8s"),
     }
 }
 
@@ -93,6 +95,8 @@ impl DriverRegistry {
             Box::new(dblens_driver_dameng::DmDriver),
             #[cfg(feature = "sqlserver")]
             Box::new(dblens_driver_sqlserver::SqlServerDriver),
+            #[cfg(feature = "informix")]
+            Box::new(dblens_driver_jdbc::GbaseDriver),
         ];
         Self::with_drivers(store, drivers)
     }
@@ -135,10 +139,17 @@ impl DriverRegistry {
     }
 
     pub fn statuses(&self) -> Result<Vec<DriverStatus>> {
-        [DriverId::Mysql, DriverId::Postgres, DriverId::Oracle, DriverId::Dameng, DriverId::SqlServer]
-            .into_iter()
-            .map(|id| self.status(id))
-            .collect()
+        [
+            DriverId::Mysql,
+            DriverId::Postgres,
+            DriverId::Oracle,
+            DriverId::Dameng,
+            DriverId::SqlServer,
+            DriverId::Informix,
+        ]
+        .into_iter()
+        .map(|id| self.status(id))
+        .collect()
     }
 
     pub fn status(&self, id: DriverId) -> Result<DriverStatus> {
@@ -266,7 +277,7 @@ mod tests {
         let (_, r) = registry();
         let s = r.status(DriverId::Postgres).unwrap();
         assert!(s.compiled && s.available && !s.needs_native_lib && s.hint.is_none());
-        assert_eq!(r.statuses().unwrap().len(), 5);
+        assert_eq!(r.statuses().unwrap().len(), 6);
         let ms = r.status(DriverId::SqlServer).unwrap();
         assert!(ms.compiled && ms.available && !ms.needs_native_lib, "{ms:?}");
         assert!(matches!(r.set_lib_dir(DriverId::Mysql, None), Err(Error::Invalid { .. })));
