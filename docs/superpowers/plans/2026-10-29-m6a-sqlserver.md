@@ -70,7 +70,7 @@ docs/notes/{m6a-sqlserver.md（新增）, m0-4b-api.md}; docs/superpowers/specs/
 
 ### Task 1: 依赖复查
 
-按依赖原则（M1b2 设计文档 3.1 节）复查前端和后端的全部直接依赖。写计划时可升级的是 `i18next` 26.5.5 和 `react-i18next` 17.1.2（其余有更新的发布都不满 7 天）。
+按依赖原则（M1b2 设计文档 3.1 节）复查前端和后端的全部直接依赖。写计划时可升级的是 `i18next` 26.5.5 和 `react-i18next` 17.1.2；2026-10-30 执行时复查结果为 26.5.6 和 17.1.3（下面的 diff 是写计划时的版本，以执行当天的复查结果为准）。
 
 **Files:**
 - Modify: `web/package.json`
@@ -2774,7 +2774,7 @@ git commit -m "feat(dialect): SQL Server 家族（标识符、字面量、GO 分
 - `vendor/tiberius`：crates.io 的 0.13.0 加补丁（见 Step 1–2 和 `vendor/PATCHES.md`）。工作区 `Cargo.toml`：`tiberius = { version = "0.13", default-features = false, features = ["tds80", "rustls", "chrono", "sql-browser-tokio", "winauth"] }`、`tokio-util`（compat），`[patch.crates-io] tiberius = { path = "vendor/tiberius" }`，`vendor/tiberius` 加进 `exclude`。
 - `dblens-driver`：`DriverId::SqlServer`（序列化为 `sqlserver`，与前端一致）、URL 前缀 `sqlserver://` / `mssql://`、默认端口 1433。
 - `dblens-driver-sqlserver`（新）：`SqlServerDriver`、`SqlServerConnection`。后台任务独占 `Client<Compat<TcpStream>>`，命令走 mpsc、结果走有界通道（256）；无参数时 `simple_query` 整批执行（`USE`、临时表留在会话里），有参数时 `query`（sp_executesql）；结果集后面的 DONE 结束结果集，否则是影响行数；INFO 是消息；取消用 `Notify`（执行开始时 `notified().enable()`）；批内行号换算成错误位置；手动提交时 `BEGIN TRANSACTION`，提交、回滚前看 `@@TRANCOUNT`。选项：`auth=sql|windows|integrated`、`instance`（填了就经 SQL Browser 查端口）、`trust_server_certificate`。
-- `dblens-service`：`Profile::in_catalog`、`Profile::scope`（SQL Server 为"连接 id + \u{1f} + 库名"）；元数据连接池和缓存按 scope 区分，`scope_of` 认前缀；`MetadataService::catalogs`；`Service::feature_profile`（M6b 的功能对 SQL Server 报 `sqlserver.later`），设计器、导入、文档导出、比对、迁移、模型的入口改用它；会话执行完执行计划后执行 `explain_cleanup`；注册表加 SQL Server；Cargo 特性 `sqlserver`。
+- `dblens-service`：`Profile::in_catalog`、`Profile::scope`（SQL Server 为"连接 id + \u{1f} + 库名"）；元数据连接池和缓存按 scope 区分，`scope_of` 认前缀；`MetadataService::catalogs`；`Service::feature_profile`（M6b 的功能对 SQL Server 报 `sqlserver.later`），设计器、导入、文档导出、比对、迁移、模型的入口改用它；会话执行完执行计划后执行 `explain_cleanup`；`ChangeSet.catalog`（serde 默认值，表结构从该库读取）；注册表加 SQL Server；Cargo 特性 `sqlserver`。
 - `dblens-api`：元数据接口加 `?catalog=`，新接口 `GET /profiles/{id}/catalogs`。
 - 实库测试：`meta_live`（`fixtures/sqlserver.sql`）、`service/tests/live.rs` 的 `sqlserver_*`（流程、工作台、取消、对象、运维、导出、库和分批与 M6b 拦截、SQL 文件、编辑）、api 的 `sqlserver` 和 `sqlserver_catalogs`、迁移测试的分支；驱动一致性测试（含多结果集、影响行数、PRINT、取消后连接可用、Windows 认证）。
 - 后端词条加 `sqlserver.bad_auth`、`sqlserver.connection_lost`、`sqlserver.windows_auth_only`。
@@ -2801,6 +2801,7 @@ git commit -m "feat(dialect): SQL Server 家族（标识符、字面量、GO 分
 - Modify: `crates/dblens-driver/Cargo.toml`
 - Modify: `crates/dblens-driver/src/params.rs`
 - Modify: `crates/dblens-service/Cargo.toml`
+- Modify: `crates/dblens-service/src/changes.rs`
 - Modify: `crates/dblens-service/src/compare.rs`
 - Modify: `crates/dblens-service/src/design.rs`
 - Modify: `crates/dblens-service/src/document/job.rs`
@@ -5213,7 +5214,32 @@ mod tests {
  encoding_rs_io.workspace = true
 ```
 
-- [ ] **Step 25: 修改 `crates/dblens-service/src/compare.rs`**
+- [ ] **Step 25: 修改 `crates/dblens-service/src/changes.rs`**
+
+```diff
+--- a/crates/dblens-service/src/changes.rs
++++ b/crates/dblens-service/src/changes.rs
+@@ -11,6 +11,9 @@ use crate::session::{ApplyOutcome, SessionId};
+ /// 前端提交的改动集。
+ #[derive(Debug, Clone, PartialEq, Deserialize)]
+ pub struct ChangeSet {
++    /// 所在的库（SQL Server）：表结构从这个库读取。
++    #[serde(default)]
++    pub catalog: Option<String>,
+     pub schema: String,
+     pub table: String,
+     pub changes: Vec<RowChange>,
+@@ -18,6 +21,7 @@ pub struct ChangeSet {
+ 
+ impl Service {
+     async fn change_statements(&self, profile: &Profile, set: &ChangeSet) -> Result<Vec<ChangeStatement>> {
++        let profile = &profile.in_catalog(set.catalog.as_deref());
+         let dialect = self.metadata.dialect(profile).await?;
+         let table = self
+             .metadata
+```
+
+- [ ] **Step 26: 修改 `crates/dblens-service/src/compare.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/compare.rs
@@ -5229,7 +5255,7 @@ mod tests {
                  let args = MetaArgs { schema: Some(schema.clone()), ..Default::default() };
 ```
 
-- [ ] **Step 26: 修改 `crates/dblens-service/src/design.rs`**
+- [ ] **Step 27: 修改 `crates/dblens-service/src/design.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/design.rs
@@ -5254,7 +5280,7 @@ mod tests {
          if let Some(name) = &req.name {
 ```
 
-- [ ] **Step 27: 修改 `crates/dblens-service/src/document/job.rs`**
+- [ ] **Step 28: 修改 `crates/dblens-service/src/document/job.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/document/job.rs
@@ -5270,7 +5296,7 @@ mod tests {
                  for key in MetaKey::TABLE_DETAIL.into_iter().chain([MetaKey::Views]) {
 ```
 
-- [ ] **Step 28: 修改 `crates/dblens-service/src/import/job.rs`**
+- [ ] **Step 29: 修改 `crates/dblens-service/src/import/job.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/import/job.rs
@@ -5295,7 +5321,7 @@ mod tests {
          let (table, create_sql) = match &req.create {
 ```
 
-- [ ] **Step 29: 修改 `crates/dblens-service/src/metadata.rs`**
+- [ ] **Step 30: 修改 `crates/dblens-service/src/metadata.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/metadata.rs
@@ -5419,7 +5445,7 @@ mod tests {
          meta::schemas(&*self.rows_or_empty(profile, MetaKey::Schemas, &args).await?)
 ```
 
-- [ ] **Step 30: 修改 `crates/dblens-service/src/migrate/mod.rs`**
+- [ ] **Step 31: 修改 `crates/dblens-service/src/migrate/mod.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/migrate/mod.rs
@@ -5448,7 +5474,7 @@ mod tests {
          let source_password = self.secrets.get(&source.id)?.unwrap_or_default();
 ```
 
-- [ ] **Step 31: 修改 `crates/dblens-service/src/model/ops.rs`**
+- [ ] **Step 32: 修改 `crates/dblens-service/src/model/ops.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/model/ops.rs
@@ -5464,7 +5490,7 @@ mod tests {
          }
 ```
 
-- [ ] **Step 32: 修改 `crates/dblens-service/src/profile.rs`**
+- [ ] **Step 33: 修改 `crates/dblens-service/src/profile.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/profile.rs
@@ -5531,7 +5557,7 @@ mod tests {
          }
 ```
 
-- [ ] **Step 33: 修改 `crates/dblens-service/src/registry.rs`**
+- [ ] **Step 34: 修改 `crates/dblens-service/src/registry.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/registry.rs
@@ -5584,7 +5610,7 @@ mod tests {
  
 ```
 
-- [ ] **Step 34: 修改 `crates/dblens-service/src/service.rs`**
+- [ ] **Step 35: 修改 `crates/dblens-service/src/service.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/service.rs
@@ -5619,7 +5645,7 @@ mod tests {
          let p = self.store.create_profile(input)?;
 ```
 
-- [ ] **Step 35: 修改 `crates/dblens-service/src/session.rs`**
+- [ ] **Step 36: 修改 `crates/dblens-service/src/session.rs`**
 
 ```diff
 --- a/crates/dblens-service/src/session.rs
@@ -5640,7 +5666,7 @@ mod tests {
                  Err(Error::Cancelled) => Outcome::Cancelled,
 ```
 
-- [ ] **Step 36: 修改 `vendor/PATCHES.md`**
+- [ ] **Step 37: 修改 `vendor/PATCHES.md`**
 
 ```diff
 --- a/vendor/PATCHES.md
@@ -5680,11 +5706,11 @@ mod tests {
 +4. 运行 `CARGO_TARGET_DIR=target cargo test --manifest-path vendor/postgres-protocol/Cargo.toml --lib authentication`（构建目录用工作区的 `target`，不要在 vendor 下生成），再用 `DBLENS_TEST_OPENGAUSS_SHA_URL` 跑 PG 驱动的一致性测试；tiberius 用 `DBLENS_TEST_SQLSERVER_URL` 跑 SQL Server 驱动的一致性测试（其中多结果集、影响行数和 PRINT 消息的用例覆盖补丁）。
 ```
 
-- [ ] **Step 37: 更新锁文件**
+- [ ] **Step 38: 更新锁文件**
 
 `cargo build` 会更新 `Cargo.lock`。
 
-- [ ] **Step 38: 检查**
+- [ ] **Step 39: 检查**
 
 ```bash
 export CARGO_INCREMENTAL=0
@@ -5716,10 +5742,10 @@ Windows 认证（设计文档 10 节，只能在 Windows 上运行）：Win11 �
 
 Expected: 全部测试通过；SQL Server 的实库测试（驱动一致性、元数据、服务、接口）全部通过；回归无失败。
 
-- [ ] **Step 39: 提交**
+- [ ] **Step 40: 提交**
 
 ```bash
-git add Cargo.lock Cargo.toml crates/dblens-api/src/lib.rs crates/dblens-api/src/routes.rs crates/dblens-api/tests/live.rs crates/dblens-core/locales/app.json crates/dblens-dialect/Cargo.toml crates/dblens-dialect/src/variant.rs crates/dblens-dialect/tests/fixtures/sqlserver.sql crates/dblens-dialect/tests/meta_live.rs crates/dblens-driver-sqlserver/Cargo.toml crates/dblens-driver-sqlserver/src/actor.rs crates/dblens-driver-sqlserver/src/conn.rs crates/dblens-driver-sqlserver/src/error.rs crates/dblens-driver-sqlserver/src/exec.rs crates/dblens-driver-sqlserver/src/lib.rs crates/dblens-driver-sqlserver/src/types.rs crates/dblens-driver-sqlserver/tests/conformance.rs crates/dblens-driver/Cargo.toml crates/dblens-driver/src/params.rs crates/dblens-service/Cargo.toml crates/dblens-service/src/compare.rs crates/dblens-service/src/design.rs crates/dblens-service/src/document/job.rs crates/dblens-service/src/import/job.rs crates/dblens-service/src/metadata.rs crates/dblens-service/src/migrate/mod.rs crates/dblens-service/src/model/ops.rs crates/dblens-service/src/profile.rs crates/dblens-service/src/registry.rs crates/dblens-service/src/service.rs crates/dblens-service/src/session.rs crates/dblens-service/tests/live.rs crates/dblens-service/tests/migrate_live.rs vendor/PATCHES.md vendor/tiberius
+git add Cargo.lock Cargo.toml crates/dblens-api/src/lib.rs crates/dblens-api/src/routes.rs crates/dblens-api/tests/live.rs crates/dblens-core/locales/app.json crates/dblens-dialect/Cargo.toml crates/dblens-dialect/src/variant.rs crates/dblens-dialect/tests/fixtures/sqlserver.sql crates/dblens-dialect/tests/meta_live.rs crates/dblens-driver-sqlserver/Cargo.toml crates/dblens-driver-sqlserver/src/actor.rs crates/dblens-driver-sqlserver/src/conn.rs crates/dblens-driver-sqlserver/src/error.rs crates/dblens-driver-sqlserver/src/exec.rs crates/dblens-driver-sqlserver/src/lib.rs crates/dblens-driver-sqlserver/src/types.rs crates/dblens-driver-sqlserver/tests/conformance.rs crates/dblens-driver/Cargo.toml crates/dblens-driver/src/params.rs crates/dblens-service/Cargo.toml crates/dblens-service/src/changes.rs crates/dblens-service/src/compare.rs crates/dblens-service/src/design.rs crates/dblens-service/src/document/job.rs crates/dblens-service/src/import/job.rs crates/dblens-service/src/metadata.rs crates/dblens-service/src/migrate/mod.rs crates/dblens-service/src/model/ops.rs crates/dblens-service/src/profile.rs crates/dblens-service/src/registry.rs crates/dblens-service/src/service.rs crates/dblens-service/src/session.rs crates/dblens-service/tests/live.rs crates/dblens-service/tests/migrate_live.rs vendor/PATCHES.md vendor/tiberius
 git commit -m "feat: SQL Server 驱动（tiberius）、按库浏览元数据、M6b 功能拦截" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
@@ -5727,7 +5753,7 @@ git commit -m "feat: SQL Server 驱动（tiberius）、按库浏览元数据、M
 
 ### Task 4: 前端：连接、库树、T-SQL 编辑器、M6b 入口置灰
 
-- `shared/api.ts`：`DriverId` 加 `sqlserver`；库名和架构合成一个字符串在各处传递：`joinCatalog`、`splitCatalog`、`schemaLabel`（给人看的 `库.架构`）、`sessionSchema`（SQL Server 的会话"当前 schema"是库）、`exportSource`（三段名的 SELECT）、`supportsWrites`；元数据方法带 `catalog`，`catalogs()`；改动集带 `catalog`（后端 `ChangeSet.catalog`，serde 默认值）。
+- `shared/api.ts`：`DriverId` 加 `sqlserver`；库名和架构合成一个字符串在各处传递：`joinCatalog`、`splitCatalog`、`schemaLabel`（给人看的 `库.架构`）、`sessionSchema`（SQL Server 的会话"当前 schema"是库）、`exportSource`（三段名的 SELECT）、`supportsWrites`；元数据方法带 `catalog`，`catalogs()`；改动集带 `catalog`（后端在任务 3）。
 - 连接：产品列表、图标（MS，`#cc2927`）、认证方式（SQL 账号 / Windows 账号 / 当前 Windows 用户，附说明）、实例名、信任服务器证书；`needsCredentials`。
 - 树：库节点 `d`、系统分组 `g` 带库；右键菜单中 M6b 的项置灰并提示（`writable`、`later` 写成函数声明，菜单在渲染时就调用它们）；DDL 对话框和只读 ER 图的标题用 `schemaLabel`；ER 图按架构名比较外键目标。
 - 编辑器：`sql` 语言、`transactsql` 格式化；工具栏的库下拉框；执行前 `USE [库]`；数据标签、行数统计、SQL 文件对话框按库执行。
@@ -5737,7 +5763,6 @@ git commit -m "feat: SQL Server 驱动（tiberius）、按库浏览元数据、M
 **Files:**
 - Create（下载，见下）：`web/grammars/tsql/TSqlLexer.g4`、`web/grammars/tsql/TSqlParser.g4`
 - Modify: `.gitignore`
-- Modify: `crates/dblens-service/src/changes.rs`
 - Create: `web/grammars/tsql/README.md`
 - Modify: `web/package.json`
 - Create: `web/scripts/gen-tsql.mjs`
@@ -6136,32 +6161,7 @@ describe('T-SQL 补全', () => {
  # tauri-build 按 build.rs 中的命令列表自动生成的权限定义
 ```
 
-- [ ] **Step 11: 修改 `crates/dblens-service/src/changes.rs`**
-
-```diff
---- a/crates/dblens-service/src/changes.rs
-+++ b/crates/dblens-service/src/changes.rs
-@@ -11,6 +11,9 @@ use crate::session::{ApplyOutcome, SessionId};
- /// 前端提交的改动集。
- #[derive(Debug, Clone, PartialEq, Deserialize)]
- pub struct ChangeSet {
-+    /// 所在的库（SQL Server）：表结构从这个库读取。
-+    #[serde(default)]
-+    pub catalog: Option<String>,
-     pub schema: String,
-     pub table: String,
-     pub changes: Vec<RowChange>,
-@@ -18,6 +21,7 @@ pub struct ChangeSet {
- 
- impl Service {
-     async fn change_statements(&self, profile: &Profile, set: &ChangeSet) -> Result<Vec<ChangeStatement>> {
-+        let profile = &profile.in_catalog(set.catalog.as_deref());
-         let dialect = self.metadata.dialect(profile).await?;
-         let table = self
-             .metadata
-```
-
-- [ ] **Step 12: 新建 `web/grammars/tsql/README.md`**
+- [ ] **Step 11: 新建 `web/grammars/tsql/README.md`**
 
 ```markdown
 # T-SQL 语法（SQL Server）
@@ -6177,7 +6177,7 @@ describe('T-SQL 补全', () => {
 更新上游版本：按依赖原则（只取发布满 7 天的提交），替换这两个文件并更新上面的提交号。
 ```
 
-- [ ] **Step 13: 修改 `web/package.json`**
+- [ ] **Step 12: 修改 `web/package.json`**
 
 ```diff
 --- a/web/package.json
@@ -6201,7 +6201,7 @@ describe('T-SQL 补全', () => {
    },
 ```
 
-- [ ] **Step 14: 新建 `web/scripts/gen-tsql.mjs`**
+- [ ] **Step 13: 新建 `web/scripts/gen-tsql.mjs`**
 
 ```js
 // 生成 T-SQL 解析器（SQL Server；M6a 设计文档第 8 节）：grammars/tsql 中的上游语法，原样用 antlr-ng 生成 TypeScript
@@ -6255,7 +6255,7 @@ function main() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) main()
 ```
 
-- [ ] **Step 15: 修改 `web/src/features/compare/CompareView.tsx`**
+- [ ] **Step 14: 修改 `web/src/features/compare/CompareView.tsx`**
 
 ```diff
 --- a/web/src/features/compare/CompareView.tsx
@@ -6279,7 +6279,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
        <Select
 ```
 
-- [ ] **Step 16: 修改 `web/src/features/connections/ConnectionDialog.tsx`**
+- [ ] **Step 15: 修改 `web/src/features/connections/ConnectionDialog.tsx`**
 
 ```diff
 --- a/web/src/features/connections/ConnectionDialog.tsx
@@ -6365,7 +6365,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
            <Input value={form.oracleSid} onChange={(e) => set('oracleSid', e.target.value)} placeholder={t('connections.advanced.sidPlaceholder')} />
 ```
 
-- [ ] **Step 17: 修改 `web/src/features/connections/form.ts`**
+- [ ] **Step 16: 修改 `web/src/features/connections/form.ts`**
 
 ```diff
 --- a/web/src/features/connections/form.ts
@@ -6476,7 +6476,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
    }
 ```
 
-- [ ] **Step 18: 修改 `web/src/features/connections/products.ts`**
+- [ ] **Step 17: 修改 `web/src/features/connections/products.ts`**
 
 ```diff
 --- a/web/src/features/connections/products.ts
@@ -6499,7 +6499,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
  export function product(id: ProductId): Product {
 ```
 
-- [ ] **Step 19: 修改 `web/src/features/data/DataView.tsx`**
+- [ ] **Step 18: 修改 `web/src/features/data/DataView.tsx`**
 
 ```diff
 --- a/web/src/features/data/DataView.tsx
@@ -6563,7 +6563,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
              {t('editor.data.design')}
 ```
 
-- [ ] **Step 20: 修改 `web/src/features/data/count.ts`**
+- [ ] **Step 19: 修改 `web/src/features/data/count.ts`**
 
 ```diff
 --- a/web/src/features/data/count.ts
@@ -6589,7 +6589,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
      return await new Promise<string>((resolve, reject) => {
 ```
 
-- [ ] **Step 21: 修改 `web/src/features/editor/QueryView.tsx`**
+- [ ] **Step 20: 修改 `web/src/features/editor/QueryView.tsx`**
 
 ```diff
 --- a/web/src/features/editor/QueryView.tsx
@@ -6622,7 +6622,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
          : null,
 ```
 
-- [ ] **Step 22: 修改 `web/src/features/editor/Toolbar.tsx`**
+- [ ] **Step 21: 修改 `web/src/features/editor/Toolbar.tsx`**
 
 ```diff
 --- a/web/src/features/editor/Toolbar.tsx
@@ -6652,7 +6652,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
          disabled={rt.running}
 ```
 
-- [ ] **Step 23: 修改 `web/src/features/editor/dialect.ts`**
+- [ ] **Step 22: 修改 `web/src/features/editor/dialect.ts`**
 
 ```diff
 --- a/web/src/features/editor/dialect.ts
@@ -6699,7 +6699,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
  /** 变体的简短名称（状态栏、对象树用）；达梦的名称随界面语言。不认识的变体返回 undefined。 */
 ```
 
-- [ ] **Step 24: 修改 `web/src/features/editor/monaco.ts`**
+- [ ] **Step 23: 修改 `web/src/features/editor/monaco.ts`**
 
 ```diff
 --- a/web/src/features/editor/monaco.ts
@@ -6713,7 +6713,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
  import { loader } from '@monaco-editor/react'
 ```
 
-- [ ] **Step 25: 修改 `web/src/features/editor/runner.ts`**
+- [ ] **Step 24: 修改 `web/src/features/editor/runner.ts`**
 
 ```diff
 --- a/web/src/features/editor/runner.ts
@@ -6739,7 +6739,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
      this.socket = new ExecSocket(
 ```
 
-- [ ] **Step 26: 修改 `web/src/features/er/ErView.tsx`**
+- [ ] **Step 25: 修改 `web/src/features/er/ErView.tsx`**
 
 ```diff
 --- a/web/src/features/er/ErView.tsx
@@ -6764,7 +6764,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
        <div className="row toolbar" style={{ gap: 6, flexWrap: 'wrap' }}>
 ```
 
-- [ ] **Step 27: 修改 `web/src/features/er/graph.ts`**
+- [ ] **Step 26: 修改 `web/src/features/er/graph.ts`**
 
 ```diff
 --- a/web/src/features/er/graph.ts
@@ -6793,7 +6793,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
    const edges: ErEdge[] = []
 ```
 
-- [ ] **Step 28: 修改 `web/src/features/import/SqlFileDialog.tsx`**
+- [ ] **Step 27: 修改 `web/src/features/import/SqlFileDialog.tsx`**
 
 ```diff
 --- a/web/src/features/import/SqlFileDialog.tsx
@@ -6830,7 +6830,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
    const submit = async () => {
 ```
 
-- [ ] **Step 29: 修改 `web/src/features/migrate/MigrateView.tsx`**
+- [ ] **Step 28: 修改 `web/src/features/migrate/MigrateView.tsx`**
 
 ```diff
 --- a/web/src/features/migrate/MigrateView.tsx
@@ -6854,7 +6854,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
          size="small"
 ```
 
-- [ ] **Step 30: 修改 `web/src/features/model/ModelDialogs.tsx`**
+- [ ] **Step 29: 修改 `web/src/features/model/ModelDialogs.tsx`**
 
 ```diff
 --- a/web/src/features/model/ModelDialogs.tsx
@@ -6879,7 +6879,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
          <Form.Item label={t('model.dialog.schemas')}>
 ```
 
-- [ ] **Step 31: 修改 `web/src/features/sql/completion.ts`**
+- [ ] **Step 30: 修改 `web/src/features/sql/completion.ts`**
 
 ```diff
 --- a/web/src/features/sql/completion.ts
@@ -6904,7 +6904,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
  
 ```
 
-- [ ] **Step 32: 修改 `web/src/features/sql/dialects.ts`**
+- [ ] **Step 31: 修改 `web/src/features/sql/dialects.ts`**
 
 ```diff
 --- a/web/src/features/sql/dialects.ts
@@ -6932,7 +6932,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
  }
 ```
 
-- [ ] **Step 33: 修改 `web/src/features/sql/functions.ts`**
+- [ ] **Step 32: 修改 `web/src/features/sql/functions.ts`**
 
 ```diff
 --- a/web/src/features/sql/functions.ts
@@ -6957,7 +6957,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
  export function builtinFunctions(d: Dialect): string[] {
 ```
 
-- [ ] **Step 34: 修改 `web/src/features/sql/metadata.ts`**
+- [ ] **Step 33: 修改 `web/src/features/sql/metadata.ts`**
 
 ```diff
 --- a/web/src/features/sql/metadata.ts
@@ -7064,7 +7064,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
  }
 ```
 
-- [ ] **Step 35: 修改 `web/src/features/sql/parsers.ts`**
+- [ ] **Step 34: 修改 `web/src/features/sql/parsers.ts`**
 
 ```diff
 --- a/web/src/features/sql/parsers.ts
@@ -7088,7 +7088,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
      p.catch(() => loaded.delete(d))
 ```
 
-- [ ] **Step 36: 修改 `web/src/features/sql/provider.ts`**
+- [ ] **Step 35: 修改 `web/src/features/sql/provider.ts`**
 
 ```diff
 --- a/web/src/features/sql/provider.ts
@@ -7108,7 +7108,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) main()
  }
 ```
 
-- [ ] **Step 37: 新建 `web/src/features/sql/tsql/parser.ts`**
+- [ ] **Step 36: 新建 `web/src/features/sql/tsql/parser.ts`**
 
 ```ts
 // SQL Server 的语言服务（M6a 设计文档第 8 节）：grammars-v4 的 T-SQL 语法生成的解析器，加 antlr4-c3 分析光标处
@@ -7411,7 +7411,7 @@ export const tsql: SqlParser = {
 }
 ```
 
-- [ ] **Step 38: 修改 `web/src/features/sql/types.ts`**
+- [ ] **Step 37: 修改 `web/src/features/sql/types.ts`**
 
 ```diff
 --- a/web/src/features/sql/types.ts
@@ -7428,7 +7428,7 @@ export const tsql: SqlParser = {
  export type ParserLocale = 'zh_CN' | 'en_US'
 ```
 
-- [ ] **Step 39: 修改 `web/src/features/tree/DdlDialog.tsx`**
+- [ ] **Step 38: 修改 `web/src/features/tree/DdlDialog.tsx`**
 
 ```diff
 --- a/web/src/features/tree/DdlDialog.tsx
@@ -7453,7 +7453,7 @@ export const tsql: SqlParser = {
          <Button
 ```
 
-- [ ] **Step 40: 修改 `web/src/features/tree/ObjectTree.tsx`**
+- [ ] **Step 39: 修改 `web/src/features/tree/ObjectTree.tsx`**
 
 ```diff
 --- a/web/src/features/tree/ObjectTree.tsx
@@ -7624,7 +7624,7 @@ export const tsql: SqlParser = {
        }
 ```
 
-- [ ] **Step 41: 修改 `web/src/features/tree/nodes.ts`**
+- [ ] **Step 40: 修改 `web/src/features/tree/nodes.ts`**
 
 ```diff
 --- a/web/src/features/tree/nodes.ts
@@ -7734,7 +7734,7 @@ export const tsql: SqlParser = {
      case 'k':
 ```
 
-- [ ] **Step 42: 修改 `web/src/locales/en/connections.json`**
+- [ ] **Step 41: 修改 `web/src/locales/en/connections.json`**
 
 ```diff
 --- a/web/src/locales/en/connections.json
@@ -7792,7 +7792,7 @@ export const tsql: SqlParser = {
  }
 ```
 
-- [ ] **Step 43: 修改 `web/src/locales/en/editor.json`**
+- [ ] **Step 42: 修改 `web/src/locales/en/editor.json`**
 
 ```diff
 --- a/web/src/locales/en/editor.json
@@ -7809,7 +7809,7 @@ export const tsql: SqlParser = {
      "title": "Switch Connection",
 ```
 
-- [ ] **Step 44: 修改 `web/src/locales/en/tree.json`**
+- [ ] **Step 43: 修改 `web/src/locales/en/tree.json`**
 
 ```diff
 --- a/web/src/locales/en/tree.json
@@ -7826,7 +7826,7 @@ export const tsql: SqlParser = {
      "name": "{{name}} copy",
 ```
 
-- [ ] **Step 45: 修改 `web/src/locales/zh-CN/connections.json`**
+- [ ] **Step 44: 修改 `web/src/locales/zh-CN/connections.json`**
 
 ```diff
 --- a/web/src/locales/zh-CN/connections.json
@@ -7884,7 +7884,7 @@ export const tsql: SqlParser = {
  }
 ```
 
-- [ ] **Step 46: 修改 `web/src/locales/zh-CN/editor.json`**
+- [ ] **Step 45: 修改 `web/src/locales/zh-CN/editor.json`**
 
 ```diff
 --- a/web/src/locales/zh-CN/editor.json
@@ -7901,7 +7901,7 @@ export const tsql: SqlParser = {
      "title": "切换连接",
 ```
 
-- [ ] **Step 47: 修改 `web/src/locales/zh-CN/tree.json`**
+- [ ] **Step 46: 修改 `web/src/locales/zh-CN/tree.json`**
 
 ```diff
 --- a/web/src/locales/zh-CN/tree.json
@@ -7918,7 +7918,7 @@ export const tsql: SqlParser = {
      "name": "{{name}} 副本",
 ```
 
-- [ ] **Step 48: 修改 `web/src/shared/api.ts`**
+- [ ] **Step 47: 修改 `web/src/shared/api.ts`**
 
 ```diff
 --- a/web/src/shared/api.ts
@@ -8093,7 +8093,7 @@ export const tsql: SqlParser = {
        `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/api/sessions/${sessionId}/ws?token=${encodeURIComponent(token)}&lang=${currentLang()}`,
 ```
 
-- [ ] **Step 49: 修改 `web/src/shared/dbIcons.ts`**
+- [ ] **Step 48: 修改 `web/src/shared/dbIcons.ts`**
 
 ```diff
 --- a/web/src/shared/dbIcons.ts
@@ -8117,7 +8117,7 @@ export const tsql: SqlParser = {
  export function dbIcon(driver: DriverId, variant?: string | null): DbIconDef {
 ```
 
-- [ ] **Step 50: 检查**
+- [ ] **Step 49: 检查**
 
 ```bash
 export CARGO_INCREMENTAL=0
@@ -8134,7 +8134,7 @@ $env:PATH = "D:\Environments\nvm4w\nodejs;$env:PATH"; Set-Location web; pnpm ins
 
 Expected: 全部通过（前端新增 T-SQL 解析、库节点、ER 图的测试）。
 
-- [ ] **Step 51: 浏览器实测**
+- [ ] **Step 50: 浏览器实测**
 
 浏览器实测（设计文档 10 节）：用 `dblens-server --listen 127.0.0.1:<端口> --data-dir <临时目录> --web-dir web/dist --no-update-check` 启动浏览器模式，按 `DBLENS_TEST_SQLSERVER_URL` 建一个"生产"环境的 SQL Server 连接（可用接口 `POST /api/profiles`，驱动名 `sqlserver`）。
 1. 展开连接：列出各库，系统库标"系统"；展开 `dblens_test` → 架构 → 表。
@@ -8144,10 +8144,10 @@ Expected: 全部通过（前端新增 T-SQL 解析、库节点、ER 图的测试
 5. 右键架构和表：页面不崩溃，设计表、导入、比对、另存为模型、导出文档、迁移置灰；查看 DDL 的标题是 `库.架构.表`；"生成 SQL → INSERT"跳过计算列；ER 图画出外键连线、没有误报的图外引用。
 6. 运维的会话列表能执行；新建连接选 SQL Server：认证方式切换时用户名密码随之隐藏，SSL/TLS 页有"信任服务器证书"。
 
-- [ ] **Step 52: 提交**
+- [ ] **Step 51: 提交**
 
 ```bash
-git add .gitignore crates/dblens-service/src/changes.rs web/grammars/tsql/README.md web/grammars/tsql/TSqlLexer.g4 web/grammars/tsql/TSqlParser.g4 web/package.json web/scripts/gen-tsql.mjs web/src/features/compare/CompareView.tsx web/src/features/connections/ConnectionDialog.tsx web/src/features/connections/form.test.ts web/src/features/connections/form.ts web/src/features/connections/products.ts web/src/features/data/DataView.tsx web/src/features/data/count.ts web/src/features/editor/QueryView.tsx web/src/features/editor/Toolbar.tsx web/src/features/editor/dialect.ts web/src/features/editor/monaco.ts web/src/features/editor/runner.ts web/src/features/er/ErView.tsx web/src/features/er/graph.test.ts web/src/features/er/graph.ts web/src/features/import/SqlFileDialog.tsx web/src/features/migrate/MigrateView.tsx web/src/features/model/ModelDialogs.tsx web/src/features/sql/completion.ts web/src/features/sql/dialects.test.ts web/src/features/sql/dialects.ts web/src/features/sql/functions.ts web/src/features/sql/metadata.test.ts web/src/features/sql/metadata.ts web/src/features/sql/parsers.ts web/src/features/sql/provider.ts web/src/features/sql/tsql/parser.test.ts web/src/features/sql/tsql/parser.ts web/src/features/sql/types.ts web/src/features/tree/DdlDialog.tsx web/src/features/tree/ObjectTree.tsx web/src/features/tree/nodes.test.ts web/src/features/tree/nodes.ts web/src/locales/en/connections.json web/src/locales/en/editor.json web/src/locales/en/tree.json web/src/locales/zh-CN/connections.json web/src/locales/zh-CN/editor.json web/src/locales/zh-CN/tree.json web/src/shared/api.test.ts web/src/shared/api.ts web/src/shared/dbIcons.test.ts web/src/shared/dbIcons.ts
+git add .gitignore web/grammars/tsql/README.md web/grammars/tsql/TSqlLexer.g4 web/grammars/tsql/TSqlParser.g4 web/package.json web/scripts/gen-tsql.mjs web/src/features/compare/CompareView.tsx web/src/features/connections/ConnectionDialog.tsx web/src/features/connections/form.test.ts web/src/features/connections/form.ts web/src/features/connections/products.ts web/src/features/data/DataView.tsx web/src/features/data/count.ts web/src/features/editor/QueryView.tsx web/src/features/editor/Toolbar.tsx web/src/features/editor/dialect.ts web/src/features/editor/monaco.ts web/src/features/editor/runner.ts web/src/features/er/ErView.tsx web/src/features/er/graph.test.ts web/src/features/er/graph.ts web/src/features/import/SqlFileDialog.tsx web/src/features/migrate/MigrateView.tsx web/src/features/model/ModelDialogs.tsx web/src/features/sql/completion.ts web/src/features/sql/dialects.test.ts web/src/features/sql/dialects.ts web/src/features/sql/functions.ts web/src/features/sql/metadata.test.ts web/src/features/sql/metadata.ts web/src/features/sql/parsers.ts web/src/features/sql/provider.ts web/src/features/sql/tsql/parser.test.ts web/src/features/sql/tsql/parser.ts web/src/features/sql/types.ts web/src/features/tree/DdlDialog.tsx web/src/features/tree/ObjectTree.tsx web/src/features/tree/nodes.test.ts web/src/features/tree/nodes.ts web/src/locales/en/connections.json web/src/locales/en/editor.json web/src/locales/en/tree.json web/src/locales/zh-CN/connections.json web/src/locales/zh-CN/editor.json web/src/locales/zh-CN/tree.json web/src/shared/api.test.ts web/src/shared/api.ts web/src/shared/dbIcons.test.ts web/src/shared/dbIcons.ts
 git commit -m "feat(web): SQL Server 连接、按库浏览、T-SQL 语法检查与补全、M6b 功能入口置灰" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
