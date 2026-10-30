@@ -115,9 +115,11 @@ export default function TitleBar() {
         side: ui.side,
       })
 
-  // 只有空白处（不是菜单和按钮）才拖动窗口
-  const onMouseDown = (e: MouseEvent) => {
-    if (!desktop || e.button !== 0 || (e.target as HTMLElement).closest('[data-no-drag]')) return
+  // 只有空白处（不是菜单和按钮）才拖动窗口。下拉菜单挂在 body 下，但事件会沿 React 树冒泡到这里，要排除
+  const onMouseDown = (e: MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement
+    if (!desktop || e.button !== 0 || !e.currentTarget.contains(target)) return
+    if (target.closest('[data-no-drag]')) return
     act(e.detail === 2 ? 'toggle_maximize' : 'start_dragging')
   }
 
