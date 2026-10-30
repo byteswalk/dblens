@@ -18,6 +18,7 @@ import {
   IconListNumbers,
   IconSchema,
   IconSearch,
+  IconStack2,
   IconTable,
 } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -35,7 +36,6 @@ import { emptyPlan } from '../migrate/plan'
 import { useModelDialogs } from '../model/dialogs'
 import {
   type Api,
-  type Environment,
   type Profile,
   type RoutineInfo,
   exportSource,
@@ -43,6 +43,7 @@ import {
   schemaLabel,
 } from '../../shared/api'
 import DbIcon from '../../shared/DbIcon'
+import EnvTag from '../../shared/EnvTag'
 import { profileKind } from '../connections/form'
 import { withVault } from '../connections/vault'
 import { metaKey } from '../sql/metadata'
@@ -85,20 +86,13 @@ interface Loaded {
   error?: string
 }
 
-const ENV_COLOR: Record<Environment, string> = {
-  none: 'var(--env-none)',
-  dev: 'var(--env-dev)',
-  test: 'var(--env-test)',
-  prod: 'var(--env-prod)',
-}
-
 const CATEGORY_ICON: Record<CategoryKind, ReactNode> = {
-  tables: <IconTable size={16} />,
-  views: <IconEye size={16} />,
-  materialized_views: <IconEye size={16} />,
-  routines: <IconFunction size={16} />,
-  sequences: <IconListNumbers size={16} />,
-  synonyms: <IconLink size={16} />,
+  tables: <IconTable size={16} className="ic-table" />,
+  views: <IconEye size={16} className="ic-view" />,
+  materialized_views: <IconStack2 size={16} className="ic-mview" />,
+  routines: <IconFunction size={16} className="ic-routine" />,
+  sequences: <IconListNumbers size={16} className="ic-sequence" />,
+  synonyms: <IconLink size={16} className="ic-synonym" />,
 }
 
 /** 按节点键取下一层。 */
@@ -261,7 +255,7 @@ export default function ObjectTree() {
       return items.map((i) => {
         const k = decodeKey(i.key)
         const icon =
-          k.type === 'd' ? <IconDatabase size={16} /> : k.type === 's' ? <IconSchema size={16} /> : k.type === 'g' || k.type === 'k' ? <IconFolder size={16} /> : k.type === 'o' ? CATEGORY_ICON[k.kind] : i.pk ? <IconKey size={16} color="var(--warn)" /> : <IconColumns size={16} />
+          k.type === 'd' ? <IconDatabase size={16} /> : k.type === 's' ? <IconSchema size={16} className="ic-schema" /> : k.type === 'g' ? <IconFolder size={16} /> : k.type === 'k' || k.type === 'o' ? CATEGORY_ICON[k.kind] : i.pk ? <IconKey size={16} color="var(--warn)" /> : <IconColumns size={16} />
         const label = k.type === 'k' ? categoryLabel(k.kind) : k.type === 'g' ? t('tree.node.system') : i.label
         const extra = i.routineKind ? routineKindLabel(i.routineKind) : i.extra === 'system' ? t('tree.node.system') : i.extra
         const count = k.type === 'k' && loaded[i.key] && !loaded[i.key].error ? loaded[i.key].items.length : null
@@ -289,11 +283,10 @@ export default function ObjectTree() {
         isLeaf: false,
         title: (
           <span>
-            <span className="dot" style={{ background: p.color || ENV_COLOR[env] }} />
             <DbIcon driver={p.driver} variant={profileKind(p).icon} />{' '}
             <b style={env === 'prod' ? { color: 'var(--danger)' } : undefined}>{p.name}</b>
-            {env !== 'none' && <span className={`env ${env}`}>{t(`tree.env.${env}`)}</span>}
             <span className="cm">{profileKind(p).label}</span>
+            <EnvTag env={env} />
           </span>
         ),
         children: build(key, 1),

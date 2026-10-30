@@ -17,17 +17,11 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
+import EnvTag from '../../shared/EnvTag'
 import type { Profile } from '../../shared/api'
 import { sendCommand } from './commands'
 import { type Runner, type TabRuntime, disposeRunner } from './runner'
 import { type QueryTab, useTabs } from './tabs'
-
-const ENV_COLORS: Record<string, string> = {
-  dev: 'var(--env-dev)',
-  test: 'var(--env-test)',
-  prod: 'var(--env-prod)',
-  none: 'var(--env-none)',
-}
 
 function IconBtn({ title, onClick, disabled, color, children }: {
   title: string
@@ -106,8 +100,8 @@ export default function Toolbar({ tab, rt, runner, profiles }: ToolbarProps) {
           value: p.id,
           label: (
             <span className="row" style={{ gap: 6 }}>
-              <span className="dot" style={{ background: ENV_COLORS[p.environment ?? 'none'] }} />
               {p.name}
+              <EnvTag env={p.environment} />
             </span>
           ),
         }))}

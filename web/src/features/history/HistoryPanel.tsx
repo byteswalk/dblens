@@ -9,17 +9,11 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import DbIcon from '../../shared/DbIcon'
+import EnvTag from '../../shared/EnvTag'
 import type { HistoryItem } from '../../shared/api'
 import { useQueryActions } from '../editor/actions'
 import { useFavoriteDialog } from '../favorites/dialog'
 import { PAGE, detail, firstLine, groupByDay } from './history'
-
-const ENV_COLORS: Record<string, string> = {
-  dev: 'var(--env-dev)',
-  test: 'var(--env-test)',
-  prod: 'var(--env-prod)',
-  none: 'var(--env-none)',
-}
 
 /** 输入停顿 ms 毫秒后才更新。 */
 function useDebounced<T>(value: T, ms: number): T {
@@ -144,9 +138,9 @@ export default function HistoryPanel() {
                       <div className="hist-item" onDoubleClick={() => insertSql(item.sql, item.profile_id)}>
                         <div className="hist-sql">{firstLine(item.sql)}</div>
                         <div className="row hist-meta">
-                          <span className="dot" style={{ background: ENV_COLORS[p?.environment ?? 'none'] }} />
                           <DbIcon driver={item.driver} variant={item.variant} />
                           <span className="hist-conn">{item.profile_name}</span>
+                          <EnvTag env={p?.environment} />
                           <span className="grow" />
                           <span>{detail(item)}</span>
                         </div>

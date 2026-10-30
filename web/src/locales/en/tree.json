@@ -17,6 +17,7 @@
     "system": "System"
   },
   "env": {
+    "none": "No env",
     "dev": "Dev",
     "test": "Test",
     "prod": "Prod"

@@ -31,7 +31,37 @@
   --fs-xs: 12px;
   --fs-mono: 13px;
 }
+:root {
+  color-scheme: light;
+  --scroll: #c8c8ce;
+  --scroll-hover: #a9a9b1;
+}
+/* 滚动条跟随界面主题（不跟随系统），否则亮色界面在暗色系统下是黑滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scroll);
+  border: 2px solid transparent;
+  border-radius: 5px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-hover);
+  background-clip: content-box;
+}
 :root[data-theme='dark'] {
+  color-scheme: dark;
+  --scroll: #4a4a52;
+  --scroll-hover: #62626c;
   --bg: #18181b;
   --panel: #1f1f23;
   --panel-2: #26262b;
@@ -317,33 +347,73 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tree .env {
+.env-tag {
+  display: inline-block;
   font-size: var(--fs-xs);
-  padding: 0 5px;
-  border-radius: 3px;
-  margin-left: 6px;
+  font-weight: 500;
+  padding: 0 6px;
+  border-radius: 4px;
+  margin-left: 8px;
   line-height: 18px;
+  white-space: nowrap;
+  color: var(--text-2);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
-.tree .env.dev {
+.env-tag.dev {
   color: var(--env-dev);
   background: var(--ok-bg);
+  box-shadow: none;
 }
-.tree .env.test {
+.env-tag.test {
   color: var(--warn);
   background: var(--warn-bg);
+  box-shadow: none;
 }
-.tree .env.prod {
+.env-tag.prod {
   color: var(--danger);
   background: var(--danger-bg);
-  font-weight: 600;
+  box-shadow: none;
 }
-.tree .dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin: 0 4px 0 2px;
-  vertical-align: 0;
+/* 对象树的图标：不同类型不同颜色 */
+.ic-schema {
+  color: var(--accent);
+}
+.ic-table {
+  color: #2f7fd6;
+}
+.ic-view {
+  color: #16998a;
+}
+.ic-mview {
+  color: #7a5bd1;
+}
+.ic-routine {
+  color: #d9822b;
+}
+.ic-sequence {
+  color: #3c9a4e;
+}
+.ic-synonym {
+  color: #c9558c;
+}
+[data-theme='dark'] .ic-table {
+  color: #6aa9ee;
+}
+[data-theme='dark'] .ic-view {
+  color: #4cc7b6;
+}
+[data-theme='dark'] .ic-mview {
+  color: #a78ff0;
+}
+[data-theme='dark'] .ic-routine {
+  color: #efa45c;
+}
+[data-theme='dark'] .ic-sequence {
+  color: #72c583;
+}
+[data-theme='dark'] .ic-synonym {
+  color: #e68ab4;
 }
 .tree .cm {
   color: var(--muted);
