@@ -516,6 +516,14 @@
     "zh-CN": "该条款不需要人工结论",
     "en": "This clause does not take a manual verdict"
   },
+  "lint.exception_duplicate": {
+    "zh-CN": "对象 %{object} 在这条条款下已有例外",
+    "en": "Object %{object} already has an exception for this clause"
+  },
+  "lint.exception_empty": {
+    "zh-CN": "例外的条款、对象和原因都不能为空",
+    "en": "An exception needs a clause, an object and a reason"
+  },
   "lint.fix.add_column": {
     "zh-CN": "增加该字段",
     "en": "Add the column"
@@ -635,6 +643,10 @@
   "lint.fix.varchar": {
     "zh-CN": "改用 VARCHAR",
     "en": "Use VARCHAR"
+  },
+  "lint.issue_missing": {
+    "zh-CN": "问题 %{object}",
+    "en": "Issue %{object}"
   },
   "lint.issue.all_nullable": {
     "zh-CN": "所有字段都可空",
@@ -844,6 +856,14 @@
     "zh-CN": "不是内置规范，不能恢复默认",
     "en": "Not a built-in ruleset; cannot reset"
   },
+  "lint.report.checked_at": {
+    "zh-CN": "检查时间",
+    "en": "Checked at"
+  },
+  "lint.report.checklist": {
+    "zh-CN": "自查表",
+    "en": "Checklist"
+  },
   "lint.report.clause": {
     "zh-CN": "条款",
     "en": "Clause"
@@ -852,9 +872,33 @@
     "zh-CN": "条款结论",
     "en": "Clause results"
   },
+  "lint.report.constraint": {
+    "zh-CN": "约束",
+    "en": "Constraint"
+  },
+  "lint.report.constraint_recommended": {
+    "zh-CN": "建议",
+    "en": "Recommended"
+  },
+  "lint.report.constraint_reference": {
+    "zh-CN": "参考",
+    "en": "Reference"
+  },
+  "lint.report.constraint_required": {
+    "zh-CN": "强制",
+    "en": "Required"
+  },
+  "lint.report.count": {
+    "zh-CN": "数量",
+    "en": "Count"
+  },
   "lint.report.generated": {
     "zh-CN": "生成时间",
     "en": "Generated"
+  },
+  "lint.report.item": {
+    "zh-CN": "检查项",
+    "en": "Check item"
   },
   "lint.report.issue_details": {
     "zh-CN": "问题明细",
@@ -876,6 +920,10 @@
     "zh-CN": "未发现问题",
     "en": "No issues found"
   },
+  "lint.report.no": {
+    "zh-CN": "序号",
+    "en": "No."
+  },
   "lint.report.object": {
     "zh-CN": "检查对象",
     "en": "Target"
@@ -887,6 +935,10 @@
   "lint.report.pass_rate": {
     "zh-CN": "条款通过率",
     "en": "Clause pass rate"
+  },
+  "lint.report.result": {
+    "zh-CN": "结果",
+    "en": "Result"
   },
   "lint.report.reason": {
     "zh-CN": "说明",
@@ -900,6 +952,14 @@
     "zh-CN": "所用规范",
     "en": "Ruleset"
   },
+  "lint.report.section": {
+    "zh-CN": "分类",
+    "en": "Category"
+  },
+  "lint.report.severity": {
+    "zh-CN": "级别",
+    "en": "Severity"
+  },
   "lint.report.suggestion": {
     "zh-CN": "建议",
     "en": "Suggestion"
@@ -911,6 +971,18 @@
   "lint.report.title": {
     "zh-CN": "数据库设计规范检查报告",
     "en": "Database Design Lint Report"
+  },
+  "lint.report.waive_reason": {
+    "zh-CN": "豁免原因",
+    "en": "Waiver reason"
+  },
+  "lint.report.waived": {
+    "zh-CN": "已豁免",
+    "en": "Waived"
+  },
+  "lint.report.waived_list": {
+    "zh-CN": "豁免清单",
+    "en": "Waiver list"
   },
   "lint.report.verdict": {
     "zh-CN": "结论",

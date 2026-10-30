@@ -6,33 +6,55 @@ use dblens_core::schema::Schema;
 use dblens_core::{Error, Result, current_lang, msg};
 use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_lint::{
-    LintInput, RuleInfo, Ruleset, apply, builtin, builtin_ids, check, diff, rule_infos, validate,
+    ClauseResult, Exception, LintInput, RuleInfo, Ruleset, apply, builtin, builtin_ids, check, diff,
+    rule_infos, validate,
 };
 
-use super::report;
+use super::report::{self, Report};
+use super::report_office;
 use super::{
-    ClauseMeta, LintRequest, LintRun, LintRunSummary, LintSource, ReviewInput, RulesetSummary, is_reviewable,
+    ClauseMeta, LintRequest, LintRun, LintRunSummary, LintSource, ReviewInput, RulesetSummary, WaiveInput,
+    is_reviewable,
 };
 use crate::service::Service;
 use crate::task::{TaskKind, TaskPhase};
 
-/// 报告格式。M7a 先支持 HTML。
+/// 报告格式。`Checklist` 是 Excel 的自查表。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReportFormat {
     Html,
+    Docx,
+    Xlsx,
+    Checklist,
 }
 
 impl ReportFormat {
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "html" => Some(Self::Html),
+            "docx" => Some(Self::Docx),
+            "xlsx" => Some(Self::Xlsx),
+            "checklist" => Some(Self::Checklist),
             _ => None,
         }
     }
 
-    fn ext(self) -> &'static str {
+    fn file_name(self, short: &str) -> String {
         match self {
-            Self::Html => "html",
+            Self::Html => format!("lint-report-{short}.html"),
+            Self::Docx => format!("lint-report-{short}.docx"),
+            Self::Xlsx => format!("lint-report-{short}.xlsx"),
+            Self::Checklist => format!("lint-checklist-{short}.xlsx"),
+        }
+    }
+
+    pub fn content_type(self) -> &'static str {
+        match self {
+            Self::Html => "text/html; charset=utf-8",
+            Self::Docx => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            Self::Xlsx | Self::Checklist => {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
         }
     }
 }
@@ -106,7 +128,7 @@ impl Service {
         if builtin_ids().iter().any(|b| b == id) {
             let base = builtin(id, lang).expect("内置编号必然存在");
             let overrides = diff(&base, &set);
-            if overrides.clauses.is_empty() {
+            if overrides.is_empty() {
                 self.store.delete_lint_overrides(id)?;
             } else {
                 self.store.save_lint_overrides(id, &base.name, &overrides)?;
@@ -180,6 +202,45 @@ impl Service {
             return Err(Error::invalid(msg!("lint.clause_not_reviewable")));
         }
         result.review = Some(dblens_lint::Review { verdict: input.verdict, note: input.note });
+        self.store.save_lint_run(&run)?;
+        Ok(run)
+    }
+
+    /// 豁免一个对象：写进规范，对这次结果立即生效，以后的检查也跳过它。
+    pub fn waive_lint_issue(&self, run_id: &str, clause: &str, input: WaiveInput) -> Result<LintRun> {
+        let reason = input.reason.trim();
+        if reason.is_empty() {
+            return Err(Error::invalid(msg!("lint.exception_empty")));
+        }
+        let mut run = self.store.lint_run_record(run_id)?;
+        if !lint_clause_mut(&mut run, clause)?.waive(&input.object, reason) {
+            return Err(Error::not_found(msg!("lint.issue_missing", object = input.object)));
+        }
+        let mut set = self.lint_ruleset(&run.ruleset_id)?;
+        set.exceptions.push(Exception {
+            clause: clause.to_string(),
+            object: input.object,
+            reason: reason.to_string(),
+        });
+        self.update_lint_ruleset(&run.ruleset_id, set)?;
+        self.store.save_lint_run(&run)?;
+        Ok(run)
+    }
+
+    /// 撤销豁免：从规范里删掉例外，恢复这次结果里的问题。规范已删除时只恢复结果。
+    pub fn unwaive_lint_issue(&self, run_id: &str, clause: &str, object: &str) -> Result<LintRun> {
+        let mut run = self.store.lint_run_record(run_id)?;
+        if !lint_clause_mut(&mut run, clause)?.unwaive(object) {
+            return Err(Error::not_found(msg!("lint.issue_missing", object = object)));
+        }
+        match self.lint_ruleset(&run.ruleset_id) {
+            Ok(mut set) => {
+                set.exceptions.retain(|e| !(e.clause == clause && e.object == object));
+                self.update_lint_ruleset(&run.ruleset_id, set)?;
+            }
+            Err(Error::NotFound { .. }) => {}
+            Err(e) => return Err(e),
+        }
         self.store.save_lint_run(&run)?;
         Ok(run)
     }
@@ -295,12 +356,21 @@ impl Service {
         format: ReportFormat,
     ) -> Result<(Vec<u8>, String)> {
         let run = self.store.lint_run_record(run_id)?;
-        let lang = current_lang();
+        let report = Report::new(&run, reviewer.as_deref(), current_lang());
         let bytes = match format {
-            ReportFormat::Html => report::html(&run, reviewer.as_deref(), lang)?.into_bytes(),
+            ReportFormat::Html => report::html(&report)?.into_bytes(),
+            ReportFormat::Docx => report_office::docx(&report)?,
+            ReportFormat::Xlsx => report_office::xlsx(&report)?,
+            ReportFormat::Checklist => report_office::checklist(&report)?,
         };
         let short: String = run.id.chars().take(8).collect();
-        let name = format!("lint-report-{short}.{}", format.ext());
-        Ok((bytes, name))
+        Ok((bytes, format.file_name(&short)))
     }
+}
+
+fn lint_clause_mut<'a>(run: &'a mut LintRun, clause: &str) -> Result<&'a mut ClauseResult> {
+    run.results
+        .iter_mut()
+        .find(|r| r.clause == clause)
+        .ok_or_else(|| Error::not_found(msg!("lint.run_missing", id = clause)))
 }

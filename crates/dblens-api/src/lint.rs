@@ -1,4 +1,4 @@
-//! 设计规范检查的接口（M7a）。规范库、发起检查、人工结论、导出报告。
+//! 设计规范检查的接口（M7a、M7b）。规范库、发起检查、人工结论、例外、导出报告。
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -6,7 +6,9 @@ use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use dblens_core::{Error, msg};
 use dblens_lint::{RuleInfo, Ruleset};
-use dblens_service::{LintRequest, LintRun, LintRunSummary, ReportFormat, ReviewInput, RulesetSummary};
+use dblens_service::{
+    LintRequest, LintRun, LintRunSummary, ReportFormat, ReviewInput, RulesetSummary, WaiveInput,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -108,6 +110,27 @@ pub async fn review(
     Ok(Json(s.service.review_lint_clause(&id, &clause, input)?))
 }
 
+pub async fn waive(
+    State(s): State<AppState>,
+    Path((id, clause)): Path<(String, String)>,
+    Json(input): Json<WaiveInput>,
+) -> ApiResult<Json<LintRun>> {
+    Ok(Json(s.service.waive_lint_issue(&id, &clause, input)?))
+}
+
+#[derive(Deserialize)]
+pub struct UnwaiveQuery {
+    object: String,
+}
+
+pub async fn unwaive(
+    State(s): State<AppState>,
+    Path((id, clause)): Path<(String, String)>,
+    Query(q): Query<UnwaiveQuery>,
+) -> ApiResult<Json<LintRun>> {
+    Ok(Json(s.service.unwaive_lint_issue(&id, &clause, &q.object)?))
+}
+
 #[derive(Deserialize)]
 pub struct ReportQuery {
     #[serde(default)]
@@ -128,7 +151,7 @@ pub async fn report(
     let disposition = format!("attachment; filename=\"{name}\"");
     Ok((
         [
-            (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
+            (header::CONTENT_TYPE, format.content_type().to_string()),
             (header::CONTENT_DISPOSITION, disposition),
         ],
         bytes,

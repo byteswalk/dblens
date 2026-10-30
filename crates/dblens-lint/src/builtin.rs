@@ -77,6 +77,7 @@ fn build(r: &RawRuleset, lang: Lang) -> Ruleset {
                 rules: c.rules.clone(),
             })
             .collect(),
+        exceptions: vec![],
     }
 }
 
@@ -108,11 +109,20 @@ pub struct ClausePatch {
 pub struct Overrides {
     #[serde(default)]
     pub clauses: BTreeMap<String, ClausePatch>,
+    /// 内置规范没有默认例外，所以用户的例外全部算差异。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exceptions: Vec<crate::model::Exception>,
+}
+
+impl Overrides {
+    pub fn is_empty(&self) -> bool {
+        self.clauses.is_empty() && self.exceptions.is_empty()
+    }
 }
 
 /// 比较编辑后的规范和内置默认值，得出差异。未知条款（内置里没有的）忽略。
 pub fn diff(base: &Ruleset, edited: &Ruleset) -> Overrides {
-    let mut overrides = Overrides::default();
+    let mut overrides = Overrides { exceptions: edited.exceptions.clone(), ..Default::default() };
     for ec in &edited.clauses {
         let Some(bc) = base.clauses.iter().find(|c| c.id == ec.id) else { continue };
         let mut patch = ClausePatch::default();
@@ -136,6 +146,7 @@ pub fn diff(base: &Ruleset, edited: &Ruleset) -> Overrides {
 
 /// 把差异套回内置默认值。这样新版新增的条款也会带上。
 pub fn apply(mut base: Ruleset, overrides: &Overrides) -> Ruleset {
+    base.exceptions = overrides.exceptions.clone();
     for clause in &mut base.clauses {
         let Some(patch) = overrides.clauses.get(&clause.id) else { continue };
         if let Some(enabled) = patch.enabled {
@@ -206,6 +217,21 @@ mod tests {
         assert_eq!(rebuilt.clauses[0].enabled, edited.clauses[0].enabled);
         assert_eq!(rebuilt.clauses[0].severity, Severity::Info);
         assert!(diff(&base, &base).clauses.is_empty());
+    }
+
+    #[test]
+    fn exceptions_round_trip_through_overrides() {
+        let base = builtin("general", Lang::ZhCn).unwrap();
+        let mut edited = base.clone();
+        edited.exceptions.push(crate::model::Exception {
+            clause: "table.comment".into(),
+            object: "t".into(),
+            reason: "why".into(),
+        });
+        let overrides = diff(&base, &edited);
+        assert!(!overrides.is_empty() && overrides.clauses.is_empty());
+        assert_eq!(apply(base.clone(), &overrides).exceptions, edited.exceptions);
+        assert!(diff(&base, &base).is_empty());
     }
 
     #[test]

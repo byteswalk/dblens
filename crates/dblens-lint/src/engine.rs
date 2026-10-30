@@ -4,7 +4,7 @@ use dblens_core::schema::Schema;
 use dblens_core::{Lang, msg};
 use dblens_dialect::Family;
 
-use crate::model::{Clause, ClauseResult, Issue, RuleRef, Ruleset, Verdict};
+use crate::model::{Clause, ClauseResult, CleanVerdict, Exception, Issue, RuleRef, Ruleset, Verdict};
 use crate::rules::{self, Ctx, Outcome};
 
 /// 一次检查的输入。模型文件只有表，`objects_known` 为 false，
@@ -41,7 +41,7 @@ pub fn check(
         .filter(|c| c.enabled)
         .map(|c| {
             on_clause();
-            check_clause(&ctx, c, lang)
+            check_clause(&ctx, c, &ruleset.exceptions, lang)
         })
         .collect()
 }
@@ -50,13 +50,15 @@ fn applies(rule: &RuleRef, family: Family) -> bool {
     rule.databases.is_empty() || rule.databases.iter().any(|d| d == "all" || d == family_key(family))
 }
 
-fn check_clause(ctx: &Ctx, clause: &Clause, lang: Lang) -> ClauseResult {
+fn check_clause(ctx: &Ctx, clause: &Clause, exceptions: &[Exception], lang: Lang) -> ClauseResult {
     let note = clause.manual_note.clone().filter(|n| !n.trim().is_empty());
     let mut result = ClauseResult {
         clause: clause.id.clone(),
         verdict: Verdict::Manual,
         reason: note.clone(),
         issues: vec![],
+        waived: vec![],
+        clean: None,
         review: None,
     };
     if clause.rules.is_empty() {
@@ -87,23 +89,20 @@ fn check_clause(ctx: &Ctx, clause: &Clause, lang: Lang) -> ClauseResult {
         }
     }
     // 判定顺序：未通过 → 全部不涉及 → 无法判断 → 待人工确认 → 通过
-    result.verdict = if !result.issues.is_empty() {
-        Verdict::Fail
-    } else if all_skipped {
-        Verdict::NotApplicable
+    let (verdict, reason) = if all_skipped {
+        (Verdict::NotApplicable, Some(msg!("lint.not_applicable").render(lang)))
     } else if unknown.is_some() {
-        Verdict::Unknown
+        (Verdict::Unknown, unknown)
     } else if note.is_some() {
-        Verdict::Manual
+        (Verdict::Manual, note)
     } else {
-        Verdict::Pass
+        (Verdict::Pass, None)
     };
-    result.reason = match result.verdict {
-        Verdict::Unknown => unknown,
-        Verdict::Manual => note,
-        Verdict::NotApplicable => Some(msg!("lint.not_applicable").render(lang)),
-        _ => None,
-    };
+    result.clean = Some(CleanVerdict { verdict, reason });
+    for e in exceptions.iter().filter(|e| e.clause == clause.id) {
+        result.waive(&e.object, &e.reason);
+    }
+    result.settle();
     result
 }
 
@@ -141,7 +140,13 @@ mod tests {
     }
 
     fn verdict(tables: Vec<Table>, c: Clause) -> ClauseResult {
-        let set = Ruleset { id: "r".into(), name: "r".into(), builtin: false, clauses: vec![c] };
+        let set = Ruleset {
+            id: "r".into(),
+            name: "r".into(),
+            builtin: false,
+            clauses: vec![c],
+            exceptions: vec![],
+        };
         check(&input(tables), &set, Lang::En, || {}).remove(0)
     }
 
@@ -199,9 +204,43 @@ mod tests {
             name: "r".into(),
             builtin: false,
             clauses: vec![off, clause(vec![], None)],
+            exceptions: vec![],
         };
         let mut seen = 0;
         let results = check(&input(vec![]), &set, Lang::En, || seen += 1);
         assert_eq!((results.len(), seen), (1, 1));
+    }
+
+    fn with_exception(object: &str, c: Clause) -> ClauseResult {
+        let exception = Exception { clause: "c".into(), object: object.into(), reason: "why".into() };
+        let set = Ruleset {
+            id: "r".into(),
+            name: "r".into(),
+            builtin: false,
+            clauses: vec![c],
+            exceptions: vec![exception],
+        };
+        check(&input(vec![table(None)]), &set, Lang::En, || {}).remove(0)
+    }
+
+    #[test]
+    fn an_exception_waives_the_issue_and_rejudges_the_clause() {
+        let r = with_exception("t", clause(vec![rule("table.comment", &[])], None));
+        assert_eq!(r.verdict, Verdict::Pass);
+        assert_eq!((r.issues.len(), r.waived.len()), (0, 1));
+        assert_eq!(r.waived[0].reason, "why");
+    }
+
+    #[test]
+    fn a_waived_clause_keeps_its_unknown_rules() {
+        let c = clause(vec![rule("db.charset", &[]), rule("table.comment", &[])], None);
+        assert_eq!(with_exception("t", c).verdict, Verdict::Unknown);
+    }
+
+    #[test]
+    fn an_exception_for_another_object_changes_nothing() {
+        let r = with_exception("other", clause(vec![rule("table.comment", &[])], None));
+        assert_eq!(r.verdict, Verdict::Fail);
+        assert!(r.waived.is_empty());
     }
 }

@@ -220,7 +220,7 @@ fn clean(text: &str) -> String {
 }
 
 /// 正文的写出。
-struct Body<'a> {
+pub(crate) struct Body<'a> {
     lang: Lang,
     styles: &'a HashMap<String, String>,
     /// 版心宽、高（twip）。
@@ -253,14 +253,14 @@ impl Body<'_> {
         out
     }
 
-    fn para(&mut self, style: Option<&str>, text: &str) {
+    pub(crate) fn para(&mut self, style: Option<&str>, text: &str) {
         let ppr = style
             .map(|s| format!("<w:pPr><w:pStyle w:val=\"{}\"/></w:pPr>", self.style(s)))
             .unwrap_or_default();
         let _ = writeln!(self.xml, "<w:p>{ppr}{}</w:p>", Self::runs(text, ""));
     }
 
-    fn heading(&mut self, level: u8, text: &str, anchor: Option<&str>) {
+    pub(crate) fn heading(&mut self, level: u8, text: &str, anchor: Option<&str>) {
         let style = self.style(&format!("heading {level}")).to_string();
         let mut inner = Self::runs(text, "");
         if let Some(a) = anchor {
@@ -290,7 +290,7 @@ impl Body<'_> {
     }
 
     /// 表格：`widths` 是各列的相对宽度，单元格内容是已写好的 run（`Cell::Xml`）或文字。
-    fn table(&mut self, headers: &[String], widths: &[u64], rows: Vec<Vec<Cell>>) {
+    pub(crate) fn table(&mut self, headers: &[String], widths: &[u64], rows: Vec<Vec<Cell>>) {
         let total: u64 = widths.iter().sum::<u64>().max(1);
         let cols: Vec<u64> = widths.iter().map(|w| self.width * w / total).collect();
         let text_style = self.style("dblens table text").to_string();
@@ -384,7 +384,7 @@ impl Body<'_> {
     }
 }
 
-enum Cell {
+pub(crate) enum Cell {
     Text(String),
     Xml(String),
 }
@@ -705,6 +705,15 @@ fn add_rels(rels: &str, items: &[(String, &str, String)]) -> String {
 
 /// 写出 docx。`reference` 为 None 时用内置的样式来源。
 pub fn write(content: &DocContent, reference: Option<&[u8]>, lang: Lang) -> Result<Vec<u8>> {
+    assemble(reference, lang, |b| write_body(b, content))
+}
+
+/// 把 `fill` 写出的正文放进样式来源，打包成 docx。
+pub(crate) fn assemble(
+    reference: Option<&[u8]>,
+    lang: Lang,
+    fill: impl FnOnce(&mut Body<'_>),
+) -> Result<Vec<u8>> {
     let builtin;
     let bytes = match reference {
         Some(b) => b,
@@ -720,7 +729,7 @@ pub fn write(content: &DocContent, reference: Option<&[u8]>, lang: Lang) -> Resu
     let (width, height) = text_area(&sect);
     let mut body =
         Body { lang, styles: &ids, width, height, xml: String::new(), bookmark: 0, images: vec![] };
-    write_body(&mut body, content);
+    fill(&mut body);
 
     // 正文：沿用样式来源根元素上的命名空间声明，补上图片要用的
     let root_end = doc.find("<w:body").unwrap_or(0);
@@ -751,11 +760,14 @@ pub fn write(content: &DocContent, reference: Option<&[u8]>, lang: Lang) -> Resu
     let mut types = r.get("[Content_Types].xml").unwrap_or_default().to_string();
     let mut new_rels: Vec<(String, &str, String)> =
         body.images.iter().map(|(id, file, _)| (id.clone(), REL_IMAGE, format!("media/{file}"))).collect();
+    // 没有目录的文档不要求更新字段，否则 Word 打开时会弹提示
+    let has_fields = body.xml.contains("<w:fldChar");
     match r.get("word/settings.xml") {
-        Some(s) => {
+        Some(s) if has_fields => {
             let s = update_fields(s);
             r.set("word/settings.xml", s.into_bytes());
         }
+        Some(_) => {}
         None => {
             r.set("word/settings.xml", update_fields(include_str!("docx/settings.xml")).into_bytes());
             new_rels.push(("rIdDBLensSettings".into(), REL_SETTINGS, "settings.xml".into()));

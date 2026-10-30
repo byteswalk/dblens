@@ -48,6 +48,7 @@ pub use import::{
 };
 pub use lint::{
     ClauseMeta, LintRequest, LintRun, LintRunSummary, LintSource, ReportFormat, ReviewInput, RulesetSummary,
+    WaiveInput,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService, SearchHit};
 pub use migrate::{

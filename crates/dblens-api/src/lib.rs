@@ -132,6 +132,7 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/lint/runs", get(lint::runs).post(lint::start_run))
         .route("/lint/runs/{id}", get(lint::run).delete(lint::delete_run))
         .route("/lint/runs/{id}/clauses/{clause}", put(lint::review))
+        .route("/lint/runs/{id}/clauses/{clause}/waivers", post(lint::waive).delete(lint::unwaive))
         .route("/lint/runs/{id}/report", get(lint::report))
         .route("/documents", post(documents::start))
         .route("/documents/check", post(documents::check))
