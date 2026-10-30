@@ -94,7 +94,8 @@ jobs:
         run: |
           set -eo pipefail
           cargo test -p dblens-driver-mysql -p dblens-driver-postgres --test conformance -- --nocapture 2>&1 | tee test.log
-          if grep -q "跳过" test.log; then echo "有测试被跳过，环境变量未生效"; exit 1; fi
+          # 只检查本任务提供的三个库；国产库的目标 CI 中没有，留给本地实库测试
+          if grep -qE "跳过.*DBLENS_TEST_(MYSQL|MARIADB|PG)_URL" test.log; then echo "有测试被跳过，环境变量未生效"; exit 1; fi
 
   oracle:
     name: Oracle 驱动集成测试

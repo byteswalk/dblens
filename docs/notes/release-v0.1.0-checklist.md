@@ -1,0 +1,29 @@
+# v0.1.0 发版检查清单
+
+## 桌面手动测试（Windows）
+
+测试包：`target/release/bundle/nsis/DBLens_0.1.0_x64-setup.exe`（不含更新签名）。
+
+- [ ] 安装、启动、窗口位置记忆，卸载后数据目录保留
+- [ ] 新建连接：按产品选择；SQL Server 的"当前 Windows 用户"认证；命名实例
+- [ ] 导入、执行 SQL 文件时的系统"打开"对话框；任务报告"另存为"
+- [ ] 表设计器：新建、修改、重建、保存确认（含 SQL Server）
+- [ ] Oracle 兼容模式的编辑器：PL/SQL 高亮、补全、按 / 拆分
+- [ ] 模型：选择文件夹（打开、新建、反向生成）、"在文件管理器中显示"、同步脚本另存为
+- [ ] ER 图的图片导出对话框
+- [ ] 文档导出：保存和选择文件对话框、样式来源和模板、"在文件夹中显示"；样式来源 docx 在 WPS 中的效果
+- [ ] 迁移："另存脚本""迁移报告"保存对话框
+- [ ] SQL Server：导入、文档导出、比对、迁移走一遍
+
+## 可选
+
+- [ ] 百万行以上的大表迁移耗时
+- [ ] SQL Server 2017
+
+## 发布步骤
+
+1. 确认私钥和密码的备份能读出（`m0-4d-release.md`）。
+2. 配置 Secrets：`TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
+3. 确认 `main` 的 CI 通过。
+4. 打标签 `v0.1.0` 并推送，等 `release` 工作流生成草稿 Release。
+5. 检查安装包和 `latest.json`，再点 Publish。
