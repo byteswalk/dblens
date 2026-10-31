@@ -43,9 +43,10 @@ POST /api/lint/table   {ruleset, source, table}，只返回未通过的条款，
 - 后端 1013 项、前端 339 项、clippy、格式检查（不含 `dblens-desktop` 和 `dblens-server`）。
 - 真实鼠标（模型来源）：检查记录列表、勾选两次对比、点问题打开表设计器、“规范”子标签和角标、改表注释后角标从 5 降到 4、加规则条款、错误正则被拒绝、正确的正则能保存。
 
+- 实库（2026-10-31）：`lint_tables_query_runs_on_every_database` 在 MySQL 9.7、MariaDB 12.3、PostgreSQL 18、Oracle 26ai、达梦 8、SQL Server 2022、TiDB、OceanBase、openGauss、金仓、GBase 8s 上逐库通过；`mysql_lint_reads_storage_facts` 确认字符集、引擎、`ON UPDATE`、自增步长、行数都能判出问题。
+- 真实鼠标（连接来源，MySQL）：检查记录打开结果、“无法判断”为 0、点问题打开真实表的设计器、“规范”子标签带角标。
+
 ## 待验证（真实运行）
 
-- `lint_tables` 没有在真实数据库上跑过。设好 `DBLENS_TEST_*_URL` 后运行 `cargo test -p dblens-service --test live lint_tables_query_runs_on_every_database`；不设环境变量时测试直接通过。
 - 用自定义规则跑检查只有规则单测，界面上没有走过。
-- 连接来源的完整流程（打开表设计器、设计器提示、字符集、引擎、步长、`ON UPDATE`）没有实测，走查只用了模型。
 - 桌面版没有编译和验证。
