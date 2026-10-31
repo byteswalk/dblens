@@ -16,7 +16,7 @@ use dblens_service::{
     SessionEvent, Store,
 };
 
-const LIB_OPTIONS: [&str; 3] = ["oracle_client_lib_dir", "dpi_lib_dir", "jdbc_dir"];
+const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "jdbc_dir"];
 const LOW_PASSWORD: &str = "Dblens_Priv_9x!";
 const SENTINEL: &str = "Dblens_Sentinel_9x!";
 
@@ -233,7 +233,7 @@ async fn profile(
     password: &str,
 ) -> String {
     let mut options = params.options.clone();
-    options.retain(|k, _| !LIB_OPTIONS.contains(&k.as_str()));
+    options.retain(|k, _| driver == DriverId::Dameng || !LIB_OPTIONS.contains(&k.as_str()));
     let p = service
         .create_profile(
             ProfileInput {
@@ -461,8 +461,9 @@ async fn flow(env: &str, fx: Fixture) {
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
     secrets.init_vault("测试主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
-    for option in LIB_OPTIONS {
-        if let Some(lib) = params.options.get(option) {
+    // 达梦的驱动目录是连接选项，不是全局设置
+    for option in LIB_OPTIONS.iter().filter(|_| driver != DriverId::Dameng) {
+        if let Some(lib) = params.options.get(*option) {
             registry.set_lib_dir(driver, Some(Path::new(lib))).unwrap();
         }
     }

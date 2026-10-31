@@ -55,9 +55,8 @@ pub struct ServerSummary {
 fn native_lib(id: DriverId) -> Option<(NativeLib, &'static str)> {
     match id {
         DriverId::Oracle => Some((NativeLib::OracleClient, "oracle_client_lib_dir")),
-        DriverId::Dameng => Some((NativeLib::DamengDpi, "dpi_lib_dir")),
         DriverId::Informix => Some((NativeLib::GbaseJdbc, "jdbc_dir")),
-        DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer => None,
+        DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer | DriverId::Dameng => None,
     }
 }
 
@@ -79,7 +78,7 @@ fn display_name(id: DriverId) -> Msg {
 pub struct DriverRegistry {
     store: Arc<Store>,
     drivers: Vec<Box<dyn Driver>>,
-    /// 连接选项 `client=jdbc` 时改用的驱动（达梦、Oracle），不需要原生客户端。
+    /// 连接选项 `client=jdbc` 时改用的驱动（Oracle），不需要原生客户端。
     jdbc_drivers: Vec<Box<dyn Driver>>,
 }
 
@@ -99,7 +98,7 @@ impl DriverRegistry {
             #[cfg(feature = "oracle")]
             Box::new(dblens_driver_oracle::OracleDriver),
             #[cfg(feature = "dameng")]
-            Box::new(dblens_driver_dameng::DmDriver),
+            Box::new(dblens_driver_jdbc::DamengJdbcDriver),
             #[cfg(feature = "sqlserver")]
             Box::new(dblens_driver_sqlserver::SqlServerDriver),
             #[cfg(feature = "informix")]
@@ -108,10 +107,7 @@ impl DriverRegistry {
         let mut registry = Self::with_drivers(store, drivers);
         #[cfg(feature = "informix")]
         {
-            registry.jdbc_drivers = vec![
-                Box::new(dblens_driver_jdbc::DamengJdbcDriver),
-                Box::new(dblens_driver_jdbc::OracleJdbcDriver),
-            ];
+            registry.jdbc_drivers = vec![Box::new(dblens_driver_jdbc::OracleJdbcDriver)];
         }
         registry
     }
@@ -313,36 +309,36 @@ mod tests {
     fn native_lib_dir_must_be_confirmed_absolute_and_contain_the_library() {
         let (dir, r) = registry();
         // 未确认：不可用，连接参数报驱动不可用
-        let s = r.status(DriverId::Dameng).unwrap();
+        let s = r.status(DriverId::Oracle).unwrap();
         assert!(s.compiled && s.needs_native_lib && !s.available && s.lib_dir.is_none());
         let p = Profile {
             id: "1".into(),
-            input: ProfileInput { driver: DriverId::Dameng, ..input("dm") },
+            input: ProfileInput { driver: DriverId::Oracle, ..input("o") },
             variant: None,
         };
         assert!(matches!(r.connect_params(&p, "pw".into()), Err(Error::DriverUnavailable { .. })));
 
         assert!(matches!(
-            r.set_lib_dir(DriverId::Dameng, Some(Path::new("relative/dir"))),
+            r.set_lib_dir(DriverId::Oracle, Some(Path::new("relative/dir"))),
             Err(Error::Invalid { .. })
         ));
-        assert!(matches!(r.set_lib_dir(DriverId::Dameng, Some(dir.path())), Err(Error::Invalid { .. })));
+        assert!(matches!(r.set_lib_dir(DriverId::Oracle, Some(dir.path())), Err(Error::Invalid { .. })));
 
         // 放一个同名文件冒充库文件，只检查路径逻辑
-        std::fs::write(dir.path().join(NativeLib::DamengDpi.file_name()), b"").unwrap();
-        r.set_lib_dir(DriverId::Dameng, Some(dir.path())).unwrap();
-        let s = r.status(DriverId::Dameng).unwrap();
+        std::fs::write(dir.path().join(NativeLib::OracleClient.file_name()), b"").unwrap();
+        r.set_lib_dir(DriverId::Oracle, Some(dir.path())).unwrap();
+        let s = r.status(DriverId::Oracle).unwrap();
         assert!(s.available && s.lib_dir.as_deref() == Some(dir.path()), "{s:?}");
         let params = r.connect_params(&p, "pw".into()).unwrap();
-        assert_eq!(params.options["dpi_lib_dir"], dir.path().to_string_lossy());
+        assert_eq!(params.options["oracle_client_lib_dir"], dir.path().to_string_lossy());
 
         // 库文件被删掉后：不可用，并提示重新选择
-        std::fs::remove_file(dir.path().join(NativeLib::DamengDpi.file_name())).unwrap();
-        let s = r.status(DriverId::Dameng).unwrap();
+        std::fs::remove_file(dir.path().join(NativeLib::OracleClient.file_name())).unwrap();
+        let s = r.status(DriverId::Oracle).unwrap();
         assert!(!s.available && s.hint.unwrap().render(dblens_core::Lang::ZhCn).contains("重新选择"));
 
-        r.set_lib_dir(DriverId::Dameng, None).unwrap();
-        assert_eq!(r.lib_dir(DriverId::Dameng).unwrap(), None);
+        r.set_lib_dir(DriverId::Oracle, None).unwrap();
+        assert_eq!(r.lib_dir(DriverId::Oracle).unwrap(), None);
     }
 
     #[test]

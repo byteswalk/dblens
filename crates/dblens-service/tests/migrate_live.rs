@@ -22,7 +22,7 @@ use dblens_service::{
     TaskStatus,
 };
 
-const LIB_OPTIONS: [&str; 3] = ["oracle_client_lib_dir", "dpi_lib_dir", "jdbc_dir"];
+const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "jdbc_dir"];
 
 /// 大表的行数。MySQL 的递归 CTE 默认至多 1000 层。
 const ROWS: u64 = 1000;
@@ -59,13 +59,14 @@ async fn setup(envs: [&str; 2]) -> Option<(Arc<Service>, Vec<End>, tempfile::Tem
     let mut ends = Vec::new();
     for (env, url) in envs.iter().zip(urls) {
         let (driver, params) = ConnectParams::from_url(&url).unwrap();
-        for option in LIB_OPTIONS {
-            if let Some(lib) = params.options.get(option) {
+        // 达梦的驱动目录是连接选项，不是全局设置
+        for option in LIB_OPTIONS.iter().filter(|_| driver != DriverId::Dameng) {
+            if let Some(lib) = params.options.get(*option) {
                 registry.set_lib_dir(driver, Some(Path::new(lib))).unwrap();
             }
         }
         let mut options = params.options.clone();
-        options.retain(|k, _| !LIB_OPTIONS.contains(&k.as_str()));
+        options.retain(|k, _| driver == DriverId::Dameng || !LIB_OPTIONS.contains(&k.as_str()));
         let schema = match driver {
             DriverId::Mysql => params.database.clone().unwrap(),
             DriverId::Postgres => "public".to_string(),

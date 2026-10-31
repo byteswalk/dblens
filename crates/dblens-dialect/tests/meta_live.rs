@@ -34,7 +34,7 @@ async fn connect(env: &str) -> Option<Live> {
         DriverId::Mysql => Box::new(dblens_driver_mysql::MySqlDriver),
         DriverId::Postgres => Box::new(dblens_driver_postgres::PgDriver),
         DriverId::Oracle => Box::new(dblens_driver_oracle::OracleDriver),
-        DriverId::Dameng => Box::new(dblens_driver_dameng::DmDriver),
+        DriverId::Dameng => Box::new(dblens_driver_jdbc::DamengJdbcDriver),
         DriverId::SqlServer => Box::new(dblens_driver_sqlserver::SqlServerDriver),
         DriverId::Informix => Box::new(dblens_driver_jdbc::GbaseDriver),
     };

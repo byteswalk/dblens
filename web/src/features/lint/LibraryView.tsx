@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import type { LintClause, LintException, LintRuleInfo, LintRuleset, LintSeverity } from '../../shared/api'
+import { desktop } from '../../shared/shell'
 import { SECTION_ORDER, download } from './logic'
 
 const SEVERITIES: LintSeverity[] = ['error', 'warning', 'info']
@@ -218,7 +219,7 @@ function Editor({
         <Button size="small" onClick={() => void copy()}>
           {t('lint.lib.copy')}
         </Button>
-        <Button size="small" onClick={() => download(api.lintRulesetExportUrl(id))}>
+        <Button size="small" onClick={() => { download(api.lintRulesetExportUrl(id)); if (desktop) message.success(t('lint.downloaded')) }}>
           {t('lint.lib.export')}
         </Button>
         {builtin ? (

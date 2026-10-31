@@ -6,6 +6,7 @@ use dblens_driver::{CancelHandle, ColumnMeta, ExecEvent, ServerInfo};
 
 use crate::error::{Flavor, expect, protocol};
 use crate::frame::{Column, Req, Resp};
+use crate::position::with_position;
 use crate::process::Bridge;
 
 pub(crate) struct JdbcConnection {
@@ -108,7 +109,10 @@ impl BlockingConnection for JdbcConnection {
     fn execute<'a>(&'a mut self, sql: &'a str, params: &'a [Value]) -> Result<Box<dyn BlockingExec + 'a>> {
         let (k, b) =
             self.bridge.call(&Req::Execute { conn: self.id, sql: sql.into(), params: params.to_vec() })?;
-        let stage = match expect(k, &b, 0, self.flavor)? {
+        let first = expect(k, &b, 0, self.flavor);
+        let first =
+            if self.flavor == Flavor::Dameng { first.map_err(|e| with_position(e, sql)) } else { first };
+        let stage = match first? {
             Resp::Result(cols) => Stage::Start(cols.into_iter().map(meta).collect()),
             Resp::Affected(n) => Stage::Affected(n),
             _ => return Err(protocol()),

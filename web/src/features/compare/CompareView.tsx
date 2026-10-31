@@ -119,6 +119,8 @@ function SidePicker({ label, value, profiles, onChange }: {
           placeholder={t('model.compare.pickProfile')}
           value={value?.kind === 'database' ? value.profile : undefined}
           onChange={(p) => onChange({ kind: 'database', profile: p, schema: '' })}
+          showSearch
+          optionFilterProp="label"
           options={profiles.map((p) => ({ value: p.id, label: p.name }))}
         />
       )}

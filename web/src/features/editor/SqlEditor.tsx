@@ -54,7 +54,7 @@ export default function SqlEditor({ path, language, defaultValue, marks, sql, on
   const checker = useRef<ReturnType<typeof attachChecker> | null>(null)
   useEffect(() => () => checker.current?.dispose(), [])
   // 识别出变体（标准档 / 兼容档）、换了连接或界面语言时重新检查
-  useEffect(() => checker.current?.recheck(), [sql?.driver, sql?.variant, i18n.language])
+  useEffect(() => checker.current?.recheck(), [sql?.driver, sql?.variant, sql?.compat, i18n.language])
 
   const onMount: OnMount = (editor) => {
     editorRef.current = editor

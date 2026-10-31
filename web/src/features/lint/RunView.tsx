@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import type { LintClauseResult, LintIssue, LintVerdict, LintWaivedIssue } from '../../shared/api'
+import { desktop } from '../../shared/shell'
 import type { QueryTab } from '../editor/tabs'
 import { download, effectiveVerdict, groupBySection, reviewable, summarize, verdictTone } from './logic'
 
@@ -109,7 +110,10 @@ export default function RunView({ tab }: { tab: QueryTab }) {
               trigger={['click']}
               menu={{
                 items: REPORT_FORMATS.map((f) => ({ key: f, label: t(`lint.run.format.${f}`) })),
-                onClick: ({ key }) => download(api.lintReportUrl(runId, key, reviewer || undefined)),
+                onClick: ({ key }) => {
+                  download(api.lintReportUrl(runId, key, reviewer || undefined))
+                  if (desktop) message.success(t('lint.downloaded'))
+                },
               }}
             >
               <Button size="small">{t('lint.run.report')}</Button>

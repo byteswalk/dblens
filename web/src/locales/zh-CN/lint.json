@@ -69,6 +69,7 @@
     "distribution": "分布式",
     "design": "设计"
   },
+  "downloaded": "已保存到“下载”文件夹",
   "lib": {
     "title": "规范库",
     "new": "新建",

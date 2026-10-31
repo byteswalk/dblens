@@ -224,30 +224,6 @@
     "zh-CN": "主窗口不存在",
     "en": "The main window does not exist"
   },
-  "dm.alloc_env_failed": {
-    "zh-CN": "dpi_alloc_env 失败",
-    "en": "dpi_alloc_env failed"
-  },
-  "dm.cancel_failed": {
-    "zh-CN": "dpi_cancel 失败，返回码 %{code}",
-    "en": "dpi_cancel failed with return code %{code}"
-  },
-  "dm.load_failed": {
-    "zh-CN": "加载 %{path} 失败：%{error}",
-    "en": "Failed to load %{path}: %{error}"
-  },
-  "dm.missing_functions": {
-    "zh-CN": "缺少 DPI 函数 %{functions}，达梦客户端版本可能过旧",
-    "en": "Missing DPI functions %{functions}; the DM client may be too old"
-  },
-  "dm.no_diagnostics": {
-    "zh-CN": "调用 DPI 失败，且无法读取错误信息",
-    "en": "A DPI call failed and its error information could not be read"
-  },
-  "dm.nul_in_string": {
-    "zh-CN": "字符串中不能包含 \\0 字符",
-    "en": "Strings cannot contain the \\0 character"
-  },
   "dml.no_insertable_columns": {
     "zh-CN": "没有可插入的列：%{table}",
     "en": "No insertable columns: %{table}"
@@ -1524,10 +1500,6 @@
     "zh-CN": "生成 YAML 失败：%{error}",
     "en": "Failed to write YAML: %{error}"
   },
-  "native.dameng_dpi": {
-    "zh-CN": "达梦 DPI 库",
-    "en": "DM DPI library"
-  },
   "native.dir_not_absolute": {
     "zh-CN": "%{lib}目录必须是绝对路径：%{dir}",
     "en": "The %{lib} directory must be an absolute path: %{dir}"
@@ -1535,10 +1507,6 @@
   "native.gbase_jdbc": {
     "zh-CN": "GBase 8s JDBC 驱动",
     "en": "GBase 8s JDBC driver"
-  },
-  "native.install.dameng_dpi": {
-    "zh-CN": "请安装达梦客户端（含 DPI 驱动），然后在连接设置中指定 dmdpi 所在目录，或设置 DM_HOME",
-    "en": "Install the DM client (with the DPI driver), then set the directory containing dmdpi in the connection settings, or set DM_HOME"
   },
   "native.install.gbase_jdbc": {
     "zh-CN": "请从 https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE 下载 gbasedbtjdbc，改名为 gbasedbtjdbc.jar 后放到一个目录，再在设置中选择该目录",

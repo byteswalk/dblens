@@ -17,6 +17,11 @@
       "file": "ojdbc11.jar",
       "version": "23.26.4.0.0",
       "sha256": "df977e9291499cd4ceee7d577462c285987dd2ad0216637c0865eb98956a9e6e"
+    },
+    {
+      "file": "DmJdbcDriver8.jar",
+      "version": "DM8 2026-07-10",
+      "sha256": "35bf432bd15d722a4a67c11b0768fd4be95eee46a6f914afa60a9a5161ccfc7f"
     }
   ]
 }

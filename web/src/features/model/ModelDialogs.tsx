@@ -206,6 +206,8 @@ function ReverseDialog() {
               setProfileId(v)
               setSchemas([])
             }}
+            showSearch
+            optionFilterProp="label"
             options={profiles.map((p) => ({ value: p.id, label: p.name }))}
           />
         </Form.Item>

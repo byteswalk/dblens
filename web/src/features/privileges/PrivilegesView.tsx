@@ -253,6 +253,8 @@ export default function PrivilegesView({ tab }: { tab: QueryTab }) {
               placeholder={t('privilege.catalog')}
               value={catalog}
               onChange={setChosenCatalog}
+              showSearch
+              optionFilterProp="label"
               options={catalogs.map((c) => ({ value: c.name, label: c.name }))}
             />
           )}

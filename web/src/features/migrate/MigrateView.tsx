@@ -72,6 +72,8 @@ function EndPicker({ label, value, profiles, onChange }: {
         placeholder={t('migrate.pickProfile')}
         value={value.profile || undefined}
         onChange={(profile) => onChange({ profile, schema: '' })}
+        showSearch
+        optionFilterProp="label"
         options={profiles.map((p) => ({ value: p.id, label: p.name }))}
       />
       <Select

@@ -1,5 +1,7 @@
 # 达梦 DPI 技术验证结论（日期：2026-10-22）
 
+> 2026-10-31：原生 DPI 驱动已移除，达梦统一走 JDBC 桥接。这篇只作历史记录。
+
 - 达梦客户端版本（生成 ffi.rs 所用的头文件）：DM8 Windows 安装包（2026-07-09 构建）中的 `include/DPI.h`、`DPIext.h`、`DPItypes.h`；
   运行时 `drivers/dpi/dmdpi.dll` 内嵌版本串 `V8.1.5.60-Build(2026.07.07-335949)ENT`（DLL 没有 Windows 版本资源）
 - 测试库：`DM Database Server 64 V8`（V$VERSION 其余行：`DB Version: 0x7000d`、`03134284604-20260707-335949-20228`、`Msg Version: 6`、`Gsu level(5) cnt: 102`）；

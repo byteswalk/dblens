@@ -1,4 +1,4 @@
-//! 查找运行时动态加载的原生客户端库（Oracle Instant Client、达梦 DPI）。
+//! 查找运行时动态加载的原生客户端库（Oracle Instant Client）。
 //! 查找顺序：设置中指定的目录（指定后只查这一处）→ 专属环境变量 → 库搜索路径变量 → 常见安装位置。
 
 use std::ffi::OsString;
@@ -9,7 +9,6 @@ use dblens_core::{Error, Msg, Result, msg};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeLib {
     OracleClient,
-    DamengDpi,
     /// GBase 8s 的 JDBC 驱动。不是原生库，但同样由用户放置、在设置中确认目录。
     GbaseJdbc,
 }
@@ -27,15 +26,6 @@ impl NativeLib {
                     "libclntsh.so"
                 }
             }
-            NativeLib::DamengDpi => {
-                if cfg!(windows) {
-                    "dmdpi.dll"
-                } else if cfg!(target_os = "macos") {
-                    "libdmdpi.dylib"
-                } else {
-                    "libdmdpi.so"
-                }
-            }
             NativeLib::GbaseJdbc => "gbasedbtjdbc.jar",
         }
     }
@@ -43,7 +33,6 @@ impl NativeLib {
     fn display_name(self) -> Msg {
         match self {
             NativeLib::OracleClient => msg!("native.oracle_client"),
-            NativeLib::DamengDpi => msg!("native.dameng_dpi"),
             NativeLib::GbaseJdbc => msg!("native.gbase_jdbc"),
         }
     }
@@ -51,7 +40,6 @@ impl NativeLib {
     fn install_hint(self) -> Msg {
         match self {
             NativeLib::OracleClient => msg!("native.install.oracle_client"),
-            NativeLib::DamengDpi => msg!("native.install.dameng_dpi"),
             NativeLib::GbaseJdbc => msg!("native.install.gbase_jdbc"),
         }
     }
@@ -60,7 +48,6 @@ impl NativeLib {
     fn home_vars(self) -> &'static [(&'static str, &'static [&'static str])] {
         match self {
             NativeLib::OracleClient => &[("ORACLE_HOME", &["", "bin", "lib"])],
-            NativeLib::DamengDpi => &[("DM_HOME", &["bin", "drivers/dpi"])],
             NativeLib::GbaseJdbc => &[],
         }
     }
@@ -85,15 +72,6 @@ impl NativeLib {
                         "/usr/lib/oracle/21/client64/lib",
                         "/usr/lib/oracle/19/client64/lib",
                     ]
-                }
-            }
-            NativeLib::DamengDpi => {
-                if cfg!(windows) {
-                    &["C:\\dmdbms\\bin", "D:\\dmdbms\\bin", "C:\\dmdbms\\drivers\\dpi"]
-                } else if cfg!(target_os = "macos") {
-                    &[]
-                } else {
-                    &["/opt/dmdbms/bin", "/home/dmdba/dmdbms/bin", "/dm8/bin"]
                 }
             }
             NativeLib::GbaseJdbc => &[],
@@ -222,38 +200,41 @@ mod tests {
     fn configured_dir_is_the_only_place_searched() {
         let root = temp("configured");
         let good = root.join("good");
-        put_lib(&good, NativeLib::DamengDpi);
-        assert_eq!(locate_with(NativeLib::DamengDpi, Some(good.as_path()), &no_env, &[]).unwrap(), good);
+        put_lib(&good, NativeLib::OracleClient);
+        assert_eq!(locate_with(NativeLib::OracleClient, Some(good.as_path()), &no_env, &[]).unwrap(), good);
 
         // 指定了目录但里面没有库：即使环境变量里能找到，也要报错
         let empty = root.join("empty");
         fs::create_dir_all(&empty).unwrap();
-        let env = |k: &str| (k == "DM_HOME").then(|| good.clone().into_os_string());
-        let err = locate_with(NativeLib::DamengDpi, Some(empty.as_path()), &env, &[]).unwrap_err();
+        let env = |k: &str| (k == "ORACLE_HOME").then(|| good.clone().into_os_string());
+        let err = locate_with(NativeLib::OracleClient, Some(empty.as_path()), &env, &[]).unwrap_err();
         assert!(matches!(err, Error::DriverUnavailable { .. }), "{err:?}");
     }
 
     #[test]
     fn relative_configured_dir_and_home_are_rejected() {
         let root = temp("relative");
-        put_lib(&root, NativeLib::DamengDpi);
+        put_lib(&root, NativeLib::OracleClient);
         let err =
-            locate_with(NativeLib::DamengDpi, Some(Path::new("drivers/dpi")), &no_env, &[]).unwrap_err();
+            locate_with(NativeLib::OracleClient, Some(Path::new("drivers/dpi")), &no_env, &[]).unwrap_err();
         assert!(
             matches!(&err, Error::DriverUnavailable { hint } if hint.render(Lang::ZhCn).contains("绝对路径")),
             "{err:?}"
         );
-        // 相对路径的 DM_HOME 被忽略，继续查找常见目录
-        let env = |k: &str| (k == "DM_HOME").then(|| OsString::from("dmdbms"));
-        assert_eq!(locate_with(NativeLib::DamengDpi, None, &env, std::slice::from_ref(&root)).unwrap(), root);
+        // 相对路径的 ORACLE_HOME 被忽略，继续查找常见目录
+        let env = |k: &str| (k == "ORACLE_HOME").then(|| OsString::from("dmdbms"));
+        assert_eq!(
+            locate_with(NativeLib::OracleClient, None, &env, std::slice::from_ref(&root)).unwrap(),
+            root
+        );
     }
 
     #[test]
     fn home_variable_subdirectories() {
         let home = temp("home");
-        put_lib(&home.join("bin"), NativeLib::DamengDpi);
-        let env = |k: &str| (k == "DM_HOME").then(|| home.clone().into_os_string());
-        assert_eq!(locate_with(NativeLib::DamengDpi, None, &env, &[]).unwrap(), home.join("bin"));
+        put_lib(&home.join("bin"), NativeLib::OracleClient);
+        let env = |k: &str| (k == "ORACLE_HOME").then(|| home.clone().into_os_string());
+        assert_eq!(locate_with(NativeLib::OracleClient, None, &env, &[]).unwrap(), home.join("bin"));
     }
 
     #[test]
@@ -331,10 +312,11 @@ mod tests {
     #[test]
     fn not_found_hint_lists_tried_dirs() {
         let root = temp("missing");
-        let err = locate_with(NativeLib::DamengDpi, None, &no_env, std::slice::from_ref(&root)).unwrap_err();
+        let err =
+            locate_with(NativeLib::OracleClient, None, &no_env, std::slice::from_ref(&root)).unwrap_err();
         let Error::DriverUnavailable { hint } = err else { panic!("应为 DriverUnavailable") };
         let hint = hint.render(Lang::En);
-        assert!(hint.contains(NativeLib::DamengDpi.file_name()), "{hint}");
+        assert!(hint.contains(NativeLib::OracleClient.file_name()), "{hint}");
         assert!(hint.contains(&root.display().to_string()), "{hint}");
     }
 }

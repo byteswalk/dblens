@@ -47,6 +47,11 @@ export interface ConnectionForm {
 }
 
 /** 新建连接时可选的驱动，按界面上的顺序。 */
+/** 达梦只走 JDBC，Oracle 可选。 */
+export function usesJdbc(f: { driver: DriverId; client: ClientKind }): boolean {
+  return f.driver === 'dameng' || (f.driver === 'oracle' && f.client === 'jdbc')
+}
+
 export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng', 'sqlserver', 'informix']
 
 /** 驱动的显示名称（如「MySQL 系」）。 */
@@ -170,7 +175,8 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     if (f.instance.trim()) options.instance = f.instance.trim()
     if (f.trustCert) options.trust_server_certificate = 'true'
   }
-  if ((f.driver === 'oracle' || f.driver === 'dameng') && f.client === 'jdbc') {
+  if (f.driver === 'dameng' && f.jdbcDir.trim()) options.jdbc_dir = f.jdbcDir.trim()
+  if (f.driver === 'oracle' && f.client === 'jdbc') {
     options.client = 'jdbc'
     if (f.jdbcDir.trim()) options.jdbc_dir = f.jdbcDir.trim()
   }

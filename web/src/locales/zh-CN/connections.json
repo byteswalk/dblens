@@ -14,7 +14,7 @@
     },
     "dameng": {
       "label": "达梦 DM",
-      "note": "需要达梦 DPI 客户端库；也可在「高级」中改用 JDBC 驱动"
+      "note": "通过内置的 JDBC 驱动连接，也可在「高级」中指定驱动目录。"
     },
     "sqlserver": {
       "label": "SQL Server",
@@ -61,7 +61,7 @@
     },
     "dameng": {
       "label": "达梦 DM",
-      "note": "需要达梦 DPI 客户端库；也可在「高级」中改用 JDBC 驱动"
+      "note": "通过内置的 JDBC 驱动连接，也可在「高级」中指定驱动目录。"
     },
     "sqlserver": {
       "label": "SQL Server",

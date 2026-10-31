@@ -69,6 +69,7 @@
     "distribution": "Distribution",
     "design": "Design"
   },
+  "downloaded": "Saved to your Downloads folder",
   "lib": {
     "title": "Ruleset library",
     "new": "New",

@@ -680,10 +680,10 @@ body {
   flex-direction: column;
 }
 .toolbar {
-  height: 40px;
+  min-height: 40px;
   flex: none;
   border-bottom: 1px solid var(--border);
-  padding: 0 8px;
+  padding: 4px 8px;
   gap: 6px;
 }
 .toolbar .sep {

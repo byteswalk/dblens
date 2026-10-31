@@ -26,6 +26,7 @@ import {
   switchProduct,
   toProfileInput,
   validate,
+  usesJdbc,
 } from './form'
 import { PRODUCT_GROUPS, product, productLabel, productNote } from './products'
 import { withVault } from './vault'
@@ -269,7 +270,7 @@ export default function ConnectionDialog() {
       <Field label={t('connections.advanced.timeout')} error={errors.timeoutSecs}>
         <InputNumber min={1} max={600} value={form.timeoutSecs} onChange={(v) => set('timeoutSecs', v ?? 0)} />
       </Field>
-      {(form.driver === 'oracle' || form.driver === 'dameng') && (
+      {form.driver === 'oracle' && (
         <Field label={t('connections.client.label')}>
           <Segmented
             value={form.client}
@@ -278,7 +279,7 @@ export default function ConnectionDialog() {
           />
         </Field>
       )}
-      {(form.driver === 'oracle' || form.driver === 'dameng') && form.client === 'jdbc' && (
+      {usesJdbc(form) && (
         <Field label={t('connections.client.dir')}>
           <Input value={form.jdbcDir} onChange={(e) => set('jdbcDir', e.target.value)} placeholder={t('connections.client.dirPlaceholder')} />
         </Field>

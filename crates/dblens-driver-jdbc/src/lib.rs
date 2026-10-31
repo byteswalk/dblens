@@ -4,6 +4,7 @@ mod conn;
 mod drivers;
 mod error;
 mod frame;
+mod position;
 mod process;
 
 pub use drivers::{DamengJdbcDriver, GbaseDriver, OracleJdbcDriver};

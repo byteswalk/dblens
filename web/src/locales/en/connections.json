@@ -14,7 +14,7 @@
     },
     "dameng": {
       "label": "DM (Dameng)",
-      "note": "Requires the DM DPI client library, or choose the JDBC driver under Advanced"
+      "note": "Connects through the bundled JDBC driver. You can set the driver folder under Advanced."
     },
     "sqlserver": {
       "label": "SQL Server",
@@ -61,7 +61,7 @@
     },
     "dameng": {
       "label": "Dameng DM",
-      "note": "Requires the DM DPI client library, or choose the JDBC driver under Advanced"
+      "note": "Connects through the bundled JDBC driver. You can set the driver folder under Advanced."
     },
     "sqlserver": {
       "label": "SQL Server",

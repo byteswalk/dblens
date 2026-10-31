@@ -13,7 +13,6 @@ serde.workspace = true
 
 [dev-dependencies]
 chrono.workspace = true
-dblens-driver-dameng.workspace = true
 dblens-driver-jdbc.workspace = true
 dblens-driver-mysql.workspace = true
 dblens-driver-oracle.workspace = true

@@ -44,7 +44,7 @@ struct Live {
     database: Option<String>,
 }
 
-const LIB_OPTIONS: [&str; 3] = ["oracle_client_lib_dir", "dpi_lib_dir", "jdbc_dir"];
+const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "jdbc_dir"];
 
 async fn setup(env: &str) -> Option<Live> {
     let url = std::env::var(env).ok()?;
@@ -55,7 +55,7 @@ async fn setup(env: &str) -> Option<Live> {
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
     secrets.init_vault("测试主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
-    let via_jdbc = params.options.get("client").is_some_and(|c| c == "jdbc");
+    let via_jdbc = driver == DriverId::Dameng || params.options.get("client").is_some_and(|c| c == "jdbc");
     for option in LIB_OPTIONS.iter().filter(|_| !via_jdbc) {
         if let Some(lib) = params.options.get(*option) {
             registry.set_lib_dir(driver, Some(Path::new(lib))).unwrap();
@@ -342,21 +342,6 @@ async fn oracle_jdbc_ops() {
 #[tokio::test]
 async fn oracle_jdbc_editing() {
     editing_flow("DBLENS_TEST_ORACLE_JDBC_URL").await;
-}
-
-#[tokio::test]
-async fn dameng_jdbc_flow() {
-    full_flow("DBLENS_TEST_DM_JDBC_URL").await;
-}
-
-#[tokio::test]
-async fn dameng_jdbc_objects() {
-    objects_flow("DBLENS_TEST_DM_JDBC_URL").await;
-}
-
-#[tokio::test]
-async fn dameng_jdbc_editing() {
-    editing_flow("DBLENS_TEST_DM_JDBC_URL").await;
 }
 
 /// 会话的当前 schema 是当前库，可以切换；GBase 8s 没有执行计划和出错位置。

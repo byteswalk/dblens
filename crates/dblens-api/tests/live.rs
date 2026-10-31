@@ -22,7 +22,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tower::ServiceExt;
 
 const TOKEN: &str = "live-token";
-const LIB_OPTIONS: [&str; 3] = ["oracle_client_lib_dir", "dpi_lib_dir", "jdbc_dir"];
+const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "jdbc_dir"];
 
 async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
     let mut req =
@@ -56,14 +56,15 @@ async fn flow(env: &str, tls: bool) {
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
     let app = router(service, ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files: false });
 
-    for option in LIB_OPTIONS {
-        if let Some(lib) = params.options.get(option) {
+    // 达梦的驱动目录是连接选项，不是全局设置
+    let lib_options = if driver == DriverId::Dameng { [].as_slice() } else { LIB_OPTIONS.as_slice() };
+    for option in lib_options {
+        if let Some(lib) = params.options.get(*option) {
             let path = format!(
                 "/api/drivers/{}/lib-dir",
                 match driver {
                     DriverId::Oracle => "oracle",
-                    DriverId::Informix => "informix",
-                    _ => "dameng",
+                    _ => "informix",
                 }
             );
             let (st, s) = call(&app, "PUT", &path, Some(json!({"path": lib}))).await;
@@ -73,7 +74,7 @@ async fn flow(env: &str, tls: bool) {
     let mut options: serde_json::Map<String, Value> = params
         .options
         .iter()
-        .filter(|(k, _)| !LIB_OPTIONS.contains(&k.as_str()))
+        .filter(|(k, _)| !lib_options.contains(&k.as_str()))
         .map(|(k, v)| (k.clone(), json!(v)))
         .collect();
     if tls {
