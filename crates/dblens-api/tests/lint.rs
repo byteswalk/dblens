@@ -58,6 +58,23 @@ async fn new_model(app: &Router, dir: &std::path::Path) -> String {
     m["id"].as_str().unwrap().to_string()
 }
 
+/// 发起检查并等它结束，返回记录编号。
+async fn finish_run(app: &Router, req: Value) -> String {
+    let (st, v) = call(app, "POST", "/api/lint/runs", Some(req)).await;
+    assert_eq!(st, StatusCode::CREATED, "{v}");
+    let task = v["id"].as_str().unwrap().to_string();
+    for _ in 0..500 {
+        let (_, t) = call(app, "GET", &format!("/api/tasks/{task}"), None).await;
+        if t["state"] != "running" {
+            assert_eq!(t["state"], "done", "{t}");
+            assert_eq!(t["kind"], "lint");
+            return t["lint_run"].as_str().unwrap().to_string();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("task did not finish");
+}
+
 #[tokio::test]
 async fn builtin_rulesets_are_listed_and_readable() {
     let app = app();
@@ -121,22 +138,7 @@ async fn run_a_check_review_and_report() {
     assert_eq!(st, StatusCode::OK, "{v}");
 
     let req = json!({ "ruleset": "general", "source": { "kind": "model", "model": m, "schema": "public" } });
-    let (st, v) = call(&app, "POST", "/api/lint/runs", Some(req)).await;
-    assert_eq!(st, StatusCode::CREATED, "{v}");
-    let task = v["id"].as_str().unwrap().to_string();
-
-    let mut run_id = String::new();
-    for _ in 0..500 {
-        let (_, t) = call(&app, "GET", &format!("/api/tasks/{task}"), None).await;
-        if t["state"] != "running" {
-            assert_eq!(t["state"], "done", "{t}");
-            assert_eq!(t["kind"], "lint");
-            run_id = t["lint_run"].as_str().unwrap().to_string();
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
-    assert!(!run_id.is_empty(), "task did not finish");
+    let run_id = finish_run(&app, req).await;
 
     let (st, run) = call(&app, "GET", &format!("/api/lint/runs/{run_id}"), None).await;
     assert_eq!(st, StatusCode::OK);
@@ -181,6 +183,52 @@ async fn run_a_check_review_and_report() {
     assert!(ct.contains("text/html"), "{ct}");
     assert!(html.contains("public.orders") || html.contains("orders"), "report missing target");
     assert!(html.contains("张三"), "report missing reviewer");
+
+    // 豁免：问题移到已豁免清单，条款重判，例外写进规范
+    let clause_of = |run: &Value| {
+        run["results"].as_array().unwrap().iter().find(|r| r["clause"] == "table.comment").unwrap().clone()
+    };
+    let waivers = format!("/api/lint/runs/{run_id}/clauses/table.comment/waivers");
+    let (st, _) = call(&app, "POST", &waivers, Some(json!({ "object": "orders", "reason": "  " }))).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    let (st, _) = call(&app, "POST", &waivers, Some(json!({ "object": "nope", "reason": "r" }))).await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+    let (st, after) =
+        call(&app, "POST", &waivers, Some(json!({ "object": "orders", "reason": "历史表" }))).await;
+    assert_eq!(st, StatusCode::OK, "{after}");
+    assert_eq!(clause_of(&after)["verdict"], "pass", "{after}");
+    assert_eq!(clause_of(&after)["waived"][0]["object"], "orders");
+    let (_, set) = call(&app, "GET", "/api/lint/rulesets/general", None).await;
+    assert_eq!(set["exceptions"][0]["reason"], "历史表", "{set}");
+
+    // 再查一次，例外自动生效
+    let req = json!({ "ruleset": "general", "source": { "kind": "model", "model": m, "schema": "public" } });
+    let again = finish_run(&app, req).await;
+    let (_, second) = call(&app, "GET", &format!("/api/lint/runs/{again}"), None).await;
+    assert_eq!(clause_of(&second)["verdict"], "pass", "{second}");
+
+    // 四种报告都能导出，豁免进报告
+    for (format, ct) in [
+        ("html", "text/html"),
+        ("docx", "wordprocessingml"),
+        ("xlsx", "spreadsheetml"),
+        ("checklist", "spreadsheetml"),
+    ] {
+        let (st, got, _) = raw(&app, &format!("/api/lint/runs/{run_id}/report?format={format}")).await;
+        assert_eq!(st, StatusCode::OK, "{format}");
+        assert!(got.contains(ct), "{format}: {got}");
+    }
+    let (_, _, html) = raw(&app, &format!("/api/lint/runs/{run_id}/report?format=html")).await;
+    assert!(html.contains("历史表"), "report missing waiver");
+    let (st, _, _) = raw(&app, &format!("/api/lint/runs/{run_id}/report?format=pdf")).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+
+    // 撤销豁免：问题回来，规范里的例外删掉
+    let (st, after) = call(&app, "DELETE", &format!("{waivers}?object=orders"), None).await;
+    assert_eq!(st, StatusCode::OK, "{after}");
+    assert_eq!(clause_of(&after)["verdict"], "fail", "{after}");
+    let (_, set) = call(&app, "GET", "/api/lint/rulesets/general", None).await;
+    assert!(set.get("exceptions").is_none(), "{set}");
 
     // 删除检查记录
     let (st, _) = call(&app, "DELETE", &format!("/api/lint/runs/{run_id}"), None).await;

@@ -19,6 +19,14 @@ describe('effectiveVerdict', () => {
   })
 })
 
+describe('summarize waivers', () => {
+  it('counts waived issues apart from open issues', () => {
+    const r = { ...result('c', 'pass'), waived: [{ object: 'o', message: 'm', reason: 'r' }] }
+    const s = summarize([r, result('d', 'fail', 2)])
+    expect([s.issues, s.waived]).toEqual([2, 1])
+  })
+})
+
 describe('reviewable', () => {
   it('is true only for unknown and manual', () => {
     expect(reviewable('unknown')).toBe(true)

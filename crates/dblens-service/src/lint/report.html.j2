@@ -46,6 +46,7 @@
   <div class="tile"><b class="manual">{{ summary.manual }}</b><span>{{ lb.manual }}</span></div>
   <div class="tile"><b class="not_applicable">{{ summary.not_applicable }}</b><span>{{ lb.not_applicable }}</span></div>
   <div class="tile"><b>{{ summary.issues }}</b><span>{{ lb.issues }}</span></div>
+  <div class="tile"><b>{{ summary.waived }}</b><span>{{ lb.waived }}</span></div>
 </div>
 
 <h2>{{ lb.clause_results }}</h2>
@@ -83,6 +84,39 @@
 {% endfor %}
 {% else %}
 <p>{{ lb.no_issues }}</p>
+{% endif %}
+
+{% if has_manual %}
+<h2>{{ lb.manual_list }}</h2>
+<table>
+  <thead><tr><th>{{ lb.clause }}</th><th>{{ lb.verdict }}</th><th>{{ lb.reason }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}{% if r.manual %}
+    <tr>
+      <td>{{ r.section }} · {{ r.text }}</td>
+      <td class="v {{ r.verdict_slug }}">{{ r.verdict }}</td>
+      <td>{{ r.reason if r.reason else "" }}</td>
+    </tr>
+  {% endif %}{% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if has_waived %}
+<h2>{{ lb.waived_list }}</h2>
+<table>
+  <thead><tr><th>{{ lb.clause }}</th><th>{{ lb.object_col }}</th><th>{{ lb.message }}</th><th>{{ lb.waive_reason }}</th></tr></thead>
+  <tbody>
+  {% for r in rows %}{% for w in r.waived %}
+    <tr>
+      <td>{{ r.section }} · {{ r.text }}</td>
+      <td class="obj">{{ w.object }}</td>
+      <td>{{ w.message }}</td>
+      <td>{{ w.reason }}</td>
+    </tr>
+  {% endfor %}{% endfor %}
+  </tbody>
+</table>
 {% endif %}
 </body>
 </html>

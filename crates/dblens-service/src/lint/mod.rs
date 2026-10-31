@@ -3,6 +3,7 @@
 
 mod job;
 mod report;
+mod report_office;
 mod store;
 
 use dblens_lint::{ClauseResult, Section, Severity, Verdict};
@@ -50,6 +51,13 @@ pub struct ReviewInput {
     pub verdict: Verdict,
     #[serde(default)]
     pub note: String,
+}
+
+/// 豁免一个对象。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct WaiveInput {
+    pub object: String,
+    pub reason: String,
 }
 
 /// 条款的说明信息，随检查结果一起存下来，报告和界面分组用。

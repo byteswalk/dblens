@@ -9,7 +9,7 @@ mod rules;
 pub use builtin::{ClausePatch, Overrides, apply, builtin, builtin_ids, diff};
 pub use engine::{LintInput, check, family_key};
 pub use model::{
-    Clause, ClauseResult, Issue, Review, RuleRef, Ruleset, Section, Severity, Summary, Verdict, summarize,
-    validate,
+    Clause, ClauseResult, CleanVerdict, Exception, Issue, Review, RuleRef, Ruleset, Section, Severity,
+    Summary, Verdict, WaivedIssue, summarize, validate,
 };
 pub use rules::{ParamInfo, RuleInfo, rule_infos};

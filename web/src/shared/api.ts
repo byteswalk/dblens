@@ -738,6 +738,14 @@ export interface LintRuleset {
   name: string
   builtin: boolean
   clauses: LintClause[]
+  exceptions?: LintException[]
+}
+
+/** 例外：某个对象不适用某条条款。 */
+export interface LintException {
+  clause: string
+  object: string
+  reason: string
 }
 
 export interface LintRulesetSummary {
@@ -767,6 +775,10 @@ export interface LintIssue {
   suggestion?: string | null
 }
 
+export interface LintWaivedIssue extends LintIssue {
+  reason: string
+}
+
 export interface LintReview {
   verdict: LintVerdict
   note: string
@@ -777,6 +789,7 @@ export interface LintClauseResult {
   verdict: LintVerdict
   reason?: string | null
   issues: LintIssue[]
+  waived?: LintWaivedIssue[]
   review?: LintReview | null
 }
 
@@ -1448,6 +1461,18 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     /** 填写人工结论，返回更新后的记录。 */
     reviewLintClause: (run: string, clause: string, input: LintReview) =>
       request<LintRun>('PUT', `/lint/runs/${encodeURIComponent(run)}/clauses/${encodeURIComponent(clause)}`, input),
+    /** 豁免一个对象，返回更新后的记录。 */
+    waiveLintIssue: (run: string, clause: string, object: string, reason: string) =>
+      request<LintRun>('POST', `/lint/runs/${encodeURIComponent(run)}/clauses/${encodeURIComponent(clause)}/waivers`, {
+        object,
+        reason,
+      }),
+    /** 撤销豁免，返回更新后的记录。 */
+    unwaiveLintIssue: (run: string, clause: string, object: string) =>
+      request<LintRun>(
+        'DELETE',
+        `/lint/runs/${encodeURIComponent(run)}/clauses/${encodeURIComponent(clause)}/waivers${q({ object })}`,
+      ),
     /** 报告下载地址。 */
     lintReportUrl: (run: string, format: string, reviewer?: string) =>
       `/api/lint/runs/${encodeURIComponent(run)}/report${q({ format, reviewer, token })}`,

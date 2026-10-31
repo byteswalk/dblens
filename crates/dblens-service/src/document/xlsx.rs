@@ -11,12 +11,12 @@ const CELL_MAX: usize = 32767;
 /// 自动列宽的上限（字符宽度）。
 const WIDTH_MAX: usize = 60;
 
-fn xlsx_error(e: XlsxError) -> Error {
+pub(crate) fn xlsx_error(e: XlsxError) -> Error {
     Error::internal(msg!("document.write_failed", error = e))
 }
 
 /// 一张工作表的写出：记下各列的宽度，统计截断的单元格。
-struct Sheet<'a> {
+pub(crate) struct Sheet<'a> {
     ws: &'a mut Worksheet,
     widths: Vec<usize>,
     row: u32,
@@ -28,8 +28,12 @@ fn display_width(s: &str) -> usize {
     s.chars().map(|c| if (c as u32) >= 0x1100 { 2 } else { 1 }).sum()
 }
 
-impl Sheet<'_> {
-    fn header(&mut self, headers: &[String], bold: &Format) -> Result<()> {
+impl<'a> Sheet<'a> {
+    pub(crate) fn new(ws: &'a mut Worksheet, truncated: &'a mut u64) -> Self {
+        Self { ws, widths: vec![], row: 0, truncated }
+    }
+
+    pub(crate) fn header(&mut self, headers: &[String], bold: &Format) -> Result<()> {
         for (c, h) in headers.iter().enumerate() {
             self.ws.write_string_with_format(0, c as u16, h, bold).map_err(xlsx_error)?;
             self.widths.push(display_width(h));
@@ -39,7 +43,7 @@ impl Sheet<'_> {
         Ok(())
     }
 
-    fn cell(&mut self, col: usize, text: &str) -> Result<()> {
+    pub(crate) fn cell(&mut self, col: usize, text: &str) -> Result<()> {
         let text = if text.chars().count() > CELL_MAX {
             *self.truncated += 1;
             text.chars().take(CELL_MAX).collect::<String>()
@@ -53,7 +57,7 @@ impl Sheet<'_> {
         Ok(())
     }
 
-    fn number(&mut self, col: usize, n: usize) -> Result<()> {
+    pub(crate) fn number(&mut self, col: usize, n: usize) -> Result<()> {
         self.ws.write_number(self.row, col as u16, n as f64).map_err(xlsx_error)?;
         self.widen(col, &n.to_string());
         Ok(())
@@ -72,11 +76,11 @@ impl Sheet<'_> {
         }
     }
 
-    fn next(&mut self) {
+    pub(crate) fn next(&mut self) {
         self.row += 1;
     }
 
-    fn finish(self) -> Result<()> {
+    pub(crate) fn finish(self) -> Result<()> {
         if self.row > 1 {
             self.ws
                 .autofilter(0, 0, self.row - 1, self.widths.len().saturating_sub(1) as u16)
@@ -111,7 +115,7 @@ pub fn write(content: &DocContent, lang: Lang) -> Result<(Vec<u8>, u64)> {
 
     {
         let ws = book.add_worksheet().set_name(&tables_name).map_err(xlsx_error)?;
-        let mut sh = Sheet { ws, widths: vec![], row: 0, truncated: &mut truncated };
+        let mut sh = Sheet::new(ws, &mut truncated);
         sh.header(&hs(&["doc.col.schema", "doc.col.table", "doc.col.comment", "doc.col.columns"]), &bold)?;
         let mut i = 0;
         for s in &content.schemas {
@@ -131,7 +135,7 @@ pub fn write(content: &DocContent, lang: Lang) -> Result<(Vec<u8>, u64)> {
 
     {
         let ws = book.add_worksheet().set_name(&columns_name).map_err(xlsx_error)?;
-        let mut sh = Sheet { ws, widths: vec![], row: 0, truncated: &mut truncated };
+        let mut sh = Sheet::new(ws, &mut truncated);
         sh.header(
             &hs(&[
                 "doc.col.schema",
@@ -173,7 +177,7 @@ pub fn write(content: &DocContent, lang: Lang) -> Result<(Vec<u8>, u64)> {
 
     {
         let ws = book.add_worksheet().set_name(t("doc.sheet.keys")).map_err(xlsx_error)?;
-        let mut sh = Sheet { ws, widths: vec![], row: 0, truncated: &mut truncated };
+        let mut sh = Sheet::new(ws, &mut truncated);
         sh.header(
             &hs(&[
                 "doc.col.schema",

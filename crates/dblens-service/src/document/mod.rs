@@ -12,8 +12,10 @@ pub use content::{
     DocReference, DocRelation, DocSchema, DocStats, DocTable, DocTrigger, DocUnreadable, DocView,
     SourceSchema, SourceTable, build, png_size,
 };
+pub(crate) use docx::{Cell, assemble};
 pub use docx::{builtin_reference, check_reference, write as write_docx};
 pub use job::{DiagramImage, DocFormat, DocSource, DocumentProblem, DocumentRequest};
 pub use labels::label;
 pub use template::{TextFormat, check, render};
 pub use xlsx::write as write_xlsx;
+pub(crate) use xlsx::{Sheet, xlsx_error};
