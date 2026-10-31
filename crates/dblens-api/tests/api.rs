@@ -714,6 +714,8 @@ async fn uploads_respect_the_limit_and_paths_are_desktop_only() {
 /// 表设计器（M3）：能力和类型目录、预览新建表（含校验错误）、执行后任务完成、执行有错误的草稿被拒绝。
 #[tokio::test]
 async fn design_routes() {
+    // 断言的是英文文案，不随系统语言变
+    dblens_core::set_default_lang(Some(dblens_core::Lang::En));
     let (app, _) = app();
     let (_, p) =
         call(&app, "POST", "/api/profiles", Some(json!({"profile": profile_json("d"), "password": "pw"})))

@@ -581,6 +581,8 @@ pub(crate) mod tests {
     /// 预览之后目标被改了：拒绝同步。
     #[tokio::test]
     async fn sync_refuses_when_target_changed() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let (s, _, _, dir) = service();
         let a = model(&s, dir.path(), "a", vec![table("t", &["id", "x"])]);
         let b = model(&s, dir.path(), "b", vec![table("t", &["id"])]);

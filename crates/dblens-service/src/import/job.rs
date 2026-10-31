@@ -749,6 +749,8 @@ mod tests {
 
     #[tokio::test]
     async fn batches_skip_failed_rows_into_a_report() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let (s, p, _, _dir) = service();
         let mut text = String::from("id,name\n1,a\nx,b\n3,FAIL\n4,d\n");
         text += "";

@@ -447,6 +447,8 @@ mod tests {
 
     #[tokio::test]
     async fn continue_on_error_runs_everything_and_logs_failures() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let (s, dev, _, log, _dir) = service();
         let req = SqlFileRequest {
             continue_on_error: true,

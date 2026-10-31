@@ -860,6 +860,8 @@ mod tests {
 
     #[test]
     fn create_open_and_list() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("m");
         let (store, id) = sample(&root);
@@ -880,6 +882,8 @@ mod tests {
 
     #[test]
     fn bad_files_and_newer_format() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("m");
         let (store, id) = sample(&root);
@@ -903,6 +907,8 @@ mod tests {
 
     #[test]
     fn fingerprint_conflict() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("m");
         let (store, id) = sample(&root);
@@ -957,6 +963,8 @@ mod tests {
 
     #[test]
     fn save_new_table_keeps_unknown_fields() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("m");
         let (store, id) = sample(&root);
@@ -988,6 +996,8 @@ mod tests {
     /// 逻辑外键：校验、设计器保存后保留、表和列改名时引用跟着改、删除。
     #[test]
     fn logical_keys_follow_renames() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("m");
         let (store, id) = sample(&root);

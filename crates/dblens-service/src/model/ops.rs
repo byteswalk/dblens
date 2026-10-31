@@ -283,6 +283,8 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn create_remembers_recent_and_design_saves_files() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let (s, _, dir) = service();
         let path = dir.path().join("model");
         let db = ModelDatabase { variant: Variant::Postgres, compat: Compat::Native, version: None };
@@ -325,6 +327,8 @@ pub(crate) mod tests {
     /// 假驱动没有元数据结果：任务失败，不留下模型目录（成功的流程在实库测试中）。
     #[tokio::test]
     async fn reverse_task_failure_leaves_nothing() {
+        // 断言的是英文文案，不随系统语言变
+        dblens_core::set_default_lang(Some(dblens_core::Lang::En));
         let (s, dev, dir) = service();
         let path = dir.path().join("rev");
         let req = ReverseRequest {
