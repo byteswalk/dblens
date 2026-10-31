@@ -79,5 +79,37 @@
     "back": "返回列表",
     "none": "没有读到访问者"
   },
-  "error": "读取失败：{{detail}}"
+  "error": "读取失败：{{detail}}",
+  "action": {
+    "new": "新建",
+    "newUser": "新建用户",
+    "newRole": "新建角色",
+    "setPassword": "改密",
+    "lock": "锁定",
+    "unlock": "解锁",
+    "grant": "授权",
+    "addRole": "加入角色",
+    "removeRole": "移出",
+    "revoke": "回收",
+    "drop": "删除",
+    "next": "下一步",
+    "password": "密码",
+    "generate": "生成",
+    "withGrant": "可转授",
+    "withAdmin": "可管理该角色"
+  },
+  "change": {
+    "title": "确认修改",
+    "connection": "连接：{{name}}",
+    "run": "执行",
+    "cancel": "取消",
+    "close": "关闭",
+    "notAtomic": "多条语句逐条执行，中途失败时前面的不会撤销。",
+    "ownAccount": "这是当前连接使用的账号，修改后现有连接可能失效。",
+    "owned": "它持有这些对象：{{list}}",
+    "cascade": "同时删除它持有的对象（CASCADE）",
+    "typeName": "这是生产连接，输入 {{name}} 确认",
+    "done": "已执行：",
+    "failed": "执行失败：{{statement}}"
+  }
 }

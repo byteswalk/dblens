@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { EffectivePrivilege, ObjectAccess, Principal, PrivilegeGrant } from '../../shared/api'
-import { filterPrincipals, groupAccess, pathLabel, targetLabel } from './logic'
+import { hasCredentials, principalRef, randomPassword, withCascade, filterPrincipals, groupAccess, pathLabel, targetLabel } from './logic'
 
 const p = (id: string, over: Partial<Principal> = {}): Principal => ({
   id, name: id, host: null, kind: 'user', level: 'server', can_login: true, locked: null, expires_at: null, builtin: false, attrs: [], ...over,
@@ -54,5 +54,35 @@ describe('groupAccess', () => {
       { principal: 'u', privilege: e('UPDATE') },
     ]
     expect(groupAccess(rows).map((x) => [x.principal, x.items.length])).toEqual([['u', 2], ['v', 1]])
+  })
+})
+
+describe('修改账号', () => {
+  const base: Principal = { id: 'a', name: 'a', host: null, kind: 'user', level: 'server', can_login: true, locked: false, expires_at: null, builtin: false, attrs: [] }
+
+  it('随机密码够长、四类字符都有、没有引号', () => {
+    for (let i = 0; i < 50; i++) {
+      const p = randomPassword()
+      expect(p).toHaveLength(20)
+      expect(p).toMatch(/[A-Z]/)
+      expect(p).toMatch(/[a-z]/)
+      expect(p).toMatch(/[0-9]/)
+      expect(p).toMatch(/[!#%*+=_-]/)
+      expect(p).not.toMatch(/['"\\]/)
+    }
+  })
+
+  it('角色和数据库用户不能改密', () => {
+    expect(hasCredentials(base)).toBe(true)
+    expect(hasCredentials({ ...base, kind: 'login' })).toBe(true)
+    expect(hasCredentials({ ...base, kind: 'role' })).toBe(false)
+    expect(hasCredentials({ ...base, level: 'database' })).toBe(false)
+  })
+
+  it('级联只作用于删除', () => {
+    const principal = principalRef(base)
+    expect(withCascade({ op: 'drop', principal }, true)).toEqual({ op: 'drop', principal, cascade: true })
+    const lock = { op: 'set_locked', principal, locked: true } as const
+    expect(withCascade(lock, true)).toBe(lock)
   })
 })

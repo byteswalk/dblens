@@ -1,17 +1,21 @@
-// 账号与权限标签（M9 设计文档第 8 节）：左侧主体列表，右侧属性、直接授权、实际权限；对象反查时右侧列出访问者。只读。
+// 账号与权限标签（M9 设计文档第 8、9 节）：左侧主体列表，右侧属性、直接授权、实际权限；对象反查时右侧列出访问者。
+// 修改都经过 ChangeDialog 预览确认。
 
-import { Alert, Button, Checkbox, Empty, Input, Segmented, Select, Spin, Table, Tabs, Tooltip } from 'antd'
+import { Alert, Button, Checkbox, Dropdown, Empty, Input, Segmented, Select, Spin, Table, Tabs, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { IconArrowLeft, IconRefresh } from '@tabler/icons-react'
+import { IconArrowLeft, IconPlus, IconRefresh } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { schemaLabel, splitCatalog } from '../../shared/api'
-import type { Coverage, EffectivePrivilege, Principal, PrivilegeGrant, PrivNote } from '../../shared/api'
+import type { Coverage, EffectivePrivilege, Membership, Principal, PrivCaps, PrivChange, PrivilegeGrant, PrivNote } from '../../shared/api'
 import { type QueryTab, useTabs } from '../editor/tabs'
-import { type KindFilter, filterPrincipals, groupAccess, pathLabel, targetLabel } from './logic'
+import { AddRoleDialog, ChangeDialog, CreateDialog, GrantDialog, PasswordDialog } from './PrivilegeDialogs'
+import { type KindFilter, filterPrincipals, groupAccess, hasCredentials, pathLabel, principalRef, targetLabel } from './logic'
+
+type FormKind = 'new_user' | 'new_role' | 'password' | 'grant' | 'add_role'
 
 function CoverageNote({ coverage }: { coverage: Coverage | undefined }) {
   const { t } = useTranslation()
@@ -47,12 +51,15 @@ function useEffectiveColumns(principals: Principal[]): ColumnsType<EffectivePriv
   ]
 }
 
-function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
+function PrincipalDetail({ tab, catalog, principal, principals, memberships, caps, onForm, onChange }: {
   tab: QueryTab
   catalog: string | undefined
   principal: Principal
   principals: Principal[]
-  roles: string[]
+  memberships: Membership[]
+  caps: PrivCaps | undefined
+  onForm: (f: FormKind) => void
+  onChange: (c: PrivChange) => void
 }) {
   const api = useApi()
   const { t } = useTranslation()
@@ -62,6 +69,23 @@ function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
     queryKey: ['privileges', tab.profileId, catalog, 'principal', principal.id],
     queryFn: () => api.principalPrivileges(tab.profileId, principal.id, catalog),
   })
+  const nameOf = (id: string) => principals.find((p) => p.id === id)?.name ?? id
+  const memberOf = memberships.filter((m) => m.member === principal.id)
+  const ref = principalRef(principal)
+  const revokeColumn: ColumnsType<PrivilegeGrant>[number] = {
+    key: 'revoke',
+    width: 70,
+    render: (_, g) =>
+      g.effect === 'implicit' ? null : (
+        <a onClick={() => onChange({ op: 'revoke', grantee: ref, scope: g.scope, target: g.target, privilege: g.privilege, grantable: g.grantable })}>
+          {t('privilege.action.revoke')}
+        </a>
+      ),
+  }
+  const removeRole = (m: Membership) => {
+    const role = principals.find((p) => p.id === m.role)
+    if (role) onChange({ op: 'remove_role', member: ref, role: principalRef(role) })
+  }
   const yesNo = (v: boolean | null) => (v === null ? t('privilege.unknown') : v ? t('privilege.yes') : t('privilege.no'))
   const rows: [string, string][] = [
     [t('privilege.attr.name'), principal.name],
@@ -71,7 +95,6 @@ function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
     [t('privilege.attr.login'), yesNo(principal.can_login)],
     [t('privilege.attr.locked'), yesNo(principal.locked)],
     [t('privilege.attr.expires'), principal.expires_at ?? '—'],
-    [t('privilege.attr.roles'), roles.join(', ') || '—'],
     [t('privilege.attr.builtin'), principal.builtin ? t('privilege.yes') : t('privilege.no')],
     ...principal.attrs,
   ]
@@ -79,6 +102,17 @@ function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
       <CoverageNote coverage={data?.coverage} />
       {error && <div className="err" style={{ padding: 12 }}>{t('privilege.error', { detail: (error as Error).message })}</div>}
+      <div className="row" style={{ padding: '6px 12px 0', gap: 2 }}>
+        {hasCredentials(principal) && <Button size="small" type="text" onClick={() => onForm('password')}>{t('privilege.action.setPassword')}</Button>}
+        {hasCredentials(principal) && caps?.lock && (
+          <Button size="small" type="text" onClick={() => onChange({ op: 'set_locked', principal: ref, locked: !principal.locked })}>
+            {t(principal.locked ? 'privilege.action.unlock' : 'privilege.action.lock')}
+          </Button>
+        )}
+        <Button size="small" type="text" onClick={() => onForm('grant')}>{t('privilege.action.grant')}</Button>
+        <Button size="small" type="text" onClick={() => onForm('add_role')}>{t('privilege.action.addRole')}</Button>
+        <Button size="small" type="text" danger onClick={() => onChange({ op: 'drop', principal: ref })}>{t('privilege.action.drop')}</Button>
+      </div>
       <Tabs
         size="small"
         style={{ padding: '0 12px', flex: 1, minHeight: 0, overflow: 'auto' }}
@@ -92,6 +126,15 @@ function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
                   {rows.map(([k, v]) => (
                     <tr key={k}><td className="muted" style={{ paddingRight: 24 }}>{k}</td><td>{v}</td></tr>
                   ))}
+                  <tr>
+                    <td className="muted" style={{ paddingRight: 24 }}>{t('privilege.attr.roles')}</td>
+                    <td>
+                      {memberOf.length === 0 && '—'}
+                      {memberOf.map((m) => (
+                        <div key={m.role}>{nameOf(m.role)} <a onClick={() => removeRole(m)}>{t('privilege.action.removeRole')}</a></div>
+                      ))}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             ),
@@ -99,7 +142,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, roles }: {
           {
             key: 'direct',
             label: t('privilege.tab.direct'),
-            children: <Table size="small" pagination={false} loading={isLoading} scroll={{ x: 730 }} rowKey={(g) => `${g.scope}|${targetLabel(g)}|${g.privilege}`} columns={grantColumns} dataSource={data?.direct} />,
+            children: <Table size="small" pagination={false} loading={isLoading} scroll={{ x: 800 }} rowKey={(g) => `${g.scope}|${targetLabel(g)}|${g.privilege}`} columns={[...grantColumns, revokeColumn]} dataSource={data?.direct} />,
           },
           {
             key: 'effective',
@@ -179,10 +222,13 @@ export default function PrivilegesView({ tab }: { tab: QueryTab }) {
   const principals = useMemo(() => data?.principals ?? [], [data])
   const list = useMemo(() => filterPrincipals(principals, { text, kind, builtin }), [principals, text, kind, builtin])
   const current = principals.find((p) => p.id === picked)
-  const roles = (id: string) =>
-    (data?.memberships ?? [])
-      .filter((m) => m.member === id)
-      .map((m) => principals.find((p) => p.id === m.role)?.name ?? m.role)
+  const [form, setForm] = useState<FormKind | null>(null)
+  const [change, setChange] = useState<PrivChange | null>(null)
+  const review = (c: PrivChange) => {
+    setForm(null)
+    setChange(c)
+  }
+  const refresh = () => void qc.invalidateQueries({ queryKey: ['privileges', tab.profileId] })
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -210,8 +256,22 @@ export default function PrivilegesView({ tab }: { tab: QueryTab }) {
               ]}
             />
             <span className="grow" />
+            {data && (
+              <Dropdown
+                trigger={['click']}
+                menu={{
+                  items: [
+                    { key: 'new_user', label: t('privilege.action.newUser') },
+                    { key: 'new_role', label: t('privilege.action.newRole') },
+                  ],
+                  onClick: ({ key }) => setForm(key as FormKind),
+                }}
+              >
+                <Button size="small" type="text" aria-label={t('privilege.action.new')} icon={<IconPlus size={14} />} />
+              </Dropdown>
+            )}
             <Tooltip title={t('privilege.refresh')}>
-              <Button size="small" type="text" icon={<IconRefresh size={14} />} onClick={() => void qc.invalidateQueries({ queryKey: ['privileges', tab.profileId] })} />
+              <Button size="small" type="text" icon={<IconRefresh size={14} />} onClick={refresh} />
             </Tooltip>
           </div>
           <Checkbox checked={builtin} onChange={(e) => setBuiltin(e.target.checked)}>{t('privilege.showBuiltin')}</Checkbox>
@@ -242,11 +302,27 @@ export default function PrivilegesView({ tab }: { tab: QueryTab }) {
         {focus ? (
           <ObjectAccessPanel tab={tab} principals={principals} onPick={(id) => { setPicked(id); useTabs.getState().setPrivilegesFocus(tab.id, undefined) }} />
         ) : current ? (
-          <PrincipalDetail key={current.id} tab={tab} catalog={catalog} principal={current} principals={principals} roles={roles(current.id)} />
+          <PrincipalDetail key={current.id} tab={tab} catalog={catalog} principal={current} principals={principals} memberships={data?.memberships ?? []} caps={data?.caps} onForm={setForm} onChange={setChange} />
         ) : (
           <Empty style={{ marginTop: 64 }} image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('privilege.empty')} />
         )}
       </div>
+      {data && (form === 'new_user' || form === 'new_role') && <CreateDialog role={form === 'new_role'} caps={data.caps} onCancel={() => setForm(null)} onNext={review} />}
+      {current && form === 'password' && <PasswordDialog principal={current} onCancel={() => setForm(null)} onNext={review} />}
+      {data && current && form === 'grant' && <GrantDialog principal={current} caps={data.caps} catalog={catalog} onCancel={() => setForm(null)} onNext={review} />}
+      {current && form === 'add_role' && (
+        <AddRoleDialog principal={current} roles={principals.filter((p) => p.kind === 'role' && p.id !== current.id && p.level === current.level)} onCancel={() => setForm(null)} onNext={review} />
+      )}
+      {change && (
+        <ChangeDialog
+          profileId={tab.profileId}
+          catalog={catalog}
+          change={change}
+          cascadable={change.op === 'drop' && (data?.caps.drop_cascade ?? false) && change.principal.kind !== 'role'}
+          onClose={() => setChange(null)}
+          onDone={refresh}
+        />
+      )}
     </div>
   )
 }

@@ -260,6 +260,19 @@ fn write_batch(store: &Store, batch: &[NewHistory]) {
 pub(crate) mod tests {
     use super::*;
 
+    #[test]
+    fn typed_account_statements_lose_their_passwords() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let log = HistoryLog::inline(store.clone());
+        log.record(entry(
+            "CREATE USER 'u'@'%' IDENTIFIED BY 'S3ntinel'",
+            Some("near IDENTIFIED BY 'S3ntinel'"),
+        ));
+        let items = store.history(&HistoryQuery::default()).unwrap();
+        assert_eq!(items[0].entry.sql, "CREATE USER 'u'@'%' IDENTIFIED BY ***");
+        assert!(!items[0].entry.error.as_deref().unwrap().contains("S3ntinel"));
+    }
+
     pub(crate) fn entry(sql: &str, error: Option<&str>) -> NewHistory {
         NewHistory {
             at: 1_700_000_000_000,

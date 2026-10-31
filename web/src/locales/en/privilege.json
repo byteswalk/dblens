@@ -79,5 +79,37 @@
     "back": "Back to list",
     "none": "No one found"
   },
-  "error": "Failed to read: {{detail}}"
+  "error": "Failed to read: {{detail}}",
+  "action": {
+    "new": "New",
+    "newUser": "New user",
+    "newRole": "New role",
+    "setPassword": "Change password",
+    "lock": "Lock",
+    "unlock": "Unlock",
+    "grant": "Grant",
+    "addRole": "Add to role",
+    "removeRole": "Remove",
+    "revoke": "Revoke",
+    "drop": "Delete",
+    "next": "Next",
+    "password": "Password",
+    "generate": "Generate",
+    "withGrant": "Grantable",
+    "withAdmin": "Can administer this role"
+  },
+  "change": {
+    "title": "Confirm change",
+    "connection": "Connection: {{name}}",
+    "run": "Run",
+    "cancel": "Cancel",
+    "close": "Close",
+    "notAtomic": "Statements run one at a time; earlier ones are not undone if a later one fails.",
+    "ownAccount": "This is the account this connection uses. Existing connections may stop working.",
+    "owned": "It owns: {{list}}",
+    "cascade": "Also delete what it owns (CASCADE)",
+    "typeName": "This is a production connection. Type {{name}} to confirm",
+    "done": "Executed:",
+    "failed": "Failed: {{statement}}"
+  }
 }

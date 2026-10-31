@@ -1,8 +1,40 @@
 // 账号与权限的纯逻辑（M9 设计文档第 8 节）。
 
-import type { ObjectAccess, Principal, PrivilegeGrant } from '../../shared/api'
+import type { ObjectAccess, Principal, PrincipalRef, PrivChange, PrivilegeGrant } from '../../shared/api'
 
 export type KindFilter = 'all' | 'user' | 'role'
+
+export function principalRef(p: Principal): PrincipalRef {
+  return { name: p.name, host: p.host, kind: p.kind, level: p.level }
+}
+
+/** 这个主体能不能改密、锁定：角色不能；SQL Server 的数据库用户要改对应的登录名。 */
+export function hasCredentials(p: Principal): boolean {
+  return p.kind === 'login' || (p.kind === 'user' && p.level === 'server')
+}
+
+export function withCascade(change: PrivChange, cascade: boolean): PrivChange {
+  return change.op === 'drop' ? { ...change, cascade } : change
+}
+
+/** 本地生成的随机密码：大小写字母、数字、符号各至少一个，不含引号和反斜杠。 */
+export function randomPassword(length = 20): string {
+  const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnpqrstuvwxyz', '23456789', '!#%*+-=_']
+  const all = sets.join('')
+  const pick = (from: string) => {
+    const r = new Uint32Array(1)
+    crypto.getRandomValues(r)
+    return from[r[0] % from.length]
+  }
+  const chars = [...sets.map(pick), ...Array.from({ length: length - sets.length }, () => pick(all))]
+  for (let i = chars.length - 1; i > 0; i--) {
+    const r = new Uint32Array(1)
+    crypto.getRandomValues(r)
+    const j = r[0] % (i + 1)
+    ;[chars[i], chars[j]] = [chars[j], chars[i]]
+  }
+  return chars.join('')
+}
 
 export interface PrincipalFilter {
   text: string

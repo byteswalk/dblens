@@ -148,11 +148,11 @@ pub fn redact_sql(sql: &str) -> Cow<'_, str> {
     }
     let mut ranges = Vec::new();
     for i in 0..t.len() {
-        match word(sql, t.get(i)).as_deref() {
-            Some("BY" | "PASSWORD" | "OLD_PASSWORD" | "REPLACE" | "AS") => {
-                ranges.extend(value_after(sql, &t, i + 1));
-            }
-            _ => {}
+        if matches!(
+            word(sql, t.get(i)).as_deref(),
+            Some("BY" | "PASSWORD" | "OLD_PASSWORD" | "REPLACE" | "AS")
+        ) {
+            ranges.extend(value_after(sql, &t, i + 1));
         }
     }
     // SET PASSWORD [FOR 账号] = '…'：等号后面都不留

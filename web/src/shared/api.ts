@@ -409,11 +409,57 @@ export interface ObjectAccess {
 /** 读到的范围。`missing` 是后端按请求语言给出的文字。 */
 export type Coverage = { state: 'complete' } | { state: 'partial'; missing: string[] }
 
+export interface PrivCaps {
+  lock: boolean
+  role_password: boolean
+  host: boolean
+  drop_cascade: boolean
+  global_grant: boolean
+  database_grant: boolean
+  schema_grant: boolean
+}
+
 export interface PrivilegeOverview {
   principals: Principal[]
   memberships: Membership[]
   public: string[]
+  caps: PrivCaps
   coverage: Coverage
+}
+
+export interface PrincipalRef {
+  name: string
+  host: string | null
+  kind: Principal['kind']
+  level: Principal['level']
+}
+
+/** 修改账号和权限的操作。密码只随请求发送，不进前端的任何存储。 */
+export type PrivChange =
+  | { op: 'create_user'; name: string; host?: string; password: string }
+  | { op: 'create_role'; name: string; level: Principal['level']; password?: string }
+  | { op: 'drop'; principal: PrincipalRef; cascade?: boolean }
+  | { op: 'set_password'; principal: PrincipalRef; password: string }
+  | { op: 'set_locked'; principal: PrincipalRef; locked: boolean }
+  | { op: 'grant'; grantee: PrincipalRef; scope: GrantScope; target: PrivilegeGrant['target']; privilege: string; with_grant?: boolean }
+  | { op: 'revoke'; grantee: PrincipalRef; scope: GrantScope; target: PrivilegeGrant['target']; privilege: string; grantable?: boolean }
+  | { op: 'add_role'; member: PrincipalRef; role: PrincipalRef; admin?: boolean }
+  | { op: 'remove_role'; member: PrincipalRef; role: PrincipalRef }
+
+export interface PrivPreview {
+  statements: string[]
+  profile_name: string
+  production: boolean
+  confirm_name: string | null
+  own_account: boolean
+  owned: string[]
+  confirm: string[]
+}
+
+export interface PrivApplyResult {
+  done: string[]
+  failed: string | null
+  error: string | null
 }
 
 export interface PrincipalPrivileges {
@@ -1381,6 +1427,10 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     ops: (id: string) => request<OpsQuery[]>('GET', `${p(id)}/ops`),
     privilegeOverview: (id: string, catalog?: string) =>
       request<PrivilegeOverview>('GET', `${p(id)}/privileges${q({ catalog })}`),
+    privilegePreview: (id: string, change: PrivChange, catalog?: string) =>
+      request<PrivPreview>('POST', `${p(id)}/privileges/preview`, { change, catalog }),
+    privilegeApply: (id: string, change: PrivChange, catalog?: string, confirm_name?: string) =>
+      request<PrivApplyResult>('POST', `${p(id)}/privileges/apply`, { change, catalog, confirm_name }),
     principalPrivileges: (id: string, principal: string, catalog?: string) =>
       request<PrincipalPrivileges>('GET', `${p(id)}/privileges/principal${q({ principal, catalog })}`),
     objectAccess: (id: string, schema: string, object: string, catalog?: string) =>
