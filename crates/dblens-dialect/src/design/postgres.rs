@@ -180,7 +180,7 @@ impl Dialect {
                 C::RenameColumn { from, to, .. } => {
                     vec![alter(format!("RENAME COLUMN {} TO {}", self.ident(from), self.ident(to)))]
                 }
-                C::AlterColumn { from, to } => self.pg_alter_column(&q, from, to)?,
+                C::AlterColumn { from, to, .. } => self.pg_alter_column(&q, from, to)?,
                 // 由 design_unsupported 改为重建，不会走到这里
                 C::MoveColumn { .. } => vec![],
                 C::DropPrimaryKey { key } => vec![drop_constraint(&key.name)?],

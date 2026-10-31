@@ -22,7 +22,7 @@ use dblens_service::{
     TaskStatus,
 };
 
-const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "dpi_lib_dir"];
+const LIB_OPTIONS: [&str; 3] = ["oracle_client_lib_dir", "dpi_lib_dir", "jdbc_dir"];
 
 /// 大表的行数。MySQL 的递归 CTE 默认至多 1000 层。
 const ROWS: u64 = 1000;
@@ -152,7 +152,43 @@ fn source_ddl(end: &End, p: &str) -> Vec<String> {
     let opengauss = end.variant == Variant::OpenGauss;
     let n = ROWS;
     match end.driver {
-        DriverId::Informix => unreachable!("迁移在 M8b"),
+        DriverId::Informix => vec![
+            format!(
+                "CREATE TABLE {p}_cust (id BIGSERIAL PRIMARY KEY CONSTRAINT {p}_pk_cust, name VARCHAR(50) DEFAULT 'n/a' NOT NULL, \
+                 active BOOLEAN DEFAULT 't', created DATETIME YEAR TO SECOND DEFAULT CURRENT YEAR TO SECOND, \
+                 amount DECIMAL(12,2) DEFAULT 0, note LVARCHAR(200), \
+                 CHECK (amount >= 0) CONSTRAINT {p}_ck_amount, UNIQUE (name) CONSTRAINT {p}_uk_name)"
+            ),
+            format!("COMMENT ON TABLE {p}_cust IS 'customers'"),
+            format!("COMMENT ON COLUMN {p}_cust.name IS 'name'"),
+            format!("CREATE INDEX {p}_ix_created ON {p}_cust (created)"),
+            format!(
+                "CREATE TABLE {p}_ord (id INT PRIMARY KEY, cust_id BIGINT, qty INT, status VARCHAR(10) DEFAULT 'new', \
+                 CHECK (qty > 0) CONSTRAINT {p}_ck_qty, \
+                 FOREIGN KEY (cust_id) REFERENCES {p}_cust (id) ON DELETE CASCADE CONSTRAINT {p}_fk_cust)"
+            ),
+            format!(
+                "CREATE TABLE {p}_types (id INT PRIMARY KEY, txt VARCHAR(100), big LVARCHAR(4000), amount DECIMAL(12,2), \
+                 ratio FLOAT, flag BOOLEAN, day DATE, ts DATETIME YEAR TO FRACTION(3))"
+            ),
+            format!("CREATE SEQUENCE {p}_seq START WITH 1"),
+            format!("SELECT FIRST 5 {p}_seq.NEXTVAL FROM systables"),
+            format!(
+                "CREATE PROCEDURE {p}_fill()\n  DEFINE i INT;\n  FOR i = 1 TO {n}\n    \
+                 INSERT INTO {p}_cust (name, amount, note) VALUES ('name' || i, i * 1.5, '备注' || i);\n  \
+                 END FOR;\nEND PROCEDURE"
+            ),
+            format!("EXECUTE PROCEDURE {p}_fill()"),
+            format!("DROP PROCEDURE {p}_fill"),
+            format!("INSERT INTO {p}_ord (id, cust_id, qty, status) VALUES (1, 1, 2, 'paid')"),
+            format!("INSERT INTO {p}_ord (id, cust_id, qty, status) VALUES (2, 3, 1, 'new')"),
+            format!(
+                "INSERT INTO {p}_types VALUES (1, '中文 abc', '{}', 1234.5, 0.25, 't', '2026-01-02', '2026-01-02 03:04:05.678')",
+                "y".repeat(3000)
+            ),
+            format!("INSERT INTO {p}_types VALUES (2, 'x''q', 'z', -0.01, NULL, 'f', NULL, NULL)"),
+            format!("INSERT INTO {p}_types (id) VALUES (3)"),
+        ],
         DriverId::SqlServer => vec![
             format!(
                 "CREATE TABLE {p}_cust (id BIGINT IDENTITY(1,1) PRIMARY KEY, name NVARCHAR(50) NOT NULL DEFAULT 'n/a', \
@@ -457,6 +493,7 @@ async fn migrate_flow(src_env: &str, tgt_env: &str, p: &str) {
         let tseq = dialect.qualified(Some(&tgt.schema), &preview.draft.sequences[0].target.name);
         let sql = match tgt.driver {
             DriverId::Postgres => format!("SELECT nextval('{tseq}')"),
+            DriverId::Informix => format!("SELECT {tseq}.NEXTVAL FROM sysmaster:sysdual"),
             DriverId::SqlServer => format!("SELECT NEXT VALUE FOR {tseq}"),
             _ => format!("SELECT {tseq}.NEXTVAL FROM DUAL"),
         };
@@ -656,6 +693,11 @@ routes! {
     kingbase_pg_to_pg: "DBLENS_TEST_KINGBASE_PG_URL" => "DBLENS_TEST_PG_URL", "m5kp";
     kingbase_pg_to_oracle: "DBLENS_TEST_KINGBASE_PG_URL" => "DBLENS_TEST_ORACLE_URL", "m5kp";
     kingbase_pg_to_dameng: "DBLENS_TEST_KINGBASE_PG_URL" => "DBLENS_TEST_DM_URL", "m5kp";
+    gbase_to_mysql: "DBLENS_TEST_GBASE_URL" => "DBLENS_TEST_MYSQL_URL", "m8gb";
+    gbase_to_pg: "DBLENS_TEST_GBASE_URL" => "DBLENS_TEST_PG_URL", "m8gb";
+    gbase_to_oracle: "DBLENS_TEST_GBASE_URL" => "DBLENS_TEST_ORACLE_URL", "m8gb";
+    mysql_to_gbase: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_GBASE_URL", "m8my";
+    pg_to_gbase: "DBLENS_TEST_PG_URL" => "DBLENS_TEST_GBASE_URL", "m8pg";
     sqlserver_to_mysql: "DBLENS_TEST_SQLSERVER_URL" => "DBLENS_TEST_MYSQL_URL", "m6ms";
     sqlserver_to_pg: "DBLENS_TEST_SQLSERVER_URL" => "DBLENS_TEST_PG_URL", "m6ms";
     sqlserver_to_oracle: "DBLENS_TEST_SQLSERVER_URL" => "DBLENS_TEST_ORACLE_URL", "m6ms";

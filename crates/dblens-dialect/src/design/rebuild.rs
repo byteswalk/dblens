@@ -133,7 +133,8 @@ impl Dialect {
         }
         let view_list =
             || ctx.views.iter().map(|v| format!("{}.{}", v.schema, v.name)).collect::<Vec<_>>().join(", ");
-        if self.family() == Family::Postgres && !ctx.views.is_empty() {
+        // PG 的 DROP TABLE 被视图挡住，GBase 8s 的 DROP TABLE 会把视图一起删掉
+        if matches!(self.family(), Family::Postgres | Family::Informix) && !ctx.views.is_empty() {
             return refuse(msg!("design.rebuild.dependent_views", views = view_list()));
         }
         // 草稿列 → 原列名（保留下来的列）
@@ -271,12 +272,16 @@ impl Dialect {
         for (rk, key) in &referencing {
             let key =
                 ForeignKey { ref_schema: Some(schema.to_string()), ref_table: name.clone(), ..key.clone() };
-            sql(format!(
-                "ALTER TABLE {} ADD {}{}",
-                self.qualified(Some(&rk.schema), &rk.table),
-                self.constraint_name(&key.name),
-                self.fk_clause(&rk.schema, &key)
-            ));
+            let other = self.qualified(Some(&rk.schema), &rk.table);
+            sql(if self.family() == Family::Informix {
+                format!("ALTER TABLE {other} ADD CONSTRAINT {}", self.ifx_fk(&rk.schema, &key))
+            } else {
+                format!(
+                    "ALTER TABLE {other} ADD {}{}",
+                    self.constraint_name(&key.name),
+                    self.fk_clause(&rk.schema, &key)
+                )
+            });
         }
 
         // 8. 自增接续、授权、重新编译视图

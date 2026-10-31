@@ -158,6 +158,9 @@ impl Dialect {
     }
 
     pub(crate) fn table_create(&self, schema: &str, t: &Table) -> String {
+        if self.family() == Family::Informix {
+            return self.ifx_table(schema, t) + ";\n";
+        }
         let q = self.qualified(Some(schema), &t.name);
         let list = |cols: &[String]| cols.iter().map(|c| self.ident(c)).collect::<Vec<_>>().join(", ");
         let mut items: Vec<String> = Vec::new();

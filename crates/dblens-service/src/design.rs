@@ -156,7 +156,6 @@ impl Service {
     pub async fn design_caps(&self, profile_id: &str) -> Result<DesignCaps> {
         let profile = self.profile(profile_id)?;
         let dialect = self.metadata.dialect(&profile).await?;
-        crate::later::ensure_full(&dialect)?;
         Ok(dialect.design_caps())
     }
 
@@ -230,7 +229,6 @@ impl Service {
     async fn prepare_design(&self, profile_id: &str, req: &DesignRequest) -> Result<Prepared> {
         let profile = self.scoped_profile(profile_id, req.catalog.as_deref())?;
         let dialect = self.metadata.dialect(&profile).await?;
-        crate::later::ensure_full(&dialect)?;
         let mut draft = req.draft.clone();
         if let Some(name) = &req.name {
             // 已有表不能改名
@@ -263,6 +261,7 @@ impl Service {
             return Ok(prepared);
         }
         let diff = diff_table(original.as_ref(), &draft, &req.renames)?;
+        warnings.extend(dialect.design_warnings(&diff));
         preview.rebuild.reasons = dialect.design_unsupported(&diff);
         preview.changes = diff.changes.clone();
         let rebuild = original.is_some()

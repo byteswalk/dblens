@@ -62,8 +62,7 @@
     "newTable": "新建表",
     "exportDoc": "导出文档…",
     "migrate": "迁移到…",
-    "lint": "规范检查",
-    "gbaseLater": "GBase 8s 暂不支持这项功能，计划在 M8b 提供"
+    "lint": "规范检查"
   },
   "duplicate": {
     "name": "{{name}} 副本",

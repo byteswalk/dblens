@@ -306,7 +306,6 @@ impl Service {
             LintSource::Database { profile, catalog, schema } => {
                 let profile = self.scoped_profile(profile, catalog.as_deref())?;
                 let dialect = self.metadata.dialect(&profile).await?;
-                crate::later::ensure_full(&dialect)?;
                 let args = MetaArgs { schema: Some(schema.clone()), ..Default::default() };
                 for key in MetaKey::TABLE_DETAIL {
                     self.metadata.cache().forget(&profile.id, key, &args);
@@ -333,7 +332,8 @@ impl Service {
                     synonyms,
                 };
                 let input = LintInput { schema: model, family: dialect.family(), objects_known: true };
-                let target = format!("{} · {}", profile.input.name, schema);
+                // 带库的 schema 里有分隔符，显示时写成 库.模式
+                let target = format!("{} · {}", profile.input.name, schema.replace('\u{1f}', "."));
                 Ok((input, target))
             }
             LintSource::Model { model, schema } => {

@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
+import { schemaLabel } from '../../shared/api'
 import { useLintStart } from './dialog'
 import { useLintTracker } from './track'
 
@@ -22,7 +23,7 @@ export function LintStartDialog() {
   const open = source !== null
   const rulesets = useQuery({ queryKey: ['lint', 'rulesets'], queryFn: () => api.lintRulesets(), enabled: open })
 
-  const target = source ? source.schema : ''
+  const target = source ? schemaLabel(source.schema) : ''
 
   async function start() {
     if (!source) return

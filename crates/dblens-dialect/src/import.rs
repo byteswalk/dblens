@@ -83,10 +83,14 @@ impl Dialect {
         } else {
             Vec::new()
         };
-        let merge = mode == WriteMode::Upsert && matches!(self.family(), Family::Oracle | Family::Dameng);
-        // Oracle、达梦的 MERGE 每行一条：多行要用 UNION ALL 拼来源，各行的 NULL 参数类型不一致时会报错
-        let per_statement =
-            if merge { 1 } else { (self.max_params() / cols.len()).clamp(1, MAX_ROWS_PER_STATEMENT) };
+        let merge = mode == WriteMode::Upsert
+            && matches!(self.family(), Family::Oracle | Family::Dameng | Family::Informix);
+        // GBase 8s 的 INSERT 没有多行 VALUES；Oracle、达梦的 MERGE 每行一条：多行要用 UNION ALL 拼来源，各行的 NULL 参数类型不一致时会报错
+        let per_statement = if merge || self.family() == Family::Informix {
+            1
+        } else {
+            (self.max_params() / cols.len()).clamp(1, MAX_ROWS_PER_STATEMENT)
+        };
         let target = self.qualified(Some(schema), &table.name);
         let names: Vec<String> = cols.iter().map(|c| self.ident(&c.name)).collect();
         let list = names.join(", ");
@@ -252,7 +256,8 @@ impl Binder<'_> {
         Ok(())
     }
 
-    /// Oracle、达梦的按主键更新：一行一条 MERGE。只映射了主键列时省略 WHEN MATCHED。
+    /// Oracle、达梦、GBase 8s 的按主键更新：一行一条 MERGE。只映射了主键列时省略 WHEN MATCHED。
+    /// GBase 8s 的来源是 sysmaster:sysdual，SELECT 列表里的参数要 CAST 成列的类型。
     fn merge(
         &mut self,
         target: &str,
@@ -269,11 +274,19 @@ impl Binder<'_> {
             if k > 0 {
                 self.sql.push_str(", ");
             }
+            let informix = self.dialect.family() == Family::Informix;
+            if informix {
+                self.sql.push_str("CAST(");
+            }
             self.param(c, v);
+            if informix {
+                self.sql.push_str(&format!(" AS {})", c.data_type.native));
+            }
             self.sql.push_str(&format!(" AS {}", names[k]));
         }
         let on: Vec<String> = key.iter().map(|&k| format!("t.{0} = s.{0}", names[k])).collect();
-        self.sql.push_str(&format!(" FROM DUAL) s ON ({})", on.join(" AND ")));
+        let dual = if self.dialect.family() == Family::Informix { "sysmaster:sysdual" } else { "DUAL" };
+        self.sql.push_str(&format!(" FROM {dual}) s ON ({})", on.join(" AND ")));
         let sets: Vec<String> = (0..names.len())
             .filter(|k| !key.contains(k))
             .map(|k| format!("t.{0} = s.{0}", names[k]))

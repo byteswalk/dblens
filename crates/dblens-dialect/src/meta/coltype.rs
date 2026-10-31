@@ -34,6 +34,32 @@ fn qualifier(len: i64) -> String {
     format!("{first} TO {}", UNITS[end])
 }
 
+/// `sysdefaults` 的默认值写回 SQL 表达式。`kind`：L 字面量、C CURRENT、T TODAY、U USER。
+/// 字面量里数字和日期时间是“内部编码 + 空格 + 值”，字符串、布尔是值本身。
+pub fn default_expr(kind: &str, raw: &str, native: &str) -> Option<String> {
+    // 字符串默认值结尾带一个 NUL
+    let raw = raw.trim_end_matches('\0');
+    let upper = native.to_ascii_uppercase();
+    let qualifier = upper.strip_prefix("DATETIME ").map(str::trim);
+    match kind.trim() {
+        "T" => Some("TODAY".into()),
+        "U" => Some("USER".into()),
+        "C" => Some(qualifier.map_or("CURRENT".into(), |q| format!("CURRENT {q}"))),
+        "L" => {
+            let value = raw.split_once(' ').map_or(raw, |(_, v)| v);
+            let numeric = ["INT", "SERIAL", "DECIMAL", "NUMERIC", "MONEY", "FLOAT", "REAL"];
+            if let Some(q) = qualifier {
+                Some(format!("DATETIME({value}) {q}"))
+            } else if numeric.iter().any(|n| upper.contains(n)) {
+                Some(value.to_string())
+            } else {
+                Some(format!("'{}'", raw.replace('\'', "''")))
+            }
+        }
+        _ => None,
+    }
+}
+
 pub fn decode(coltype: i64, collength: i64, extended: Option<&str>) -> Decoded {
     let nullable = coltype & 256 == 0;
     let base = coltype & 0xff;
@@ -132,5 +158,25 @@ mod tests {
     fn extended_types_use_their_catalog_name() {
         assert_eq!(decode(41, 2048, Some("blob")).type_name, "BLOB");
         assert_eq!(decode(45, 1, Some("boolean")).type_name, "BOOLEAN");
+    }
+
+    #[test]
+    fn defaults_become_sql_expressions() {
+        assert_eq!(default_expr("L", "wQEAAAAA 1", "DECIMAL(10,2)").as_deref(), Some("1"));
+        assert_eq!(default_expr("L", "AAAABQ 5", "INT").as_deref(), Some("5"));
+        assert_eq!(default_expr("L", "PmIAAA -2", "DECIMAL(5,0)").as_deref(), Some("-2"));
+        assert_eq!(default_expr("L", "x y", "VARCHAR(20)").as_deref(), Some("'x y'"));
+        assert_eq!(default_expr("L", "it's", "CHAR(9)").as_deref(), Some("'it''s'"));
+        assert_eq!(default_expr("L", "t\0", "BOOLEAN").as_deref(), Some("'t'"));
+        assert_eq!(
+            default_expr("L", "xxQUAQIDBAU 2020-01-02 03:04:05", "DATETIME YEAR TO SECOND").as_deref(),
+            Some("DATETIME(2020-01-02 03:04:05) YEAR TO SECOND")
+        );
+        assert_eq!(
+            default_expr("C", "", "DATETIME YEAR TO SECOND").as_deref(),
+            Some("CURRENT YEAR TO SECOND")
+        );
+        assert_eq!(default_expr("T", "", "DATE").as_deref(), Some("TODAY"));
+        assert_eq!(default_expr("", "", "INT"), None);
     }
 }

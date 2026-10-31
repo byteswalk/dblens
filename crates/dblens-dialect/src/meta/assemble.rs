@@ -85,7 +85,14 @@ fn column(d: &Dialect, r: &MetaRow) -> Column {
         ordinal: r.int("ordinal").and_then(|v| u32::try_from(v).ok()).unwrap_or(0),
         data_type: ColumnType { logical: d.logical_type(&native), native },
         nullable: decoded.as_ref().map_or_else(|| r.flag("nullable"), |c| c.nullable),
-        default: r.text("default_value"),
+        default: match &decoded {
+            Some(c) => super::coltype::default_expr(
+                r.text("default_kind").as_deref().unwrap_or_default(),
+                r.text("default_value").as_deref().unwrap_or_default(),
+                &c.type_name,
+            ),
+            None => r.text("default_value"),
+        },
         comment: r.text("comment"),
         auto_increment: r.flag("auto_increment"),
         generated: r.text("generated"),

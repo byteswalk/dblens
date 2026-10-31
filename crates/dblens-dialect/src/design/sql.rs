@@ -26,6 +26,11 @@ impl Dialect {
         matches!(self.family(), Family::Postgres | Family::SqlServer)
     }
 
+    /// 执行前要提示的副作用。
+    pub fn design_warnings(&self, diff: &Diff) -> Vec<Msg> {
+        if self.family() == Family::Informix { self.ifx_warnings(&diff.changes) } else { Vec::new() }
+    }
+
     /// 库确定不支持的改动及原因；不为空时改用重建表。
     pub fn design_unsupported(&self, diff: &Diff) -> Vec<Msg> {
         let mut out = Vec::new();
@@ -39,7 +44,7 @@ impl Dialect {
             out.push(msg!("design.unsupported.clustered_pk"));
         }
         for ch in &diff.changes {
-            let C::AlterColumn { from, to } = ch else { continue };
+            let C::AlterColumn { from, to, .. } = ch else { continue };
             let generated = text(&from.generated) != text(&to.generated);
             let identity = from.auto_increment != to.auto_increment;
             match self.family() {
@@ -73,7 +78,7 @@ impl Dialect {
             Family::Postgres => self.pg_design(schema, table, &diff.changes),
             Family::Oracle | Family::Dameng => self.oracle_design(schema, table, &diff.changes),
             Family::SqlServer => self.sqlserver_design(schema, table, &diff.changes),
-            Family::Informix => Err(dblens_core::Error::invalid(dblens_core::msg!("gbase.later"))),
+            Family::Informix => self.informix_design(schema, table, &diff.changes),
         }
     }
 
@@ -85,6 +90,7 @@ impl Dialect {
             Family::SqlServer => {
                 format!("EXEC sp_rename {}, {}", self.text_literal(&q)?, self.text_literal(to)?)
             }
+            Family::Informix => format!("RENAME TABLE {q} TO {}", self.ident(to)),
             _ => format!("ALTER TABLE {q} RENAME TO {}", self.ident(to)),
         })
     }

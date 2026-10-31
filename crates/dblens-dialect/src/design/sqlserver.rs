@@ -251,7 +251,7 @@ impl Dialect {
                     ]
                 }
                 C::RenameColumn { from, to, .. } => vec![self.ms_rename(&member(from), to, "COLUMN")?],
-                C::AlterColumn { from, to } => self.ms_alter_column(schema, table, from, to)?,
+                C::AlterColumn { from, to, .. } => self.ms_alter_column(schema, table, from, to)?,
                 // 由 design_unsupported 改为重建，不会走到这里
                 C::MoveColumn { .. } => vec![],
                 C::DropPrimaryKey { key } => vec![drop_constraint(&key.name)?],

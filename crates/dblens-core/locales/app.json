@@ -196,6 +196,10 @@
     "zh-CN": "该库不能修改已有列 %{column} 的生成表达式",
     "en": "This database cannot change the generation expression of existing column %{column}"
   },
+  "design.gbase_key_modify": {
+    "zh-CN": "修改 %{column} 时，GBase 8s 会删除其他表引用这一列的外键，执行后要重新创建",
+    "en": "Changing %{column} makes GBase 8s drop foreign keys in other tables that reference it; recreate them afterwards"
+  },
   "design.unsupported.identity": {
     "zh-CN": "该库不能改变已有列 %{column} 的自增属性",
     "en": "This database cannot change the auto-increment of existing column %{column}"
@@ -419,10 +423,6 @@
   "gbase.bad_option": {
     "zh-CN": "%{field} 的值无效：%{value}",
     "en": "Invalid value for %{field}: %{value}"
-  },
-  "gbase.later": {
-    "zh-CN": "GBase 8s 暂不支持这项功能，计划在 M8b 提供",
-    "en": "GBase 8s does not support this yet; it is planned for M8b"
   },
   "gbase.server_name_required": {
     "zh-CN": "请填写 GBase 8s 的服务器名（如 gbase01）",

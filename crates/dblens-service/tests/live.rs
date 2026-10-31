@@ -398,15 +398,28 @@ async fn gbase8s_ops() {
 }
 
 #[tokio::test]
-async fn gbase8s_editing() {
-    editing_flow("DBLENS_TEST_GBASE_URL").await;
+async fn gbase8s_import() {
+    import_flow("DBLENS_TEST_GBASE_URL").await;
 }
 
-/// M8b 的功能被拒绝。
 #[tokio::test]
-async fn gbase8s_later_features_are_rejected() {
-    let Some(live) = setup("DBLENS_TEST_GBASE_URL").await else { return };
-    assert!(live.service.design_caps(&live.profile_id).await.is_err());
+async fn gbase8s_sql_file() {
+    sql_file_flow("DBLENS_TEST_GBASE_URL").await;
+}
+
+#[tokio::test]
+async fn gbase8s_design() {
+    design_flow("DBLENS_TEST_GBASE_URL").await;
+}
+
+#[tokio::test]
+async fn gbase8s_model() {
+    model_flow("DBLENS_TEST_GBASE_URL").await;
+}
+
+#[tokio::test]
+async fn gbase8s_editing() {
+    editing_flow("DBLENS_TEST_GBASE_URL").await;
 }
 
 #[tokio::test]
@@ -1308,7 +1321,11 @@ async fn sql_file_flow(env: &str) {
     let Some(live) = setup(env).await else { return };
     let s = &live.service;
     let script = match live.driver {
-        DriverId::Informix => unreachable!("GBase 8s 没跑这个流程"),
+        DriverId::Informix => {
+            "DROP TABLE IF EXISTS m2b_f;\nDROP PROCEDURE IF EXISTS m2b_p;\nCREATE TABLE m2b_f (a INT);\n\
+             CREATE PROCEDURE m2b_p()\n  INSERT INTO m2b_f VALUES (1);\n  INSERT INTO m2b_f VALUES (2);\n\
+             END PROCEDURE;\nEXECUTE PROCEDURE m2b_p();\nINSERT INTO m2b_f VALUES (3);\nDROP PROCEDURE m2b_p;\n"
+        }
         // TiDB 没有存储过程
         DriverId::Mysql if live.variant == Variant::TiDb => {
             "DROP TABLE IF EXISTS m2b_f;\nCREATE TABLE m2b_f (a INT);\nINSERT INTO m2b_f VALUES (1);\n\
@@ -1348,7 +1365,7 @@ async fn sql_file_flow(env: &str) {
         source: upload(s, "脚本.sql", sql),
         encoding: Default::default(),
         // SQL Server 的"当前 schema"是库
-        schema: Some(if live.driver == DriverId::SqlServer {
+        schema: Some(if matches!(live.driver, DriverId::SqlServer | DriverId::Informix) {
             live.database.clone().unwrap()
         } else {
             live.schema.clone()
@@ -1463,8 +1480,7 @@ async fn design_flow(env: &str) {
     };
     cleanup().await;
     let types: [&str; 4] = match live.driver {
-        DriverId::Informix => unreachable!("表设计器在 M8b"),
-        DriverId::Mysql => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
+        DriverId::Mysql | DriverId::Informix => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
         DriverId::Postgres => ["bigint", "varchar(20)", "numeric(10,2)", "varchar(40)"],
         DriverId::Oracle => ["NUMBER(19)", "VARCHAR2(20)", "NUMBER(10,2)", "VARCHAR2(40)"],
         DriverId::Dameng => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
@@ -1533,11 +1549,13 @@ async fn design_flow(env: &str) {
     }
     // 外键两端的类型要相同（SQL Server 的 NVARCHAR 不能引用 VARCHAR）
     live.run(id, &format!("CREATE TABLE m3_items (item_id INT PRIMARY KEY, order_code {})", types[1])).await;
-    live.run(
-        id,
-        "ALTER TABLE m3_items ADD CONSTRAINT fk_m3_items FOREIGN KEY (order_code) REFERENCES m3_t (code)",
-    )
-    .await;
+    // GBase 8s 的约束名写在定义之后
+    let fk = if live.driver == DriverId::Informix {
+        "ALTER TABLE m3_items ADD CONSTRAINT FOREIGN KEY (order_code) REFERENCES m3_t (code) CONSTRAINT fk_m3_items"
+    } else {
+        "ALTER TABLE m3_items ADD CONSTRAINT fk_m3_items FOREIGN KEY (order_code) REFERENCES m3_t (code)"
+    };
+    live.run(id, fk).await;
     live.run(id, "INSERT INTO m3_items VALUES (1, 'a')").await;
     live.run(id, "CREATE VIEW m3_v AS SELECT id, code FROM m3_t").await;
     // 2. 修改：note 改名为 remark 并加长，amount 不可空、改默认值和注释，换索引，加列 extra，改表注释
@@ -1582,7 +1600,9 @@ async fn design_flow(env: &str) {
     let left: Vec<_> = left
         .into_iter()
         .filter(|c| match c {
-            TableChange::AlterColumn { from, to } => {
+            // GBase 8s 会改写检查约束里的数字（0.00 读回是 0.）
+            TableChange::DropCheck { .. } | TableChange::AddCheck { .. } => live.driver != DriverId::Informix,
+            TableChange::AlterColumn { from, to, .. } => {
                 Column { default: None, ..from.clone() } != Column { default: None, ..to.clone() }
                     && !(from.default.is_some() && to.default.is_some())
             }
@@ -1592,7 +1612,7 @@ async fn design_flow(env: &str) {
     assert!(left.is_empty(), "{env}：读回后仍有差异 {left:?}");
 
     let trigger: &[&str] = match live.driver {
-        DriverId::Informix => unreachable!("表设计器在 M8b"),
+        DriverId::Informix => &[],
         // TiDB 没有触发器
         DriverId::Mysql if live.variant == Variant::TiDb => &[],
         DriverId::Mysql => {
@@ -1624,7 +1644,12 @@ async fn design_flow(env: &str) {
         )
         .await;
     assert!(matches!(err, Err(Error::Invalid { .. })), "{env}：{err:?}");
-    live.run(id, "ALTER TABLE m3_t DROP COLUMN tmp_col").await;
+    let drop_tmp = if live.driver == DriverId::Informix {
+        "ALTER TABLE m3_t DROP (tmp_col)"
+    } else {
+        "ALTER TABLE m3_t DROP COLUMN tmp_col"
+    };
+    live.run(id, drop_tmp).await;
 
     // 4. 重建：amount 挪到最前、extra 改成数值类型；PG 有依赖视图时拒绝
     live.run(id, "UPDATE m3_t SET extra = '10'").await;
@@ -1652,8 +1677,8 @@ async fn design_flow(env: &str) {
         "{env}：{:?}",
         p.rebuild.reasons
     );
-    if live.driver == DriverId::Postgres {
-        assert!(p.rebuild.refused.is_some(), "{env}：PG 有依赖视图时拒绝重建");
+    if matches!(live.driver, DriverId::Postgres | DriverId::Informix) {
+        assert!(p.rebuild.refused.is_some(), "{env}：有依赖视图时拒绝重建");
         live.run(id, "DROP VIEW m3_v").await;
     }
     let p = s.preview_design(&live.profile_id, &req).await.unwrap();
@@ -1725,7 +1750,7 @@ async fn design_flow(env: &str) {
         .unwrap()
         .table;
     assert_eq!(items.foreign_keys.len(), 1, "{env}");
-    if live.driver != DriverId::Postgres {
+    if !matches!(live.driver, DriverId::Postgres | DriverId::Informix) {
         assert_eq!(one("SELECT COUNT(*) FROM m3_v".into()).await.as_deref(), Some("4"), "{env}：视图仍可用");
     }
 

@@ -155,6 +155,31 @@ const DAMENG_TYPES: &[TypeEntry] = &[
 ];
 
 /// SQL Server：长度可写 MAX 的类型在设计器里按长度填写（M6b 再细化）。
+const GBASE_TYPES: &[TypeEntry] = &[
+    t("SMALLINT", N),
+    t("INT", N),
+    t("BIGINT", N),
+    t("SERIAL", N),
+    t("BIGSERIAL", N),
+    t("DECIMAL", P),
+    t("MONEY", P),
+    t("SMALLFLOAT", N),
+    t("FLOAT", N),
+    t("CHAR", L),
+    t("VARCHAR", L),
+    t("NCHAR", L),
+    t("NVARCHAR", L),
+    t("LVARCHAR", L),
+    t("TEXT", N),
+    t("BYTE", N),
+    t("CLOB", N),
+    t("BLOB", N),
+    t("DATE", N),
+    t("DATETIME YEAR TO SECOND", N),
+    t("DATETIME YEAR TO FRACTION(3)", N),
+    t("BOOLEAN", N),
+];
+
 const SQLSERVER_TYPES: &[TypeEntry] = &[
     t("BIT", N),
     t("TINYINT", N),
@@ -244,7 +269,6 @@ impl Dialect {
                 index_methods: vec!["NONCLUSTERED", "CLUSTERED"],
                 types: SQLSERVER_TYPES.to_vec(),
             },
-            // 表设计器在 M8b 才支持，服务层已拦截
             Family::Informix => DesignCaps {
                 reorder: false,
                 checks: true,
@@ -252,7 +276,7 @@ impl Dialect {
                 on_delete: vec!["NO ACTION", "CASCADE"],
                 on_update: vec!["NO ACTION"],
                 index_methods: vec!["NORMAL"],
-                types: vec![],
+                types: GBASE_TYPES.to_vec(),
             },
         }
     }

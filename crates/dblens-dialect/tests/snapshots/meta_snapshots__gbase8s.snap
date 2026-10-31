@@ -72,8 +72,7 @@ ORDER BY 1
 SELECT TRIM(t.tabname) AS table_name, TRIM(c.colname) AS name, c.colno AS ordinal,
        CAST(NULL AS VARCHAR(1)) AS type_text, 't'::BOOLEAN AS nullable,
        c.coltype AS coltype, c.collength AS collength, TRIM(x.name) AS extended_type,
-       CASE d.type WHEN 'L' THEN TRIM(d.default) WHEN 'C' THEN 'CURRENT' WHEN 'T' THEN 'TODAY'
-                   WHEN 'U' THEN 'USER' END AS default_value,
+       TRIM(d.default) AS default_value, d.type AS default_kind,
        m.comments AS comment,
        CASE WHEN MOD(c.coltype, 256) IN (6, 18, 53) THEN 't' ELSE 'f' END::BOOLEAN AS auto_increment,
        CAST(NULL AS VARCHAR(1)) AS generated
@@ -371,7 +370,7 @@ WHERE k.constrtype = 'C' AND t.owner = ?
 ORDER BY 1, 2, c.seqno
 
 -- [indexes] [String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP")]
--- Indexes that back a constraint are excluded: they appear as keys.
+-- 约束自动建的索引名以空格开头，算作键，不列出；用户建的索引被约束共用时要保留。
 SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
        CAST(NULL AS VARCHAR(1)) AS method, TRIM(c.colname) AS column_expr, 1 AS position,
@@ -380,7 +379,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part1)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -390,7 +389,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part2)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -400,7 +399,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part3)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -410,7 +409,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part4)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -420,7 +419,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part5)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -430,7 +429,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part6)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -440,7 +439,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part7)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -450,7 +449,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part8)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -460,7 +459,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part9)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -470,7 +469,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part10)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -480,7 +479,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part11)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -490,7 +489,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part12)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -500,7 +499,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part13)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -510,7 +509,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part14)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -520,7 +519,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part15)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 UNION ALL SELECT TRIM(t.tabname) AS table_name, TRIM(x.idxname) AS index_name,
        CASE WHEN x.idxtype = 'U' THEN 't' ELSE 'f' END::BOOLEAN AS is_unique,
@@ -530,7 +529,7 @@ FROM sysindexes x
 JOIN systables t ON t.tabid = x.tabid
 JOIN syscolumns c ON c.tabid = x.tabid AND c.colno = ABS(x.part16)
 WHERE t.tabid >= 100 AND t.owner = ?
-  AND NOT EXISTS (SELECT 1 FROM sysconstraints k WHERE k.idxname = x.idxname AND k.tabid = x.tabid)
+  AND SUBSTR(x.idxname, 1, 1) <> ' '
   AND t.tabname = ?
 ORDER BY 1, 2, 6
 
@@ -558,6 +557,320 @@ JOIN sysprocedures p ON p.procid = b.procid
 WHERE b.datakey = 'T' AND p.owner = ? AND p.procname = ?
   AND (CASE WHEN p.isproc = 't' THEN 'PROCEDURE' ELSE 'FUNCTION' END) = ?
 ORDER BY b.seqno
+
+-- [referencing_keys] [String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP")]
+-- 其他表指向这张表的外键。
+SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 1 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part1)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part1)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 2 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part2)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part2)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 3 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part3)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part3)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 4 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part4)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part4)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 5 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part5)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part5)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 6 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part6)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part6)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 7 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part7)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part7)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 8 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part8)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part8)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 9 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part9)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part9)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 10 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part10)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part10)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 11 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part11)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part11)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 12 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part12)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part12)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 13 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part13)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part13)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 14 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part14)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part14)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 15 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part15)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part15)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+UNION ALL SELECT TRIM(t.owner) AS table_schema, TRIM(t.tabname) AS table_name,
+       TRIM(k.constrname) AS constraint_name, TRIM(c.colname) AS column_name, 16 AS position,
+       TRIM(rc.colname) AS ref_column,
+       CASE WHEN r.delrule = 'C' THEN 'CASCADE' ELSE 'NO ACTION' END AS on_delete,
+       CAST('NO ACTION' AS VARCHAR(10)) AS on_update
+FROM sysconstraints k
+JOIN systables t ON t.tabid = k.tabid
+JOIN sysindexes x ON x.idxname = k.idxname AND x.tabid = k.tabid
+JOIN syscolumns c ON c.tabid = k.tabid AND c.colno = ABS(x.part16)
+JOIN sysreferences r ON r.constrid = k.constrid
+JOIN systables rt ON rt.tabid = r.ptabid
+JOIN sysconstraints pk ON pk.constrid = r."primary"
+JOIN sysindexes px ON px.idxname = pk.idxname AND px.tabid = pk.tabid
+JOIN syscolumns rc ON rc.tabid = r.ptabid AND rc.colno = ABS(px.part16)
+WHERE k.constrtype = 'R' AND k.tabid <> r.ptabid
+  AND TRIM(rt.owner) = ? AND TRIM(rt.tabname) = ?
+ORDER BY 1, 2, 3, 5
+
+-- [dependent_views] [String("HR"), String("EMP")]
+SELECT DISTINCT TRIM(v.owner) AS schema_name, TRIM(v.tabname) AS name, CAST('VIEW' AS VARCHAR(10)) AS kind
+FROM sysdepend d
+JOIN systables v ON v.tabid = d.dtabid
+JOIN systables t ON t.tabid = d.btabid
+WHERE d.dtype = 'V' AND TRIM(t.owner) = ? AND TRIM(t.tabname) = ?
+ORDER BY 1, 2
+
+-- [grants] [String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP"), String("HR"), String("EMP")]
+-- tabauth 共 9 位，大写表示可转授；表的属主不算授权。
+SELECT TRIM(a.grantee) AS grantee, CAST('SELECT' AS VARCHAR(20)) AS privilege,
+       CASE WHEN SUBSTR(a.tabauth, 1, 1) = UPPER(SUBSTR(a.tabauth, 1, 1)) THEN 1 ELSE 0 END AS grantable
+FROM systabauth a
+JOIN systables t ON t.tabid = a.tabid
+WHERE TRIM(t.owner) = ? AND TRIM(t.tabname) = ?
+  AND a.grantee <> t.owner AND SUBSTR(a.tabauth, 1, 1) <> '-'
+UNION ALL SELECT TRIM(a.grantee) AS grantee, CAST('UPDATE' AS VARCHAR(20)) AS privilege,
+       CASE WHEN SUBSTR(a.tabauth, 2, 1) = UPPER(SUBSTR(a.tabauth, 2, 1)) THEN 1 ELSE 0 END AS grantable
+FROM systabauth a
+JOIN systables t ON t.tabid = a.tabid
+WHERE TRIM(t.owner) = ? AND TRIM(t.tabname) = ?
+  AND a.grantee <> t.owner AND SUBSTR(a.tabauth, 2, 1) <> '-'
+UNION ALL SELECT TRIM(a.grantee) AS grantee, CAST('INSERT' AS VARCHAR(20)) AS privilege,
+       CASE WHEN SUBSTR(a.tabauth, 4, 1) = UPPER(SUBSTR(a.tabauth, 4, 1)) THEN 1 ELSE 0 END AS grantable
+FROM systabauth a
+JOIN systables t ON t.tabid = a.tabid
+WHERE TRIM(t.owner) = ? AND TRIM(t.tabname) = ?
+  AND a.grantee <> t.owner AND SUBSTR(a.tabauth, 4, 1) <> '-'
+UNION ALL SELECT TRIM(a.grantee) AS grantee, CAST('DELETE' AS VARCHAR(20)) AS privilege,
+       CASE WHEN SUBSTR(a.tabauth, 5, 1) = UPPER(SUBSTR(a.tabauth, 5, 1)) THEN 1 ELSE 0 END AS grantable
+FROM systabauth a
+JOIN systables t ON t.tabid = a.tabid
+WHERE TRIM(t.owner) = ? AND TRIM(t.tabname) = ?
+  AND a.grantee <> t.owner AND SUBSTR(a.tabauth, 5, 1) <> '-'
+UNION ALL SELECT TRIM(a.grantee) AS grantee, CAST('INDEX' AS VARCHAR(20)) AS privilege,
+       CASE WHEN SUBSTR(a.tabauth, 6, 1) = UPPER(SUBSTR(a.tabauth, 6, 1)) THEN 1 ELSE 0 END AS grantable
+FROM systabauth a
+JOIN systables t ON t.tabid = a.tabid
+WHERE TRIM(t.owner) = ? AND TRIM(t.tabname) = ?
+  AND a.grantee <> t.owner AND SUBSTR(a.tabauth, 6, 1) <> '-'
+UNION ALL SELECT TRIM(a.grantee) AS grantee, CAST('ALTER' AS VARCHAR(20)) AS privilege,
+       CASE WHEN SUBSTR(a.tabauth, 7, 1) = UPPER(SUBSTR(a.tabauth, 7, 1)) THEN 1 ELSE 0 END AS grantable
+FROM systabauth a
+JOIN systables t ON t.tabid = a.tabid
+WHERE TRIM(t.owner) = ? AND TRIM(t.tabname) = ?
+  AND a.grantee <> t.owner AND SUBSTR(a.tabauth, 7, 1) <> '-'
+UNION ALL SELECT TRIM(a.grantee) AS grantee, CAST('REFERENCES' AS VARCHAR(20)) AS privilege,
+       CASE WHEN SUBSTR(a.tabauth, 8, 1) = UPPER(SUBSTR(a.tabauth, 8, 1)) THEN 1 ELSE 0 END AS grantable
+FROM systabauth a
+JOIN systables t ON t.tabid = a.tabid
+WHERE TRIM(t.owner) = ? AND TRIM(t.tabname) = ?
+  AND a.grantee <> t.owner AND SUBSTR(a.tabauth, 8, 1) <> '-'
+ORDER BY 1, 2
 
 -- [table_storage] [String("HR"), String("EMP")]
 SELECT CAST(NULL AS VARCHAR(1)) AS engine, CAST(NULL AS VARCHAR(1)) AS charset, CAST(NULL AS VARCHAR(1)) AS collation,

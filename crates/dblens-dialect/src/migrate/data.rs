@@ -150,7 +150,7 @@ pub fn identity_reset_sql(d: &Dialect, schema: &str, table: &str, column: &str) 
 
 /// 读序列的下一个值的查询（一行一列 `n`）：PG 系由 `last_value`、`is_called` 算出；Oracle、达梦取 `LAST_NUMBER`
 /// （带缓存时可能比实际的下一个值大，作为起点是安全的）；SQL Server 由 `current_value` 加步长算出（从未取过值时是起始值）。
-/// MySQL 系没有序列，返回 None。
+/// GBase 8s 的目录里没有当前值，只能取一次 NEXTVAL，序列会前进一步。MySQL 系没有序列，返回 None。
 pub fn sequence_next_sql(d: &Dialect, schema: &str, name: &str) -> Result<Option<String>> {
     Ok(match d.family() {
         Family::Postgres => Some(format!(
@@ -168,7 +168,10 @@ pub fn sequence_next_sql(d: &Dialect, schema: &str, name: &str) -> Result<Option
              FROM sys.sequences WHERE object_id = OBJECT_ID({})",
             d.literal(&Value::String(d.qualified(Some(schema), name)))?
         )),
-        Family::MySql | Family::Informix => None,
+        Family::Informix => {
+            Some(format!("SELECT {}.NEXTVAL AS n FROM sysmaster:sysdual", d.qualified(Some(schema), name)))
+        }
+        Family::MySql => None,
     })
 }
 
@@ -181,8 +184,8 @@ pub fn sequence_restart_sql(d: &Dialect, schema: &str, seq: &Sequence, next: &st
             let s = Sequence { start: Some(next.to_string()), ..seq.clone() };
             vec![format!("DROP SEQUENCE {q}"), sequence_sql(d, schema, &s)]
         }
-        Family::SqlServer => vec![format!("ALTER SEQUENCE {q} RESTART WITH {next}")],
-        Family::MySql | Family::Informix => vec![],
+        Family::SqlServer | Family::Informix => vec![format!("ALTER SEQUENCE {q} RESTART WITH {next}")],
+        Family::MySql => vec![],
     })
 }
 

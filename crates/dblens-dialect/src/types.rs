@@ -240,6 +240,13 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "BYTE" | "BLOB" => L::Blob,
             "DATE" => L::Date,
             "DATETIME" => L::Timestamp { tz: false, precision: Some(5) },
+            _ if n.starts_with("DATETIME YEAR") => {
+                let fraction = n.contains("FRACTION");
+                L::Timestamp { tz: false, precision: if fraction { precision.or(Some(3)) } else { Some(0) } }
+            }
+            _ if n.starts_with("DATETIME HOUR") => {
+                L::Time { precision: if n.contains("FRACTION") { precision.or(Some(3)) } else { Some(0) } }
+            }
             "INTERVAL" => L::Interval,
             _ => L::Other,
         },
@@ -600,8 +607,14 @@ pub fn native_type(family: Family, logical: &LogicalType) -> String {
             L::VarChar { .. } | L::Text | L::Json | L::Other => "TEXT".into(),
             L::Binary { .. } | L::VarBinary { .. } | L::Blob => "BYTE".into(),
             L::Date => "DATE".into(),
-            L::Time { .. } => "DATETIME HOUR TO FRACTION(5)".into(),
-            L::Timestamp { .. } => "DATETIME YEAR TO FRACTION(5)".into(),
+            L::Time { precision: Some(0) } => "DATETIME HOUR TO SECOND".into(),
+            L::Time { precision } => {
+                format!("DATETIME HOUR TO FRACTION({})", precision.unwrap_or(5).clamp(1, 5))
+            }
+            L::Timestamp { precision: Some(0), .. } => "DATETIME YEAR TO SECOND".into(),
+            L::Timestamp { precision, .. } => {
+                format!("DATETIME YEAR TO FRACTION({})", precision.unwrap_or(5).clamp(1, 5))
+            }
             L::Interval => "VARCHAR(100)".into(),
             L::Uuid => "CHAR(36)".into(),
         },

@@ -183,8 +183,6 @@ impl Service {
         let target = self.scoped_profile(&plan.target.profile, plan.target.catalog.as_deref())?;
         let source_dialect = self.metadata.dialect(&source).await?;
         let target_dialect = self.metadata.dialect(&target).await?;
-        crate::later::ensure_full(&source_dialect)?;
-        crate::later::ensure_full(&target_dialect)?;
         let schemas = self.metadata.schemas(&target, None).await?;
         if !schemas.iter().any(|s| s.name == plan.target.schema) {
             return Err(Error::not_found(msg!(
@@ -494,8 +492,6 @@ impl Service {
             self.scoped_profile(&record.plan.target.profile, record.plan.target.catalog.as_deref())?;
         let source_dialect = self.metadata.dialect(&source).await?;
         let target_dialect = self.metadata.dialect(&target).await?;
-        crate::later::ensure_full(&source_dialect)?;
-        crate::later::ensure_full(&target_dialect)?;
         let source_password = self.secrets.get(&source.id)?.unwrap_or_default();
         let target_password = self.secrets.get(&target.id)?.unwrap_or_default();
         if !self.migrations.begin(&record.id) {

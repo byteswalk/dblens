@@ -345,7 +345,10 @@ pub(super) fn convert_default(
     let oracle_like = matches!(fam, Family::Oracle | Family::Dameng);
     // SQL Server 的 BIT 也只能写 1、0
     let boolean = |v: bool| -> String {
-        if oracle_like || fam == Family::SqlServer || (fam == Family::Postgres && *logical != L::Bool) {
+        if fam == Family::Informix {
+            (if v { "'t'" } else { "'f'" }).into()
+        } else if oracle_like || fam == Family::SqlServer || (fam == Family::Postgres && *logical != L::Bool)
+        {
             (if v { "1" } else { "0" }).into()
         } else {
             (if v { "TRUE" } else { "FALSE" }).into()
@@ -358,6 +361,7 @@ pub(super) fn convert_default(
             (Family::Oracle, L::Timestamp { .. } | L::Date) => "TRUNC(SYSDATE)".into(),
             (Family::Dameng, L::Date) => "CURDATE()".into(),
             (Family::SqlServer, L::Date) => "CAST(GETDATE() AS DATE)".into(),
+            (Family::Informix, L::Date) => "TODAY".into(),
             _ => return Err(()),
         }))
     };
@@ -379,10 +383,24 @@ pub(super) fn convert_default(
             (Family::Dameng, L::Timestamp { .. }) => "CURRENT_TIMESTAMP".into(),
             (Family::SqlServer, L::Timestamp { tz: false, .. }) => "SYSDATETIME()".into(),
             (Family::SqlServer, L::Timestamp { tz: true, .. }) => "SYSDATETIMEOFFSET()".into(),
+            (Family::Informix, L::Timestamp { .. }) => {
+                let native = column.native.trim().to_ascii_uppercase();
+                format!("CURRENT {}", native.strip_prefix("DATETIME ").unwrap_or("YEAR TO SECOND"))
+            }
             (_, L::Date) => return today(),
             _ => return Err(()),
         }))
     };
+    // GBase 8s：CURRENT 后面带范围（CURRENT YEAR TO SECOND），TODAY 是日期
+    if src.family() == Family::Informix {
+        let upper = text.trim().to_ascii_uppercase();
+        if upper == "CURRENT" || upper.starts_with("CURRENT ") {
+            return now();
+        }
+        if upper == "TODAY" {
+            return today();
+        }
+    }
     match toks {
         [] => Err(()),
         [Tok::Word(w)] if w.eq_ignore_ascii_case("NULL") => Ok(None),
@@ -395,6 +413,14 @@ pub(super) fn convert_default(
         // MySQL 的位串 b'1'
         [Tok::Word(b), Tok::Str(s)] if b.eq_ignore_ascii_case("b") && (s == "0" || s == "1") => {
             Ok(Some(boolean(s == "1")))
+        }
+        // GBase 8s 的布尔默认值是 't'、'f'；目标是 NUMBER(1) 这类数字列时也要转
+        [Tok::Str(s)]
+            if src.family() == Family::Informix
+                && (s == "t" || s == "f")
+                && matches!(logical, L::Int { .. } | L::UInt { .. } | L::Decimal { .. }) =>
+        {
+            Ok(Some(boolean(s == "t")))
         }
         [Tok::Str(s)] => {
             let value = Value::String(s.clone());

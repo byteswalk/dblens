@@ -3,6 +3,7 @@
 
 mod catalog;
 pub(crate) mod diff;
+mod informix;
 mod mysql;
 mod oracle;
 mod postgres;
@@ -35,6 +36,15 @@ pub struct Renames {
     pub indexes: BTreeMap<String, String>,
 }
 
+/// 只涉及一列的约束，用原表的定义。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ColumnConstraints {
+    pub primary_key: Option<PrimaryKey>,
+    pub uniques: Vec<UniqueConstraint>,
+    pub checks: Vec<CheckConstraint>,
+    pub foreign_keys: Vec<ForeignKey>,
+}
+
 /// 一项结构变更。列的修改发生在改名之后：`AlterColumn.from` 的名字已换成新名。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -63,6 +73,9 @@ pub enum TableChange {
     AlterColumn {
         from: Column,
         to: Column,
+        /// 这一列上的单列约束，改完还要在。GBase 8s 的 `MODIFY` 会把它们删掉，要重建。
+        #[serde(default)]
+        keep: ColumnConstraints,
     },
     /// 调整已有列的位置：`column` 是草稿中的完整定义。
     MoveColumn {

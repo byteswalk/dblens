@@ -7,7 +7,7 @@ use dblens_core::schema::{
 };
 use dblens_core::{Error, Result, msg};
 
-use super::{DesignIssue, Diff, IssueSection as S, Renames, TableChange as C};
+use super::{ColumnConstraints, DesignIssue, Diff, IssueSection as S, Renames, TableChange as C};
 
 /// 索引列是不是表达式（如 `lower(name)`）：表达式不检查列是否存在，也不随列改名。
 pub(crate) fn is_expression(name: &str) -> bool {
@@ -169,6 +169,47 @@ fn pair<'a, T>(
 
 /// 比对原表与草稿。`original` 为 None 表示新建表。草稿应已校验过（`validate`）。
 /// `renames` 中的名字对不上时返回 `invalid`。
+/// 表达式里有没有这个词（前后不是标识符字符）。
+fn mentions(expression: &str, word: &str) -> bool {
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_';
+    expression.match_indices(word).any(|(at, _)| {
+        !expression[..at].chars().next_back().is_some_and(is_ident)
+            && !expression[at + word.len()..].chars().next().is_some_and(is_ident)
+    })
+}
+
+/// 原表上只涉及 `column` 一列、草稿里还保留的约束。
+fn kept_constraints(orig: &Table, draft: &Table, column: &str) -> ColumnConstraints {
+    let only = |cols: &[String]| matches!(cols, [c] if c == column);
+    let keeps = |name: &Option<String>, names: Vec<&Option<String>>| name.is_some() && names.contains(&name);
+    let primary_key =
+        orig.primary_key.as_ref().filter(|k| only(&k.columns) && draft.primary_key.is_some()).cloned();
+    let uniques = orig
+        .uniques
+        .iter()
+        .filter(|u| only(&u.columns) && keeps(&u.name, draft.uniques.iter().map(|d| &d.name).collect()))
+        .cloned()
+        .collect();
+    let foreign_keys = orig
+        .foreign_keys
+        .iter()
+        .filter(|f| only(&f.columns) && keeps(&f.name, draft.foreign_keys.iter().map(|d| &d.name).collect()))
+        .cloned()
+        .collect();
+    let others: Vec<&str> = orig.columns.iter().map(|c| c.name.as_str()).filter(|n| *n != column).collect();
+    let checks = orig
+        .checks
+        .iter()
+        .filter(|c| {
+            mentions(&c.expression, column)
+                && !others.iter().any(|o| mentions(&c.expression, o))
+                && keeps(&c.name, draft.checks.iter().map(|d| &d.name).collect())
+        })
+        .cloned()
+        .collect();
+    ColumnConstraints { primary_key, uniques, checks, foreign_keys }
+}
+
 pub fn diff_table(original: Option<&Table>, draft: &Table, renames: &Renames) -> Result<Diff> {
     let Some(orig) = original else {
         return Ok(Diff { changes: vec![C::CreateTable { table: draft.clone() }], appended: true });
@@ -209,7 +250,11 @@ pub fn diff_table(original: Option<&Table>, draft: &Table, renames: &Renames) ->
         let Some(&n) = new_of.get(o.name.as_str()) else { continue };
         let d = draft.columns.iter().find(|c| c.name == n).expect("配对的列在草稿中");
         if !same_column(o, d) {
-            cols.push(C::AlterColumn { from: Column { name: n.to_string(), ..o.clone() }, to: d.clone() });
+            cols.push(C::AlterColumn {
+                from: Column { name: n.to_string(), ..o.clone() },
+                to: d.clone(),
+                keep: kept_constraints(orig, draft, &o.name),
+            });
         }
     }
     let is_new = |c: &Column| !new_of.values().any(|&n| n == c.name);
@@ -477,7 +522,7 @@ mod tests {
             kinds(&changes),
             ["drop_check", "drop_index", "drop_column", "alter_column", "add_column"]
         );
-        let C::AlterColumn { from, to } = &changes[3] else { panic!() };
+        let C::AlterColumn { from, to, .. } = &changes[3] else { panic!() };
         assert_eq!(
             (from.data_type.native.as_str(), to.data_type.native.as_str()),
             ("VARCHAR(20)", "VARCHAR(50)")
@@ -524,7 +569,7 @@ mod tests {
         let renames = Renames { columns: [("total".into(), "amount".into())].into(), ..Default::default() };
         let changes = diff(&t, &draft, &renames);
         assert_eq!(kinds(&changes), ["drop_check", "rename_column", "alter_column"]);
-        let C::AlterColumn { from, to } = &changes[2] else { panic!() };
+        let C::AlterColumn { from, to, .. } = &changes[2] else { panic!() };
         assert_eq!(from.name, "total", "修改发生在改名之后");
         assert_eq!(to.comment.as_deref(), Some("合计"));
     }
