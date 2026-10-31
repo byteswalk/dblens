@@ -66,4 +66,3 @@ GET /api/profiles/{id}/privileges/object?schema=&object=&catalog=  访问者、�
 - openGauss 的 `CREATE ROLE` 必须带密码，用户带同名 schema，删除要 `CASCADE`。
 - SQL Server 的登录名天然有 `CONNECT SQL`；登录名的连接开着时删不掉登录名，清理前要关掉连接。
 - `pnpm` 测试和构建前要生成语法代码，直接跑 `tsc` 在新工作树里会报 `gen/` 缺失。
-- 这次观察到对象树节点第一次右键不弹菜单，第二次才弹，涉及的右键逻辑 M9a 没有改动，未确认原因。
