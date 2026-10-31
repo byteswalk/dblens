@@ -341,7 +341,8 @@ trait Policy: Send + Sync {
 - M6a 已完成（设计 `docs/superpowers/specs/2026-10-29-m6a-sqlserver-design.md`，详细计划 `docs/superpowers/plans/2026-10-29-m6a-sqlserver.md`，说明 `docs/notes/m6a-sqlserver.md`）。
 - M6b 已完成（设计 `docs/superpowers/specs/2026-10-29-m6b-sqlserver-design.md`，详细计划 `docs/superpowers/plans/2026-10-29-m6b-sqlserver.md`，说明 `docs/notes/m6b-sqlserver.md`）。M6 全部完成，SQL Server 与其他库同等可用。
 - M7a 已完成（设计 `docs/superpowers/specs/2026-10-30-m7-lint-design.md`，详细计划 `docs/superpowers/plans/2026-10-30-m7a-lint.md`，说明 `docs/notes/m7a-lint.md`）。
-- M7b 已完成（同一设计，详细计划 `docs/superpowers/plans/2026-10-30-m7b-lint-reports.md`，说明 `docs/notes/m7b-lint-reports.md`）。M7c 尚未开始。
+- M7b 已完成（同一设计，详细计划 `docs/superpowers/plans/2026-10-30-m7b-lint-reports.md`，说明 `docs/notes/m7b-lint-reports.md`）。
+- M7c 已完成（同一设计第 2 节，说明 `docs/notes/m7c-lint.md`）。M7 全部完成，`lint_tables` 待实库验证。
 - 2026-10-30 用户决定：“授权管理”指数据库账号权限，不是软件许可；团队版只规划不实现。GBase 8s 经 Java 桥接支持（JDBC 跨平台，不用 CSDK）。
 - M8a 已完成（GBase 8s 连接、浏览、查询；设计 `docs/superpowers/specs/2026-10-30-m8a-gbase8s-design.md`，详细计划 `docs/superpowers/plans/2026-10-30-m8a-gbase8s.md`，说明 `docs/notes/m8a-gbase8s.md`）。
 - M8b 已完成（GBase 8s 表设计器、导入、比对、模型、迁移、规范检查，说明 `docs/notes/m8b-gbase8s.md`）。

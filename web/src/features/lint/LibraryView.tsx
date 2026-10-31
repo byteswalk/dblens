@@ -206,7 +206,7 @@ function Editor({
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: 8, display: 'flex', gap: 6, alignItems: 'center', borderBottom: '1px solid var(--border, #e3e3e3)' }}>
+      <div style={{ padding: 8, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', borderBottom: '1px solid var(--border, #e3e3e3)' }}>
         <Input
           size="small"
           style={{ width: 200 }}

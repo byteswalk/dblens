@@ -61,13 +61,15 @@ export default function DesignLintPane({ lint }: { lint: ReturnType<typeof useDe
           size="small"
           pagination={false}
           dataSource={rows}
+          tableLayout="fixed"
           columns={[
-            { title: t('lint.lib.severity'), width: 70, render: (_, r) => t(`lint.severity.${r.hit.severity}`) },
+            { title: t('lint.lib.severity'), width: 60, render: (_, r) => t(`lint.severity.${r.hit.severity}`) },
             { title: t('lint.report.clause'), render: (_, r) => r.hit.text },
-            { title: t('lint.report.object_col'), width: 200, render: (_, r) => <code>{r.object}</code> },
+            { title: t('lint.report.object_col'), width: 150, render: (_, r) => <code>{r.object}</code> },
             { title: t('lint.report.message'), dataIndex: 'message' },
             {
               title: t('lint.report.suggestion'),
+              width: 120,
               dataIndex: 'suggestion',
               render: (v?: string | null) => <span style={{ color: '#888' }}>{v || ''}</span>,
             },

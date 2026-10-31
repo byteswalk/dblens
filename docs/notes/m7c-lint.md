@@ -1,0 +1,51 @@
+# M7c 规范检查收尾
+
+依据：设计文档 `docs/superpowers/specs/2026-10-30-m7-lint-design.md` 第 2 节。
+
+## 结构
+
+```text
+crates/dblens-lint/src/rules/naming.rs        name.pattern：名字必须匹配或不得匹配正则
+crates/dblens-lint/src/rules/mod.rs           check_params：保存规范时校验正则；Ctx::storage
+crates/dblens-lint/src/rules/{table,object}.rs  行数、自增步长、ON UPDATE、字符集、引擎改为真实判断
+crates/dblens-lint/src/engine.rs              check_table（设计器用）；LintInput.storage
+crates/dblens-dialect/sql/*.sql               [lint_tables]：整个 schema 的存储信息，只读系统表
+crates/dblens-dialect/src/meta/assemble.rs    LintTable、lint_tables
+crates/dblens-service/src/lint/job.rs         lint_table；检查时取存储信息；记录保存来源
+crates/dblens-api/src/lint.rs                 POST /api/lint/table
+web/src/features/lint/RunsView.tsx            检查记录
+web/src/features/lint/DiffView.tsx            两次结果对比，计算在 logic.ts 的 diffRuns
+web/src/features/lint/RunView.tsx             点问题打开表设计器
+web/src/features/lint/LibraryView.tsx         加规则条款（名称正则、必备字段）
+web/src/features/design/DesignLintPane.tsx    设计器“规范”子标签
+```
+
+## 接口
+
+```text
+POST /api/lint/table   {ruleset, source, table}，只返回未通过的条款，不落盘
+```
+
+检查记录多了 `source`、`model_path`。旧记录没有，问题不可点击。
+
+## 与设计文档不一致、写实现时定的
+
+- 规范没有 `custom:` 字段：自定义规则就是挂 `name.pattern`、`table.required_columns` 的条款。
+- `model_path` 单独存：设计器按模型目录打开，模型编号只在本次打开时有效。
+- 内置规范（数洞通用、事务型严格）新增 `db.charset`、`db.engine` 两条条款，只对 MySQL 系生效，规范条款数各加 2。
+- `db.engine` 默认允许 `InnoDB`、`oceanbase`：OceanBase 的 MySQL 模式报告的引擎是 `oceanbase`。
+- 行数规则默认仍关闭。行数是统计信息估计，PostgreSQL 没分析过的表取不到。
+- 自增步长取服务器设置 `@@auto_increment_increment`，不是单表属性。
+- 存储信息查询失败不影响检查，相关规则报无法判断。
+
+## 已验证
+
+- 后端 1013 项、前端 339 项、clippy、格式检查（不含 `dblens-desktop` 和 `dblens-server`）。
+- 真实鼠标（模型来源）：检查记录列表、勾选两次对比、点问题打开表设计器、“规范”子标签和角标、改表注释后角标从 5 降到 4、加规则条款、错误正则被拒绝、正确的正则能保存。
+
+## 待验证（真实运行）
+
+- `lint_tables` 没有在真实数据库上跑过。设好 `DBLENS_TEST_*_URL` 后运行 `cargo test -p dblens-service --test live lint_tables_query_runs_on_every_database`；不设环境变量时测试直接通过。
+- 用自定义规则跑检查只有规则单测，界面上没有走过。
+- 连接来源的完整流程（打开表设计器、设计器提示、字符集、引擎、步长、`ON UPDATE`）没有实测，走查只用了模型。
+- 桌面版没有编译和验证。
