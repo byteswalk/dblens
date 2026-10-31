@@ -94,6 +94,9 @@ pub struct LintRun {
     /// 模型目录。设计器按目录打开模型，来源里的模型编号只在本次打开时有效。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_path: Option<String>,
+    /// 检查到的表数。0 时通过率没有意义，界面和报告要提示。早期记录没有。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_count: Option<usize>,
     /// 条款说明，与 `results` 一一对应。
     pub clauses: Vec<ClauseMeta>,
     pub results: Vec<ClauseResult>,

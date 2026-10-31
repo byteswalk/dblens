@@ -307,7 +307,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
           {
             key: 'lint',
             label: (
-              <Badge count={lint.count} size="small" offset={[8, -2]} color="#999">
+              <Badge count={lint.count} size="small" offset={[14, -4]} color="#999">
                 {t('design.tabs.lint')}
               </Badge>
             ),

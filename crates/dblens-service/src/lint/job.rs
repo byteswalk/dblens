@@ -286,6 +286,7 @@ impl Service {
                 }
                 task.update(|s| s.phase = TaskPhase::Executing);
                 let family = dblens_lint::family_key(input.family).to_string();
+                let table_count = input.schema.tables.len();
                 let results = check(&input, &set, lang, || task.update(|s| s.progress.read += 1));
                 let clauses: Vec<ClauseMeta> = results
                     .iter()
@@ -306,6 +307,7 @@ impl Service {
                     family,
                     source: Some(req.source.clone()),
                     model_path,
+                    table_count: Some(table_count),
                     clauses,
                     results,
                 };

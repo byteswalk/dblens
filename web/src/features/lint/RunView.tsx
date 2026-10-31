@@ -1,7 +1,7 @@
 // 检查结果：总分统计、按分类分组的条款、问题明细、人工结论、例外、导出报告。
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Dropdown, Empty, Input, Modal, Select, Space, Spin, Table, Tag } from 'antd'
+import { Alert, App, Button, Dropdown, Empty, Input, Modal, Select, Space, Spin, Table, Tag } from 'antd'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -136,8 +136,10 @@ export default function RunView({ tab }: { tab: QueryTab }) {
           </Space>
         </div>
 
+        {run.table_count === 0 && <Alert type="warning" showIcon message={t('lint.run.no_tables')} />}
+
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
-          {s.passRate !== null && (
+          {s.passRate !== null && run.table_count !== 0 && (
             <div style={{ fontSize: 22, fontWeight: 600, marginRight: 8 }}>
               {t('lint.report.pass_rate')} {s.passRate}%
             </div>

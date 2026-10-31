@@ -157,6 +157,7 @@ async fn run_a_check_review_and_report() {
     let (st, run) = call(&app, "GET", &format!("/api/lint/runs/{run_id}"), None).await;
     assert_eq!(st, StatusCode::OK);
     assert_eq!(run["source"]["kind"], "model", "{run}");
+    assert_eq!(run["table_count"], 1, "{run}");
     assert!(run["model_path"].as_str().unwrap().ends_with('m'), "{run}");
     let results = run["results"].as_array().unwrap();
     // 表注释条款应未通过

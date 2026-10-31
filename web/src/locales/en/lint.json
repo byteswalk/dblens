@@ -19,6 +19,7 @@
     "issue_count": "{{count}} issues",
     "save_review": "Save",
     "review_note": "Note (optional)",
+    "no_tables": "There are no tables here, so these verdicts do not show that the structure complies.",
     "waived_count": "{{count}} waived",
     "waive": "Waive",
     "waive_menu": "Waive this object…",

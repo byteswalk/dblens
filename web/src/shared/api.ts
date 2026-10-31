@@ -934,6 +934,8 @@ export interface LintRun {
   source?: LintSource | null
   /** 模型目录，来源是模型时才有。 */
   model_path?: string | null
+  /** 检查到的表数；早期记录没有。 */
+  table_count?: number | null
   clauses: LintClauseMeta[]
   results: LintClauseResult[]
 }

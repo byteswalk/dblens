@@ -1016,6 +1016,10 @@
     "zh-CN": "统计",
     "en": "Summary"
   },
+  "lint.report.table_count": {
+    "zh-CN": "表数量",
+    "en": "Tables"
+  },
   "lint.report.title": {
     "zh-CN": "数据库设计规范检查报告",
     "en": "Database Design Lint Report"

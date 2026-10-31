@@ -33,6 +33,7 @@
   <div>{{ lb.object }}：{{ target }}</div>
   <div>{{ lb.ruleset }}：{{ ruleset_name }}</div>
   <div>{{ lb.generated }}：{{ generated }}</div>
+  {% if table_count is not none %}<div>{{ lb.table_count }}：{{ table_count }}</div>{% endif %}
   {% if reviewer %}<div>{{ lb.reviewer }}：{{ reviewer }}</div>{% endif %}
 </div>
 

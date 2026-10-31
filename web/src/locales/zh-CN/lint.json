@@ -19,6 +19,7 @@
     "issue_count": "{{count}} 个问题",
     "save_review": "保存",
     "review_note": "说明（可选）",
+    "no_tables": "这里没有表，各条款的结论不代表结构符合规范。",
     "waived_count": "已豁免 {{count}} 个",
     "waive": "豁免",
     "waive_menu": "豁免此对象…",

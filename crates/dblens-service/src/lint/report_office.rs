@@ -21,6 +21,9 @@ fn cover(r: &Report, l: &impl Fn(&str) -> String) -> Vec<(String, String)> {
         (l("ruleset"), r.ruleset_name.to_string()),
         (l("generated"), r.generated.clone()),
     ];
+    if let Some(n) = r.table_count {
+        items.push((l("table_count"), n.to_string()));
+    }
     if let Some(who) = r.reviewer.filter(|w| !w.is_empty()) {
         items.push((l("reviewer"), who.to_string()));
     }
@@ -298,6 +301,7 @@ mod tests {
             family: "postgres".into(),
             source: None,
             model_path: None,
+            table_count: Some(3),
             clauses: vec![
                 meta("a", Section::Table, "表要有注释", Severity::Error),
                 meta("b", Section::Design, "符合第三范式", Severity::Warning),
