@@ -148,6 +148,10 @@
     "zh-CN": "有视图依赖这张表（%{views}），删除旧表会失败；请先处理这些视图",
     "en": "Views depend on this table (%{views}); dropping the old table would fail. Deal with these views first"
   },
+  "design.rebuild.function_indexes": {
+    "zh-CN": "这张表有读不到表达式的函数索引（%{indexes}），重建会丢失它们；请先手工处理",
+    "en": "This table has function-based indexes whose expressions cannot be read (%{indexes}); a rebuild would lose them. Deal with them by hand first"
+  },
   "design.rebuild.no_writes": {
     "zh-CN": "重建期间不要写入这张表：复制数据之后写入的内容会丢失",
     "en": "Do not write to this table during the rebuild: data written after the copy will be lost"

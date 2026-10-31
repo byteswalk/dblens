@@ -18,6 +18,8 @@ use crate::{Dialect, Family};
 pub struct RebuildContext {
     pub referencing: Vec<ReferencingKey>,
     pub views: Vec<DependentView>,
+    /// 这张表上的函数索引名。
+    pub function_indexes: Vec<String>,
     pub grants: Vec<Grant>,
     pub storage: TableStorage,
     /// 本表触发器的完整 DDL。
@@ -130,6 +132,16 @@ impl Dialect {
         let refuse = |reason| Ok(RebuildOutcome::Refused { reason });
         if original.partition.is_some() {
             return refuse(msg!("design.rebuild.partitioned"));
+        }
+        // 旧版达梦读不到函数索引的表达式：表明细里没有它，重建后就丢了
+        let unknown: Vec<_> = ctx
+            .function_indexes
+            .iter()
+            .filter(|n| !original.indexes.iter().any(|x| x.name == **n))
+            .map(String::as_str)
+            .collect();
+        if !unknown.is_empty() {
+            return refuse(msg!("design.rebuild.function_indexes", indexes = unknown.join(", ")));
         }
         let view_list =
             || ctx.views.iter().map(|v| format!("{}.{}", v.schema, v.name)).collect::<Vec<_>>().join(", ");
@@ -383,6 +395,7 @@ mod tests {
 
     fn ctx(schema: &str, trigger: &str) -> RebuildContext {
         RebuildContext {
+            function_indexes: vec![],
             referencing: vec![ReferencingKey {
                 schema: schema.into(),
                 table: "items".into(),
@@ -487,6 +500,33 @@ mod tests {
             Dialect::new(Variant::Oracle).rebuild("HR", &orig, &draft, &renames, &c).unwrap(),
             RebuildOutcome::Script(_)
         ));
+        // 达梦读不到表达式的函数索引：拒绝；已读到的不拦
+        let f = RebuildContext { function_indexes: vec!["FX1".into()], ..Default::default() };
+        let dm = Dialect::new(Variant::Dameng);
+        assert_eq!(
+            dm.rebuild("HR", &orig, &draft, &renames, &f).unwrap(),
+            RebuildOutcome::Refused { reason: msg!("design.rebuild.function_indexes", indexes = "FX1") }
+        );
+        let known = orig
+            .indexes
+            .first()
+            .map(|x| x.name.clone())
+            .map(|n| RebuildContext { function_indexes: vec![n], ..Default::default() });
+        if let Some(known) = known {
+            assert!(matches!(
+                dm.rebuild("HR", &orig, &draft, &renames, &known).unwrap(),
+                RebuildOutcome::Script(_)
+            ));
+        }
+        // 达梦自己生成的约束名不能手工重用
+        let mut named = orig.clone();
+        if let Some(k) = &mut named.primary_key {
+            k.name = Some("CONS134220863".into());
+        }
+        let mut d2 = draft.clone();
+        d2.primary_key = named.primary_key.clone();
+        let out = render(&dm.rebuild("HR", &named, &d2, &renames, &RebuildContext::default()).unwrap());
+        assert!(out.contains("ADD PRIMARY KEY") && !out.contains("CONS134220863"), "{out}");
         let mut part = orig.clone();
         part.partition = Some("RANGE (id)".into());
         assert_eq!(

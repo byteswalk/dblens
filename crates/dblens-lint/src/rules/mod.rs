@@ -276,6 +276,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn params_have_labels_in_both_languages() {
+        for lang in ["zh-CN", "en"] {
+            let path = format!("{}/../../web/src/locales/{lang}/lint.json", env!("CARGO_MANIFEST_DIR"));
+            let locale: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+            for info in rule_infos() {
+                for p in &info.params {
+                    assert!(locale["param"][p.key].is_string(), "{lang}: lint.param.{}", p.key);
+                    for c in &p.choices {
+                        assert!(locale["param_choice"][*c].is_string(), "{lang}: lint.param_choice.{c}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn rule_ids_are_unique() {
         let mut ids: Vec<_> = all().map(|r| r.id).collect();
         let n = ids.len();

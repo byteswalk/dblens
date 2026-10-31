@@ -439,6 +439,11 @@ pub fn dependent_views(rows: &MetaRows) -> Result<Vec<DependentView>> {
         .collect())
 }
 
+pub fn function_indexes(rows: &MetaRows) -> Result<Vec<String>> {
+    rows.require("function_indexes", &["index_name"])?;
+    Ok(rows.iter().map(|r| r.name("index_name")).collect())
+}
+
 pub fn grants(rows: &MetaRows) -> Result<Vec<Grant>> {
     rows.require("grants", &["grantee", "privilege", "grantable"])?;
     Ok(rows

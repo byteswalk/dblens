@@ -13,8 +13,8 @@ use dblens_core::Value;
 
 pub use assemble::{
     DependentView, Grant, ObjectInfo, ReferencingKey, SchemaInfo, TableRows, TableStorage, dependent_views,
-    grants, objects, referencing_keys, reserved_words, routines, schemas, sequences, source_text, synonyms,
-    table_storage, tables, trigger_ddl, views,
+    function_indexes, grants, objects, referencing_keys, reserved_words, routines, schemas, sequences,
+    source_text, synonyms, table_storage, tables, trigger_ddl, views,
 };
 pub use rows::{MetaRow, MetaRows};
 
@@ -53,6 +53,8 @@ pub enum MetaKey {
     ReferencingKeys,
     /// 依赖这张表的视图和物化视图（MySQL 系没有：视图按名字引用表）。
     DependentViews,
+    /// 这张表上的函数索引（只有达梦）：旧版读不到表达式，表明细里没有它们，重建会丢失。
+    FunctionIndexes,
     /// 这张表上授予他人的权限（MySQL 系没有：授权按表名记录，重建不受影响）。
     Grants,
     /// 存储属性（引擎、字符集、表空间）和行数估计。
@@ -74,7 +76,7 @@ pub enum MetaKey {
 }
 
 impl MetaKey {
-    pub const ALL: [MetaKey; 22] = [
+    pub const ALL: [MetaKey; 23] = [
         MetaKey::Catalogs,
         MetaKey::Schemas,
         MetaKey::Tables,
@@ -94,6 +96,7 @@ impl MetaKey {
         MetaKey::VariantProbe,
         MetaKey::ReferencingKeys,
         MetaKey::DependentViews,
+        MetaKey::FunctionIndexes,
         MetaKey::Grants,
         MetaKey::TableStorage,
         MetaKey::TriggerDdl,
@@ -142,6 +145,7 @@ impl MetaKey {
             MetaKey::Ddl => "ddl",
             MetaKey::ReferencingKeys => "referencing_keys",
             MetaKey::DependentViews => "dependent_views",
+            MetaKey::FunctionIndexes => "function_indexes",
             MetaKey::Grants => "grants",
             MetaKey::TableStorage => "table_storage",
             MetaKey::TriggerDdl => "trigger_ddl",

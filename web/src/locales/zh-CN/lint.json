@@ -89,10 +89,43 @@
     "delete_confirm": "删除这份规范？",
     "add_clause": "加人工条款",
     "clause": "条款",
+    "clause_placeholder": "输入条款内容",
     "severity": "级别",
     "rules": "规则",
     "manual": "人工",
     "unknown_rule": "未知规则",
     "exceptions": "例外"
+  },
+  "param": {
+    "max": "上限",
+    "max_len": "长度上限",
+    "max_count": "数量上限",
+    "target": "适用对象",
+    "case": "大小写",
+    "prefix": "前缀",
+    "date": "日期字段后缀",
+    "time": "时间字段后缀",
+    "words": "关键词",
+    "fields": "必备字段",
+    "suffixes": "后缀",
+    "step": "步长",
+    "bytes_per_char": "每字符字节数"
+  },
+  "param_choice": {
+    "all": "全部",
+    "table": "表",
+    "column": "字段",
+    "index": "索引",
+    "other": "其他对象",
+    "schema": "模式",
+    "primary_key": "主键",
+    "unique": "唯一约束",
+    "sequence": "序列",
+    "procedure": "存储过程",
+    "function": "函数",
+    "view": "视图",
+    "auto": "自动",
+    "upper": "大写",
+    "lower": "小写"
   }
 }

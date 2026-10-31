@@ -144,8 +144,8 @@ export default function TitleBar() {
   const appName = t('common.appName')
   const title = !tab
     ? appName
-    : // 规范库、规范检查标签不绑连接，来源在标签标题里已写明，不加连接段（否则会退化成"模型"）
-      tab.lint
+    : // 规范库、规范检查、迁移标签不绑连接，来源在标签里已写明，不加连接段（否则会退化成"模型"）
+      tab.lint || tab.migrate
       ? t('app.titleBar.windowTitlePlain', { tab: tab.title, app: appName })
       : t('app.titleBar.windowTitle', {
           tab: tab.title,

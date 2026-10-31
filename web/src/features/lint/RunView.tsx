@@ -91,7 +91,7 @@ export default function RunView({ tab }: { tab: QueryTab }) {
   }
 
   return (
-    <div style={{ padding: '12px 16px', overflow: 'auto', height: '100%' }}>
+    <div style={{ padding: '12px 16px', overflow: 'auto', flex: 1, minHeight: 0 }}>
       <Space direction="vertical" size="small" style={{ width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>

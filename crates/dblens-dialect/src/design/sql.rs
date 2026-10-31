@@ -101,7 +101,16 @@ impl Dialect {
 
     /// `CONSTRAINT 名字 `，没有名字时为空。
     pub(crate) fn constraint_name(&self, name: &Option<String>) -> String {
-        text(name).map(|n| format!("CONSTRAINT {} ", self.ident(n))).unwrap_or_default()
+        // 达梦拒绝手工使用 CONS 加数字的约束名（-2109），这是它自己生成的名字，交给它重新生成
+        let generated = |n: &str| {
+            self.family() == Family::Dameng
+                && n.strip_prefix("CONS")
+                    .is_some_and(|r| !r.is_empty() && r.chars().all(|c| c.is_ascii_digit()))
+        };
+        text(name)
+            .filter(|n| !generated(n))
+            .map(|n| format!("CONSTRAINT {} ", self.ident(n)))
+            .unwrap_or_default()
     }
 
     /// 约束必须有名字才能删除（从库中读出的约束都有）。

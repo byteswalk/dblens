@@ -166,6 +166,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
   const [onlyIssues, setOnlyIssues] = useState(false)
   const [rules, setRules] = useState(false)
   const [task, setTask] = useState<TaskStatus | null>(null)
+  const [ranPlan, setRanPlan] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const file = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
@@ -209,11 +210,14 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
   const sum = p && summary(p)
   const pending = p ? unchosen(plan, p) : []
   const running = task?.state === 'running'
+  // 刚迁完的表在目标里当然已存在：这时不问怎么处理，要重来就点“再次迁移”
+  const migrated = task?.state === 'done' && !task.failures.length && ranPlan === JSON.stringify(plan)
 
   const start = async () => {
     setBusy(true)
     try {
       track(await withVault(api, () => api.startMigration(plan)))
+      setRanPlan(JSON.stringify(plan))
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -538,7 +542,7 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
               <SqlBox sql={focus ? statementsOf(p, focus.name) : p.text} driver={target?.driver} height="100%" />
             </div>
           </div>
-          {p.draft.tables.some((x) => x.exists) && (
+          {!migrated && p.draft.tables.some((x) => x.exists) && (
             <div className="row toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
               <b>{t('migrate.existing.title')}</b>
               <span className="muted">{t('migrate.existing.all')}</span>
@@ -569,9 +573,10 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
             </div>
           )}
           {p.denied && <Alert type="error" showIcon message={p.denied} />}
-          {p.problems.map((x) => (
-            <Alert key={x} type="warning" showIcon message={x} />
-          ))}
+          {!migrated &&
+            p.problems.map((x) => (
+              <Alert key={x} type="warning" showIcon message={x} />
+            ))}
           {task && !running && (
             <Alert
               type={task.state === 'done' && !task.failures.length ? 'success' : task.state === 'done' || task.state === 'cancelled' ? 'warning' : 'error'}
@@ -597,11 +602,18 @@ export default function MigrateView({ tab, profiles }: { tab: QueryTab; profiles
                 </>
               }
               action={
-                task.report ? (
-                  <Button size="small" onClick={() => void saveReport()}>
-                    {t('migrate.report')}
-                  </Button>
-                ) : undefined
+                <Space>
+                  {migrated && (
+                    <Button size="small" onClick={() => setRanPlan(null)}>
+                      {t('migrate.again')}
+                    </Button>
+                  )}
+                  {task.report && (
+                    <Button size="small" onClick={() => void saveReport()}>
+                      {t('migrate.report')}
+                    </Button>
+                  )}
+                </Space>
               }
             />
           )}

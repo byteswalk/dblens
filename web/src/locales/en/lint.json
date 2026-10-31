@@ -89,10 +89,43 @@
     "delete_confirm": "Delete this ruleset?",
     "add_clause": "Add clause",
     "clause": "Clause",
+    "clause_placeholder": "Enter the clause text",
     "severity": "Severity",
     "rules": "Rules",
     "manual": "Manual",
     "unknown_rule": "Unknown rule",
     "exceptions": "Exceptions"
+  },
+  "param": {
+    "max": "Maximum",
+    "max_len": "Max length",
+    "max_count": "Max count",
+    "target": "Applies to",
+    "case": "Case",
+    "prefix": "Prefix",
+    "date": "Date suffixes",
+    "time": "Time suffixes",
+    "words": "Keywords",
+    "fields": "Required columns",
+    "suffixes": "Suffixes",
+    "step": "Step",
+    "bytes_per_char": "Bytes per character"
+  },
+  "param_choice": {
+    "all": "All",
+    "table": "Table",
+    "column": "Column",
+    "index": "Index",
+    "other": "Other objects",
+    "schema": "Schema",
+    "primary_key": "Primary key",
+    "unique": "Unique constraint",
+    "sequence": "Sequence",
+    "procedure": "Procedure",
+    "function": "Function",
+    "view": "View",
+    "auto": "Auto",
+    "upper": "Upper case",
+    "lower": "Lower case"
   }
 }

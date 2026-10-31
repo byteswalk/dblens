@@ -298,6 +298,14 @@ WHERE d.REFERENCED_OWNER = ?
   AND d.TYPE IN ('VIEW', 'MATERIALIZED VIEW')
 ORDER BY d.OWNER, d.NAME
 
+-- [function_indexes] [String("HR"), String("EMP")]
+SELECT i.INDEX_NAME AS "index_name"
+FROM ALL_INDEXES i
+WHERE i.OWNER = ?
+  AND i.TABLE_NAME = ?
+  AND i.INDEX_TYPE LIKE 'FUNCTION-BASED%'
+ORDER BY i.INDEX_NAME
+
 -- [grants] [String("HR"), String("EMP")]
 -- DM's ALL_TAB_PRIVS names the schema column OWNER (Oracle: TABLE_SCHEMA).
 SELECT p.GRANTEE AS "grantee",

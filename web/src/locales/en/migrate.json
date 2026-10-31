@@ -62,6 +62,7 @@
   "running": "Migrating {{done}}/{{total}}",
   "cancel": "Cancel",
   "done": "Migration finished",
+  "again": "Migrate again",
   "doneWithFailures": "Migration finished; {{count}} statements failed",
   "failed": "Migration failed",
   "cancelled": "Migration cancelled",

@@ -270,7 +270,8 @@ WHERE i.OWNER = {{ bind("schema") }}
 ORDER BY i.TABLE_NAME, i.INDEX_NAME, ic.POS
 
 -- [indexes_basic]
--- Function-based indexes are not listed: their expressions are unknown here.
+-- Function-based indexes are not listed: their expressions are unknown here. Old servers also mark the index behind a
+-- primary key as GENERATED = 'N', so constraint indexes are excluded explicitly.
 SELECT i.TABLE_NAME AS "table_name",
        i.INDEX_NAME AS "index_name",
        CASE WHEN i.UNIQUENESS = 'UNIQUE' THEN 'Y' ELSE 'N' END AS "is_unique",
@@ -289,6 +290,8 @@ JOIN (SELECT x.INDEX_OWNER AS OWN, x.INDEX_NAME AS INAME, x.COLUMN_NAME AS EXPR,
      ) ic ON ic.OWN = i.OWNER AND ic.INAME = i.INDEX_NAME
 WHERE i.OWNER = {{ bind("schema") }}
   AND i.GENERATED = 'N'
+  AND i.INDEX_NAME NOT IN (SELECT c.INDEX_NAME FROM ALL_CONSTRAINTS c
+                           WHERE c.OWNER = i.OWNER AND c.TABLE_NAME = i.TABLE_NAME AND c.INDEX_NAME IS NOT NULL)
   AND i.TABLE_NAME NOT LIKE 'BM$!_%' ESCAPE '!'
   AND i.TABLE_NAME NOT LIKE 'MTAB$!_%' ESCAPE '!'
 {% if table %}
@@ -392,6 +395,14 @@ WHERE d.REFERENCED_OWNER = {{ bind("schema") }}
   AND d.REFERENCED_TYPE = 'TABLE'
   AND d.TYPE IN ('VIEW', 'MATERIALIZED VIEW')
 ORDER BY d.OWNER, d.NAME
+
+-- [function_indexes]
+SELECT i.INDEX_NAME AS "index_name"
+FROM ALL_INDEXES i
+WHERE i.OWNER = {{ bind("schema") }}
+  AND i.TABLE_NAME = {{ bind("table") }}
+  AND i.INDEX_TYPE LIKE 'FUNCTION-BASED%'
+ORDER BY i.INDEX_NAME
 
 -- [grants]
 -- DM's ALL_TAB_PRIVS names the schema column OWNER (Oracle: TABLE_SCHEMA).

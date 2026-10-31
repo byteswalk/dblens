@@ -3,7 +3,8 @@ use crate::tls::TlsConnect;
 use crate::{Error, connect_tls};
 use bytes::BytesMut;
 use postgres_protocol::message::frontend;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use std::time::Duration;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub async fn cancel_query_raw<S, T>(
     stream: S,
@@ -25,6 +26,8 @@ where
 
     stream.write_all(&buf).await.map_err(Error::io)?;
     stream.flush().await.map_err(Error::io)?;
+    // 和 libpq 一样等服务器先关连接：抢先关闭时，PolarDB 这类代理会丢掉还没转发的取消请求
+    let _ = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut [0u8; 1])).await;
     stream.shutdown().await.map_err(Error::io)?;
 
     Ok(())

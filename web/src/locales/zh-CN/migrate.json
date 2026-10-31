@@ -62,6 +62,7 @@
   "running": "正在迁移 {{done}}/{{total}}",
   "cancel": "取消",
   "done": "迁移完成",
+  "again": "再次迁移",
   "doneWithFailures": "迁移完成，{{count}} 条语句失败",
   "failed": "迁移失败",
   "cancelled": "迁移已取消",

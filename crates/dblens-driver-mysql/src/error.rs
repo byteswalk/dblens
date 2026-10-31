@@ -7,6 +7,8 @@ pub(crate) fn map_err(e: mysql_async::Error) -> Error {
     match e {
         mysql_async::Error::Server(ref se) => match se.code {
             ER_QUERY_INTERRUPTED => Error::Cancelled,
+            // TiDB 的语句被 KILL 时，部分执行路径不报 1317，而是报这个通用错误
+            1105 if se.message == "context canceled" => Error::Cancelled,
             // 1044 无库权限，1045 密码错误，1698 用户被拒绝
             1044 | 1045 | 1698 => Error::Auth { message: Msg::raw(&se.message) },
             code => Error::Sql { code: code.to_string(), message: se.message.clone(), position: None },
@@ -73,6 +75,8 @@ mod tests {
     #[test]
     fn maps_server_errors() {
         assert_eq!(map_err(server(1317, "Query execution was interrupted")), Error::Cancelled);
+        assert_eq!(map_err(server(1105, "context canceled")), Error::Cancelled);
+        assert!(matches!(map_err(server(1105, "other")), Error::Sql { .. }));
         assert!(matches!(map_err(server(1045, "Access denied")), Error::Auth { .. }));
         assert_eq!(
             map_err(server(1146, "Table 'x' doesn't exist")),

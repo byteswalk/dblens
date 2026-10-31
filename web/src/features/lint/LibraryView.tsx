@@ -49,7 +49,7 @@ export default function LibraryView() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
+    <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       <div style={{ width: 240, borderRight: '1px solid var(--border, #e3e3e3)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 8, display: 'flex', gap: 6 }}>
           <Button
@@ -297,6 +297,8 @@ function Editor({
                       <Input
                         size="small"
                         variant="borderless"
+                        autoFocus={!c.text}
+                        placeholder={t('lint.lib.clause_placeholder')}
                         value={c.text}
                         onChange={(e) => patchClause(c.id, { text: e.target.value })}
                       />
@@ -408,7 +410,7 @@ function Params({
             <code style={{ minWidth: 180 }}>{rule.id}</code>
             {(info?.params ?? []).map((p) => {
               const val = rule.params?.[p.key] ?? p.default
-              const label = <span style={{ color: '#888' }}>{p.key}</span>
+              const label = <span style={{ color: '#888' }}>{t(`lint.param.${p.key}` as 'lint.param.max')}</span>
               if (p.kind === 'number') {
                 return (
                   <Space key={p.key} size={4}>
@@ -426,7 +428,7 @@ function Params({
                       style={{ width: 110 }}
                       value={val as string}
                       onChange={(v) => setParam(ri, p.key, v)}
-                      options={(p.choices ?? []).map((c) => ({ value: c, label: c }))}
+                      options={(p.choices ?? []).map((c) => ({ value: c, label: t(`lint.param_choice.${c}` as 'lint.param_choice.all') }))}
                     />
                   </Space>
                 )

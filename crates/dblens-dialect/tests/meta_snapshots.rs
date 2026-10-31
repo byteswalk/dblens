@@ -59,6 +59,7 @@ fn every_family_covers_the_common_keys() {
                 // 表设计器在 M8b
                 MetaKey::ReferencingKeys => v.family() == Family::Informix,
                 MetaKey::TriggerDdl => v != Variant::Oracle,
+                MetaKey::FunctionIndexes => v != Variant::Dameng,
                 // OceanBase 没有 information_schema.KEYWORDS；SQL Server、GBase 8s 没有可查的保留字表（用 ident.rs 的清单）
                 MetaKey::ReservedWords => {
                     matches!(v, Variant::MariaDb | Variant::OceanBase | Variant::SqlServer | Variant::Gbase8s)

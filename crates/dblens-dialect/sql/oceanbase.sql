@@ -37,6 +37,30 @@ WHERE s.TABLE_SCHEMA = {{ bind("schema") }}
 {% endif %}
 ORDER BY s.TABLE_NAME, s.INDEX_NAME, s.SEQ_IN_INDEX
 
+-- [keys]
+-- MySQL's three-view join takes about 10s here, which is ob_query_timeout. KEY_COLUMN_USAGE alone identifies each key.
+SELECT k.TABLE_NAME AS table_name,
+       k.CONSTRAINT_NAME AS constraint_name,
+       CASE WHEN k.CONSTRAINT_NAME = 'PRIMARY' THEN 'P' WHEN k.REFERENCED_TABLE_NAME IS NULL THEN 'U' ELSE 'F' END AS constraint_type,
+       k.COLUMN_NAME AS column_name,
+       k.ORDINAL_POSITION AS position,
+       k.REFERENCED_TABLE_SCHEMA AS ref_schema,
+       k.REFERENCED_TABLE_NAME AS ref_table,
+       k.REFERENCED_COLUMN_NAME AS ref_column,
+       rc.DELETE_RULE AS on_delete,
+       rc.UPDATE_RULE AS on_update
+FROM information_schema.KEY_COLUMN_USAGE k
+LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+  ON k.REFERENCED_TABLE_NAME IS NOT NULL
+ AND rc.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
+ AND rc.TABLE_NAME = k.TABLE_NAME
+ AND rc.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+WHERE k.TABLE_SCHEMA = {{ bind("schema") }}
+{% if table %}
+  AND k.TABLE_NAME = {{ bind("table") }}
+{% endif %}
+ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION
+
 -- [reserved_words]
 
 -- [tables]

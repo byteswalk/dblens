@@ -215,6 +215,9 @@ impl Service {
         if dialect.has_meta(MetaKey::DependentViews) {
             ctx.views = meta::dependent_views(&*rows(MetaKey::DependentViews).await?)?;
         }
+        if dialect.has_meta(MetaKey::FunctionIndexes) {
+            ctx.function_indexes = meta::function_indexes(&*rows(MetaKey::FunctionIndexes).await?)?;
+        }
         if dialect.has_meta(MetaKey::Grants) {
             ctx.grants = meta::grants(&*rows(MetaKey::Grants).await?)?;
         }
