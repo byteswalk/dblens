@@ -301,7 +301,7 @@ export default function ObjectTree() {
       ? [
           { key: 'new-query', label: t('tree.menu.newQuery'), extra: 'Ctrl+T' },
           { key: 'sql-file', label: t('tree.menu.sqlFile') },
-          { key: 'privileges', label: t('tree.menu.privileges') },
+          { key: 'privileges', label: t('tree.menu.privileges'), ...privilegeLater(menuNode) },
           { type: 'divider' },
           { key: 'edit', label: t('tree.menu.editConnection') },
           { key: 'duplicate', label: t('tree.menu.duplicateConnection') },
@@ -322,6 +322,12 @@ export default function ObjectTree() {
   function later(k: NodeKey): { disabled?: boolean; title?: string } {
     const driver = profiles.find((p) => p.id === k.profileId)?.driver
     return driver === 'informix' ? { disabled: true, title: t('tree.menu.gbaseLater') } : {}
+  }
+
+  /** GBase 8s 的账号与权限在 M9c 提供。 */
+  function privilegeLater(k: NodeKey): { disabled?: boolean; title?: string } {
+    const driver = profiles.find((p) => p.id === k.profileId)?.driver
+    return driver === 'informix' ? { disabled: true, title: t('tree.menu.gbasePrivilegeLater') } : {}
   }
 
   /** schema 节点：新建表、导入到新表、执行 SQL 文件，后面接分隔线。 */
@@ -357,7 +363,7 @@ export default function ObjectTree() {
       const children = generateMenu(target, relations) as NonNullable<MenuProps['items']>
       items.push({ key: 'gen-menu', label: t('tree.menu.generate'), children })
     }
-    if (target) items.push({ key: 'who-can-access', label: t('tree.menu.whoCanAccess') })
+    if (target) items.push({ key: 'who-can-access', label: t('tree.menu.whoCanAccess'), ...privilegeLater(k) })
     return items.length ? [...items, { type: 'divider' }] : []
   }
 

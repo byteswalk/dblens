@@ -1680,6 +1680,10 @@
     "zh-CN": "用户和角色列表不完整",
     "en": "The list of users and roles is incomplete"
   },
+  "privilege.unsupported": {
+    "zh-CN": "GBase 8s 暂不支持查看账号与权限",
+    "en": "GBase 8s does not support viewing accounts and privileges yet"
+  },
   "profile.host_required": {
     "zh-CN": "主机不能为空",
     "en": "The host is required"

@@ -123,6 +123,9 @@ impl Service {
 
     async fn privilege_base(&self, profile: &Profile) -> Result<Base> {
         let dialect = self.metadata.dialect(profile).await?;
+        if dialect.family() == Family::Informix {
+            return Err(Error::invalid(msg!("privilege.unsupported")));
+        }
         let args = MetaArgs::default();
         let mut missing = Vec::new();
         let caps_rows = self.privilege_rows(profile, PrivSection::Caps, &args, &mut missing).await?;
