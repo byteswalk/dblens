@@ -161,7 +161,8 @@ export function CreateDialog({ role, caps, onCancel, onNext }: {
   const [name, setName] = useState('')
   const [host, setHost] = useState('%')
   const [password, setPassword] = useState('')
-  const needsPassword = !role || caps.role_password
+  const needsPassword = !caps.os_accounts && (!role || caps.role_password)
+  const showPassword = needsPassword || (caps.os_accounts && !role)
   const next = () =>
     onNext(role
       ? { op: 'create_role', name, level: 'database', password: caps.role_password ? password : undefined }
@@ -170,7 +171,8 @@ export function CreateDialog({ role, caps, onCancel, onNext }: {
     <FormDialog title={t(role ? 'privilege.action.newRole' : 'privilege.action.newUser')} disabled={!name.trim() || (needsPassword && !password)} onCancel={onCancel} onNext={next}>
       <Field label={t('privilege.attr.name')}><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" /></Field>
       {caps.host && !role && <Field label={t('privilege.attr.host')}><Input value={host} onChange={(e) => setHost(e.target.value)} /></Field>}
-      {needsPassword && <Field label={t('privilege.action.password')}><PasswordField value={password} onChange={setPassword} /></Field>}
+      {showPassword && <Field label={t('privilege.action.password')}><PasswordField value={password} onChange={setPassword} /></Field>}
+      {caps.os_accounts && !role && <div className="muted">{t('privilege.action.osAccountHint')}</div>}
     </FormDialog>
   )
 }
@@ -207,6 +209,8 @@ export function GrantDialog({ principal, caps, catalog, onCancel, onNext }: {
   const [database, setDatabase] = useState(catalog ?? '')
   const [privilege, setPrivilege] = useState('SELECT')
   const [withGrant, setWithGrant] = useState(false)
+  // GBase 8s 的数据库级权限不能转授，取值只有 CONNECT、RESOURCE、DBA
+  const noGrantOption = caps.os_accounts && scope === 'database'
   const hasSchema = scope === 'schema' || scope === 'object' || scope === 'column'
   const hasObject = scope === 'object' || scope === 'column'
   const missing = !privilege.trim() || (hasSchema && !schema.trim()) || (hasObject && !object.trim()) || (scope === 'column' && !column.trim())
@@ -223,19 +227,19 @@ export function GrantDialog({ principal, caps, catalog, onCancel, onNext }: {
         column: scope === 'column' ? column : null,
       },
       privilege,
-      with_grant: withGrant,
+      with_grant: withGrant && !noGrantOption,
     })
   return (
     <FormDialog title={t('privilege.action.grant')} disabled={missing} onCancel={onCancel} onNext={next}>
       <Field label={t('privilege.col.scope')}>
         <Select style={{ width: '100%' }} value={scope} onChange={setScope} options={scopes.map((s) => ({ value: s, label: t(`privilege.scope.${s}`) }))} />
       </Field>
-      {scope === 'database' && <Field label={t('privilege.scope.database')}><Input value={database} onChange={(e) => setDatabase(e.target.value)} /></Field>}
+      {scope === 'database' && !caps.os_accounts && <Field label={t('privilege.scope.database')}><Input value={database} onChange={(e) => setDatabase(e.target.value)} /></Field>}
       {hasSchema && <Field label={t('privilege.scope.schema')}><Input value={schema} onChange={(e) => setSchema(e.target.value)} /></Field>}
       {hasObject && <Field label={t('privilege.scope.object')}><Input value={object} onChange={(e) => setObject(e.target.value)} /></Field>}
       {scope === 'column' && <Field label={t('privilege.scope.column')}><Input value={column} onChange={(e) => setColumn(e.target.value)} /></Field>}
       <Field label={t('privilege.col.privilege')}><Input value={privilege} onChange={(e) => setPrivilege(e.target.value)} /></Field>
-      <Checkbox checked={withGrant} onChange={(e) => setWithGrant(e.target.checked)}>{t('privilege.action.withGrant')}</Checkbox>
+      {!noGrantOption && <Checkbox checked={withGrant} onChange={(e) => setWithGrant(e.target.checked)}>{t('privilege.action.withGrant')}</Checkbox>}
     </FormDialog>
   )
 }

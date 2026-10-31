@@ -111,6 +111,13 @@ export default function ImportDialog() {
     enabled: !!target && !!schema && !!table && !isNew,
   }).data
 
+  // 没指定 schema 时默认连接配置的库
+  const defaultSchema = profiles.find((p) => p.id === profileId)?.database
+  useEffect(() => {
+    if (target && !target.schema && defaultSchema && schemas.data?.some((s) => s.name === defaultSchema)) {
+      setSchema((s) => s ?? defaultSchema)
+    }
+  }, [target, defaultSchema, schemas.data])
   // 预览到达：新建表的列取推断的类型，表名取文件名
   useEffect(() => {
     if (!pv) return

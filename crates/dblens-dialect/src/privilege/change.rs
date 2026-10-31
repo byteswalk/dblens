@@ -83,6 +83,9 @@ pub enum PrivChange {
         /// 这条授权带转授权时，SQL Server 要 CASCADE。
         #[serde(default)]
         grantable: bool,
+        /// 授权人。GBase 8s 只能由授权人回收，别人回收要写 `AS`。
+        #[serde(default)]
+        grantor: Option<String>,
     },
     AddRole {
         member: PrincipalRef,
@@ -93,6 +96,12 @@ pub enum PrivChange {
     RemoveRole {
         member: PrincipalRef,
         role: PrincipalRef,
+    },
+    /// GBase 8s 的角色要设为默认才在登录时生效；`role` 为空表示取消。
+    SetDefaultRole {
+        member: PrincipalRef,
+        #[serde(default)]
+        role: Option<PrincipalRef>,
     },
 }
 
@@ -122,8 +131,9 @@ impl std::fmt::Debug for PrivStatement {
 /// 方言支持的操作，不支持的不显示入口。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct PrivCaps {
-    /// 能不能在界面上修改。GBase 8s 目前只读。
     pub write: bool,
+    /// 账号是操作系统用户，新建时密码可选（GBase 8s）：不填只授权，填了才建内部用户。
+    pub os_accounts: bool,
     pub lock: bool,
     /// 建角色必须给密码（openGauss）。
     pub role_password: bool,
@@ -184,7 +194,9 @@ impl PrivChange {
             | Self::SetPassword { principal, .. }
             | Self::SetLocked { principal, .. } => Some(&principal.name),
             Self::Grant { grantee, .. } | Self::Revoke { grantee, .. } => Some(&grantee.name),
-            Self::AddRole { member, .. } | Self::RemoveRole { member, .. } => Some(&member.name),
+            Self::AddRole { member, .. }
+            | Self::RemoveRole { member, .. }
+            | Self::SetDefaultRole { member, .. } => Some(&member.name),
         }
     }
 
@@ -228,21 +240,19 @@ impl Dialect {
         let family = self.family();
         let gauss = matches!(self.variant(), Variant::OpenGauss | Variant::GaussDb);
         PrivCaps {
-            write: family != Family::Informix,
-            lock: !matches!(family, Family::Postgres | Family::Informix) || gauss,
+            write: true,
+            os_accounts: family == Family::Informix,
+            lock: family != Family::Postgres || gauss,
             role_password: gauss,
             host: family == Family::MySql,
             drop_cascade: matches!(family, Family::Postgres | Family::Oracle | Family::Dameng),
             global_grant: !matches!(family, Family::Postgres | Family::Informix),
-            database_grant: matches!(family, Family::Postgres | Family::SqlServer),
+            database_grant: matches!(family, Family::Postgres | Family::SqlServer | Family::Informix),
             schema_grant: matches!(family, Family::MySql | Family::Postgres | Family::SqlServer),
         }
     }
 
     pub fn privilege_statements(&self, change: &PrivChange) -> Result<Vec<PrivStatement>> {
-        if self.family() == Family::Informix {
-            return Err(unsupported());
-        }
         match change {
             PrivChange::CreateUser { name, host, password } => {
                 self.create_user(required(name)?, host.as_deref(), password)
@@ -254,6 +264,9 @@ impl Dialect {
             PrivChange::SetPassword { principal, password } => self.set_password(principal, password),
             PrivChange::SetLocked { principal, locked } => self.set_locked(principal, *locked),
             PrivChange::Grant { grantee, scope, target, privilege, with_grant } => {
+                if *with_grant && self.family() == Family::Informix && *scope == GrantScope::Database {
+                    return Err(unsupported());
+                }
                 let on = self.grant_clause(*scope, target, privilege_text(privilege)?, true)?;
                 let to = self.grantee_name(grantee);
                 let option = match (*with_grant, self.family(), *scope) {
@@ -263,7 +276,7 @@ impl Dialect {
                 };
                 Ok(vec![PrivStatement::plain(format!("GRANT {on} TO {to}{option}"))])
             }
-            PrivChange::Revoke { grantee, scope, target, privilege, grantable } => {
+            PrivChange::Revoke { grantee, scope, target, privilege, grantable, grantor } => {
                 let on = self.grant_clause(*scope, target, privilege_text(privilege)?, false)?;
                 let from = self.grantee_name(grantee);
                 let cascade = if *grantable && matches!(self.family(), Family::SqlServer | Family::Dameng) {
@@ -271,7 +284,13 @@ impl Dialect {
                 } else {
                     ""
                 };
-                let mut out = vec![PrivStatement::plain(format!("REVOKE {on} FROM {from}{cascade}"))];
+                let by = match grantor.as_deref().filter(|g| !g.is_empty()) {
+                    Some(g) if self.family() == Family::Informix => {
+                        format!(" AS {}", sql_string(Family::Informix, g))
+                    }
+                    _ => String::new(),
+                };
+                let mut out = vec![PrivStatement::plain(format!("REVOKE {on} FROM {from}{cascade}{by}"))];
                 // MySQL 的转授权单独存放，只回收权限时账号上还留着一条 USAGE
                 if *grantable && self.family() == Family::MySql {
                     let on = self.grant_clause(*scope, target, "GRANT OPTION", false)?;
@@ -281,6 +300,7 @@ impl Dialect {
             }
             PrivChange::AddRole { member, role, admin } => self.add_role(member, role, *admin),
             PrivChange::RemoveRole { member, role } => self.remove_role(member, role),
+            PrivChange::SetDefaultRole { member, role } => self.set_default_role(member, role.as_ref()),
         }
     }
 
@@ -312,11 +332,28 @@ impl Dialect {
         match self.family() {
             Family::MySql => self.account(&p.name, p.host.as_deref()),
             Family::Postgres | Family::SqlServer => self.quote_ident(&p.name),
+            // 用户名区分大小写，也不一定是合法标识符
+            Family::Informix => sql_string(Family::Informix, &p.name),
             _ => self.ident(&p.name),
         }
     }
 
+    /// GBase 8s 的内部用户在 `sysuser` 库里管理；连接只用这一次，切走不用切回来。
+    fn in_sysuser(&self, sql: PrivStatement) -> Vec<PrivStatement> {
+        vec![PrivStatement::plain("DATABASE sysuser".to_string()), sql]
+    }
+
     fn create_user(&self, name: &str, host: Option<&str>, password: &Secret) -> Result<Vec<PrivStatement>> {
+        if self.family() == Family::Informix {
+            let grant = format!("GRANT CONNECT TO {}", sql_string(Family::Informix, name));
+            let mut out = vec![PrivStatement::plain(grant)];
+            if !password.expose().is_empty() {
+                let template = format!("CREATE USER {} WITH PASSWORD \u{1}", self.ident(name));
+                let lit = self.password_literal(password)?;
+                out.extend(self.in_sysuser(PrivStatement::with_password(&template, &lit)));
+            }
+            return Ok(out);
+        }
         let lit = self.password_literal(password)?;
         let q = self.quote_ident(name);
         Ok(match self.family() {
@@ -372,6 +409,14 @@ impl Dialect {
     fn drop_principal(&self, p: &PrincipalRef, cascade: bool) -> Result<Vec<PrivStatement>> {
         let name = required(&p.name)?;
         let role = p.kind == PrincipalKind::Role;
+        if self.family() == Family::Informix && !role {
+            let revoke = format!("REVOKE CONNECT FROM {}", self.grantee_name(p));
+            let mut out = vec![PrivStatement::plain(revoke)];
+            if p.kind == PrincipalKind::Login {
+                out.extend(self.in_sysuser(PrivStatement::plain(format!("DROP USER {}", self.ident(name)))));
+            }
+            return Ok(out);
+        }
         let sql = match self.family() {
             Family::MySql => {
                 let what = if role { "ROLE" } else { "USER" };
@@ -411,6 +456,13 @@ impl Dialect {
 
     fn set_password(&self, p: &PrincipalRef, password: &Secret) -> Result<Vec<PrivStatement>> {
         let lit = self.password_literal(password)?;
+        if self.family() == Family::Informix {
+            if p.kind != PrincipalKind::Login {
+                return Err(unsupported());
+            }
+            let template = format!("ALTER USER {} MODIFY PASSWORD \u{1}", self.ident(&p.name));
+            return Ok(self.in_sysuser(PrivStatement::with_password(&template, &lit)));
+        }
         let template = match self.family() {
             Family::MySql => {
                 format!("ALTER USER {} IDENTIFIED BY \u{1}", self.account(&p.name, p.host.as_deref()))
@@ -430,6 +482,13 @@ impl Dialect {
             return Err(unsupported());
         }
         let word = if locked { "LOCK" } else { "UNLOCK" };
+        if self.family() == Family::Informix {
+            if p.kind != PrincipalKind::Login {
+                return Err(unsupported());
+            }
+            let sql = format!("ALTER USER {} ACCOUNT {word}", self.ident(&p.name));
+            return Ok(self.in_sysuser(PrivStatement::plain(sql)));
+        }
         let sql = match self.family() {
             Family::MySql => {
                 format!("ALTER USER {} ACCOUNT {word}", self.account(&p.name, p.host.as_deref()))
@@ -500,6 +559,19 @@ impl Dialect {
                     format!("{privilege} ON {on}")
                 }
             }
+            (Family::Informix, GrantScope::Database) => privilege.to_string(),
+            (Family::Informix, GrantScope::Object | GrantScope::Column) => {
+                let on = self.qualified(Some(&need(&t.schema)?), &need(&t.object)?);
+                match (scope, kind) {
+                    // 不能按列回收，回收整张表的这项权限
+                    (GrantScope::Column, _) if granting => {
+                        format!("{privilege} ({}) ON {on}", self.ident(&need(&t.column)?))
+                    }
+                    (_, "function") => format!("{privilege} ON FUNCTION {on}"),
+                    (_, "procedure") => format!("{privilege} ON PROCEDURE {on}"),
+                    _ => format!("{privilege} ON {on}"),
+                }
+            }
             (Family::SqlServer, GrantScope::Global | GrantScope::Database) => privilege.to_string(),
             (Family::SqlServer, GrantScope::Schema) => {
                 format!("{privilege} ON SCHEMA::{}", qi(&need(&t.schema)?))
@@ -523,13 +595,14 @@ impl Dialect {
         role: &PrincipalRef,
         admin: bool,
     ) -> Result<Vec<PrivStatement>> {
-        let (m, r) = (self.grantee_name(member), self.grantee_name(role));
+        let (m, r) = (self.grantee_name(member), self.role_name(role));
         let sql = match self.family() {
             Family::SqlServer if admin => return Err(unsupported()),
             Family::SqlServer if role.level == PrincipalLevel::Server => {
                 format!("ALTER SERVER ROLE {r} ADD MEMBER {m}")
             }
             Family::SqlServer => format!("ALTER ROLE {r} ADD MEMBER {m}"),
+            Family::Informix if admin => format!("GRANT {r} TO {m} WITH GRANT OPTION"),
             _ => {
                 let option = if admin { " WITH ADMIN OPTION" } else { "" };
                 format!("GRANT {r} TO {m}{option}")
@@ -539,13 +612,37 @@ impl Dialect {
     }
 
     fn remove_role(&self, member: &PrincipalRef, role: &PrincipalRef) -> Result<Vec<PrivStatement>> {
-        let (m, r) = (self.grantee_name(member), self.grantee_name(role));
+        let (m, r) = (self.grantee_name(member), self.role_name(role));
         let sql = match self.family() {
             Family::SqlServer if role.level == PrincipalLevel::Server => {
                 format!("ALTER SERVER ROLE {r} DROP MEMBER {m}")
             }
             Family::SqlServer => format!("ALTER ROLE {r} DROP MEMBER {m}"),
             _ => format!("REVOKE {r} FROM {m}"),
+        };
+        Ok(vec![PrivStatement::plain(sql)])
+    }
+
+    /// 角色放在 `GRANT 角色 TO` 的位置时写标识符，GBase 8s 不接受字符串。
+    fn role_name(&self, role: &PrincipalRef) -> String {
+        match self.family() {
+            Family::Informix => self.ident(&role.name),
+            _ => self.grantee_name(role),
+        }
+    }
+
+    fn set_default_role(
+        &self,
+        member: &PrincipalRef,
+        role: Option<&PrincipalRef>,
+    ) -> Result<Vec<PrivStatement>> {
+        if self.family() != Family::Informix {
+            return Err(unsupported());
+        }
+        let m = self.grantee_name(member);
+        let sql = match role {
+            Some(r) => format!("GRANT DEFAULT ROLE {} TO {m}", self.role_name(r)),
+            None => format!("REVOKE DEFAULT ROLE FROM {m}"),
         };
         Ok(vec![PrivStatement::plain(sql)])
     }
@@ -674,6 +771,7 @@ mod tests {
             target: col,
             privilege: "UPDATE".into(),
             grantable: true,
+            grantor: None,
         };
         assert_eq!(masked(Variant::Oracle, &c), ["REVOKE UPDATE ON \"s\".\"t\" FROM U"]);
         assert_eq!(
@@ -700,7 +798,86 @@ mod tests {
             with_grant: false,
         };
         assert!(Dialect::new(Variant::MySql).privilege_statements(&c).is_err());
-        assert!(Dialect::new(Variant::Gbase8s).privilege_statements(&create("u")).is_err());
+    }
+
+    #[test]
+    fn gbase_accounts() {
+        let v = Variant::Gbase8s;
+        let os = PrivChange::CreateUser { name: "u".into(), host: None, password: Secret::new("") };
+        assert_eq!(masked(v, &os), ["GRANT CONNECT TO 'u'"]);
+        assert_eq!(
+            masked(v, &create("u")),
+            ["GRANT CONNECT TO 'u'", "DATABASE sysuser", "CREATE USER u WITH PASSWORD ***"]
+        );
+        let login = PrincipalRef { kind: PrincipalKind::Login, ..user("u", None) };
+        assert_eq!(
+            masked(v, &PrivChange::Drop { principal: login.clone(), cascade: false }),
+            ["REVOKE CONNECT FROM 'u'", "DATABASE sysuser", "DROP USER u"]
+        );
+        assert_eq!(
+            masked(v, &PrivChange::Drop { principal: user("u", None), cascade: false }),
+            ["REVOKE CONNECT FROM 'u'"]
+        );
+        let pw = |p| PrivChange::SetPassword { principal: p, password: Secret::new("x") };
+        assert_eq!(masked(v, &pw(login.clone())), ["DATABASE sysuser", "ALTER USER u MODIFY PASSWORD ***"]);
+        assert!(Dialect::new(v).privilege_statements(&pw(user("u", None))).is_err(), "操作系统用户");
+        let lock = PrivChange::SetLocked { principal: login, locked: true };
+        assert_eq!(masked(v, &lock), ["DATABASE sysuser", "ALTER USER u ACCOUNT LOCK"]);
+    }
+
+    #[test]
+    fn gbase_grants() {
+        let v = Variant::Gbase8s;
+        let g = |scope, target, privilege: &str, with_grant| PrivChange::Grant {
+            grantee: user("u", None),
+            scope,
+            target,
+            privilege: privilege.into(),
+            with_grant,
+        };
+        assert_eq!(
+            masked(v, &g(GrantScope::Database, GrantTarget::default(), "DBA", false)),
+            ["GRANT DBA TO 'u'"]
+        );
+        let option = g(GrantScope::Database, GrantTarget::default(), "DBA", true);
+        assert!(Dialect::new(v).privilege_statements(&option).is_err());
+        assert_eq!(
+            masked(v, &g(GrantScope::Object, table(), "SELECT", true)),
+            ["GRANT SELECT ON s.t TO 'u' WITH GRANT OPTION"]
+        );
+        let col = GrantTarget { column: Some("c".into()), ..table() };
+        assert_eq!(
+            masked(v, &g(GrantScope::Column, col.clone(), "UPDATE", false)),
+            ["GRANT UPDATE (c) ON s.t TO 'u'"]
+        );
+        let f = GrantTarget { object_kind: Some("function".into()), ..table() };
+        assert_eq!(
+            masked(v, &g(GrantScope::Object, f, "EXECUTE", false)),
+            ["GRANT EXECUTE ON FUNCTION s.t TO 'u'"]
+        );
+        let revoke = PrivChange::Revoke {
+            grantee: user("u", None),
+            scope: GrantScope::Column,
+            target: col,
+            privilege: "UPDATE".into(),
+            grantable: false,
+            grantor: Some("o".into()),
+        };
+        assert_eq!(masked(v, &revoke), ["REVOKE UPDATE ON s.t FROM 'u' AS 'o'"]);
+    }
+
+    #[test]
+    fn gbase_roles() {
+        let v = Variant::Gbase8s;
+        let add = PrivChange::AddRole { member: user("u", None), role: role("r"), admin: true };
+        assert_eq!(masked(v, &add), ["GRANT r TO 'u' WITH GRANT OPTION"]);
+        let rm = PrivChange::RemoveRole { member: user("u", None), role: role("r") };
+        assert_eq!(masked(v, &rm), ["REVOKE r FROM 'u'"]);
+        let set = PrivChange::SetDefaultRole { member: user("u", None), role: Some(role("r")) };
+        assert_eq!(masked(v, &set), ["GRANT DEFAULT ROLE r TO 'u'"]);
+        assert!(Dialect::new(Variant::MySql).privilege_statements(&set).is_err());
+        let clear = PrivChange::SetDefaultRole { member: user("u", None), role: None };
+        assert_eq!(masked(v, &clear), ["REVOKE DEFAULT ROLE FROM 'u'"]);
     }
 
     #[test]

@@ -156,8 +156,9 @@ pub fn reveal_in_folder(path: String) -> Result<(), String> {
 #[cfg(target_os = "windows")]
 fn reveal(path: &Path) -> std::io::Result<()> {
     use std::os::windows::process::CommandExt;
-    // explorer 要求 /select, 后面的路径自己加引号，不能交给标准库按参数转义
-    std::process::Command::new("explorer").raw_arg(format!("/select,\"{}\"", path.display())).spawn()?;
+    // explorer 要求 /select, 后面的路径自己加引号，不能交给标准库按参数转义；含 / 时它会打开别的目录
+    let path = path.display().to_string().replace('/', "\\");
+    std::process::Command::new("explorer").raw_arg(format!("/select,\"{path}\"")).spawn()?;
     Ok(())
 }
 

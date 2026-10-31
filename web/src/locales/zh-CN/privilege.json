@@ -80,6 +80,7 @@
     "none": "没有读到访问者"
   },
   "error": "读取失败：{{detail}}",
+  "defaultRole": "默认",
   "action": {
     "new": "新建",
     "newUser": "新建用户",
@@ -90,6 +91,10 @@
     "grant": "授权",
     "addRole": "加入角色",
     "removeRole": "移出",
+    "setDefault": "设为默认",
+    "clearDefault": "取消默认",
+    "removeUser": "移除访问权限",
+    "osAccountHint": "账号是操作系统用户时不填密码，这里只授予连接这个库的权限；填了密码会建内部用户，实例要开启 USERMAPPING。",
     "revoke": "回收",
     "drop": "删除",
     "next": "下一步",

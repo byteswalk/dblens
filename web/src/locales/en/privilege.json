@@ -80,6 +80,7 @@
     "none": "No one found"
   },
   "error": "Failed to read: {{detail}}",
+  "defaultRole": "default",
   "action": {
     "new": "New",
     "newUser": "New user",
@@ -90,6 +91,10 @@
     "grant": "Grant",
     "addRole": "Add to role",
     "removeRole": "Remove",
+    "setDefault": "Set default",
+    "clearDefault": "Clear default",
+    "removeUser": "Remove access",
+    "osAccountHint": "Leave the password empty for an operating system user: this only grants CONNECT on this database. With a password an internal user is created, which needs USERMAPPING on the instance.",
     "revoke": "Revoke",
     "drop": "Delete",
     "next": "Next",

@@ -182,6 +182,9 @@ const GBASE_CREATE: &[&str] = &[
     "GRANT INSERT ON dblens_priv_t TO dblens_priv_u WITH GRANT OPTION",
 ];
 const GBASE_DROP: &[&str] = &[
+    "REVOKE CONNECT FROM dblens_priv_in",
+    "REVOKE CONNECT FROM dblens_priv_os",
+    "DROP ROLE dblens_priv_gr",
     "REVOKE DEFAULT ROLE FROM dblens_priv_u",
     "REVOKE dblens_priv_r1 FROM dblens_priv_u",
     "REVOKE CONNECT FROM dblens_priv_u",
@@ -398,6 +401,7 @@ async fn changes(env: &str, service: &Service, admin: &str, fx: &Fixture, driver
             target: target.clone(),
             privilege: "UPDATE".into(),
             grantable: true,
+            grantor: None,
         },
     )
     .await;
@@ -413,6 +417,7 @@ async fn changes(env: &str, service: &Service, admin: &str, fx: &Fixture, driver
             target,
             privilege: select,
             grantable: false,
+            grantor: None,
         },
     )
     .await;
@@ -548,7 +553,7 @@ async fn gbase() {
 
     let overview = service.privilege_overview(&admin, None).await.unwrap();
     assert_eq!(overview.coverage, Coverage::Complete);
-    assert!(!overview.caps.write, "GBase 8s 只读");
+    assert!(overview.caps.write && overview.caps.os_accounts);
     let by = |n: &str| overview.principals.iter().find(|p| p.id == n).unwrap_or_else(|| panic!("{n}"));
     assert_eq!(by("dblens_priv_r1").kind, PrincipalKind::Role);
     assert_eq!(by("dblens_priv_u").kind, PrincipalKind::User);
@@ -578,11 +583,123 @@ async fn gbase() {
     );
     assert!(report.access.iter().any(|a| a.privilege.grant.effect == GrantEffect::Implicit), "属主要列出");
 
-    let change = PrivChange::CreateRole { name: "x".into(), level: PrincipalLevel::Database, password: None };
-    assert!(service.privilege_preview(&admin, None, &change).await.is_err(), "修改不支持");
+    gbase_changes(&service, &admin, &params.user).await;
     run(&service, &admin, GBASE_DROP, true).await;
     let left = service.privilege_overview(&admin, None).await.unwrap();
     assert!(!left.principals.iter().any(|p| p.id.starts_with("dblens_priv")), "夹具没有清理干净");
+}
+
+/// 建内部用户到删除走一遍，新用户要能登录。
+async fn gbase_changes(service: &Service, admin: &str, owner: &str) {
+    const USER: &str = "dblens_priv_in";
+    const ROLE: &str = "dblens_priv_gr";
+    let apply = |change: PrivChange| async move {
+        let r = service.privilege_apply(admin, None, &change, None).await.unwrap();
+        assert!(r.error.is_none(), "{:?}: {:?}", r.failed, r.error);
+    };
+    let user = |kind| PrincipalRef { name: USER.into(), host: None, kind, level: PrincipalLevel::Database };
+    let role = || PrincipalRef {
+        name: ROLE.into(),
+        host: None,
+        kind: PrincipalKind::Role,
+        level: PrincipalLevel::Database,
+    };
+    let login = || user(PrincipalKind::Login);
+    let table = || GrantTarget {
+        schema: Some(owner.into()),
+        object: Some("dblens_priv_t".into()),
+        column: None,
+        ..Default::default()
+    };
+    apply(PrivChange::CreateUser {
+        name: USER.into(),
+        host: None,
+        password: Secret::new("Dblens#Sentinel1"),
+    })
+    .await;
+    apply(PrivChange::CreateRole { name: ROLE.into(), level: PrincipalLevel::Database, password: None })
+        .await;
+    apply(PrivChange::AddRole { member: login(), role: role(), admin: false }).await;
+    apply(PrivChange::SetDefaultRole { member: login(), role: Some(role()) }).await;
+    apply(PrivChange::Grant {
+        grantee: login(),
+        scope: GrantScope::Object,
+        target: table(),
+        privilege: "SELECT".into(),
+        with_grant: true,
+    })
+    .await;
+    apply(PrivChange::Grant {
+        grantee: login(),
+        scope: GrantScope::Column,
+        target: GrantTarget { column: Some("id".into()), ..table() },
+        privilege: "UPDATE".into(),
+        with_grant: false,
+    })
+    .await;
+    apply(PrivChange::Grant {
+        grantee: login(),
+        scope: GrantScope::Database,
+        target: GrantTarget::default(),
+        privilege: "RESOURCE".into(),
+        with_grant: false,
+    })
+    .await;
+
+    let overview = service.privilege_overview(admin, None).await.unwrap();
+    let found = overview.principals.iter().find(|p| p.id == USER).expect("内部用户");
+    assert_eq!(found.kind, PrincipalKind::Login);
+    assert_eq!(found.locked, Some(false));
+    let membership = overview.memberships.iter().find(|m| m.member == USER).unwrap();
+    assert_eq!(membership.default_role, Some(true));
+    let detail = service.principal_privileges(admin, None, USER).await.unwrap();
+    assert!(detail.direct.iter().any(|g| g.privilege == "RESOURCE"), "{:?}", detail.direct);
+
+    apply(PrivChange::SetLocked { principal: login(), locked: true }).await;
+    let overview = service.privilege_overview(admin, None).await.unwrap();
+    assert_eq!(overview.principals.iter().find(|p| p.id == USER).unwrap().locked, Some(true));
+    apply(PrivChange::SetLocked { principal: login(), locked: false }).await;
+    apply(PrivChange::SetPassword { principal: login(), password: Secret::new("Dblens#Sentinel2") }).await;
+
+    // 新用户用改后的密码登录
+    let input = ProfileInput { user: USER.into(), ..service.profile(admin).unwrap().input };
+    service.test_connection(input, "Dblens#Sentinel2").await.unwrap();
+
+    for g in detail.direct.iter().filter(|g| g.privilege == "SELECT" || g.privilege == "UPDATE") {
+        apply(PrivChange::Revoke {
+            grantee: login(),
+            scope: g.scope,
+            target: g.target.clone(),
+            privilege: g.privilege.clone(),
+            grantable: g.grantable,
+            grantor: g.grantor.clone(),
+        })
+        .await;
+    }
+    apply(PrivChange::Revoke {
+        grantee: login(),
+        scope: GrantScope::Database,
+        target: GrantTarget::default(),
+        privilege: "RESOURCE".into(),
+        grantable: false,
+        grantor: None,
+    })
+    .await;
+    apply(PrivChange::SetDefaultRole { member: login(), role: None }).await;
+    apply(PrivChange::RemoveRole { member: login(), role: role() }).await;
+    apply(PrivChange::Drop { principal: role(), cascade: false }).await;
+    apply(PrivChange::Drop { principal: login(), cascade: false }).await;
+    let overview = service.privilege_overview(admin, None).await.unwrap();
+    assert!(!overview.principals.iter().any(|p| p.id == USER || p.id == ROLE), "清理干净");
+
+    // 操作系统用户：只授权，移除后 sysusers 没有记录
+    let os = "dblens_priv_os";
+    apply(PrivChange::CreateUser { name: os.into(), host: None, password: Secret::new("") }).await;
+    let overview = service.privilege_overview(admin, None).await.unwrap();
+    let found = overview.principals.iter().find(|p| p.id == os).expect("操作系统用户");
+    assert_eq!(found.kind, PrincipalKind::User);
+    let principal = PrincipalRef { name: os.into(), ..user(PrincipalKind::User) };
+    apply(PrivChange::Drop { principal, cascade: false }).await;
 }
 
 #[tokio::test]

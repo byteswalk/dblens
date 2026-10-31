@@ -416,6 +416,7 @@ export type Coverage = { state: 'complete' } | { state: 'partial'; missing: stri
 
 export interface PrivCaps {
   write: boolean
+  os_accounts: boolean
   lock: boolean
   role_password: boolean
   host: boolean
@@ -448,9 +449,10 @@ export type PrivChange =
   | { op: 'set_password'; principal: PrincipalRef; password: string }
   | { op: 'set_locked'; principal: PrincipalRef; locked: boolean }
   | { op: 'grant'; grantee: PrincipalRef; scope: GrantScope; target: PrivilegeGrant['target']; privilege: string; with_grant?: boolean }
-  | { op: 'revoke'; grantee: PrincipalRef; scope: GrantScope; target: PrivilegeGrant['target']; privilege: string; grantable?: boolean }
+  | { op: 'revoke'; grantee: PrincipalRef; scope: GrantScope; target: PrivilegeGrant['target']; privilege: string; grantable?: boolean; grantor?: string | null }
   | { op: 'add_role'; member: PrincipalRef; role: PrincipalRef; admin?: boolean }
   | { op: 'remove_role'; member: PrincipalRef; role: PrincipalRef }
+  | { op: 'set_default_role'; member: PrincipalRef; role: PrincipalRef | null }
 
 export interface PrivPreview {
   statements: string[]

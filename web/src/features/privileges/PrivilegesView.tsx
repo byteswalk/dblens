@@ -5,7 +5,7 @@ import { Alert, Button, Checkbox, Dropdown, Empty, Input, Segmented, Select, Spi
 import type { ColumnsType } from 'antd/es/table'
 import { IconArrowLeft, IconPlus, IconRefresh } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
@@ -77,7 +77,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
     width: 70,
     render: (_, g) =>
       g.effect === 'implicit' || !caps?.write ? null : (
-        <a onClick={() => onChange({ op: 'revoke', grantee: ref, scope: g.scope, target: g.target, privilege: g.privilege, grantable: g.grantable })}>
+        <a onClick={() => onChange({ op: 'revoke', grantee: ref, scope: g.scope, target: g.target, privilege: g.privilege, grantable: g.grantable, grantor: g.grantor })}>
           {t('privilege.action.revoke')}
         </a>
       ),
@@ -85,6 +85,10 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
   const removeRole = (m: Membership) => {
     const role = principals.find((p) => p.id === m.role)
     if (role) onChange({ op: 'remove_role', member: ref, role: principalRef(role) })
+  }
+  const setDefault = (m: Membership) => {
+    const role = principals.find((p) => p.id === m.role)
+    if (role) onChange({ op: 'set_default_role', member: ref, role: m.default_role ? null : principalRef(role) })
   }
   const yesNo = (v: boolean | null) => (v === null ? t('privilege.unknown') : v ? t('privilege.yes') : t('privilege.no'))
   const rows: [string, string][] = [
@@ -111,7 +115,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
         )}
         <Button size="small" type="text" onClick={() => onForm('grant')}>{t('privilege.action.grant')}</Button>
         <Button size="small" type="text" onClick={() => onForm('add_role')}>{t('privilege.action.addRole')}</Button>
-        <Button size="small" type="text" danger onClick={() => onChange({ op: 'drop', principal: ref })}>{t('privilege.action.drop')}</Button>
+        <Button size="small" type="text" danger onClick={() => onChange({ op: 'drop', principal: ref })}>{t(caps.os_accounts && principal.kind === 'user' ? 'privilege.action.removeUser' : 'privilege.action.drop')}</Button>
       </div>}
       <Tabs
         size="small"
@@ -131,7 +135,12 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
                     <td>
                       {memberOf.length === 0 && '—'}
                       {memberOf.map((m) => (
-                        <div key={m.role}>{nameOf(m.role)} {caps?.write && <a onClick={() => removeRole(m)}>{t('privilege.action.removeRole')}</a>}</div>
+                        <div key={m.role} className="row" style={{ gap: 8 }}>
+                          {nameOf(m.role)}
+                          {m.default_role && <span className="muted">{t('privilege.defaultRole')}</span>}
+                          {caps?.write && <a onClick={() => removeRole(m)}>{t('privilege.action.removeRole')}</a>}
+                          {caps?.os_accounts && <a onClick={() => setDefault(m)}>{t(m.default_role ? 'privilege.action.clearDefault' : 'privilege.action.setDefault')}</a>}
+                        </div>
                       ))}
                     </td>
                   </tr>
@@ -214,6 +223,10 @@ export default function PrivilegesView({ tab }: { tab: QueryTab }) {
   const focusCatalog = focus ? splitCatalog(focus.schema).catalog : undefined
   const [chosenCatalog, setChosenCatalog] = useState<string | undefined>(undefined)
   const catalog = focusCatalog ?? chosenCatalog
+  // 从“谁能访问”回到账号页时留在同一个数据库
+  useEffect(() => {
+    if (focusCatalog) setChosenCatalog(focusCatalog)
+  }, [focusCatalog])
   const { data: catalogs = [] } = useQuery({ queryKey: ['catalogs', tab.profileId], queryFn: () => api.catalogs(tab.profileId) })
   const { data, error, isLoading } = useQuery({
     queryKey: ['privileges', tab.profileId, catalog, 'overview'],

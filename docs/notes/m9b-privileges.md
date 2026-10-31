@@ -43,9 +43,13 @@ web/src/features/privileges/PrivilegeDialogs.tsx  表单和统一的确认对话
 
 ## M9c GBase 8s
 
-只读，写能力按规格另定：`PrivCaps.write` 为 false，修改入口不显示，后端也拒绝。
+2026-10-31 补上修改：用户、角色、默认角色、数据库级和对象级授权、内部用户的改密和锁定。
 
-- 账号是操作系统用户，`sysusers` 只记录这个库里有权限的名字，所以实连夹具只授权给名字，没有低权限登录和修改流程。
+- 账号有两种。操作系统用户：`sysusers` 只记录这个库里有权限的名字，新建不填密码时只 `GRANT CONNECT`，移除也只回收。内部用户：在 `sysuser` 库 `CREATE USER`，列为 `login`，只有它们能改密、锁定。
+- 内部用户的语句先发 `DATABASE sysuser`，同一连接继续执行，连接只用这一次。要 DBSA（实测 `gbasedbt`）和实例开 `USERMAPPING`，否则报 -26703，界面原样显示。
+- 回收要由授权人执行，别人回收写 `AS '授权人'`。不能按列回收，回收整张表的这项权限。数据库级权限不能转授。
+- 角色要设为默认才在登录时生效：`GRANT DEFAULT ROLE`，界面在所属角色旁。
+- `sysuser:sysintauthusers.flags` 第 1 位是锁定，读不到时走 `@limited`，按操作系统用户显示。
 - `systabauth.tabauth` 共 9 位（s u * i d x a r n），大写表示可转授；`syscolauth.colauth` 共 3 位（s u r）。
 - 系统表的字符列带尾随空格，比较和输出都要 `TRIM`。
 - 角色要默认启用才生效，`defrole` 没设时路径标“需在会话中启用”。

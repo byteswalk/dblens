@@ -1,9 +1,26 @@
 -- GBase 8s（Informix 系）：账号是操作系统用户，sysusers 只记录在这个库里有权限的名字，角色 usertype = 'G'。
+-- 内部用户（CREATE USER）在 sysuser 库，列为 login，只有它们能改密、锁定；flags 第 1 位是锁定。读不到 sysuser 时走 @limited。
 -- 数据库级权限是 usertype：D（DBA）、R（RESOURCE）、C（CONNECT）。
 -- systabauth.tabauth 共 9 位：s u * i d x a r n，第 3 位表示有列权限，大写表示可转授；syscolauth.colauth 共 3 位：s u r。
 -- 系统表的字符列带尾随空格，比较和输出都要 TRIM。
 
 -- [principals]
+SELECT TRIM(u.username) AS id,
+       TRIM(u.username) AS name,
+       CAST(NULL AS VARCHAR(10)) AS host,
+       CASE WHEN u.usertype = 'G' THEN 'role' WHEN a.username IS NOT NULL THEN 'login' ELSE 'user' END AS principal_kind,
+       'database' AS principal_level,
+       CASE WHEN u.usertype = 'G' THEN 0 ELSE 1 END AS can_login,
+       CASE WHEN a.username IS NULL THEN NULL ELSE MOD(a.flags, 2) END AS locked,
+       CAST(NULL AS VARCHAR(10)) AS expires_at,
+       CASE WHEN TRIM(u.username) IN ('gbasedbt', 'informix', 'public') THEN 1 ELSE 0 END AS builtin,
+       TRIM(u.usertype) AS attr_usertype,
+       TRIM(u.defrole) AS attr_default_role
+FROM sysusers u, OUTER sysuser:sysintauthusers a
+WHERE a.username = u.username
+ORDER BY 1
+
+-- [principals@limited]
 SELECT TRIM(u.username) AS id,
        TRIM(u.username) AS name,
        CAST(NULL AS VARCHAR(10)) AS host,
