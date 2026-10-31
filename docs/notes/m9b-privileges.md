@@ -40,3 +40,13 @@ web/src/features/privileges/PrivilegeDialogs.tsx  表单和统一的确认对话
 - openGauss 的锁定状态在 `pg_user_status`；OceanBase 没有成员的角色在 `role_edges` 里没有记录，要看无密码且锁定。
 - `pg_user_status` 只有管理员能读，低权限账号走 `@limited` 或记入范围不完整。
 - `UPDATE t SET password = 'x'` 不是账号语句，`SET PASSWORD` 只在语句开头才算。
+
+## M9c GBase 8s
+
+只读，写能力按规格另定：`PrivCaps.write` 为 false，修改入口不显示，后端也拒绝。
+
+- 账号是操作系统用户，`sysusers` 只记录这个库里有权限的名字，所以实连夹具只授权给名字，没有低权限登录和修改流程。
+- `systabauth.tabauth` 共 9 位（s u * i d x a r n），大写表示可转授；`syscolauth.colauth` 共 3 位（s u r）。
+- 系统表的字符列带尾随空格，比较和输出都要 `TRIM`。
+- 角色要默认启用才生效，`defrole` 没设时路径标“需在会话中启用”。
+- `privilege_live` 的 `gbase` 走 JDBC 桥接实连通过：两层角色路径、可转授、列权限、数据库级权限、属主和 DBA 的隐含权限。

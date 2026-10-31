@@ -42,6 +42,7 @@ const OPENGAUSS: &str = include_str!("../../sql/privilege/opengauss.sql");
 const ORACLE: &str = include_str!("../../sql/privilege/oracle.sql");
 const DAMENG: &str = include_str!("../../sql/privilege/dameng.sql");
 const SQLSERVER: &str = include_str!("../../sql/privilege/sqlserver.sql");
+const INFORMIX: &str = include_str!("../../sql/privilege/informix.sql");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -185,8 +186,7 @@ fn base_file(family: Family) -> &'static str {
         Family::Oracle => ORACLE,
         Family::Dameng => DAMENG,
         Family::SqlServer => SQLSERVER,
-        // GBase 8s 在 M9c 补，服务层先拒绝，不能显示成“没有账号”
-        Family::Informix => "",
+        Family::Informix => INFORMIX,
     }
 }
 
@@ -243,6 +243,7 @@ impl Dialect {
             (Family::SqlServer, _) => &["db:public", "server:public"],
             (Family::MySql, Variant::MariaDb) => &["'PUBLIC'@''"],
             (Family::MySql, _) => &[],
+            (Family::Informix, _) => &["public"],
             _ => &["PUBLIC"],
         }
     }
@@ -265,8 +266,7 @@ mod tests {
 
     #[test]
     fn every_variant_has_the_required_sections() {
-        // GBase 8s 在 M9c 补
-        for &v in ALL_VARIANTS.iter().filter(|&&v| v.family() != Family::Informix) {
+        for &v in &ALL_VARIANTS {
             let d = Dialect::new(v);
             for s in [
                 PrivSection::Principals,

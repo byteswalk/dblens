@@ -63,8 +63,7 @@
     "exportDoc": "Export Document…",
     "migrate": "Migrate To…",
     "lint": "Design lint",
-    "gbaseLater": "GBase 8s does not support this yet; it is planned for M8b",
-    "gbasePrivilegeLater": "GBase 8s does not support this yet; it is planned for M9c"
+    "gbaseLater": "GBase 8s does not support this yet; it is planned for M8b"
   },
   "duplicate": {
     "name": "{{name}} copy",

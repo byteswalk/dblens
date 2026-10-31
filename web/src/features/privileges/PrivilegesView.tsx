@@ -76,7 +76,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
     key: 'revoke',
     width: 70,
     render: (_, g) =>
-      g.effect === 'implicit' ? null : (
+      g.effect === 'implicit' || !caps?.write ? null : (
         <a onClick={() => onChange({ op: 'revoke', grantee: ref, scope: g.scope, target: g.target, privilege: g.privilege, grantable: g.grantable })}>
           {t('privilege.action.revoke')}
         </a>
@@ -102,7 +102,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
       <CoverageNote coverage={data?.coverage} />
       {error && <div className="err" style={{ padding: 12 }}>{t('privilege.error', { detail: (error as Error).message })}</div>}
-      <div className="row" style={{ padding: '6px 12px 0', gap: 2 }}>
+      {caps?.write && <div className="row" style={{ padding: '6px 12px 0', gap: 2 }}>
         {hasCredentials(principal) && <Button size="small" type="text" onClick={() => onForm('password')}>{t('privilege.action.setPassword')}</Button>}
         {hasCredentials(principal) && caps?.lock && (
           <Button size="small" type="text" onClick={() => onChange({ op: 'set_locked', principal: ref, locked: !principal.locked })}>
@@ -112,7 +112,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
         <Button size="small" type="text" onClick={() => onForm('grant')}>{t('privilege.action.grant')}</Button>
         <Button size="small" type="text" onClick={() => onForm('add_role')}>{t('privilege.action.addRole')}</Button>
         <Button size="small" type="text" danger onClick={() => onChange({ op: 'drop', principal: ref })}>{t('privilege.action.drop')}</Button>
-      </div>
+      </div>}
       <Tabs
         size="small"
         style={{ padding: '0 12px', flex: 1, minHeight: 0, overflow: 'auto' }}
@@ -131,7 +131,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
                     <td>
                       {memberOf.length === 0 && '—'}
                       {memberOf.map((m) => (
-                        <div key={m.role}>{nameOf(m.role)} <a onClick={() => removeRole(m)}>{t('privilege.action.removeRole')}</a></div>
+                        <div key={m.role}>{nameOf(m.role)} {caps?.write && <a onClick={() => removeRole(m)}>{t('privilege.action.removeRole')}</a>}</div>
                       ))}
                     </td>
                   </tr>
@@ -256,7 +256,7 @@ export default function PrivilegesView({ tab }: { tab: QueryTab }) {
               ]}
             />
             <span className="grow" />
-            {data && (
+            {data?.caps.write && (
               <Dropdown
                 trigger={['click']}
                 menu={{

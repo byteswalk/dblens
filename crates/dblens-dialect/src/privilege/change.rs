@@ -122,6 +122,8 @@ impl std::fmt::Debug for PrivStatement {
 /// 方言支持的操作，不支持的不显示入口。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct PrivCaps {
+    /// 能不能在界面上修改。GBase 8s 目前只读。
+    pub write: bool,
     pub lock: bool,
     /// 建角色必须给密码（openGauss）。
     pub role_password: bool,
@@ -226,6 +228,7 @@ impl Dialect {
         let family = self.family();
         let gauss = matches!(self.variant(), Variant::OpenGauss | Variant::GaussDb);
         PrivCaps {
+            write: family != Family::Informix,
             lock: !matches!(family, Family::Postgres | Family::Informix) || gauss,
             role_password: gauss,
             host: family == Family::MySql,

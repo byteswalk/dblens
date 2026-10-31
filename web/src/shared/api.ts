@@ -410,6 +410,7 @@ export interface ObjectAccess {
 export type Coverage = { state: 'complete' } | { state: 'partial'; missing: string[] }
 
 export interface PrivCaps {
+  write: boolean
   lock: boolean
   role_password: boolean
   host: boolean

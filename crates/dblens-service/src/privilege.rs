@@ -176,9 +176,6 @@ impl Service {
 
     async fn privilege_base(&self, profile: &Profile) -> Result<Base> {
         let dialect = self.metadata.dialect(profile).await?;
-        if dialect.family() == Family::Informix {
-            return Err(Error::invalid(msg!("privilege.unsupported")));
-        }
         let args = MetaArgs::default();
         let mut missing = Vec::new();
         let caps_rows = self.privilege_rows(profile, PrivSection::Caps, &args, &mut missing).await?;
@@ -278,14 +275,6 @@ impl Service {
         Ok(ObjectAccessReport { access, coverage: coverage(base.missing) })
     }
 
-    async fn privilege_dialect(&self, profile: &Profile) -> Result<Dialect> {
-        let dialect = self.metadata.dialect(profile).await?;
-        if dialect.family() == Family::Informix {
-            return Err(Error::invalid(msg!("privilege.unsupported")));
-        }
-        Ok(dialect)
-    }
-
     /// 生成语句，不执行。
     pub async fn privilege_preview(
         &self,
@@ -294,7 +283,7 @@ impl Service {
         change: &PrivChange,
     ) -> Result<PrivPreview> {
         let profile = self.scoped_profile(profile_id, catalog)?;
-        let dialect = self.privilege_dialect(&profile).await?;
+        let dialect = self.metadata.dialect(&profile).await?;
         let statements = dialect.privilege_statements(change)?;
         let masked: Vec<String> = statements.iter().map(|s| s.masked.clone()).collect();
         let sqls: Vec<String> = masked.clone();
@@ -334,7 +323,7 @@ impl Service {
         confirm_name: Option<&str>,
     ) -> Result<PrivApplyResult> {
         let profile = self.scoped_profile(profile_id, catalog)?;
-        let dialect = self.privilege_dialect(&profile).await?;
+        let dialect = self.metadata.dialect(&profile).await?;
         let statements = dialect.privilege_statements(change)?;
         if profile.input.environment == Environment::Prod
             && let Some(name) = change.high_risk_name()

@@ -16,7 +16,7 @@ use dblens_service::{
     SessionEvent, Store,
 };
 
-const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "dpi_lib_dir"];
+const LIB_OPTIONS: [&str; 3] = ["oracle_client_lib_dir", "dpi_lib_dir", "jdbc_dir"];
 const LOW_PASSWORD: &str = "Dblens_Priv_9x!";
 const SENTINEL: &str = "Dblens_Sentinel_9x!";
 
@@ -167,6 +167,28 @@ const DAMENG: Fixture = Fixture {
     ],
     ..ORACLE
 };
+
+/// GBase 8s 的账号是操作系统用户，这里只授权给名字；没有低权限登录和修改流程，见 `gbase`。
+const GBASE_CREATE: &[&str] = &[
+    "CREATE TABLE dblens_priv_t (id INT PRIMARY KEY)",
+    "CREATE ROLE dblens_priv_r2",
+    "CREATE ROLE dblens_priv_r1",
+    "GRANT SELECT ON dblens_priv_t TO dblens_priv_r2",
+    "GRANT UPDATE (id) ON dblens_priv_t TO dblens_priv_r2",
+    "GRANT dblens_priv_r2 TO dblens_priv_r1",
+    "GRANT CONNECT TO dblens_priv_u",
+    "GRANT dblens_priv_r1 TO dblens_priv_u",
+    "GRANT DEFAULT ROLE dblens_priv_r1 TO dblens_priv_u",
+    "GRANT INSERT ON dblens_priv_t TO dblens_priv_u WITH GRANT OPTION",
+];
+const GBASE_DROP: &[&str] = &[
+    "REVOKE DEFAULT ROLE FROM dblens_priv_u",
+    "REVOKE dblens_priv_r1 FROM dblens_priv_u",
+    "REVOKE CONNECT FROM dblens_priv_u",
+    "DROP ROLE dblens_priv_r1",
+    "DROP ROLE dblens_priv_r2",
+    "DROP TABLE dblens_priv_t",
+];
 
 const SQLSERVER: Fixture = Fixture {
     create: &[
@@ -505,6 +527,62 @@ async fn flow(env: &str, fx: Fixture) {
         !left.principals.iter().any(|p| p.name.eq_ignore_ascii_case("dblens_priv_low")),
         "{env}: 夹具没有清理干净"
     );
+}
+
+#[tokio::test]
+async fn gbase() {
+    let Ok(url) = std::env::var("DBLENS_TEST_GBASE_URL") else { return };
+    let (driver, params) = ConnectParams::from_url(&url).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(Store::open(dir.path()).unwrap());
+    let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
+    secrets.init_vault("测试主密码").unwrap();
+    let registry = Arc::new(DriverRegistry::new(store.clone()));
+    if let Some(lib) = params.options.get("jdbc_dir") {
+        registry.set_lib_dir(driver, Some(Path::new(lib))).unwrap();
+    }
+    let service = Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy));
+    let admin = profile(&service, driver, &params, &params.user, &params.password).await;
+    run(&service, &admin, GBASE_DROP, true).await;
+    run(&service, &admin, GBASE_CREATE, false).await;
+
+    let overview = service.privilege_overview(&admin, None).await.unwrap();
+    assert_eq!(overview.coverage, Coverage::Complete);
+    assert!(!overview.caps.write, "GBase 8s 只读");
+    let by = |n: &str| overview.principals.iter().find(|p| p.id == n).unwrap_or_else(|| panic!("{n}"));
+    assert_eq!(by("dblens_priv_r1").kind, PrincipalKind::Role);
+    assert_eq!(by("dblens_priv_u").kind, PrincipalKind::User);
+    assert!(by("gbasedbt").builtin);
+
+    let detail = service.principal_privileges(&admin, None, "dblens_priv_u").await.unwrap();
+    assert_eq!(detail.coverage, Coverage::Complete);
+    let on_table = |g: &PrivilegeGrant| g.target.object.as_deref() == Some("dblens_priv_t");
+    let select = detail.effective.iter().find(|e| e.grant.privilege == "SELECT" && on_table(&e.grant));
+    let select = select.unwrap_or_else(|| panic!("{:?}", detail.effective));
+    assert_eq!(select.via.len(), 3, "经两层角色：{:?}", select.via);
+    assert_eq!(select.state, EffectiveState::Allowed, "默认角色：{:?}", select.notes);
+    let insert = detail.direct.iter().find(|g| g.privilege == "INSERT" && on_table(g)).unwrap();
+    assert!(insert.grantable, "大写表示可转授");
+    assert!(detail.direct.iter().any(|g| g.privilege == "CONNECT"), "{:?}", detail.direct);
+    assert!(
+        detail.effective.iter().any(|e| e.grant.scope == GrantScope::Column && e.grant.privilege == "UPDATE")
+    );
+
+    let report = service.object_access(&admin, None, &params.user, "dblens_priv_t").await.unwrap();
+    assert_eq!(report.coverage, Coverage::Complete);
+    assert!(
+        report
+            .access
+            .iter()
+            .any(|a| a.principal == "dblens_priv_u" && a.privilege.grant.privilege == "SELECT")
+    );
+    assert!(report.access.iter().any(|a| a.privilege.grant.effect == GrantEffect::Implicit), "属主要列出");
+
+    let change = PrivChange::CreateRole { name: "x".into(), level: PrincipalLevel::Database, password: None };
+    assert!(service.privilege_preview(&admin, None, &change).await.is_err(), "修改不支持");
+    run(&service, &admin, GBASE_DROP, true).await;
+    let left = service.privilege_overview(&admin, None).await.unwrap();
+    assert!(!left.principals.iter().any(|p| p.id.starts_with("dblens_priv")), "夹具没有清理干净");
 }
 
 #[tokio::test]
