@@ -3,7 +3,7 @@
 //! 增、改、删列合成一条 `ALTER TABLE`，放在改列名之前：有视图依赖时，同一会话里先改名再 `MODIFY` 这一列，或者连续两条
 //! `MODIFY`，都报 -201（服务器的行为，实测）。
 //! `MODIFY` 还会删掉这一列上的单列主键、唯一、外键和检查约束，以及别的表引用它的外键；联合约束不受影响。
-//! 这里重建本表的约束，别的表的外键由 `design_warnings` 提示。
+//! 这里重建本表的约束，别的表的外键由 `design_restore_keys` 在最后重建。
 
 use dblens_core::schema::{Column, ForeignKey, Table};
 use dblens_core::{Msg, Result, msg};
@@ -11,7 +11,8 @@ use dblens_core::{Msg, Result, msg};
 use super::diff::text;
 use super::sql::{DesignStatement, stmt};
 use super::{ColumnConstraints, TableChange as C};
-use crate::Dialect;
+use crate::meta::ReferencingKey;
+use crate::{Dialect, Family};
 
 impl Dialect {
     fn ifx_column(&self, c: &Column) -> String {
@@ -69,17 +70,63 @@ impl Dialect {
         out
     }
 
-    /// 改了被别的表引用的主键或唯一列时，那些外键会被一起删掉，这里读不到，只能提示。
-    pub(crate) fn ifx_warnings(&self, changes: &[C]) -> Vec<Msg> {
-        changes
+    /// 真的要 `MODIFY` 的列（只改注释的不算）。
+    fn ifx_modified<'a>(
+        &self,
+        changes: &'a [C],
+    ) -> impl Iterator<Item = (&'a Column, &'a ColumnConstraints)> {
+        let modified: Vec<_> = changes
             .iter()
             .filter_map(|c| match c {
-                C::AlterColumn { to, keep, .. } if keep.primary_key.is_some() || !keep.uniques.is_empty() => {
-                    Some(msg!("design.gbase_key_modify", column = to.name))
+                C::AlterColumn { from, to, keep } if self.ifx_column(from) != self.ifx_column(to) => {
+                    Some((to, keep))
                 }
                 _ => None,
             })
+            .collect();
+        modified.into_iter()
+    }
+
+    /// 改了主键或唯一列时提示：别的表的外键会先被服务器删掉，再由 `design_restore_keys` 重建。
+    pub(crate) fn ifx_warnings(&self, changes: &[C]) -> Vec<Msg> {
+        self.ifx_modified(changes)
+            .filter(|(_, keep)| keep.primary_key.is_some() || !keep.uniques.is_empty())
+            .map(|(to, _)| msg!("design.gbase_key_modify", column = to.name))
             .collect()
+    }
+
+    /// `MODIFY` 主键或唯一列时被服务器删掉的、别的表的外键：放在全部语句之后重建。`referencing` 是原表上读到的引用。
+    pub fn design_restore_keys(
+        &self,
+        schema: &str,
+        table: &str,
+        changes: &[C],
+        referencing: &[ReferencingKey],
+    ) -> Vec<DesignStatement> {
+        if self.family() != Family::Informix {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for (to, keep) in self.ifx_modified(changes) {
+            let keys =
+                keep.primary_key.iter().map(|k| &k.columns).chain(keep.uniques.iter().map(|u| &u.columns));
+            for column in keys.filter_map(|cols| cols.first()) {
+                for r in
+                    referencing.iter().filter(|r| matches!(r.key.ref_columns.as_slice(), [c] if c == column))
+                {
+                    let key = ForeignKey {
+                        ref_schema: Some(schema.to_string()),
+                        ref_table: table.to_string(),
+                        ref_columns: vec![to.name.clone()],
+                        ..r.key.clone()
+                    };
+                    let other = self.qualified(Some(&r.schema), &r.table);
+                    let sql = format!("ALTER TABLE {other} ADD CONSTRAINT {}", self.ifx_fk(&r.schema, &key));
+                    out.push(DesignStatement { changes: vec![], sql });
+                }
+            }
+        }
+        out
     }
 
     fn ifx_comment(&self, target: String, comment: &str) -> Result<String> {
@@ -310,6 +357,29 @@ mod tests {
             ]
         );
         assert_eq!(d.ifx_warnings(&changes).len(), 1);
+        let child = ReferencingKey {
+            schema: "o".into(),
+            table: "c".into(),
+            key: ForeignKey {
+                name: Some("fk".into()),
+                columns: vec!["pid".into()],
+                ref_schema: Some("o".into()),
+                ref_table: "t".into(),
+                ref_columns: vec!["a".into()],
+                on_delete: Some("CASCADE".into()),
+                on_update: None,
+            },
+        };
+        let other = ReferencingKey {
+            key: ForeignKey { ref_columns: vec!["a".into(), "b".into()], ..child.key.clone() },
+            ..child.clone()
+        };
+        let got = d.design_restore_keys("o", "t", &changes, &[child, other]);
+        assert_eq!(got.len(), 1, "联合外键不受影响");
+        assert_eq!(
+            got[0].sql,
+            "ALTER TABLE o.c ADD CONSTRAINT FOREIGN KEY (pid) REFERENCES o.t (z) ON DELETE CASCADE CONSTRAINT fk"
+        );
     }
 
     #[test]

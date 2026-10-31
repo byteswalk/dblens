@@ -154,6 +154,23 @@ mod tests {
         assert_eq!(web_dir(Some(res.clone())), Some(res.join("web")));
     }
 
+    /// 页面调用的命令都要放行，否则按钮没有反应，只在日志里有一条 not allowed。
+    #[test]
+    fn every_command_is_allowed() {
+        let main = include_str!("main.rs");
+        let handlers = main.split("generate_handler![").nth(1).unwrap().split(']').next().unwrap();
+        let capability = include_str!("../capabilities/main.json");
+        let build = include_str!("../build.rs");
+        let commands: Vec<&str> =
+            handlers.split(',').filter_map(|c| c.trim().strip_prefix("shell::")).collect();
+        assert!(commands.len() >= 7, "{commands:?}");
+        for command in commands {
+            let allow = format!("\"allow-{}\"", command.replace('_', "-"));
+            assert!(capability.contains(&allow), "capabilities/main.json 缺 {allow}");
+            assert!(build.contains(&format!("\"{command}\"")), "build.rs 缺 {command}");
+        }
+    }
+
     #[test]
     fn unsafe_ports_are_refused() {
         for port in [5060, 5061, 6000, 6667, 6679, 10080] {

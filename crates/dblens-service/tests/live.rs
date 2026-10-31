@@ -412,6 +412,47 @@ async fn gbase8s_design() {
     design_flow("DBLENS_TEST_GBASE_URL").await;
 }
 
+/// 改被引用的主键列：`MODIFY` 会删掉本表的主键和别的表的外键，都要重建。
+#[tokio::test]
+async fn gbase8s_key_modify_keeps_constraints() {
+    let Some(live) = setup("DBLENS_TEST_GBASE_URL").await else { return };
+    let s = &live.service;
+    let id = s.open_session(&live.profile_id).await.unwrap().id;
+    for sql in ["DROP TABLE IF EXISTS m8k_c", "DROP TABLE IF EXISTS m8k_p"] {
+        live.submit(id, ExecRequest::new(sql)).await;
+    }
+    live.run(id, "CREATE TABLE m8k_p (id INT NOT NULL, name VARCHAR(20), CHECK (id > 0) CONSTRAINT m8k_ck, PRIMARY KEY (id) CONSTRAINT m8k_pk)").await;
+    live.run(id, "CREATE TABLE m8k_c (id INT PRIMARY KEY, pid INT, FOREIGN KEY (pid) REFERENCES m8k_p (id) CONSTRAINT m8k_fk)").await;
+    let t = s.design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, "m8k_p").await.unwrap();
+    let mut draft = t.table.clone();
+    draft.columns[0].default = Some("1".into());
+    let req = DesignRequest {
+        catalog: live.catalog(),
+        schema: live.schema.clone(),
+        name: Some("m8k_p".into()),
+        draft,
+        renames: Renames::default(),
+        rebuild: false,
+        fingerprint: Some(t.fingerprint.clone()),
+    };
+    let p = s.preview_design(&live.profile_id, &req).await.unwrap();
+    assert_eq!(p.warnings.len(), 1, "{p:?}");
+    let task = s.start_design(&live.profile_id, req).await.unwrap();
+    let st = wait_task(s, &task).await;
+    assert_eq!(st.state, TaskState::Done, "{st:?}");
+    let catalog = live.catalog();
+    let parent =
+        s.design_table(&live.profile_id, catalog.as_deref(), &live.schema, "m8k_p").await.unwrap().table;
+    assert_eq!(parent.primary_key.as_ref().and_then(|k| k.name.as_deref()), Some("m8k_pk"));
+    assert_eq!(parent.checks.len(), 1, "{:?}", parent.checks);
+    let child =
+        s.design_table(&live.profile_id, catalog.as_deref(), &live.schema, "m8k_c").await.unwrap().table;
+    assert_eq!(child.foreign_keys.len(), 1, "{:?}", child.foreign_keys);
+    for sql in ["DROP TABLE m8k_c", "DROP TABLE m8k_p"] {
+        live.run(id, sql).await;
+    }
+}
+
 #[tokio::test]
 async fn gbase8s_model() {
     model_flow("DBLENS_TEST_GBASE_URL").await;

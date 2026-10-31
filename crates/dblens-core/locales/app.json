@@ -197,8 +197,8 @@
     "en": "This database cannot change the generation expression of existing column %{column}"
   },
   "design.gbase_key_modify": {
-    "zh-CN": "修改 %{column} 时，GBase 8s 会删除其他表引用这一列的外键，执行后要重新创建",
-    "en": "Changing %{column} makes GBase 8s drop foreign keys in other tables that reference it; recreate them afterwards"
+    "zh-CN": "修改 %{column} 时，GBase 8s 会删除其他表引用这一列的外键，脚本最后会重建。类型改变时重建可能失败，要先改外键列",
+    "en": "Changing %{column} makes GBase 8s drop foreign keys in other tables that reference it; the script recreates them last. If the type changes that can fail, so change the referencing columns first"
   },
   "design.unsupported.identity": {
     "zh-CN": "该库不能改变已有列 %{column} 的自增属性",

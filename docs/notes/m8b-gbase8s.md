@@ -29,3 +29,11 @@
 - 规范检查没有拆开带库的 schema，SQL Server 和 GBase 从树上发起时读到空结构，报告通过率 100%。修复后 GBase 的结果是 58.6%、36 个问题。
 - 桌面程序随机到 WebView 拒绝的端口（如 5061）时窗口打不开（ERR_UNSAFE_PORT），偶发。绑定时避开这些端口。
 - 文档导出的 Schema 和默认标题露出分隔符，规范检查的标题同样；状态栏在规范检查标签上写成“比对”。
+
+第二轮桌面验证：
+
+- `capabilities/main.json` 漏了 `open_dialog`、`folder_dialog`，桌面版的“选择文件”“选择文件夹”点了没反应，只在日志里有 `not allowed`。已放行，并加了测试：`generate_handler!` 里的命令都要在权限清单和 `build.rs` 里。
+- 改被引用的主键或唯一列时，设计器现在在脚本最后重建别的表的外键，不再只给警告（`design_restore_keys`）。类型改变时重建可能失败，预览里有提示。
+- 17 个实例在桌面程序里都连上并展开过：MySQL、MariaDB、TiDB、OceanBase、PostgreSQL、openGauss（PG、A、SHA 账号）、金仓（两种模式）、GaussDB（两种模式）、Oracle、达梦、SQL Server 2022、2025、GBase 8s。
+- TiDB 的系统库名是大写且比较区分大小写，没有归进“系统”，改成 `LOWER()` 比较，并加了 `metrics_schema`、`oceanbase`。
+- GaussDB 开发者版读不到角色成员关系，权限页报告范围不完整。GaussDB 不单独适配，未处理。

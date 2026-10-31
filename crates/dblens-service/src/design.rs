@@ -7,12 +7,12 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use dblens_core::schema::Table;
 use dblens_core::{Error, Msg, Result, msg};
-use dblens_dialect::Dialect;
 use dblens_dialect::design::{
     DesignCaps, DesignIssue, DesignStatement, Rebuild, RebuildContext, RebuildOutcome, RebuildStep, Renames,
     TableChange, diff_table, validate,
 };
 use dblens_dialect::meta::{self, MetaArgs, MetaKey, MetaRows, TableStorage};
+use dblens_dialect::{Dialect, Family};
 use dblens_driver::{Connection, collect_all};
 use serde::{Deserialize, Serialize};
 
@@ -290,7 +290,20 @@ impl Service {
                 }
             }
             _ => {
-                let statements = dialect.design_sql(&req.schema, &draft.name, &diff)?;
+                let mut statements = dialect.design_sql(&req.schema, &draft.name, &diff)?;
+                if dialect.family() == Family::Informix && !warnings.is_empty() {
+                    let rows = self
+                        .fresh_rows(&prepared.profile, MetaKey::ReferencingKeys, &req.schema, &draft.name)
+                        .await?;
+                    let referencing = meta::referencing_keys(&rows, &req.schema, &draft.name)?;
+                    prepared.related = referencing.iter().map(|r| r.schema.clone()).collect();
+                    statements.extend(dialect.design_restore_keys(
+                        &req.schema,
+                        &draft.name,
+                        &diff.changes,
+                        &referencing,
+                    ));
+                }
                 preview.statements = statements
                     .iter()
                     .map(|s| PreviewStatement {

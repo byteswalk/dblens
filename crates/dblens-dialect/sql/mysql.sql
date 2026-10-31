@@ -7,7 +7,7 @@
 
 -- [schemas]
 SELECT s.SCHEMA_NAME AS name,
-       CASE WHEN s.SCHEMA_NAME IN ('mysql', 'sys', 'information_schema', 'performance_schema') THEN 1 ELSE 0 END AS is_system
+       CASE WHEN LOWER(s.SCHEMA_NAME) IN ('mysql', 'sys', 'information_schema', 'performance_schema', 'metrics_schema', 'oceanbase') THEN 1 ELSE 0 END AS is_system
 FROM information_schema.SCHEMATA s
 ORDER BY s.SCHEMA_NAME
 

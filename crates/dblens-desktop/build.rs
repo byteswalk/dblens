@@ -5,6 +5,8 @@ fn main() {
         "window_action",
         "set_auto_check_update",
         "save_dialog",
+        "open_dialog",
+        "folder_dialog",
         "reveal_in_folder",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest)).expect("tauri-build 失败");

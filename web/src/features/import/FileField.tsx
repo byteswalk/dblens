@@ -34,8 +34,12 @@ export default function FileField({
   const [progress, setProgress] = useState<number | null>(null)
 
   const pickDesktop = async () => {
-    const path = await desktop?.openDialog(filters)
-    if (path) onChange({ source: { path }, name: fileNameOf(path), size: null })
+    try {
+      const path = await desktop?.openDialog(filters)
+      if (path) onChange({ source: { path }, name: fileNameOf(path), size: null })
+    } catch (e) {
+      message.error((e as Error).message ?? String(e))
+    }
   }
 
   const upload = async (file: File) => {
