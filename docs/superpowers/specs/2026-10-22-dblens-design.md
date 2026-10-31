@@ -342,6 +342,13 @@ trait Policy: Send + Sync {
 - M6b 已完成（设计 `docs/superpowers/specs/2026-10-29-m6b-sqlserver-design.md`，详细计划 `docs/superpowers/plans/2026-10-29-m6b-sqlserver.md`，说明 `docs/notes/m6b-sqlserver.md`）。M6 全部完成，SQL Server 与其他库同等可用。
 - M7a 已完成（设计 `docs/superpowers/specs/2026-10-30-m7-lint-design.md`，详细计划 `docs/superpowers/plans/2026-10-30-m7a-lint.md`，说明 `docs/notes/m7a-lint.md`）。
 - M7b 已完成（同一设计，详细计划 `docs/superpowers/plans/2026-10-30-m7b-lint-reports.md`，说明 `docs/notes/m7b-lint-reports.md`）。M7c 尚未开始。
+- 2026-10-30 用户决定：“授权管理”指数据库账号权限，不是软件许可；团队版只规划不实现。GBase 8s 经 Java 桥接支持（JDBC 跨平台，不用 CSDK）。
+- M8a 已完成（GBase 8s 连接、浏览、查询；设计 `docs/superpowers/specs/2026-10-30-m8a-gbase8s-design.md`，详细计划 `docs/superpowers/plans/2026-10-30-m8a-gbase8s.md`，说明 `docs/notes/m8a-gbase8s.md`）。
+- M8b 已完成（GBase 8s 表设计器、导入、比对、模型、迁移、规范检查，说明 `docs/notes/m8b-gbase8s.md`）。
+- M9 已完成：M9a 账号权限查看、M9b 修改、M9c GBase 8s（设计 `docs/superpowers/specs/2026-10-30-m9-privileges-design.md`，说明 `docs/notes/m9a-privileges.md`、`docs/notes/m9b-privileges.md`）。
+- 2026-10-31 达梦去掉原生 DPI，统一走 JDBC 桥接，第 5 节的达梦驱动描述已过时。Oracle 可选 JDBC 桥接。
+- 2026-10-31 用户决定首次发布延后，另行通知。
+- 国产库第三批：GBase 8s 已完成，OceanBase 的 Oracle 模式未定。GoldenDB 走 MySQL 协议，等新授权后实测。
 
 ## 12. 风险与待验证项
 
@@ -356,5 +363,5 @@ trait Policy: Send + Sync {
 
 - 图形化执行计划、SQL 调试器、存储过程编辑和调试
 - 分区、触发器、存储过程的可视化编辑（首期只读）
-- 多用户、权限与审计（只预留 Policy 接口）
-- SQLite、SQL Server 以及其他国产数据库（虚谷、GBase、神通等）
+- 多用户、团队权限与审计（只预留 Policy 接口）
+- SQLite 以及其他国产数据库（虚谷、神通等）
