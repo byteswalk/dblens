@@ -15,8 +15,8 @@ impl Flavor {
         match self {
             // -213：语句被用户中断
             Flavor::Gbase if code == -213 => Error::Cancelled,
-            // JDBC 规定的取消状态；达梦驱动用它
-            Flavor::Dameng if sqlstate == "HY008" => Error::Cancelled,
+            // -6515：操作被取消
+            Flavor::Dameng if code == -6515 || sqlstate == "HY008" => Error::Cancelled,
             // ORA-01013：用户请求取消当前操作
             Flavor::Oracle if code == 1013 => Error::Cancelled,
             Flavor::Oracle => Error::Sql { code: format!("ORA-{code:05}"), message, position: None },

@@ -44,10 +44,10 @@ dblens（Rust）── stdin/stdout 帧 ──> dblens-bridge（Java 进程）�
 - jlink 精简 JRE 50 MB（含三种驱动所需模块），一致性测试在上面通过。
 - GBase 8s：一致性 11 项、元数据、服务层 7 项、接口层通过，界面已用真实鼠标走过。
 - Oracle 26ai（ojdbc11 23.26.4）：一致性 10 项、服务层 4 项通过。
+- 达梦 DM8（DmJdbcDriver8）：一致性 10 项、服务层 3 项通过，用的是 VM 上 5237 端口的独立测试实例。
 
 ## 未实测
 
-- 达梦经 JDBC：VM 上没有存测试密码，代码和测试都已写好，环境变量是 `DBLENS_TEST_DM_JDBC_URL`。
 - 安装包整体安装、Linux 上的桥接、macOS。
 - `DATETIME YEAR TO FRACTION(3)` 用 `CURRENT` 取回毫秒是 `.0`，未确认是服务器行为还是驱动截断。
 - 打包要用 OpenJDK 构建。本机的 JDK 是 Oracle JDK，只用来量体积。
