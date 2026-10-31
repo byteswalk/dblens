@@ -1,8 +1,11 @@
-//! 数据库账号与权限接口（M9 设计文档第 7 节）。只读。
+//! 数据库账号与权限接口（M9 设计文档第 7 节）。
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use dblens_service::{ObjectAccessReport, PrincipalPrivileges, PrivilegeOverview};
+use dblens_dialect::privilege::PrivChange;
+use dblens_service::{
+    ObjectAccessReport, PrincipalPrivileges, PrivApplyResult, PrivPreview, PrivilegeOverview,
+};
 use serde::Deserialize;
 
 use crate::AppState;
@@ -24,6 +27,34 @@ pub struct ObjectQuery {
     schema: String,
     object: String,
     catalog: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ChangeBody {
+    #[serde(default)]
+    catalog: Option<String>,
+    change: PrivChange,
+    /// 生产连接上的高风险操作要带主体名。
+    #[serde(default)]
+    confirm_name: Option<String>,
+}
+
+pub async fn preview(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(b): Json<ChangeBody>,
+) -> ApiResult<Json<PrivPreview>> {
+    Ok(Json(s.service.privilege_preview(&id, b.catalog.as_deref(), &b.change).await?))
+}
+
+pub async fn apply(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Json(b): Json<ChangeBody>,
+) -> ApiResult<Json<PrivApplyResult>> {
+    let result =
+        s.service.privilege_apply(&id, b.catalog.as_deref(), &b.change, b.confirm_name.as_deref()).await?;
+    Ok(Json(result))
 }
 
 pub async fn overview(

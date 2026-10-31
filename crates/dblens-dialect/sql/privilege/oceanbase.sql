@@ -6,7 +6,8 @@
 SELECT CONCAT('''', u.user, '''@''', u.host, '''') AS id,
        u.user AS name,
        u.host AS host,
-       CASE WHEN EXISTS (SELECT 1 FROM mysql.role_edges r WHERE r.FROM_USER = u.user AND r.FROM_HOST = u.host) THEN 'role' ELSE 'user' END AS principal_kind,
+       CASE WHEN EXISTS (SELECT 1 FROM mysql.role_edges r WHERE r.FROM_USER = u.user AND r.FROM_HOST = u.host)
+                 OR (u.account_locked = 'Y' AND LENGTH(u.authentication_string) = 0) THEN 'role' ELSE 'user' END AS principal_kind,
        'server' AS principal_level,
        CASE WHEN u.account_locked = 'Y' THEN 0 ELSE 1 END AS can_login,
        u.account_locked AS locked,

@@ -96,6 +96,8 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/profiles/{id}/privileges", get(privileges::overview))
         .route("/profiles/{id}/privileges/principal", get(privileges::principal))
         .route("/profiles/{id}/privileges/object", get(privileges::object))
+        .route("/profiles/{id}/privileges/preview", post(privileges::preview))
+        .route("/profiles/{id}/privileges/apply", post(privileges::apply))
         .route("/profiles/{id}/changes/preview", post(routes::preview_changes))
         .route("/profiles/{id}/design/caps", get(design::caps))
         .route("/profiles/{id}/design/table", get(design::table))

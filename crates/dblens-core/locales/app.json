@@ -1656,6 +1656,30 @@
     "zh-CN": "账号与权限查询返回了不认识的值：%{column} = %{value}",
     "en": "Unexpected value in privilege query: %{column} = %{value}"
   },
+  "privilege.change.bad_privilege": {
+    "zh-CN": "权限名只能包含字母、数字、空格、下划线和逗号",
+    "en": "A privilege name may only contain letters, digits, spaces, underscores and commas"
+  },
+  "privilege.change.confirm_name": {
+    "zh-CN": "生产连接上的这项操作要输入主体名确认",
+    "en": "This operation on a production connection needs the principal name to confirm"
+  },
+  "privilege.change.name_required": {
+    "zh-CN": "请填写名称",
+    "en": "Enter a name"
+  },
+  "privilege.change.password_quote": {
+    "zh-CN": "这个数据库的密码不能包含双引号",
+    "en": "Passwords on this database cannot contain double quotes"
+  },
+  "privilege.change.password_required": {
+    "zh-CN": "请填写密码",
+    "en": "Enter a password"
+  },
+  "privilege.change.unsupported": {
+    "zh-CN": "这个数据库不支持此操作",
+    "en": "This database does not support the operation"
+  },
   "privilege.missing.caps": {
     "zh-CN": "无法判断当前账号的查看范围",
     "en": "Could not determine this account's visibility"

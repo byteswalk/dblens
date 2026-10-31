@@ -82,3 +82,8 @@ SELECT p.grantee AS grantee, 'object' AS grant_scope, NULL AS db_name, p.owner A
        p.grantable AS grantable, p.grantor AS grantor
 FROM all_tab_privs p
 WHERE p.owner = {{ bind("schema") }} AND p.table_name = {{ bind("table") }}
+
+-- [owned]
+SELECT object_name, object_type AS object_kind
+FROM all_objects
+WHERE owner = {{ bind("name") }} AND ROWNUM <= 50

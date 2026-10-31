@@ -110,3 +110,9 @@ SELECT N'db:' + o.name, 'object', NULL, s.name, 'table', {{ bind("table") }}, NU
 FROM sys.schemas s
 JOIN sys.database_principals o ON o.principal_id = s.principal_id
 WHERE s.name = {{ bind("schema") }}
+
+-- [owned]
+SELECT TOP 50 s.name AS object_name, 'schema' AS object_kind
+FROM sys.schemas s
+JOIN sys.database_principals p ON p.principal_id = s.principal_id
+WHERE p.name = {{ bind("name") }}

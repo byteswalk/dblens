@@ -21,6 +21,12 @@ fn bad(column: &str, value: &str) -> Error {
     Error::internal(msg!("privilege.bad_value", column = column, value = value))
 }
 
+/// `owned` 段：对象名称和种类。
+pub fn owned(rows: &MetaRows) -> Result<Vec<String>> {
+    rows.require("owned", &["object_name", "object_kind"])?;
+    Ok(rows.iter().map(|r| format!("{} ({})", r.name("object_name"), r.name("object_kind"))).collect())
+}
+
 pub fn principals(rows: &MetaRows) -> Result<Vec<Principal>> {
     rows.require(
         "principals",

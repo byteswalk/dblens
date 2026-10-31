@@ -1,10 +1,12 @@
 //! 执行历史（M1c1 设计文档第 3、4 节）：每条执行过的语句一条记录，保存在本地库，超出上限时删除最旧的。
 //! 写入不阻塞执行：会话把记录交给 `HistoryLog`，由后台线程批量写库。
 
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
 
 use dblens_core::{Error, Result, msg};
+use dblens_dialect::privilege::redact_sql;
 use rusqlite::{Row, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
@@ -212,8 +214,14 @@ impl HistoryLog {
             })
     }
 
-    /// 记录一条。不阻塞；失败只记日志。
-    pub fn record(&self, entry: NewHistory) {
+    /// 记录一条。不阻塞；失败只记日志。账号类语句里的密码在这里脱敏，所有入口都经过这里。
+    pub fn record(&self, mut entry: NewHistory) {
+        if let Cow::Owned(sql) = redact_sql(&entry.sql) {
+            entry.sql = sql;
+        }
+        if let Some(Cow::Owned(error)) = entry.error.as_deref().map(redact_sql) {
+            entry.error = Some(error);
+        }
         match &self.inner {
             Inner::Off => {}
             Inner::Thread(tx) => match tx.try_send(entry) {

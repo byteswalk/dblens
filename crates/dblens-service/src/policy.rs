@@ -86,6 +86,18 @@ pub trait Policy: Send + Sync {
     async fn after_execute(&self, ctx: &ExecContext, stmt: &StatementInfo, outcome: &Outcome);
 }
 
+/// 改账号和权限的语句，生产连接上要确认。
+const ACCOUNT_KEYWORDS: [&str; 8] = [
+    "GRANT",
+    "REVOKE",
+    "CREATE USER",
+    "ALTER USER",
+    "CREATE ROLE",
+    "ALTER ROLE",
+    "CREATE LOGIN",
+    "ALTER LOGIN",
+];
+
 /// 个人版的默认策略。
 pub struct DefaultPolicy;
 
@@ -101,6 +113,7 @@ impl Policy for DefaultPolicy {
                 msg!("policy.prod_no_where", keyword = stmt.keyword)
             }
             "DROP" | "TRUNCATE" => msg!("policy.prod_statement", keyword = stmt.keyword),
+            k if ACCOUNT_KEYWORDS.contains(&k) => msg!("policy.prod_statement", keyword = stmt.keyword),
             "KILL" | "SHUTDOWN" | "DBCC" | "RESTORE" | "ALTER DATABASE"
                 if ctx.dialect.family() == Family::SqlServer =>
             {
@@ -199,7 +212,16 @@ pub fn classify(dialect: &Dialect, sql: &str) -> StatementInfo {
             }
         }
     };
-    StatementInfo { kind, keyword, has_where, objects }
+    StatementInfo { kind, keyword: account_keyword(sql, keyword), has_where, objects }
+}
+
+/// `CREATE`、`ALTER` 后面跟 `USER`、`ROLE`、`LOGIN` 时带上第二个词，策略要区分它们。
+fn account_keyword(sql: &str, keyword: String) -> String {
+    if !matches!(keyword.as_str(), "CREATE" | "ALTER") {
+        return keyword;
+    }
+    let second = batch_words(sql).into_iter().nth(1).unwrap_or_default();
+    if matches!(second.as_str(), "USER" | "ROLE" | "LOGIN") { format!("{keyword} {second}") } else { keyword }
 }
 
 /// SQL Server 中执行前要确认的关键字（另有 `ALTER DATABASE`）。
@@ -220,7 +242,7 @@ fn classify_batch(sql: &str) -> StatementInfo {
             w if SQLSERVER_DANGEROUS.contains(&w) => Some(w.to_string()),
             _ => None,
         });
-        let keyword = found.unwrap_or(first);
+        let keyword = found.unwrap_or_else(|| account_keyword(sql, first));
         let kind = kind_of_keyword(keyword.split(' ').next().unwrap_or_default());
         return StatementInfo { kind, keyword, has_where: None, objects: vec![] };
     };
@@ -232,6 +254,7 @@ fn classify_batch(sql: &str) -> StatementInfo {
             if keyword == "ALTER" && text.to_uppercase().split_whitespace().nth(1) == Some("DATABASE") {
                 keyword = "ALTER DATABASE".into();
             }
+            keyword = account_keyword(&text, keyword);
             let (has_where, objects) = from_ast(s);
             StatementInfo {
                 kind: kind_of_keyword(keyword.split(' ').next().unwrap_or_default()),
@@ -245,7 +268,7 @@ fn classify_batch(sql: &str) -> StatementInfo {
     let dangerous = |i: &&StatementInfo| match i.keyword.as_str() {
         "UPDATE" | "DELETE" => i.has_where != Some(true),
         "DROP" | "TRUNCATE" | "ALTER DATABASE" => true,
-        k => SQLSERVER_DANGEROUS.contains(&k),
+        k => SQLSERVER_DANGEROUS.contains(&k) || ACCOUNT_KEYWORDS.contains(&k),
     };
     let pick = infos
         .iter()
@@ -409,6 +432,28 @@ mod tests {
 
     fn ctx(environment: Environment) -> ExecContext {
         ExecContext { profile_id: "p".into(), environment, dialect: pg() }
+    }
+
+    #[tokio::test]
+    async fn account_statements_need_confirmation_on_production() {
+        let dialect = Dialect::new(Variant::MySql);
+        let prod = ExecContext { profile_id: "p".into(), environment: Environment::Prod, dialect };
+        for sql in [
+            "GRANT SELECT ON t TO u",
+            "REVOKE SELECT ON t FROM u",
+            "CREATE USER u",
+            "alter user u account lock",
+            "CREATE ROLE r",
+        ] {
+            let d = DefaultPolicy.before_execute(&prod, &classify(&dialect, sql)).await;
+            assert!(matches!(d, Decision::Confirm { .. }), "{sql}");
+        }
+        let d = DefaultPolicy.before_execute(&prod, &classify(&dialect, "CREATE TABLE t (a int)")).await;
+        assert_eq!(d, Decision::Allow);
+        let sqlserver = Dialect::new(Variant::SqlServer);
+        let info = classify(&sqlserver, "CREATE LOGIN [u] WITH PASSWORD = N'x'");
+        assert_eq!(info.keyword, "CREATE LOGIN");
+        assert_eq!(info.kind, StatementKind::Ddl);
     }
 
     #[tokio::test]

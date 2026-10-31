@@ -70,6 +70,7 @@ pub enum MetaKey {
     PrivMemberships,
     PrivGrantsOf,
     PrivGrantsOn,
+    PrivOwned,
 }
 
 impl MetaKey {
@@ -153,6 +154,7 @@ impl MetaKey {
             MetaKey::PrivMemberships => "priv_memberships",
             MetaKey::PrivGrantsOf => "priv_grants_of",
             MetaKey::PrivGrantsOn => "priv_grants_on",
+            MetaKey::PrivOwned => "priv_owned",
         }
     }
 }

@@ -106,3 +106,8 @@ UNION ALL
 SELECT p.grantee, 'column', NULL, p.table_schema, 'table', p.table_name, p.column_name, p.privilege, 'grant', p.grantable, p.grantor
 FROM all_col_privs p
 WHERE p.table_schema = {{ bind("schema") }} AND p.table_name = {{ bind("table") }}
+
+-- [owned]
+SELECT object_name, object_type AS object_kind
+FROM all_objects
+WHERE owner = {{ bind("name") }} AND ROWNUM <= 50

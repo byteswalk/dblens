@@ -6,7 +6,10 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use dblens_dialect::privilege::{EffectiveState, GrantEffect, PrivilegeGrant};
+use dblens_dialect::privilege::{
+    EffectiveState, GrantEffect, GrantScope, GrantTarget, Principal, PrincipalKind, PrincipalLevel,
+    PrincipalRef, PrivChange, PrivilegeGrant, Secret,
+};
 use dblens_driver::{ConnectParams, DriverId};
 use dblens_service::{
     Coverage, DefaultPolicy, DriverRegistry, Environment, ProfileInput, SecretBackend, Secrets, Service,
@@ -15,6 +18,7 @@ use dblens_service::{
 
 const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "dpi_lib_dir"];
 const LOW_PASSWORD: &str = "Dblens_Priv_9x!";
+const SENTINEL: &str = "Dblens_Sentinel_9x!";
 
 struct Fixture {
     create: &'static [&'static str],
@@ -243,6 +247,185 @@ async fn run(service: &Service, profile: &str, statements: &[&str], tolerate: bo
     service.sessions.close(info.id, false).await.unwrap();
 }
 
+fn reference(p: &Principal) -> PrincipalRef {
+    PrincipalRef { name: p.name.clone(), host: p.host.clone(), kind: p.kind, level: p.level }
+}
+
+async fn apply(service: &Service, profile: &str, change: PrivChange) {
+    let r = service.privilege_apply(profile, None, &change, None).await.unwrap();
+    assert_eq!(r.error, None, "{change:?}");
+}
+
+fn same_name(p: &Principal, name: &str) -> bool {
+    p.name.eq_ignore_ascii_case(name)
+}
+
+/// 同名的主体里取能接受授权的那个：SQL Server 是数据库级，其他库只有一个。
+fn pick<'a>(list: &'a [Principal], name: &str, role: bool) -> &'a Principal {
+    let mut found: Vec<&Principal> =
+        list.iter().filter(|p| same_name(p, name) && (p.kind == PrincipalKind::Role) == role).collect();
+    found.sort_by_key(|p| p.level != PrincipalLevel::Database);
+    found.first().copied().unwrap_or_else(|| panic!("找不到 {name}"))
+}
+
+/// 删掉上次留下的修改夹具：数据库级在前，SQL Server 的登录名要等用户删掉。
+async fn drop_change_fixture(service: &Service, profile: &str, names: [&str; 2]) {
+    let list = service.privilege_overview(profile, None).await.unwrap().principals;
+    let mut found: Vec<&Principal> = list.iter().filter(|p| names.iter().any(|n| same_name(p, n))).collect();
+    found.sort_by_key(|p| p.level != PrincipalLevel::Database);
+    for p in found {
+        let change = PrivChange::Drop { principal: reference(p), cascade: false };
+        service.privilege_apply(profile, None, &change, None).await.unwrap();
+    }
+}
+
+/// M9b：建用户和角色、授予回收、改密、锁定、删除都走专用路径，结果用只读接口核对。
+async fn changes(env: &str, service: &Service, admin: &str, fx: &Fixture, driver: DriverId) {
+    let upper = fx.user.chars().any(|c| c.is_ascii_uppercase());
+    let name = |s: &str| if upper { s.to_uppercase() } else { s.to_string() };
+    let (user, role) = (name("dblens_priv_c"), name("dblens_priv_cr"));
+    drop_change_fixture(service, admin, [&user, &role]).await;
+
+    let overview = service.privilege_overview(admin, None).await.unwrap();
+    let caps = overview.caps;
+    apply(
+        service,
+        admin,
+        PrivChange::CreateUser { name: user.clone(), host: None, password: Secret::new(SENTINEL) },
+    )
+    .await;
+    let level = if driver == DriverId::SqlServer { PrincipalLevel::Database } else { PrincipalLevel::Server };
+    let password = caps.role_password.then(|| Secret::new(SENTINEL));
+    apply(service, admin, PrivChange::CreateRole { name: role.clone(), level, password }).await;
+
+    let list = service.privilege_overview(admin, None).await.unwrap().principals;
+    let (member, login) = (reference(pick(&list, &user, false)), {
+        let mut logins: Vec<&Principal> = list.iter().filter(|p| same_name(p, &user)).collect();
+        logins.sort_by_key(|p| p.level != PrincipalLevel::Server);
+        reference(logins[0])
+    });
+    let role_ref = reference(pick(&list, &role, true));
+    let member_id = pick(&list, &user, false).id.clone();
+    let target =
+        GrantTarget { schema: Some(fx.schema.into()), object: Some(fx.table.into()), ..Default::default() };
+    let select = "SELECT".to_string();
+    apply(
+        service,
+        admin,
+        PrivChange::Grant {
+            grantee: role_ref.clone(),
+            scope: GrantScope::Object,
+            target: target.clone(),
+            privilege: select.clone(),
+            with_grant: false,
+        },
+    )
+    .await;
+    apply(
+        service,
+        admin,
+        PrivChange::AddRole { member: member.clone(), role: role_ref.clone(), admin: false },
+    )
+    .await;
+    apply(
+        service,
+        admin,
+        PrivChange::Grant {
+            grantee: member.clone(),
+            scope: GrantScope::Object,
+            target: target.clone(),
+            privilege: "UPDATE".into(),
+            with_grant: true,
+        },
+    )
+    .await;
+    let on_table =
+        |g: &PrivilegeGrant| g.target.object.as_deref().is_some_and(|o| o.eq_ignore_ascii_case(fx.table));
+    let detail = service.principal_privileges(admin, None, &member_id).await.unwrap();
+    assert!(
+        detail
+            .effective
+            .iter()
+            .any(|e| e.grant.privilege == "SELECT" && on_table(&e.grant) && e.via.len() >= 2),
+        "{env}: 经角色拿到 SELECT：{:?}",
+        detail.effective
+    );
+    let direct = detail.direct.iter().find(|g| g.privilege == "UPDATE" && on_table(g));
+    let direct = direct.unwrap_or_else(|| panic!("{env}: 直接授权：{:?}", detail.direct));
+    assert!(direct.grantable, "{env}: 带转授权");
+
+    apply(
+        service,
+        admin,
+        PrivChange::SetPassword { principal: login.clone(), password: Secret::new(format!("{SENTINEL}2")) },
+    )
+    .await;
+    if caps.lock {
+        apply(service, admin, PrivChange::SetLocked { principal: login.clone(), locked: true }).await;
+        let list = service.privilege_overview(admin, None).await.unwrap().principals;
+        let locked = list.iter().find(|p| same_name(p, &user) && p.locked == Some(true));
+        assert!(locked.is_some(), "{env}: 要显示已锁定");
+        apply(service, admin, PrivChange::SetLocked { principal: login.clone(), locked: false }).await;
+    }
+    apply(
+        service,
+        admin,
+        PrivChange::Revoke {
+            grantee: member.clone(),
+            scope: GrantScope::Object,
+            target: target.clone(),
+            privilege: "UPDATE".into(),
+            grantable: true,
+        },
+    )
+    .await;
+    apply(service, admin, PrivChange::RemoveRole { member: member.clone(), role: role_ref.clone() }).await;
+    let detail = service.principal_privileges(admin, None, &member_id).await.unwrap();
+    assert!(!detail.effective.iter().any(on_table_effective(fx.table)), "{env}: {:?}", detail.effective);
+    apply(
+        service,
+        admin,
+        PrivChange::Revoke {
+            grantee: role_ref.clone(),
+            scope: GrantScope::Object,
+            target,
+            privilege: select,
+            grantable: false,
+        },
+    )
+    .await;
+
+    drop_change_fixture(service, admin, [&user, &role]).await;
+    let list = service.privilege_overview(admin, None).await.unwrap().principals;
+    assert!(!list.iter().any(|p| same_name(p, &user) || same_name(p, &role)), "{env}: 没有删干净");
+}
+
+fn on_table_effective(
+    table: &'static str,
+) -> impl Fn(&dblens_dialect::privilege::EffectivePrivilege) -> bool {
+    move |e| {
+        e.grant.effect == GrantEffect::Grant
+            && e.grant.target.object.as_deref().is_some_and(|o| o.eq_ignore_ascii_case(table))
+    }
+}
+
+/// 数据目录里的所有文件都不能有哨兵密码。历史写入在后台线程里，先等一下。
+fn assert_no_sentinel(env: &str, dir: &Path) {
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for entry in std::fs::read_dir(d).unwrap().flatten() {
+            if entry.path().is_dir() {
+                stack.push(entry.path());
+            } else {
+                let bytes = std::fs::read(entry.path()).unwrap();
+                let found = bytes.windows(SENTINEL.len()).any(|w| w == SENTINEL.as_bytes());
+                assert!(!found, "{env}: {} 里有密码", entry.path().display());
+            }
+        }
+    }
+}
+
 async fn flow(env: &str, fx: Fixture) {
     let Ok(url) = std::env::var(env) else { return };
     let (driver, params) = ConnectParams::from_url(&url).unwrap();
@@ -298,6 +481,9 @@ async fn flow(env: &str, fx: Fixture) {
             || report.access.iter().any(|a| a.privilege.grant.effect == GrantEffect::Implicit),
         "{env}: 属主或超级用户要列出"
     );
+
+    changes(env, &service, &admin, &fx, driver).await;
+    assert_no_sentinel(env, dir.path());
 
     // 低权限连接不报整页错误
     let low = profile(&service, driver, &params, fx.low_login, LOW_PASSWORD).await;

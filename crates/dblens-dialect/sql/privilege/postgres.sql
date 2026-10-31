@@ -104,3 +104,12 @@ FROM (
   FROM pg_catalog.pg_roles r
   WHERE r.rolsuper
 ) g
+
+-- [owned]
+SELECT n.nspname || '.' || c.relname AS object_name, c.relkind::text AS object_kind
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_roles r ON r.oid = c.relowner
+WHERE r.rolname = {{ bind("name") }} AND c.relkind IN ('r', 'v', 'm', 'S', 'p')
+ORDER BY 1
+LIMIT 50

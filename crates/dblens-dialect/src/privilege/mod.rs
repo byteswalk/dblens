@@ -7,9 +7,12 @@
 //! - memberships：member_id、role_id、admin_option、inherits、default_role；
 //! - grants_of、grants_on：grantee、grant_scope（global/database/schema/object/column）、db_name、schema_name、
 //!   object_kind、object_name、column_name、privilege、effect（grant/deny/implicit）、grantable、grantor；
-//! - caps（可选）：full_view、partial_revokes。
+//! - caps（可选）：full_view、partial_revokes；
+//! - owned（可选，用 name）：object_name、object_kind。
 
+mod change;
 mod effective;
+mod redact;
 mod rows;
 
 use std::collections::HashMap;
@@ -18,11 +21,13 @@ use std::sync::OnceLock;
 use dblens_core::Result;
 use serde::{Deserialize, Serialize};
 
+pub use change::{PrincipalRef, PrivCaps, PrivChange, PrivStatement, Secret, is_admin_privilege};
 pub use effective::{
     EffectiveContext, EffectivePrivilege, EffectiveState, ObjectAccess, PrivNote, Reach, effective,
     reachable, who_can_access,
 };
-pub use rows::{Caps, caps, grants, memberships, principals};
+pub use redact::redact_sql;
+pub use rows::{Caps, caps, grants, memberships, owned, principals};
 
 use crate::meta::template::{ALL_VARIANTS, parse_sections};
 use crate::meta::{MetaArgs, MetaKey, MetaQuery, render};
@@ -102,7 +107,8 @@ pub enum GrantEffect {
     Implicit,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct GrantTarget {
     pub database: Option<String>,
     pub schema: Option<String>,
@@ -131,6 +137,8 @@ pub enum PrivSection {
     Memberships,
     GrantsOf,
     GrantsOn,
+    /// 主体持有的对象（删除前提示），可选。
+    Owned,
 }
 
 /// 主查询，或低权限时的退路。
@@ -148,6 +156,7 @@ impl PrivSection {
             Self::Memberships => MetaKey::PrivMemberships,
             Self::GrantsOf => MetaKey::PrivGrantsOf,
             Self::GrantsOn => MetaKey::PrivGrantsOn,
+            Self::Owned => MetaKey::PrivOwned,
         }
     }
 
@@ -163,6 +172,8 @@ impl PrivSection {
             (Self::GrantsOf, PrivTier::Limited) => "grants_of@limited",
             (Self::GrantsOn, PrivTier::Full) => "grants_on",
             (Self::GrantsOn, PrivTier::Limited) => "grants_on@limited",
+            (Self::Owned, PrivTier::Full) => "owned",
+            (Self::Owned, PrivTier::Limited) => "owned@limited",
         }
     }
 }

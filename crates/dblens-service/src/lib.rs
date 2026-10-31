@@ -67,7 +67,9 @@ pub use objects::{DataOrder, GenerateKind, ObjectKind};
 pub use policy::{
     Decision, DefaultPolicy, ExecContext, ObjectRef, Outcome, Policy, StatementInfo, StatementKind, classify,
 };
-pub use privilege::{Coverage, ObjectAccessReport, PrincipalPrivileges, PrivilegeOverview};
+pub use privilege::{
+    Coverage, ObjectAccessReport, PrincipalPrivileges, PrivApplyResult, PrivPreview, PrivilegeOverview,
+};
 pub use profile::{Environment, Profile, ProfileInput};
 pub use registry::{DriverRegistry, DriverStatus, ServerSummary};
 pub use secret::{SecretBackend, SecretStatus, Secrets};
