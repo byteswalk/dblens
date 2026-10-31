@@ -2218,3 +2218,67 @@ async fn lint_tables_query_runs_on_every_database() {
         dblens_dialect::meta::lint_tables(&rows).unwrap_or_else(|e| panic!("{env}: {e:?}"));
     }
 }
+
+/// 存储信息的判断（M7c3）：字符集、引擎、`ON UPDATE`、自增步长、行数都要真的判出来。
+#[tokio::test]
+async fn mysql_lint_reads_storage_facts() {
+    let Some(live) = setup("DBLENS_TEST_MYSQL_URL").await else { return };
+    let s = &live.service;
+    let id = s.open_session(&live.profile_id).await.unwrap().id;
+    let (bad, auto) = (format!("{}.m7c_bad", live.schema), format!("{}.m7c_auto", live.schema));
+    for t in [&bad, &auto] {
+        live.run(id, &format!("DROP TABLE IF EXISTS {t}")).await;
+    }
+    live.run(
+        id,
+        &format!(
+            "CREATE TABLE {bad} (ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP PRIMARY KEY) \
+             ENGINE=MyISAM DEFAULT CHARSET=latin1"
+        ),
+    )
+    .await;
+    live.run(id, &format!("INSERT INTO {bad} (ts) VALUES ('2020-01-01 00:00:01'), ('2020-01-02 00:00:01')"))
+        .await;
+    live.run(id, &format!("ANALYZE TABLE {bad}")).await;
+    live.run(id, &format!("CREATE TABLE {auto} (id INT AUTO_INCREMENT PRIMARY KEY) ENGINE=InnoDB")).await;
+
+    let clause = |rule: &str, params: serde_json::Value| {
+        serde_json::json!({
+            "id": rule, "section": "table", "text": rule, "enabled": true, "severity": "warning",
+            "rules": [{ "id": rule, "params": params }]
+        })
+    };
+    let set: dblens_lint::Ruleset = serde_json::from_value(serde_json::json!({
+        "id": "", "name": "m7c", "clauses": [
+            clause("db.charset", serde_json::json!({})),
+            clause("db.engine", serde_json::json!({})),
+            clause("pk.on_update_timestamp", serde_json::json!({})),
+            clause("pk.auto_increment_step", serde_json::json!({ "step": 2 })),
+            clause("table.row_count", serde_json::json!({ "max": 1 })),
+        ]
+    }))
+    .unwrap();
+    let ruleset = s.create_lint_ruleset(set).unwrap();
+    let source = dblens_service::LintSource::Database {
+        profile: live.profile_id.clone(),
+        catalog: None,
+        schema: live.schema.clone(),
+    };
+    let task = s.start_lint(dblens_service::LintRequest { ruleset, source }).await.unwrap();
+    let st = wait_task(s, &task).await;
+    let run = s.lint_run(st.lint_run.as_deref().expect("没有检查记录")).unwrap();
+    for t in [&bad, &auto] {
+        live.run(id, &format!("DROP TABLE IF EXISTS {t}")).await;
+    }
+    let objects = |rule: &str| {
+        let r = run.results.iter().find(|r| r.clause == rule).unwrap();
+        let names: Vec<&str> = r.issues.iter().map(|i| i.object.as_str()).collect();
+        assert!(names.iter().any(|n| n.starts_with("m7c_")), "{rule}: {r:?}");
+        names.join(",")
+    };
+    assert!(objects("db.charset").contains("m7c_bad"));
+    assert!(objects("db.engine").contains("m7c_bad"));
+    assert!(objects("pk.on_update_timestamp").contains("m7c_bad.ts"));
+    assert!(objects("pk.auto_increment_step").contains("m7c_auto.id"));
+    assert!(objects("table.row_count").contains("m7c_bad"));
+}
