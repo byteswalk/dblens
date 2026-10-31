@@ -228,7 +228,7 @@ impl Dialect {
     pub fn public_grantees(&self) -> &'static [&'static str] {
         match (self.family(), self.variant()) {
             (Family::SqlServer, _) => &["db:public", "server:public"],
-            (Family::MySql, Variant::MariaDb) => &["'PUBLIC'"],
+            (Family::MySql, Variant::MariaDb) => &["'PUBLIC'@''"],
             (Family::MySql, _) => &[],
             _ => &["PUBLIC"],
         }
@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(Dialect::new(Variant::Postgres).public_grantees(), ["PUBLIC"]);
         assert_eq!(Dialect::new(Variant::Oracle).public_grantees(), ["PUBLIC"]);
         assert_eq!(Dialect::new(Variant::MySql).public_grantees(), [] as [&str; 0]);
-        assert_eq!(Dialect::new(Variant::MariaDb).public_grantees(), ["'PUBLIC'"]);
+        assert_eq!(Dialect::new(Variant::MariaDb).public_grantees(), ["'PUBLIC'@''"]);
         assert_eq!(Dialect::new(Variant::SqlServer).public_grantees(), ["db:public", "server:public"]);
         assert_eq!(Dialect::new(Variant::SqlServer).family(), Family::SqlServer);
     }

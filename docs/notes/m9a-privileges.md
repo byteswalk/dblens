@@ -45,9 +45,10 @@ GET /api/profiles/{id}/privileges/object?schema=&object=&catalog=  访问者、�
 | openGauss（PG、A 模式） | 通过 | Partial（看不到别人） |
 | 金仓（Oracle、PG 模式） | 通过 | Complete，能看到其他账号 |
 | SQL Server 2022 | 通过 | Partial（看不到别人） |
-| MySQL、MariaDB、PostgreSQL、Oracle | **未运行**，缺连接密码 | |
-| 达梦 | **未运行**，模板从未实连 | |
-| SQL Server 2025 | **未运行** | |
+| MySQL、MariaDB | 通过 | Partial（主体、成员关系） |
+| PostgreSQL | 通过 | Complete，能看到其他账号 |
+| Oracle、达梦 | 通过 | Partial（主体、成员关系） |
+| SQL Server 2025 Express | 通过 | Partial（看不到别人） |
 
 没设环境变量的测试会直接通过，`cargo test` 显示 ok 不代表实测过。
 
@@ -60,6 +61,7 @@ GET /api/profiles/{id}/privileges/object?schema=&object=&catalog=  访问者、�
 ## 发现的坑
 
 - MySQL 的 `default_roles` 只记账号到角色这一层，嵌套角色的边不能判成“未默认启用”。
+- MariaDB 的 `GRANTEE` 对角色写 `'role'@''`，且 `information_schema` 的角色行含继承来的权限，要用 `mysql` 库的授权表滤掉。全局权限存成位掩码，滤不了，角色的全局权限来源路径可能偏短。
 - MySQL 系连到某个库要求在库里有权限，什么权限都没有的账号连不上。
 - openGauss 的 `CREATE ROLE` 必须带密码，用户带同名 schema，删除要 `CASCADE`。
 - SQL Server 的登录名天然有 `CONNECT SQL`；登录名的连接开着时删不掉登录名，清理前要关掉连接。
