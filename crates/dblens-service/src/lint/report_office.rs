@@ -296,6 +296,8 @@ mod tests {
             ruleset_id: "general".into(),
             ruleset_name: "通用".into(),
             family: "postgres".into(),
+            source: None,
+            model_path: None,
             clauses: vec![
                 meta("a", Section::Table, "表要有注释", Severity::Error),
                 meta("b", Section::Design, "符合第三范式", Severity::Warning),

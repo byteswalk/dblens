@@ -1,7 +1,7 @@
 // 规范库：左侧规范列表，右侧条款表。可改开关、级别、参数，复制、删除、恢复默认、导入导出。
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Empty, Input, InputNumber, Select, Space, Spin, Switch, Table, Tag } from 'antd'
+import { App, Button, Dropdown, Empty, Input, InputNumber, Select, Space, Spin, Switch, Table, Tag } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -150,6 +150,7 @@ function Editor({
   const { data, isLoading } = useQuery({ queryKey: ['lint', 'ruleset', id], queryFn: () => api.lintRuleset(id) })
   const [draft, setDraft] = useState<LintRuleset | null>(null)
   const [dirty, setDirty] = useState(false)
+  const [expanded, setExpanded] = useState<string[]>([])
 
   useEffect(() => {
     if (!data) return
@@ -259,9 +260,27 @@ function Editor({
         )}
         <span style={{ flex: 1 }} />
         {!builtin && (
-          <Button size="small" onClick={() => edit({ ...draft, clauses: [...draft.clauses, newManualClause(draft)] })}>
-            {t('lint.lib.add_clause')}
-          </Button>
+          <>
+            <Button size="small" onClick={() => edit({ ...draft, clauses: [...draft.clauses, newManualClause(draft)] })}>
+              {t('lint.lib.add_clause')}
+            </Button>
+            <Dropdown
+              trigger={['click']}
+              menu={{
+                items: [
+                  { key: 'name.pattern', label: t('lint.lib.rule_pattern') },
+                  { key: 'table.required_columns', label: t('lint.lib.rule_fields') },
+                ],
+                onClick: ({ key }) => {
+                  const clause = newRuleClause(draft, key)
+                  edit({ ...draft, clauses: [...draft.clauses, clause] })
+                  setExpanded((x) => [...x, clause.id])
+                },
+              }}
+            >
+              <Button size="small">{t('lint.lib.add_rule')}</Button>
+            </Dropdown>
+          </>
         )}
       </div>
 
@@ -276,6 +295,8 @@ function Editor({
               dataSource={g.clauses}
               expandable={{
                 rowExpandable: (c) => (c.rules?.length ?? 0) > 0,
+                expandedRowKeys: expanded,
+                onExpand: (open, c) => setExpanded((x) => (open ? [...x, c.id] : x.filter((id) => id !== c.id))),
                 expandedRowRender: (c) => (
                   <Params clause={c} rules={rules} onChange={(rs) => patchClause(c.id, { rules: rs })} />
                 ),
@@ -378,12 +399,22 @@ function Editor({
   )
 }
 
-function newManualClause(set: LintRuleset): LintClause {
+function newClauseId(set: LintRuleset): string {
   let n = set.clauses.length + 1
   let id = `custom.${n}`
   const ids = new Set(set.clauses.map((c) => c.id))
   while (ids.has(id)) id = `custom.${++n}`
-  return { id, section: 'design', text: '', enabled: true, severity: 'info', manual_note: '', rules: [] }
+  return id
+}
+
+function newManualClause(set: LintRuleset): LintClause {
+  return { id: newClauseId(set), section: 'design', text: '', enabled: true, severity: 'info', manual_note: '', rules: [] }
+}
+
+/** 自定义规范里的规则条款：名称正则放命名，必备字段放表。 */
+function newRuleClause(set: LintRuleset, rule: string): LintClause {
+  const section = rule === 'name.pattern' ? 'naming' : 'table'
+  return { id: newClauseId(set), section, text: '', enabled: true, severity: 'warning', rules: [{ id: rule, params: {} }] }
 }
 
 function Params({

@@ -804,6 +804,14 @@
     "zh-CN": "主键用了自增列",
     "en": "Primary key uses an auto-increment column"
   },
+  "lint.issue.pattern_forbidden": {
+    "zh-CN": "名字不得匹配 %{pattern}",
+    "en": "The name must not match %{pattern}"
+  },
+  "lint.issue.pattern_mismatch": {
+    "zh-CN": "名字不符合 %{pattern}",
+    "en": "The name does not match %{pattern}"
+  },
   "lint.issue.prefix": {
     "zh-CN": "名称应以 %{prefix} 开头",
     "en": "Name should start with %{prefix}"
@@ -871,6 +879,10 @@
   "lint.not_builtin": {
     "zh-CN": "不是内置规范，不能恢复默认",
     "en": "Not a built-in ruleset; cannot reset"
+  },
+  "lint.pattern_invalid": {
+    "zh-CN": "正则表达式无效：%{pattern}",
+    "en": "Invalid regular expression: %{pattern}"
   },
   "lint.report.checked_at": {
     "zh-CN": "检查时间",

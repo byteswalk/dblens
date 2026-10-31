@@ -70,8 +70,30 @@
     "design": "设计"
   },
   "downloaded": "已保存到“下载”文件夹",
+  "runs": {
+    "title": "检查记录",
+    "time": "时间",
+    "target": "检查对象",
+    "ruleset": "所用规范",
+    "empty": "还没有检查记录",
+    "compare": "对比",
+    "compare_hint": "勾选两次检查进行对比",
+    "delete_confirm": "删除这条检查记录？"
+  },
+  "diff": {
+    "title": "检查对比",
+    "before": "较早",
+    "after": "较新",
+    "none": "无此条款",
+    "verdicts": "结论变化",
+    "added": "新增问题",
+    "resolved": "已解决的问题"
+  },
   "lib": {
     "title": "规范库",
+    "add_rule": "加规则条款",
+    "rule_pattern": "名称正则",
+    "rule_fields": "必备字段",
     "new": "新建",
     "new_name": "新规范",
     "import": "导入",
@@ -98,6 +120,8 @@
   },
   "param": {
     "max": "上限",
+    "pattern": "正则表达式",
+    "mode": "匹配方式",
     "max_len": "长度上限",
     "max_count": "数量上限",
     "target": "适用对象",
@@ -113,6 +137,8 @@
   },
   "param_choice": {
     "all": "全部",
+    "match": "必须匹配",
+    "reject": "不得匹配",
     "table": "表",
     "column": "字段",
     "index": "索引",

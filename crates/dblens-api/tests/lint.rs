@@ -108,6 +108,17 @@ async fn edit_reset_and_custom_rulesets() {
     assert_eq!(st, StatusCode::OK);
     assert_eq!(back["clauses"][0]["enabled"], true, "{back}");
 
+    // 自定义规则：正则写错不能保存
+    let mut custom = json!({ "id": "", "name": "c", "clauses": [{
+        "id": "custom.1", "section": "design", "text": "表名以 t_ 开头", "enabled": true, "severity": "warning",
+        "rules": [{ "id": "name.pattern", "params": { "target": "table", "pattern": "(" } }]
+    }]});
+    let (st, _) = call(&app, "POST", "/api/lint/rulesets", Some(custom.clone())).await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    custom["clauses"][0]["rules"][0]["params"]["pattern"] = json!("^t_");
+    let (st, v) = call(&app, "POST", "/api/lint/rulesets", Some(custom)).await;
+    assert_eq!(st, StatusCode::CREATED, "{v}");
+
     // 导出 YAML、再导入成自定义规范，然后删除
     let (st, ct, yaml) = raw(&app, "/api/lint/rulesets/general/export").await;
     assert_eq!(st, StatusCode::OK);
@@ -142,6 +153,8 @@ async fn run_a_check_review_and_report() {
 
     let (st, run) = call(&app, "GET", &format!("/api/lint/runs/{run_id}"), None).await;
     assert_eq!(st, StatusCode::OK);
+    assert_eq!(run["source"]["kind"], "model", "{run}");
+    assert!(run["model_path"].as_str().unwrap().ends_with('m'), "{run}");
     let results = run["results"].as_array().unwrap();
     // 表注释条款应未通过
     let comment = results.iter().find(|r| r["clause"] == "table.comment").unwrap();

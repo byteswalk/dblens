@@ -80,6 +80,12 @@ pub struct LintRun {
     pub ruleset_name: String,
     /// 数据库家族；模型检查时取模型的家族。
     pub family: String,
+    /// 检查来源，用来定位到表设计器。早期记录没有。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<LintSource>,
+    /// 模型目录。设计器按目录打开模型，来源里的模型编号只在本次打开时有效。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_path: Option<String>,
     /// 条款说明，与 `results` 一一对应。
     pub clauses: Vec<ClauseMeta>,
     pub results: Vec<ClauseResult>,

@@ -6,9 +6,10 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import type { LintClauseResult, LintIssue, LintVerdict, LintWaivedIssue } from '../../shared/api'
+import type { LintClauseResult, LintIssue, LintRun, LintVerdict, LintWaivedIssue } from '../../shared/api'
+import { joinCatalog } from '../../shared/api'
 import { desktop } from '../../shared/shell'
-import type { QueryTab } from '../editor/tabs'
+import { type QueryTab, useTabs } from '../editor/tabs'
 import { download, effectiveVerdict, groupBySection, reviewable, summarize, verdictTone } from './logic'
 
 const TONE: Record<string, string> = { ok: '#2a7d4f', bad: '#c0392b', warn: '#b8860b', muted: '#999' }
@@ -18,6 +19,19 @@ const REPORT_FORMATS = ['html', 'docx', 'xlsx', 'checklist'] as const
 interface WaiveActions {
   onWaive: (clause: string, object: string) => void
   onUnwaive: (clause: string, object: string) => void
+  /** 打开问题所在的表；来源未知时为 undefined。 */
+  onOpenTable?: (table: string) => void
+}
+
+/** 在表设计器里打开检查对象中的一张表。 */
+function openTable(run: LintRun, table: string) {
+  const s = run.source
+  if (s?.kind === 'database') {
+    const schema = s.catalog ? joinCatalog(s.catalog, s.schema) : s.schema
+    useTabs.getState().openDesign(s.profile, { schema, table })
+  } else if (s?.kind === 'model' && run.model_path) {
+    useTabs.getState().openDesign('', { schema: s.schema, table, model: run.model_path })
+  }
 }
 
 type Row = ReturnType<typeof groupBySection>[number]['rows'][number]
@@ -88,6 +102,7 @@ export default function RunView({ tab }: { tab: QueryTab }) {
       setWaiving({ clause, object })
     },
     onUnwaive: (clause, object) => unwaive.mutate({ clause, object }),
+    onOpenTable: run.source ? (table) => openTable(run, table) : undefined,
   }
 
   return (
@@ -250,7 +265,14 @@ function Issues({ result, actions }: { result: LintClauseResult; actions: WaiveA
                   title: t('lint.report.object_col'),
                   dataIndex: 'object',
                   width: 260,
-                  render: (v: string) => <code>{v}</code>,
+                  render: (v: string, r) =>
+                    r.table && actions.onOpenTable ? (
+                      <a onClick={() => r.table && actions.onOpenTable?.(r.table)}>
+                        <code>{v}</code>
+                      </a>
+                    ) : (
+                      <code>{v}</code>
+                    ),
                 },
                 { title: t('lint.report.message'), dataIndex: 'message' },
                 {

@@ -930,6 +930,10 @@ export interface LintRun {
   ruleset_id: string
   ruleset_name: string
   family: string
+  /** 检查来源；早期记录没有。 */
+  source?: LintSource | null
+  /** 模型目录，来源是模型时才有。 */
+  model_path?: string | null
   clauses: LintClauseMeta[]
   results: LintClauseResult[]
 }

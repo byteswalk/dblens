@@ -261,6 +261,10 @@ impl Service {
         tokio::spawn(async move {
             let run = async {
                 let (input, target) = service.load_lint_input(&req.source).await?;
+                let model_path = match &req.source {
+                    LintSource::Model { model, .. } => Some(service.models.summary_of(model)?.path),
+                    LintSource::Database { .. } => None,
+                };
                 if task.cancelled() {
                     return Err(Error::Cancelled);
                 }
@@ -284,6 +288,8 @@ impl Service {
                     ruleset_id: set.id.clone(),
                     ruleset_name: set.name.clone(),
                     family,
+                    source: Some(req.source.clone()),
+                    model_path,
                     clauses,
                     results,
                 };

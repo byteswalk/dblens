@@ -241,6 +241,7 @@ pub fn validate(ruleset: &Ruleset) -> Result<()> {
             if !rules::exists(&rule.id) {
                 return Err(Error::invalid(msg!("lint.rule_unknown", id = rule.id)));
             }
+            rules::check_params(rule)?;
         }
     }
     // 不查条款是否存在：内置规范换版本后，旧例外留着无害
@@ -378,6 +379,9 @@ mod tests {
         };
         assert!(validate(&set(vec![clause("a", "table.comment")])).is_ok());
         assert!(validate(&set(vec![clause("a", "no.such")])).is_err());
+        let mut bad_regex = clause("a", "name.pattern");
+        bad_regex.rules[0].params.insert("pattern".into(), "(".into());
+        assert!(validate(&set(vec![bad_regex])).is_err());
         assert!(validate(&set(vec![clause("a", "table.comment"), clause("a", "table.comment")])).is_err());
     }
 }

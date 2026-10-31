@@ -4,12 +4,15 @@ use dblens_core::schema::{RoutineKind, Table};
 use dblens_core::{LogicalType, Msg, msg};
 use dblens_dialect::Family;
 use dblens_dialect::ident::{is_reserved_word, needs_quote};
+use regex::Regex;
 
 use super::index::backs_constraint;
 use super::{Check, Ctx, Finding, ParamDef, ParamDefault, Params, RuleDef, upper};
 use crate::pinyin;
 
 const TARGETS: &[&str] = &["all", "table", "column", "index", "other", "schema"];
+/// 自定义名称规则的适用对象。
+const PATTERN_TARGETS: &[&str] = &["table", "column", "index", "other"];
 const PREFIX_TARGETS: &[&str] =
     &["primary_key", "unique", "index", "sequence", "procedure", "function", "view"];
 
@@ -65,7 +68,20 @@ pub(super) const RULES: &[RuleDef] = &[
         fix: Some(|| msg!("lint.fix.rename")),
         check: required_prefix,
     },
+    RuleDef {
+        id: PATTERN_RULE,
+        params: &[
+            ParamDef { key: "target", default: ParamDefault::Choice(PATTERN_TARGETS) },
+            ParamDef { key: "pattern", default: ParamDefault::Text("") },
+            ParamDef { key: "mode", default: ParamDefault::Choice(&["match", "reject"]) },
+        ],
+        fix: Some(|| msg!("lint.fix.rename")),
+        check: name_pattern,
+    },
 ];
+
+/// 自定义规则：名字必须匹配或不得匹配正则。
+pub(super) const PATTERN_RULE: &str = "name.pattern";
 
 struct Named {
     object: String,
@@ -282,6 +298,23 @@ fn required_prefix(ctx: &Ctx, p: &Params) -> Check {
     })
 }
 
+fn name_pattern(ctx: &Ctx, p: &Params) -> Check {
+    let pattern = p.text("pattern");
+    if pattern.is_empty() {
+        return Check::NotApplicable;
+    }
+    // 保存规范时已校验，这里只防手改过的旧数据
+    let Ok(re) = Regex::new(&pattern) else {
+        return Check::Unknown(msg!("lint.pattern_invalid", pattern = pattern));
+    };
+    let reject = p.text("mode") == "reject";
+    report(names(ctx, &p.text("target")), |name| match (re.is_match(name), reject) {
+        (false, false) => Some(msg!("lint.issue.pattern_mismatch", pattern = pattern)),
+        (true, true) => Some(msg!("lint.issue.pattern_forbidden", pattern = pattern)),
+        _ => None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use dblens_core::LogicalType;
@@ -395,6 +428,18 @@ mod tests {
             Family::Oracle,
         );
         assert!(objects(&oracle, "name.temporal_suffix", json!({})).is_empty());
+    }
+
+    #[test]
+    fn name_pattern_matches_or_rejects() {
+        let i = tables(vec![named("t_orders"), named("orders_bak")]);
+        let must = json!({"target": "table", "pattern": "^t_"});
+        assert_eq!(objects(&i, "name.pattern", must), ["orders_bak"]);
+        let never = json!({"target": "table", "pattern": "_bak$", "mode": "reject"});
+        assert_eq!(objects(&i, "name.pattern", never), ["orders_bak"]);
+        assert!(matches!(outcome(&i, "name.pattern", json!({"target": "table"})), Outcome::NotApplicable));
+        let bad = json!({"target": "table", "pattern": "("});
+        assert!(matches!(outcome(&i, "name.pattern", bad), Outcome::Unknown(_)));
     }
 
     #[test]

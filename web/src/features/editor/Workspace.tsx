@@ -30,6 +30,8 @@ const MigrateView = lazy(() => import('../migrate/MigrateView'))
 // 规范检查：规范库和结果页
 const LintLibraryView = lazy(() => import('../lint/LibraryView'))
 const LintRunView = lazy(() => import('../lint/RunView'))
+const LintRunsView = lazy(() => import('../lint/RunsView'))
+const LintDiffView = lazy(() => import('../lint/DiffView'))
 // 账号权限：懒加载，不影响启动
 const PrivilegesView = lazy(() => import('../privileges/PrivilegesView'))
 
@@ -220,6 +222,14 @@ export default function Workspace() {
         ) : tab.lint?.view === 'run' ? (
           <Suspense fallback={<Spin style={{ margin: 48 }} />}>
             <LintRunView key={tab.id} tab={tab} />
+          </Suspense>
+        ) : tab.lint?.view === 'runs' ? (
+          <Suspense fallback={<Spin style={{ margin: 48 }} />}>
+            <LintRunsView key={tab.id} />
+          </Suspense>
+        ) : tab.lint?.view === 'diff' ? (
+          <Suspense fallback={<Spin style={{ margin: 48 }} />}>
+            <LintDiffView key={tab.id} tab={tab} />
           </Suspense>
         ) : tab.migrate ? (
           <Suspense fallback={<Spin style={{ margin: 48 }} />}>

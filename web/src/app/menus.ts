@@ -37,6 +37,7 @@ export function buildMenus(s: MenuState): MenuGroup[] {
     { key: 'new-model', label: t('app.menu.file.newModel') },
     { key: 'compare', label: t('app.menu.file.compare') },
     { key: 'lint', label: t('app.menu.file.lint') },
+    { key: 'lint-runs', label: t('app.menu.file.lintRuns') },
     'divider',
   ]
   file.push({ key: 'settings', label: t('app.menu.file.settings') })

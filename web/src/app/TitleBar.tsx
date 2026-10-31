@@ -185,6 +185,7 @@ export default function TitleBar() {
     else if (key === 'new-model') useModelDialogs.getState().openCreate()
     else if (key === 'compare') useTabs.getState().openCompare({ source: null, target: null })
     else if (key === 'lint') useTabs.getState().openLintLibrary(t('lint.lib.title'))
+    else if (key === 'lint-runs') useTabs.getState().openLintRuns(t('lint.runs.title'))
     else if (kind === 'sql') sendCommand(arg as EditorCommand)
     else if (key === 'settings') ui.setSettingsOpen(true)
     else if (key === 'quit') act('quit')

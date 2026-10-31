@@ -7,8 +7,8 @@ mod naming;
 mod object;
 mod table;
 
-use dblens_core::Msg;
 use dblens_core::schema::{Column, Index, Table};
+use dblens_core::{Error, Msg, Result};
 use dblens_dialect::Family;
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -149,6 +149,17 @@ pub(crate) fn run(ctx: &Ctx, rule: &RuleRef) -> Outcome {
         Check::Unknown(reason) => Outcome::Unknown(reason),
         Check::NotApplicable => Outcome::NotApplicable,
     }
+}
+
+/// 保存规范前校验规则参数：自定义名称规则的正则要能编译。
+pub(crate) fn check_params(rule: &RuleRef) -> Result<()> {
+    if rule.id == naming::PATTERN_RULE
+        && let Some(pattern) = rule.params.get("pattern").and_then(Value::as_str)
+        && regex::Regex::new(pattern).is_err()
+    {
+        return Err(Error::invalid(dblens_core::msg!("lint.pattern_invalid", pattern = pattern)));
+    }
+    Ok(())
 }
 
 /// 规则的编号和参数定义。说明文字和参数名在前端词条里。

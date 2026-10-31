@@ -70,7 +70,11 @@ export interface QueryTab {
 }
 
 /** 规范检查标签：规范库，或某次检查的结果。 */
-export type LintTab = { view: 'library' } | { view: 'run'; run: string }
+export type LintTab =
+  | { view: 'library' }
+  | { view: 'runs' }
+  | { view: 'run'; run: string }
+  | { view: 'diff'; before: string; after: string }
 
 /** 账号权限标签。`focus` 有值时显示这个对象的访问者。schema 是合成值，SQL Server 含库名。 */
 export interface PrivilegesTab {
@@ -85,7 +89,8 @@ function isPrivilegesTab(v: unknown): v is PrivilegesTab {
 
 function isLintTab(v: unknown): v is LintTab {
   const l = v as LintTab | null
-  return l?.view === 'library' || (l?.view === 'run' && typeof (l as { run?: unknown }).run === 'string')
+  if (l?.view === 'diff') return typeof l.before === 'string' && typeof l.after === 'string'
+  return l?.view === 'library' || l?.view === 'runs' || (l?.view === 'run' && typeof l.run === 'string')
 }
 
 const TARGET_KINDS: readonly unknown[] = ['table', 'view', 'materialized_view'] satisfies TargetKind[]
@@ -209,6 +214,10 @@ interface TabsState extends Persisted {
   openLintLibrary(title: string): string
   /** 打开某次检查的结果标签：已打开时切换过去。返回标签的 id。 */
   openLintRun(run: string, title: string): string
+  /** 打开检查记录标签：已打开时切换过去。返回标签的 id。 */
+  openLintRuns(title: string): string
+  /** 打开两次检查的对比标签：已打开时切换过去。返回标签的 id。 */
+  openLintDiff(before: string, after: string, title: string): string
   /** 打开连接的账号权限标签：已打开时切换过去。`focus` 有值时定位到对象。返回标签的 id。 */
   openPrivileges(profileId: string, title: string, focus?: PrivilegesTab['focus']): string
   /** 修改定位：undefined 回到按主体浏览。 */
@@ -323,6 +332,28 @@ export const useTabs = create<TabsState>()((set, get) => ({
       return same.id
     }
     const tab: QueryTab = { id: newId(), title, profileId: '', sql: '', lint: { view: 'run', run } }
+    set({ tabs: [...tabs, tab], active: tab.id })
+    return tab.id
+  },
+  openLintRuns: (title) => {
+    const { tabs } = get()
+    const same = tabs.find((x) => x.lint?.view === 'runs')
+    if (same) {
+      set({ active: same.id })
+      return same.id
+    }
+    const tab: QueryTab = { id: newId(), title, profileId: '', sql: '', lint: { view: 'runs' } }
+    set({ tabs: [...tabs, tab], active: tab.id })
+    return tab.id
+  },
+  openLintDiff: (before, after, title) => {
+    const { tabs } = get()
+    const same = tabs.find((x) => x.lint?.view === 'diff' && x.lint.before === before && x.lint.after === after)
+    if (same) {
+      set({ active: same.id })
+      return same.id
+    }
+    const tab: QueryTab = { id: newId(), title, profileId: '', sql: '', lint: { view: 'diff', before, after } }
     set({ tabs: [...tabs, tab], active: tab.id })
     return tab.id
   },

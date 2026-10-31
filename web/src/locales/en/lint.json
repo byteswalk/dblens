@@ -70,8 +70,30 @@
     "design": "Design"
   },
   "downloaded": "Saved to your Downloads folder",
+  "runs": {
+    "title": "Lint history",
+    "time": "Time",
+    "target": "Target",
+    "ruleset": "Ruleset",
+    "empty": "No lint runs yet",
+    "compare": "Compare",
+    "compare_hint": "Tick two runs to compare them",
+    "delete_confirm": "Delete this lint run?"
+  },
+  "diff": {
+    "title": "Lint comparison",
+    "before": "Earlier",
+    "after": "Later",
+    "none": "No such clause",
+    "verdicts": "Verdict changes",
+    "added": "New issues",
+    "resolved": "Resolved issues"
+  },
   "lib": {
     "title": "Ruleset library",
+    "add_rule": "Add rule clause",
+    "rule_pattern": "Name pattern",
+    "rule_fields": "Required columns",
     "new": "New",
     "new_name": "New ruleset",
     "import": "Import",
@@ -98,6 +120,8 @@
   },
   "param": {
     "max": "Maximum",
+    "pattern": "Regular expression",
+    "mode": "Match mode",
     "max_len": "Max length",
     "max_count": "Max count",
     "target": "Applies to",
@@ -113,6 +137,8 @@
   },
   "param_choice": {
     "all": "All",
+    "match": "Must match",
+    "reject": "Must not match",
     "table": "Table",
     "column": "Column",
     "index": "Index",

@@ -80,7 +80,8 @@
       "openModel": "Open Model…",
       "newModel": "New Model…",
       "compare": "Compare Schemas…",
-      "lint": "Design lint"
+      "lint": "Design lint",
+      "lintRuns": "Lint history"
     },
     "view": {
       "title": "View",
