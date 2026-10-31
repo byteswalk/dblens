@@ -12,12 +12,13 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
-import { type DesignRequest, type ModelDesignRequest, type Profile, type TaskStatus, errorText, schemaLabel } from '../../shared/api'
+import { type DesignRequest, type LintSource, type ModelDesignRequest, type Profile, type TaskStatus, errorText, schemaLabel } from '../../shared/api'
 import { withVault } from '../connections/vault'
 import { useQueryActions } from '../editor/actions'
 import { type QueryTab, useTabs } from '../editor/tabs'
 import ColumnsPane from './ColumnsPane'
 import ConstraintsPane from './ConstraintsPane'
+import DesignLintPane, { useDesignLint } from './DesignLintPane'
 import { useDesigns } from './designStore'
 import ForeignKeysPane from './ForeignKeysPane'
 import IndexesPane from './IndexesPane'
@@ -55,7 +56,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
   )
   const state = useDesigns((s) => s.tabs[tab.id])
   const [schema, setSchema] = useState(target.schema)
-  const [pane, setPane] = useState<Pane | 'sql'>('columns')
+  const [pane, setPane] = useState<Pane | 'sql' | 'lint'>('columns')
   const [selected, setSelected] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [task, setTask] = useState<TaskStatus | null>(null)
@@ -139,6 +140,12 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
     placeholderData: keepPreviousData,
     retry: false,
   })
+  const lintSource = useMemo((): LintSource | null => {
+    if (!debounced?.schema) return null
+    if (modelPath) return modelId ? { kind: 'model', model: modelId, schema: debounced.schema } : null
+    return profile ? { kind: 'database', profile: tab.profileId, schema: debounced.schema } : null
+  }, [debounced?.schema, modelPath, modelId, profile, tab.profileId])
+  const lint = useDesignLint(lintSource, debounced?.draft)
   const errors = modelPath ? modelPreview.data?.errors : preview.data?.errors
   const issues = useMemo(
     () => (state && errors && dirty ? issuesOf(errors, state.draft) : NO_ISSUES),
@@ -255,7 +262,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
         className="design-tabs grow"
         size="small"
         activeKey={pane}
-        onChange={(k) => setPane(k as Pane | 'sql')}
+        onChange={(k) => setPane(k as Pane | 'sql' | 'lint')}
         items={[
           {
             key: 'columns',
@@ -296,6 +303,15 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
                 onChange={edit}
               />
             ),
+          },
+          {
+            key: 'lint',
+            label: (
+              <Badge count={lint.count} size="small" offset={[8, -2]} color="#999">
+                {t('design.tabs.lint')}
+              </Badge>
+            ),
+            children: <DesignLintPane lint={lint} />,
           },
           modelPath ? {
             key: 'sql',

@@ -938,6 +938,14 @@ export interface LintRun {
   results: LintClauseResult[]
 }
 
+/** 设计器实时提示里未通过的一条条款。 */
+export interface LintTableHit {
+  clause: string
+  text: string
+  severity: LintSeverity
+  issues: LintIssue[]
+}
+
 export interface LintRunSummary {
   id: string
   created_at: number
@@ -1590,6 +1598,9 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     lintRulesetExportUrl: (id: string) =>
       `/api/lint/rulesets/${encodeURIComponent(id)}/export?token=${encodeURIComponent(token)}`,
     lintRules: () => request<LintRuleInfo[]>('GET', '/lint/rules'),
+    /** 检查设计器里的一张表。 */
+    lintTable: ({ ruleset, source, table }: { ruleset: string; source: LintSource; table: DesignTableModel }) =>
+      request<LintTableHit[]>('POST', '/lint/table', { ...lintRequest({ ruleset, source }), table }),
     lintRuns: () => request<LintRunSummary[]>('GET', '/lint/runs'),
     /** 发起检查，返回任务 id。 */
     startLint: async (req: LintRequest) => (await request<{ id: string }>('POST', '/lint/runs', lintRequest(req))).id,

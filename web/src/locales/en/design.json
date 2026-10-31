@@ -15,7 +15,12 @@
     "foreignKeys": "Foreign keys",
     "constraints": "Constraints",
     "options": "Options",
-    "sql": "SQL preview"
+    "sql": "SQL preview",
+    "lint": "Lint"
+  },
+  "lint": {
+    "hint": "Checks this table only and never blocks saving. Consistency and other objects need a full check.",
+    "clean": "No issues in this table"
   },
   "column": {
     "name": "Name",

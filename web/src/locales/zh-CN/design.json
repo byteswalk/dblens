@@ -15,7 +15,12 @@
     "foreignKeys": "外键",
     "constraints": "约束",
     "options": "选项",
-    "sql": "SQL 预览"
+    "sql": "SQL 预览",
+    "lint": "规范"
+  },
+  "lint": {
+    "hint": "只查这张表，提示不影响保存。一致性和其他对象要做整库检查。",
+    "clean": "这张表没有发现问题"
   },
   "column": {
     "name": "名称",

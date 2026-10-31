@@ -58,6 +58,15 @@ async fn new_model(app: &Router, dir: &std::path::Path) -> String {
     m["id"].as_str().unwrap().to_string()
 }
 
+fn draft_table() -> Value {
+    json!({
+        "name": "orders", "comment": null,
+        "columns": [column("id", "integer", json!({ "kind": "int", "bits": 32 }))],
+        "primary_key": null, "uniques": [], "foreign_keys": [], "checks": [],
+        "indexes": [], "triggers": [], "partition": null
+    })
+}
+
 /// 发起检查并等它结束，返回记录编号。
 async fn finish_run(app: &Router, req: Value) -> String {
     let (st, v) = call(app, "POST", "/api/lint/runs", Some(req)).await;
@@ -138,13 +147,7 @@ async fn run_a_check_review_and_report() {
     let dir = tempfile::tempdir().unwrap();
     let m = new_model(&app, dir.path()).await;
     // 一张缺注释、缺主键的表：注释规则会报问题，对象类规则对模型报无法判断
-    let draft = json!({
-        "name": "orders", "comment": null,
-        "columns": [column("id", "integer", json!({ "kind": "int", "bits": 32 }))],
-        "primary_key": null, "uniques": [], "foreign_keys": [], "checks": [],
-        "indexes": [], "triggers": [], "partition": null
-    });
-    let save = json!({ "schema": "public", "name": null, "draft": draft, "fingerprint": null });
+    let save = json!({ "schema": "public", "name": null, "draft": draft_table(), "fingerprint": null });
     let (st, v) = call(&app, "POST", &format!("/api/models/{m}/tables"), Some(save)).await;
     assert_eq!(st, StatusCode::OK, "{v}");
 
@@ -161,6 +164,14 @@ async fn run_a_check_review_and_report() {
     assert_eq!(comment["verdict"], "fail", "{comment}");
     // 视图等对象规则对模型报无法判断
     assert!(results.iter().any(|r| r["verdict"] == "unknown"), "{run}");
+
+    // 设计器实时提示：不落盘，只给未通过的条款；一致性规则不跑
+    let body = json!({ "ruleset": "general", "source": { "kind": "model", "model": m, "schema": "public" }, "table": draft_table() });
+    let (st, hits) = call(&app, "POST", "/api/lint/table", Some(body)).await;
+    assert_eq!(st, StatusCode::OK, "{hits}");
+    let hits = hits.as_array().unwrap();
+    assert!(hits.iter().any(|h| h["clause"] == "table.comment"), "{hits:?}");
+    assert!(hits.iter().all(|h| !h["issues"].as_array().unwrap().is_empty()));
 
     // 对一条无法判断的条款填人工结论
     let unknown = results.iter().find(|r| r["verdict"] == "unknown").unwrap();

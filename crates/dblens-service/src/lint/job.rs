@@ -6,15 +6,15 @@ use dblens_core::schema::Schema;
 use dblens_core::{Error, Result, current_lang, msg};
 use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_lint::{
-    ClauseResult, Exception, LintInput, RuleInfo, Ruleset, apply, builtin, builtin_ids, check, diff,
-    rule_infos, validate,
+    ClauseResult, Exception, LintInput, RuleInfo, Ruleset, TableHit, apply, builtin, builtin_ids, check,
+    check_table, diff, rule_infos, validate,
 };
 
 use super::report::{self, Report};
 use super::report_office;
 use super::{
-    ClauseMeta, LintRequest, LintRun, LintRunSummary, LintSource, ReviewInput, RulesetSummary, WaiveInput,
-    is_reviewable,
+    ClauseMeta, LintRequest, LintRun, LintRunSummary, LintSource, LintTableRequest, ReviewInput,
+    RulesetSummary, WaiveInput, is_reviewable,
 };
 use crate::service::Service;
 use crate::task::{TaskKind, TaskPhase};
@@ -243,6 +243,22 @@ impl Service {
         }
         self.store.save_lint_run(&run)?;
         Ok(run)
+    }
+
+    /// 检查设计器里的一张表，只给未通过的条款。
+    pub async fn lint_table(&self, req: LintTableRequest) -> Result<Vec<TableHit>> {
+        let set = self.lint_ruleset(&req.ruleset)?;
+        let (dialect, schema) = match &req.source {
+            LintSource::Database { profile, catalog, schema } => {
+                let profile = self.scoped_profile(profile, catalog.as_deref())?;
+                (self.metadata.dialect(&profile).await?, schema)
+            }
+            LintSource::Model { model, schema } => (self.models.dialect(model)?, schema),
+        };
+        // 草稿里的逻辑类型由前端占位，要按原生类型算出来，类型规则才准
+        let mut table = req.table;
+        dialect.prepare_draft(&mut table);
+        Ok(check_table(table, schema, dialect.family(), &set, current_lang()))
     }
 
     /// 发起检查，返回任务编号。结果存进 `lint_runs`，任务状态里给出记录编号。

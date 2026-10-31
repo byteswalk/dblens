@@ -7,7 +7,7 @@ mod pinyin;
 mod rules;
 
 pub use builtin::{ClausePatch, Overrides, apply, builtin, builtin_ids, diff};
-pub use engine::{LintInput, check, family_key};
+pub use engine::{LintInput, TableHit, check, check_table, family_key};
 pub use model::{
     Clause, ClauseResult, CleanVerdict, Exception, Issue, Review, RuleRef, Ruleset, Section, Severity,
     Summary, Verdict, WaivedIssue, summarize, validate,

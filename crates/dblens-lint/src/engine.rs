@@ -1,10 +1,13 @@
 //! 遍历条款，运行规则，判定结论。
 
-use dblens_core::schema::Schema;
+use dblens_core::schema::{Schema, Table};
 use dblens_core::{Lang, msg};
 use dblens_dialect::Family;
+use serde::Serialize;
 
-use crate::model::{Clause, ClauseResult, CleanVerdict, Exception, Issue, RuleRef, Ruleset, Verdict};
+use crate::model::{
+    Clause, ClauseResult, CleanVerdict, Exception, Issue, RuleRef, Ruleset, Severity, Verdict,
+};
 use crate::rules::{self, Ctx, Outcome};
 
 /// 一次检查的输入。模型文件只有表，`objects_known` 为 false，
@@ -43,6 +46,48 @@ pub fn check(
         .map(|c| {
             on_clause();
             check_clause(&ctx, c, &ruleset.exceptions, lang)
+        })
+        .collect()
+}
+
+/// 设计器实时提示里未通过的一条条款。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TableHit {
+    pub clause: String,
+    pub text: String,
+    pub severity: Severity,
+    pub issues: Vec<Issue>,
+}
+
+/// 检查单张表，只返回未通过的条款。一致性规则要看其他表，这里不跑；
+/// 其他对象的规则因 `objects_known` 为 false 报无法判断，不会出现在结果里。
+pub fn check_table(
+    table: Table,
+    schema: &str,
+    family: Family,
+    ruleset: &Ruleset,
+    lang: Lang,
+) -> Vec<TableHit> {
+    let input = LintInput {
+        schema: Schema { name: schema.to_string(), tables: vec![table], ..Default::default() },
+        family,
+        objects_known: false,
+    };
+    let mut set = ruleset.clone();
+    for clause in &mut set.clauses {
+        clause.rules.retain(|r| !r.id.starts_with("consistency."));
+    }
+    check(&input, &set, lang, || {})
+        .into_iter()
+        .filter(|r| r.verdict == Verdict::Fail)
+        .filter_map(|r| {
+            let clause = set.clauses.iter().find(|c| c.id == r.clause)?;
+            Some(TableHit {
+                clause: r.clause,
+                text: clause.text.clone(),
+                severity: clause.severity,
+                issues: r.issues,
+            })
         })
         .collect()
 }
@@ -210,6 +255,25 @@ mod tests {
         let mut seen = 0;
         let results = check(&input(vec![]), &set, Lang::En, || seen += 1);
         assert_eq!((results.len(), seen), (1, 1));
+    }
+
+    #[test]
+    fn check_table_returns_only_failures_and_honours_exceptions() {
+        let mut consistency = clause(vec![rule("consistency.same_name", &[])], None);
+        consistency.id = "x".into();
+        let mut failing = clause(vec![rule("table.comment", &[])], None);
+        failing.id = "comment".into();
+        let mut set = Ruleset {
+            id: "r".into(),
+            name: "r".into(),
+            builtin: false,
+            clauses: vec![clause(vec![], None), consistency, failing],
+            exceptions: vec![],
+        };
+        let hits = check_table(table(None), "s", Family::Postgres, &set, Lang::En);
+        assert_eq!(hits.iter().map(|h| h.clause.as_str()).collect::<Vec<_>>(), ["comment"]);
+        set.exceptions.push(Exception { clause: "comment".into(), object: "t".into(), reason: "r".into() });
+        assert!(check_table(table(None), "s", Family::Postgres, &set, Lang::En).is_empty());
     }
 
     fn with_exception(object: &str, c: Clause) -> ClauseResult {

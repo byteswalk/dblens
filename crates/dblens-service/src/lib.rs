@@ -48,8 +48,8 @@ pub use import::{
     infer_type, new_table, preview_file,
 };
 pub use lint::{
-    ClauseMeta, LintRequest, LintRun, LintRunSummary, LintSource, ReportFormat, ReviewInput, RulesetSummary,
-    WaiveInput,
+    ClauseMeta, LintRequest, LintRun, LintRunSummary, LintSource, LintTableRequest, ReportFormat,
+    ReviewInput, RulesetSummary, WaiveInput,
 };
 pub use metadata::{METADATA_POOL_SIZE, MetadataCache, MetadataService, SearchHit};
 pub use migrate::{

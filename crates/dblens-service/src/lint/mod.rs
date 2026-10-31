@@ -34,6 +34,14 @@ pub struct LintRequest {
     pub source: LintSource,
 }
 
+/// 设计器实时提示：检查一张还没保存的表。
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct LintTableRequest {
+    pub ruleset: String,
+    pub source: LintSource,
+    pub table: dblens_core::schema::Table,
+}
+
 /// 规范库列表里的一条。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RulesetSummary {

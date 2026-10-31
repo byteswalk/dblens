@@ -5,9 +5,10 @@ use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use dblens_core::{Error, msg};
-use dblens_lint::{RuleInfo, Ruleset};
+use dblens_lint::{RuleInfo, Ruleset, TableHit};
 use dblens_service::{
-    LintRequest, LintRun, LintRunSummary, ReportFormat, ReviewInput, RulesetSummary, WaiveInput,
+    LintRequest, LintRun, LintRunSummary, LintTableRequest, ReportFormat, ReviewInput, RulesetSummary,
+    WaiveInput,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -79,6 +80,13 @@ pub async fn import_ruleset(
 
 pub async fn rules(State(s): State<AppState>) -> ApiResult<Json<Vec<RuleInfo>>> {
     Ok(Json(s.service.lint_rule_catalog()))
+}
+
+pub async fn check_table(
+    State(s): State<AppState>,
+    Json(req): Json<LintTableRequest>,
+) -> ApiResult<Json<Vec<TableHit>>> {
+    Ok(Json(s.service.lint_table(req).await?))
 }
 
 pub async fn runs(State(s): State<AppState>) -> ApiResult<Json<Vec<LintRunSummary>>> {
