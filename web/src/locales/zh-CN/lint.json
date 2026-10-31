@@ -119,6 +119,7 @@
     "exceptions": "例外"
   },
   "param": {
+    "allowed": "允许的值",
     "max": "上限",
     "pattern": "正则表达式",
     "mode": "匹配方式",

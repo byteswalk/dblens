@@ -274,6 +274,14 @@ FROM all_tables t
 WHERE t.owner = :1
   AND t.table_name = :2
 
+-- [lint_tables] [String("HR")]
+SELECT t.table_name AS name,
+       CAST(NULL AS VARCHAR2(1)) AS engine,
+       CAST(NULL AS VARCHAR2(1)) AS charset,
+       t.num_rows AS row_count
+FROM all_tables t
+WHERE t.owner = :1
+
 -- [trigger_ddl] [String("HR"), String("EMP")]
 -- Full CREATE TRIGGER rebuilt from ALL_TRIGGERS (triggers.definition holds the body only). DESCRIPTION starts with the
 -- trigger name and the ON clause as written, unqualified: run it with the table's schema as the current schema.

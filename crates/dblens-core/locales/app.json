@@ -672,6 +672,10 @@
     "zh-CN": "字段用了自增",
     "en": "Column is auto-increment"
   },
+  "lint.issue.auto_step": {
+    "zh-CN": "自增步长是 %{step}，应为 %{want}",
+    "en": "The auto-increment step is %{step}, it should be %{want}"
+  },
   "lint.issue.backup_table": {
     "zh-CN": "疑似残留的备份表",
     "en": "Looks like a leftover backup table"
@@ -692,6 +696,10 @@
     "zh-CN": "对象名应由字母、数字、下划线组成，以字母开头",
     "en": "Object name should use letters, digits and underscores and start with a letter"
   },
+  "lint.issue.charset_value": {
+    "zh-CN": "字符集是 %{value}",
+    "en": "The character set is %{value}"
+  },
   "lint.issue.comment_is_name": {
     "zh-CN": "注释和字段名相同",
     "en": "Comment is the same as the column name"
@@ -707,6 +715,10 @@
   "lint.issue.decimal_precision": {
     "zh-CN": "小数类型未指定精度",
     "en": "Decimal type has no precision"
+  },
+  "lint.issue.engine": {
+    "zh-CN": "存储引擎是 %{value}",
+    "en": "The storage engine is %{value}"
   },
   "lint.issue.enum_type": {
     "zh-CN": "字段用了 ENUM/SET 类型",
@@ -812,6 +824,10 @@
     "zh-CN": "名字不符合 %{pattern}",
     "en": "The name does not match %{pattern}"
   },
+  "lint.issue.pk_on_update": {
+    "zh-CN": "主键列带自动更新属性",
+    "en": "The primary key column updates itself automatically"
+  },
   "lint.issue.prefix": {
     "zh-CN": "名称应以 %{prefix} 开头",
     "en": "Name should start with %{prefix}"
@@ -831,6 +847,10 @@
   "lint.issue.routine": {
     "zh-CN": "自定义函数或存储过程",
     "en": "Custom function or procedure"
+  },
+  "lint.issue.row_count": {
+    "zh-CN": "约 %{count} 行，超过 %{max} 行，应考虑分区",
+    "en": "About %{count} rows, more than %{max}: consider partitioning"
   },
   "lint.issue.same_name_types": {
     "zh-CN": "同名字段类型不一致：%{types}",

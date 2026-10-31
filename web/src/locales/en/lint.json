@@ -119,6 +119,7 @@
     "exceptions": "Exceptions"
   },
   "param": {
+    "allowed": "Allowed values",
     "max": "Maximum",
     "pattern": "Regular expression",
     "mode": "Match mode",

@@ -473,6 +473,41 @@ pub fn table_storage(rows: &MetaRows) -> Result<TableStorage> {
         .unwrap_or_default())
 }
 
+/// 规范检查用的一张表（`lint_tables`）。取不到的项为 None，统计信息没有收集时行数为 None。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LintTable {
+    pub name: String,
+    pub engine: Option<String>,
+    pub charset: Option<String>,
+    pub row_count: Option<u64>,
+    /// 带 `ON UPDATE` 的列（只有 MySQL 系）。
+    pub on_update: Vec<String>,
+    /// 服务器的自增步长（只有 MySQL 系）。
+    pub auto_step: Option<u64>,
+}
+
+pub fn lint_tables(rows: &MetaRows) -> Result<Vec<LintTable>> {
+    rows.require("lint_tables", &["name", "engine", "charset", "row_count"])?;
+    let has = |name: &str| rows.iter().next().is_some_and(|r| r.columns().iter().any(|c| c == name));
+    let (on_update, auto_step) = (has("on_update"), has("auto_step"));
+    Ok(rows
+        .iter()
+        .map(|r| LintTable {
+            name: r.name("name"),
+            engine: r.text("engine"),
+            charset: r.text("charset"),
+            // PostgreSQL 没分析过的表是 -1 或 0
+            row_count: r.int("row_count").filter(|n| *n > 0).map(|n| n as u64),
+            on_update: if on_update {
+                r.text("on_update").map(|s| s.split(',').map(str::to_string).collect()).unwrap_or_default()
+            } else {
+                vec![]
+            },
+            auto_step: if auto_step { r.int("auto_step").map(|n| n as u64) } else { None },
+        })
+        .collect())
+}
+
 /// `trigger_ddl`（Oracle）：每个触发器拼成一条完整的 CREATE TRIGGER。
 pub fn trigger_ddl(rows: &MetaRows) -> Result<Vec<String>> {
     rows.require("trigger_ddl", &["name", "head", "body"])?;

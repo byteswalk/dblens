@@ -298,6 +298,14 @@ WHERE p.class = 1
   AND p.major_id = OBJECT_ID(QUOTENAME({{ bind("schema") }}) + '.' + QUOTENAME({{ bind("table") }}))
 ORDER BY 1, 2
 
+-- [lint_tables]
+SELECT t.name AS name,
+       CAST(NULL AS nvarchar(10)) AS engine,
+       CAST(NULL AS nvarchar(10)) AS charset,
+       (SELECT SUM(p.rows) FROM sys.partitions p WHERE p.object_id = t.object_id AND p.index_id IN (0, 1)) AS row_count
+FROM sys.tables t
+WHERE t.schema_id = SCHEMA_ID({{ bind("schema") }})
+
 -- [table_storage]
 -- tablespace = filegroup of the heap / clustered index; row_count from partition metadata (no scan).
 SELECT CAST(NULL AS nvarchar(10)) AS engine,

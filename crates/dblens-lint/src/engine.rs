@@ -3,6 +3,7 @@
 use dblens_core::schema::{Schema, Table};
 use dblens_core::{Lang, msg};
 use dblens_dialect::Family;
+use dblens_dialect::meta::LintTable;
 use serde::Serialize;
 
 use crate::model::{
@@ -17,6 +18,8 @@ pub struct LintInput {
     pub schema: Schema,
     pub family: Family,
     pub objects_known: bool,
+    /// 只有连接能取到的存储信息。模型和设计器里为 None，相关规则报无法判断。
+    pub storage: Option<Vec<LintTable>>,
 }
 
 /// 规范里 `databases` 用的家族名。
@@ -72,6 +75,7 @@ pub fn check_table(
         schema: Schema { name: schema.to_string(), tables: vec![table], ..Default::default() },
         family,
         objects_known: false,
+        storage: None,
     };
     let mut set = ruleset.clone();
     for clause in &mut set.clauses {
@@ -162,7 +166,7 @@ mod tests {
 
     fn input(tables: Vec<Table>) -> LintInput {
         let schema = Schema { name: "s".into(), tables, ..Default::default() };
-        LintInput { schema, family: Family::Postgres, objects_known: true }
+        LintInput { schema, family: Family::Postgres, objects_known: true, storage: None }
     }
 
     fn rule(id: &str, databases: &[&str]) -> RuleRef {

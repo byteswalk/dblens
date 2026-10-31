@@ -1,10 +1,11 @@
 //! 外键、触发器、视图等数据库对象的规则，以及现有元数据取不到的规则。
 
-use dblens_core::msg;
 use dblens_core::schema::RoutineKind;
+use dblens_core::{Msg, msg};
 use dblens_dialect::Family;
+use dblens_dialect::meta::LintTable;
 
-use super::{Check, Ctx, Finding, Params, RuleDef};
+use super::{Check, Ctx, Finding, ParamDef, ParamDefault, Params, RuleDef};
 
 pub(super) const RULES: &[RuleDef] = &[
     RuleDef {
@@ -44,13 +45,54 @@ pub(super) const RULES: &[RuleDef] = &[
         fix: Some(|| msg!("lint.fix.review_object")),
         check: dblink,
     },
-    RuleDef { id: "db.charset", params: &[], fix: None, check: no_metadata },
-    RuleDef { id: "db.engine", params: &[], fix: None, check: no_metadata },
+    RuleDef {
+        id: "db.charset",
+        params: &[ParamDef { key: "allowed", default: ParamDefault::List(&["utf8mb4"]) }],
+        fix: None,
+        check: charset,
+    },
+    RuleDef {
+        id: "db.engine",
+        // OceanBase 的 MySQL 模式报告的引擎是 oceanbase
+        params: &[ParamDef { key: "allowed", default: ParamDefault::List(&["InnoDB", "oceanbase"]) }],
+        fix: None,
+        check: engine,
+    },
     RuleDef { id: "db.tablespace", params: &[], fix: None, check: no_metadata },
     RuleDef { id: "db.grants", params: &[], fix: None, check: no_metadata },
     RuleDef { id: "db.event", params: &[], fix: None, check: no_metadata },
     RuleDef { id: "db.temporary_table", params: &[], fix: None, check: no_metadata },
 ];
+
+/// 每张表的某项存储属性要在允许的范围内。一张表都取不到时无法判断。
+fn storage_allowed(
+    ctx: &Ctx,
+    p: &Params,
+    value: impl Fn(&LintTable) -> Option<&String>,
+    message: impl Fn(&str) -> Msg,
+) -> Check {
+    let allowed = p.list("allowed");
+    let values: Vec<_> =
+        ctx.tables().iter().filter_map(|t| Some((t, value(ctx.storage(&t.name)?)?))).collect();
+    if ctx.input.storage.is_none() || (values.is_empty() && !ctx.tables().is_empty()) {
+        return Check::Unknown(msg!("lint.unknown.no_metadata"));
+    }
+    Check::Findings(
+        values
+            .into_iter()
+            .filter(|(_, v)| !allowed.iter().any(|a| a.eq_ignore_ascii_case(v)))
+            .map(|(t, v)| Finding::table(t, message(v)))
+            .collect(),
+    )
+}
+
+fn charset(ctx: &Ctx, p: &Params) -> Check {
+    storage_allowed(ctx, p, |s| s.charset.as_ref(), |v| msg!("lint.issue.charset_value", value = v))
+}
+
+fn engine(ctx: &Ctx, p: &Params) -> Check {
+    storage_allowed(ctx, p, |s| s.engine.as_ref(), |v| msg!("lint.issue.engine", value = v))
+}
 
 fn no_metadata(_: &Ctx, _: &Params) -> Check {
     Check::Unknown(msg!("lint.unknown.no_metadata"))

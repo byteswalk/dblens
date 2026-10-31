@@ -186,6 +186,12 @@ WHERE b.datakey = 'T' AND p.owner = {{ bind("schema") }} AND p.procname = {{ bin
 {% endif %}
 ORDER BY b.seqno
 
+-- [lint_tables]
+SELECT t.tabname AS name, CAST(NULL AS VARCHAR(1)) AS engine, CAST(NULL AS VARCHAR(1)) AS charset,
+       CAST(t.nrows AS BIGINT) AS row_count
+FROM systables t
+WHERE t.owner = {{ bind("schema") }} AND t.tabtype = 'T'
+
 -- [table_storage]
 SELECT CAST(NULL AS VARCHAR(1)) AS engine, CAST(NULL AS VARCHAR(1)) AS charset, CAST(NULL AS VARCHAR(1)) AS collation,
        CAST(NULL AS VARCHAR(1)) AS tablespace, CAST(t.nrows AS BIGINT) AS row_count

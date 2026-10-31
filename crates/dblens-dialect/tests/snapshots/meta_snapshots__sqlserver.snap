@@ -280,3 +280,11 @@ SELECT CAST(NULL AS nvarchar(10)) AS engine,
 FROM sys.tables t
 WHERE t.schema_id = SCHEMA_ID(@P1)
   AND t.name = @P2
+
+-- [lint_tables] [String("HR")]
+SELECT t.name AS name,
+       CAST(NULL AS nvarchar(10)) AS engine,
+       CAST(NULL AS nvarchar(10)) AS charset,
+       (SELECT SUM(p.rows) FROM sys.partitions p WHERE p.object_id = t.object_id AND p.index_id IN (0, 1)) AS row_count
+FROM sys.tables t
+WHERE t.schema_id = SCHEMA_ID(@P1)

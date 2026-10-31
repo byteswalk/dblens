@@ -10,6 +10,7 @@ mod table;
 use dblens_core::schema::{Column, Index, Table};
 use dblens_core::{Error, Msg, Result};
 use dblens_dialect::Family;
+use dblens_dialect::meta::LintTable;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -27,6 +28,11 @@ impl Ctx<'_> {
 
     pub fn tables(&self) -> &[Table] {
         &self.input.schema.tables
+    }
+
+    /// 一张表的存储信息；没取到时为 None。
+    pub fn storage(&self, table: &str) -> Option<&LintTable> {
+        self.input.storage.as_ref()?.iter().find(|t| same_name(&t.name, table))
     }
 }
 
@@ -260,7 +266,7 @@ pub(crate) mod testing {
     }
 
     pub fn input(schema: Schema, family: Family) -> LintInput {
-        LintInput { schema, family, objects_known: true }
+        LintInput { schema, family, objects_known: true, storage: None }
     }
 
     /// 运行一条规则，返回问题的对象名。

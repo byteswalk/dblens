@@ -130,6 +130,22 @@
       severity: info
       rules:
         - { id: table.all_nullable }
+    - id: db.charset
+      section: table
+      text:
+        zh-CN: 表使用 utf8mb4 字符集
+        en: Tables use the utf8mb4 character set
+      severity: warning
+      rules:
+        - { id: db.charset, databases: [mysql] }
+    - id: db.engine
+      section: table
+      text:
+        zh-CN: 表使用 InnoDB 存储引擎
+        en: Tables use the InnoDB storage engine
+      severity: warning
+      rules:
+        - { id: db.engine, databases: [mysql] }
     - id: table.row_count
       section: table
       text:
@@ -469,6 +485,22 @@
       severity: warning
       rules:
         - { id: table.all_nullable }
+    - id: db.charset
+      section: table
+      text:
+        zh-CN: 表使用 utf8mb4 字符集
+        en: Tables use the utf8mb4 character set
+      severity: error
+      rules:
+        - { id: db.charset, databases: [mysql] }
+    - id: db.engine
+      section: table
+      text:
+        zh-CN: 表使用 InnoDB 存储引擎
+        en: Tables use the InnoDB storage engine
+      severity: error
+      rules:
+        - { id: db.engine, databases: [mysql] }
     - id: table.row_count
       section: table
       text:

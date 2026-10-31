@@ -2192,3 +2192,29 @@ domestic_flows! {
     kingbase: "DBLENS_TEST_KINGBASE_URL", slow = "SELECT pg_sleep(20)", ops = &["slow_sql"];
     kingbase_pg: "DBLENS_TEST_KINGBASE_PG_URL", slow = "SELECT pg_sleep(20)", ops = &["slow_sql"];
 }
+
+/// 规范检查的存储信息查询（M7c3）：各库都要能执行并解析。没设环境变量的库跳过。
+#[tokio::test]
+async fn lint_tables_query_runs_on_every_database() {
+    let envs = [
+        "DBLENS_TEST_MYSQL_URL",
+        "DBLENS_TEST_MARIADB_URL",
+        "DBLENS_TEST_PG_URL",
+        "DBLENS_TEST_ORACLE_URL",
+        "DBLENS_TEST_DM_URL",
+        "DBLENS_TEST_SQLSERVER_URL",
+        "DBLENS_TEST_GBASE_URL",
+        "DBLENS_TEST_TIDB_URL",
+        "DBLENS_TEST_OCEANBASE_URL",
+        "DBLENS_TEST_OPENGAUSS_URL",
+        "DBLENS_TEST_KINGBASE_URL",
+    ];
+    for env in envs {
+        let Some(live) = setup(env).await else { continue };
+        let s = &live.service;
+        let profile = s.profile(&live.profile_id).unwrap();
+        let args = MetaArgs { schema: Some(live.schema.clone()), ..Default::default() };
+        let rows = s.metadata.rows(&profile, MetaKey::LintTables, &args).await.unwrap().unwrap();
+        dblens_dialect::meta::lint_tables(&rows).unwrap_or_else(|e| panic!("{env}: {e:?}"));
+    }
+}

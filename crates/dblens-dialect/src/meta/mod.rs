@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use dblens_core::Value;
 
 pub use assemble::{
-    DependentView, Grant, ObjectInfo, ReferencingKey, SchemaInfo, TableRows, TableStorage, dependent_views,
-    function_indexes, grants, objects, referencing_keys, reserved_words, routines, schemas, sequences,
-    source_text, synonyms, table_storage, tables, trigger_ddl, views,
+    DependentView, Grant, LintTable, ObjectInfo, ReferencingKey, SchemaInfo, TableRows, TableStorage,
+    dependent_views, function_indexes, grants, lint_tables, objects, referencing_keys, reserved_words,
+    routines, schemas, sequences, source_text, synonyms, table_storage, tables, trigger_ddl, views,
 };
 pub use rows::{MetaRow, MetaRows};
 
@@ -59,6 +59,8 @@ pub enum MetaKey {
     Grants,
     /// 存储属性（引擎、字符集、表空间）和行数估计。
     TableStorage,
+    /// 规范检查用：整个 schema 各表的引擎、字符集、行数估计，只读系统表。参数：schema。
+    LintTables,
     /// 触发器的完整 DDL（只有 Oracle：`triggers` 的 definition 只有触发器体）。
     TriggerDdl,
     // 以下是退路（只有达梦）：旧版 DM8 缺少 ALL_MVIEWS、ALL_IND_EXPRESSIONS 时用，见 `fallback`。不在 `ALL` 中。
@@ -76,7 +78,7 @@ pub enum MetaKey {
 }
 
 impl MetaKey {
-    pub const ALL: [MetaKey; 23] = [
+    pub const ALL: [MetaKey; 24] = [
         MetaKey::Catalogs,
         MetaKey::Schemas,
         MetaKey::Tables,
@@ -99,6 +101,7 @@ impl MetaKey {
         MetaKey::FunctionIndexes,
         MetaKey::Grants,
         MetaKey::TableStorage,
+        MetaKey::LintTables,
         MetaKey::TriggerDdl,
     ];
 
@@ -148,6 +151,7 @@ impl MetaKey {
             MetaKey::FunctionIndexes => "function_indexes",
             MetaKey::Grants => "grants",
             MetaKey::TableStorage => "table_storage",
+            MetaKey::LintTables => "lint_tables",
             MetaKey::TriggerDdl => "trigger_ddl",
             MetaKey::TablesBasic => "tables_basic",
             MetaKey::MaterializedViewsBasic => "materialized_views_basic",

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use dblens_core::schema::Schema;
 use dblens_core::{Error, Result, current_lang, msg};
-use dblens_dialect::meta::{MetaArgs, MetaKey};
+use dblens_dialect::meta::{self, MetaArgs, MetaKey};
 use dblens_lint::{
     ClauseResult, Exception, LintInput, RuleInfo, Ruleset, TableHit, apply, builtin, builtin_ids, check,
     check_table, diff, rule_infos, validate,
@@ -353,7 +353,15 @@ impl Service {
                     routines,
                     synonyms,
                 };
-                let input = LintInput { schema: model, family: dialect.family(), objects_known: true };
+                // 补充信息取不到不影响检查，相关规则报无法判断
+                let args = MetaArgs { schema: Some(schema.clone()), ..Default::default() };
+                self.metadata.cache().forget(&profile.id, MetaKey::LintTables, &args);
+                let storage = match self.metadata.rows(&profile, MetaKey::LintTables, &args).await {
+                    Ok(Some(rows)) => meta::lint_tables(&rows).ok(),
+                    _ => None,
+                };
+                let input =
+                    LintInput { schema: model, family: dialect.family(), objects_known: true, storage };
                 let place = catalog.as_ref().map_or_else(|| schema.clone(), |c| format!("{c}.{schema}"));
                 let target = format!("{} · {place}", profile.input.name);
                 Ok((input, target))
@@ -364,7 +372,7 @@ impl Service {
                 let family = self.models.dialect(model)?.family();
                 let name = self.models.summary_of(model)?.info.name;
                 let model_schema = Schema { name: schema.clone(), tables, ..Default::default() };
-                let input = LintInput { schema: model_schema, family, objects_known: false };
+                let input = LintInput { schema: model_schema, family, objects_known: false, storage: None };
                 let target = format!("{name} · {schema}");
                 Ok((input, target))
             }

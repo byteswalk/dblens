@@ -327,6 +327,17 @@ WHERE n.nspname = {{ bind("schema") }}
   AND a.grantee <> c.relowner
 ORDER BY 1, 2
 
+-- [lint_tables]
+-- Design lint: row estimate only. reltuples is -1 (PG 14+) or 0 until the table is analyzed.
+SELECT c.relname AS name,
+       NULL::text AS engine,
+       NULL::text AS charset,
+       c.reltuples::bigint AS row_count
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = {{ bind("schema") }}
+  AND c.relkind IN ('r', 'p')
+
 -- [table_storage]
 -- reltuples is -1 (PG 14+) or 0 until the table is analyzed.
 SELECT NULL::text AS engine,

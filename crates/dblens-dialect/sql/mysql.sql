@@ -237,6 +237,22 @@ WHERE k.REFERENCED_TABLE_SCHEMA = {{ bind("schema") }}
   AND NOT (k.TABLE_SCHEMA = k.REFERENCED_TABLE_SCHEMA AND k.TABLE_NAME = k.REFERENCED_TABLE_NAME)
 ORDER BY k.TABLE_SCHEMA, k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION
 
+-- [lint_tables]
+-- Design lint: storage facts of every table in a schema, from the catalog only (no scan).
+-- auto_step is the server's auto-increment step; on_update lists columns with ON UPDATE CURRENT_TIMESTAMP.
+SELECT t.TABLE_NAME AS name,
+       t.ENGINE AS engine,
+       (SELECT MAX(c.CHARACTER_SET_NAME) FROM information_schema.COLLATION_CHARACTER_SET_APPLICABILITY c
+         WHERE c.COLLATION_NAME = t.TABLE_COLLATION) AS charset,
+       t.TABLE_ROWS AS row_count,
+       (SELECT GROUP_CONCAT(c.COLUMN_NAME) FROM information_schema.COLUMNS c
+         WHERE c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME
+           AND LOWER(c.EXTRA) LIKE '%on update%') AS on_update,
+       @@auto_increment_increment AS auto_step
+FROM information_schema.TABLES t
+WHERE t.TABLE_SCHEMA = {{ bind("schema") }}
+  AND t.TABLE_TYPE = 'BASE TABLE'
+
 -- [table_storage]
 -- Table designer: engine / charset / collation kept by a rebuild, and the row estimate shown in the designer.
 SELECT t.ENGINE AS engine,

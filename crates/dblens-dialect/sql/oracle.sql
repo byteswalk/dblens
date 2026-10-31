@@ -335,6 +335,14 @@ WHERE p.table_schema = {{ bind("schema") }}
   AND p.table_name = {{ bind("table") }}
 ORDER BY p.grantee, p.privilege
 
+-- [lint_tables]
+SELECT t.table_name AS name,
+       CAST(NULL AS VARCHAR2(1)) AS engine,
+       CAST(NULL AS VARCHAR2(1)) AS charset,
+       t.num_rows AS row_count
+FROM all_tables t
+WHERE t.owner = {{ bind("schema") }}
+
 -- [table_storage]
 SELECT CAST(NULL AS VARCHAR2(1)) AS engine,
        CAST(NULL AS VARCHAR2(1)) AS charset,

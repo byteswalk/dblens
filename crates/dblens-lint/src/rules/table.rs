@@ -63,7 +63,7 @@ pub(super) const RULES: &[RuleDef] = &[
         id: "table.row_count",
         params: &[ParamDef { key: "max", default: ParamDefault::Num(20_000_000) }],
         fix: None,
-        check: |_, _| Check::Unknown(msg!("lint.unknown.needs_data")),
+        check: row_count,
     },
     RuleDef {
         id: "pk.auto_increment",
@@ -197,24 +197,125 @@ fn pk_auto_increment(ctx: &Ctx, _: &Params) -> Check {
     Check::Findings(findings)
 }
 
-fn pk_step(ctx: &Ctx, _: &Params) -> Check {
-    if ctx.tables().iter().any(|t| pk_columns(t).any(|c| c.auto_increment)) {
-        Check::Unknown(msg!("lint.unknown.no_metadata"))
-    } else {
-        Check::Findings(vec![])
+/// 行数是系统表里的估计值，不扫表。一张表都没有估计值时（模型、没收集统计信息）无法判断。
+fn row_count(ctx: &Ctx, p: &Params) -> Check {
+    let max = p.num("max");
+    let counts: Vec<_> =
+        ctx.tables().iter().filter_map(|t| Some((t, ctx.storage(&t.name)?.row_count?))).collect();
+    if ctx.input.storage.is_none() || (counts.is_empty() && !ctx.tables().is_empty()) {
+        return Check::Unknown(msg!("lint.unknown.needs_data"));
     }
+    Check::Findings(
+        counts
+            .into_iter()
+            .filter(|(_, n)| *n > max)
+            .map(|(t, n)| Finding::table(t, msg!("lint.issue.row_count", count = n, max = max)))
+            .collect(),
+    )
 }
 
-/// `ON UPDATE` 只有 MySQL 有，现有元数据没有取。
+/// 步长是服务器设置，只有 MySQL 系取得到。
+fn pk_step(ctx: &Ctx, p: &Params) -> Check {
+    let want = p.num("step");
+    let mut findings = vec![];
+    for t in ctx.tables() {
+        for c in pk_columns(t).filter(|c| c.auto_increment) {
+            let Some(step) = ctx.storage(&t.name).and_then(|s| s.auto_step) else {
+                return Check::Unknown(msg!("lint.unknown.no_metadata"));
+            };
+            if step != want {
+                findings.push(Finding::column(t, c, msg!("lint.issue.auto_step", step = step, want = want)));
+            }
+        }
+    }
+    Check::Findings(findings)
+}
+
+/// `ON UPDATE` 只有 MySQL 有。
 fn pk_on_update(ctx: &Ctx, _: &Params) -> Check {
     if ctx.family() != Family::MySql {
         return Check::NotApplicable;
     }
-    let timestamp_key = ctx
-        .tables()
-        .iter()
-        .any(|t| pk_columns(t).any(|c| matches!(c.data_type.logical, LogicalType::Timestamp { .. })));
-    if timestamp_key { Check::Unknown(msg!("lint.unknown.no_metadata")) } else { Check::Findings(vec![]) }
+    let mut findings = vec![];
+    for t in ctx.tables() {
+        for c in pk_columns(t).filter(|c| matches!(c.data_type.logical, LogicalType::Timestamp { .. })) {
+            let Some(storage) = ctx.storage(&t.name) else {
+                return Check::Unknown(msg!("lint.unknown.no_metadata"));
+            };
+            if storage.on_update.iter().any(|n| n.eq_ignore_ascii_case(&c.name)) {
+                findings.push(Finding::column(t, c, msg!("lint.issue.pk_on_update")));
+            }
+        }
+    }
+    Check::Findings(findings)
+}
+
+#[cfg(test)]
+mod storage_tests {
+    use dblens_core::LogicalType;
+    use dblens_core::schema::Schema;
+    use dblens_dialect::Family;
+    use dblens_dialect::meta::LintTable;
+    use serde_json::json;
+
+    use crate::rules::Outcome;
+    use crate::rules::testing::*;
+
+    fn with(storage: Option<LintTable>, mut t: dblens_core::schema::Table) -> crate::engine::LintInput {
+        t.primary_key = pk(&["id"]);
+        let schema = Schema { name: "s".into(), tables: vec![t], ..Default::default() };
+        let mut i = input(schema, Family::MySql);
+        i.storage = storage.map(|s| vec![s]);
+        i
+    }
+
+    fn facts() -> LintTable {
+        LintTable { name: "T".into(), ..Default::default() }
+    }
+
+    #[test]
+    fn row_count_uses_the_estimate() {
+        let t = || table("t", vec![int("id")]);
+        let big = LintTable { row_count: Some(30), ..facts() };
+        assert_eq!(objects(&with(Some(big), t()), "table.row_count", json!({"max": 20})), ["t"]);
+        let small = LintTable { row_count: Some(10), ..facts() };
+        assert!(objects(&with(Some(small), t()), "table.row_count", json!({"max": 20})).is_empty());
+        assert!(matches!(outcome(&with(None, t()), "table.row_count", json!({})), Outcome::Unknown(_)));
+        assert!(matches!(
+            outcome(&with(Some(facts()), t()), "table.row_count", json!({})),
+            Outcome::Unknown(_)
+        ));
+    }
+
+    #[test]
+    fn auto_increment_step_compares_with_the_server_setting() {
+        let t = || {
+            let mut id = int("id");
+            id.auto_increment = true;
+            table("t", vec![id])
+        };
+        let one = LintTable { auto_step: Some(1), ..facts() };
+        assert_eq!(objects(&with(Some(one), t()), "pk.auto_increment_step", json!({"step": 2})), ["t.id"]);
+        let two = LintTable { auto_step: Some(2), ..facts() };
+        assert!(objects(&with(Some(two), t()), "pk.auto_increment_step", json!({"step": 2})).is_empty());
+        assert!(matches!(
+            outcome(&with(None, t()), "pk.auto_increment_step", json!({})),
+            Outcome::Unknown(_)
+        ));
+    }
+
+    #[test]
+    fn on_update_timestamp_key_is_reported() {
+        let logical = LogicalType::Timestamp { tz: false, precision: None };
+        let t = || table("t", vec![col("id", "timestamp", logical.clone())]);
+        let hit = LintTable { on_update: vec!["ID".into()], ..facts() };
+        assert_eq!(objects(&with(Some(hit), t()), "pk.on_update_timestamp", json!({})), ["t.id"]);
+        assert!(objects(&with(Some(facts()), t()), "pk.on_update_timestamp", json!({})).is_empty());
+        assert!(matches!(
+            outcome(&with(None, t()), "pk.on_update_timestamp", json!({})),
+            Outcome::Unknown(_)
+        ));
+    }
 }
 
 #[cfg(test)]

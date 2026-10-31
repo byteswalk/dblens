@@ -414,6 +414,14 @@ WHERE p.OWNER = {{ bind("schema") }}
   AND p.TABLE_NAME = {{ bind("table") }}
 ORDER BY p.GRANTEE, p.PRIVILEGE
 
+-- [lint_tables]
+SELECT t.TABLE_NAME AS "name",
+       CAST(NULL AS VARCHAR(1)) AS "engine",
+       CAST(NULL AS VARCHAR(1)) AS "charset",
+       t.NUM_ROWS AS "row_count"
+FROM ALL_TABLES t
+WHERE t.OWNER = {{ bind("schema") }}
+
 -- [table_storage]
 SELECT CAST(NULL AS VARCHAR(1)) AS "engine",
        CAST(NULL AS VARCHAR(1)) AS "charset",

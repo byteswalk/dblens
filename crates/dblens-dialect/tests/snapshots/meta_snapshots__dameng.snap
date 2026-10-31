@@ -325,3 +325,11 @@ SELECT CAST(NULL AS VARCHAR(1)) AS "engine",
 FROM ALL_TABLES t
 WHERE t.OWNER = ?
   AND t.TABLE_NAME = ?
+
+-- [lint_tables] [String("HR")]
+SELECT t.TABLE_NAME AS "name",
+       CAST(NULL AS VARCHAR(1)) AS "engine",
+       CAST(NULL AS VARCHAR(1)) AS "charset",
+       t.NUM_ROWS AS "row_count"
+FROM ALL_TABLES t
+WHERE t.OWNER = ?
