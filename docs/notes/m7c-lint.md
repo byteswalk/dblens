@@ -45,8 +45,8 @@ POST /api/lint/table   {ruleset, source, table}，只返回未通过的条款，
 
 - 实库（2026-10-31）：`lint_tables_query_runs_on_every_database` 在 MySQL 9.7、MariaDB 12.3、PostgreSQL 18、Oracle 26ai、达梦 8、SQL Server 2022、TiDB、OceanBase、openGauss、金仓、GBase 8s 上逐库通过；`mysql_lint_reads_storage_facts` 确认字符集、引擎、`ON UPDATE`、自增步长、行数都能判出问题。
 - 真实鼠标（连接来源，MySQL）：检查记录打开结果、“无法判断”为 0、点问题打开真实表的设计器、“规范”子标签带角标。
+- 真实鼠标（浏览器模式）：用自定义规范发起检查，不符合正则的表判为未通过，符合的不报。
 
 ## 待验证（真实运行）
 
-- 用自定义规则跑检查只有规则单测，界面上没有走过。
-- 桌面版没有编译和验证。
+- 桌面版的界面操作：dev 程序能编译启动并连上数据目录，M7c 的入口没有在桌面窗口里点过（前端和浏览器模式是同一份）。
