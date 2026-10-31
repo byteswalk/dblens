@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  lintRequest,
   ApiError,
   type FetchFn,
   createApi,
@@ -205,5 +206,17 @@ describe('元数据与设置', () => {
     expect(calls[0].url).toBe('/api/settings/ui.theme')
     expect(calls[0].init?.method).toBe('PUT')
     expect(JSON.parse(calls[0].init?.body as string)).toEqual({ value: 'dark' })
+  })
+})
+
+describe('lintRequest', () => {
+  it('拆开带库的 schema，否则后端读到空结构', () => {
+    const source = { kind: 'database', profile: 'p', schema: 'db\u001fadmin' } as const
+    expect(lintRequest({ ruleset: 'r', source }).source).toEqual({ kind: 'database', profile: 'p', catalog: 'db', schema: 'admin' })
+  })
+
+  it('模型原样', () => {
+    const model = { ruleset: 'r', source: { kind: 'model', model: 'm', schema: 's' } } as const
+    expect(lintRequest(model)).toBe(model)
   })
 })

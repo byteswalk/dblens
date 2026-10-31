@@ -1,5 +1,6 @@
 // 导出文档对话框的选项（M4c 设计文档 3.2 节）：种类与格式的联动、按来源记住的选项、组成请求、图片的像素倍数。
 
+import { schemaLabel } from '../../shared/api'
 import type { DocDiagramImage, DocFormat, DocKind, DocSource, DocumentRequest } from '../../shared/api'
 import { settingKey } from '../../shared/settings'
 
@@ -69,7 +70,7 @@ export function optionsKey(target: DocTarget): string {
 export function loadOptions(raw: string | undefined, target: DocTarget): DocOptions {
   const base: DocOptions = {
     ...DEFAULT_OPTIONS,
-    title: target.kind === 'model' ? target.name : target.schema,
+    title: target.kind === 'model' ? target.name : schemaLabel(target.schema),
     description: target.kind === 'model' ? (target.description ?? '') : '',
   }
   if (!raw) return base

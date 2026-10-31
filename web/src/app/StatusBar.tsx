@@ -69,7 +69,7 @@ export default function StatusBar() {
   if (active && !active.profileId) {
     return (
       <div className="row statusbar">
-        <span className="muted">{active.design?.model ?? (active.er?.kind === 'model' ? active.er.path : t('model.compare.title'))}</span>
+        <span className="muted">{active.design?.model ?? (active.er?.kind === 'model' ? active.er.path : active.lint ? t('lint.start.title') : t('model.compare.title'))}</span>
         <span className="grow" />
       </div>
     )

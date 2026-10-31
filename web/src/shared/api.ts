@@ -91,6 +91,11 @@ function reverseRequest(req: ReverseRequest): ReverseRequest & { catalog?: strin
   return { ...req, schemas: parts.map((s) => s.schema), ...(catalog === undefined ? {} : { catalog }) }
 }
 
+/** 规范检查：连接一侧拆开合成的 schema，否则读到的是空结构。 */
+export function lintRequest(req: LintRequest): LintRequest {
+  return req.source.kind === 'database' ? { ...req, source: withCatalog(req.source) } : req
+}
+
 function documentRequest(req: DocumentRequest): DocumentRequest {
   return req.source.kind === 'database' ? { ...req, source: withCatalog(req.source) } : req
 }
@@ -1147,7 +1152,7 @@ export interface ReverseRequest {
 /** 比对的一边：模型的一个 schema，或连接的一个 schema。 */
 export type CompareSideRef =
   | { kind: 'model'; model: string; schema: string }
-  | { kind: 'database'; profile: string; schema: string }
+  | { kind: 'database'; profile: string; catalog?: string; schema: string }
 
 export interface CompareOptions {
   ignore_comments: boolean
@@ -1581,7 +1586,7 @@ export function createApi(token: string, fetchFn: FetchFn = (i, o) => fetch(i, o
     lintRules: () => request<LintRuleInfo[]>('GET', '/lint/rules'),
     lintRuns: () => request<LintRunSummary[]>('GET', '/lint/runs'),
     /** 发起检查，返回任务 id。 */
-    startLint: async (req: LintRequest) => (await request<{ id: string }>('POST', '/lint/runs', req)).id,
+    startLint: async (req: LintRequest) => (await request<{ id: string }>('POST', '/lint/runs', lintRequest(req))).id,
     lintRun: (id: string) => request<LintRun>('GET', `/lint/runs/${encodeURIComponent(id)}`),
     deleteLintRun: (id: string) => request<null>('DELETE', `/lint/runs/${encodeURIComponent(id)}`),
     /** 填写人工结论，返回更新后的记录。 */

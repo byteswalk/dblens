@@ -35,12 +35,32 @@ fn web_dir(resource_dir: Option<PathBuf>) -> Option<PathBuf> {
         .find(|d| d.join("index.html").is_file())
 }
 
+/// WebView 拒绝访问的端口（ERR_UNSAFE_PORT），1024 以下的系统不会随机分配。
+const UNSAFE_PORTS: [u16; 17] =
+    [1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697];
+
+fn is_unsafe_port(port: u16) -> bool {
+    UNSAFE_PORTS.contains(&port) || port == 6679 || port == 10080
+}
+
+/// 绑定系统分配的本机端口，避开 WebView 拒绝的端口：绑到它们时窗口打不开。
+/// 不合适的监听先留着，系统才不会再分配同一个端口。
+fn bind_local() -> std::io::Result<std::net::TcpListener> {
+    let mut rejected = Vec::new();
+    loop {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        if !is_unsafe_port(listener.local_addr()?.port()) {
+            return Ok(listener);
+        }
+        rejected.push(listener);
+    }
+}
+
 fn run(data_dir: PathBuf) -> Result<(), String> {
     let service = Arc::new(Service::open(&data_dir).map_err(|e| e.to_string())?);
     let token = new_token();
     // 先在当前线程绑定端口，窗口创建时地址已经确定
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .map_err(|e| msg!("desktop.bind_failed", error = e).current())?;
+    let listener = bind_local().map_err(|e| msg!("desktop.bind_failed", error = e).current())?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let addr = listener.local_addr().map_err(|e| e.to_string())?;
     let base = format!("http://{addr}/");
@@ -132,5 +152,16 @@ mod tests {
         assert_ne!(found, Some(res.join("web")));
         std::fs::write(res.join("web").join("index.html"), "x").unwrap();
         assert_eq!(web_dir(Some(res.clone())), Some(res.join("web")));
+    }
+
+    #[test]
+    fn unsafe_ports_are_refused() {
+        for port in [5060, 5061, 6000, 6667, 6679, 10080] {
+            assert!(is_unsafe_port(port), "{port}");
+        }
+        assert!(!is_unsafe_port(5173));
+        assert!(!is_unsafe_port(50000));
+        let listener = bind_local().unwrap();
+        assert!(!is_unsafe_port(listener.local_addr().unwrap().port()));
     }
 }

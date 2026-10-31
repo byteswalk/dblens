@@ -332,8 +332,8 @@ impl Service {
                     synonyms,
                 };
                 let input = LintInput { schema: model, family: dialect.family(), objects_known: true };
-                // 带库的 schema 里有分隔符，显示时写成 库.模式
-                let target = format!("{} · {}", profile.input.name, schema.replace('\u{1f}', "."));
+                let place = catalog.as_ref().map_or_else(|| schema.clone(), |c| format!("{c}.{schema}"));
+                let target = format!("{} · {place}", profile.input.name);
                 Ok((input, target))
             }
             LintSource::Model { model, schema } => {

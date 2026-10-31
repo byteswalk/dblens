@@ -259,7 +259,7 @@ function Dialog({ target }: { target: DocTarget }) {
           </Form.Item>
         ) : (
           <Form.Item label="Schema">
-            <span>{target.schema}</span>
+            <span>{schemaLabel(target.schema)}</span>
           </Form.Item>
         )}
         {single && (
