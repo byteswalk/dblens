@@ -155,7 +155,9 @@ fn now_ms() -> i64 {
 impl Service {
     pub async fn design_caps(&self, profile_id: &str) -> Result<DesignCaps> {
         let profile = self.profile(profile_id)?;
-        Ok(self.metadata.dialect(&profile).await?.design_caps())
+        let dialect = self.metadata.dialect(&profile).await?;
+        crate::later::ensure_full(&dialect)?;
+        Ok(dialect.design_caps())
     }
 
     /// 元数据查询，跳过缓存（设计器要以库中最新的结构为准）。
@@ -228,6 +230,7 @@ impl Service {
     async fn prepare_design(&self, profile_id: &str, req: &DesignRequest) -> Result<Prepared> {
         let profile = self.scoped_profile(profile_id, req.catalog.as_deref())?;
         let dialect = self.metadata.dialect(&profile).await?;
+        crate::later::ensure_full(&dialect)?;
         let mut draft = req.draft.clone();
         if let Some(name) = &req.name {
             // 已有表不能改名

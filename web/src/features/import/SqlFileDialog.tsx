@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
 import { type TextEncoding, sessionSchema } from '../../shared/api'
+import { hasCatalogs } from '../../shared/schemaOptions'
 import { withVault } from '../connections/vault'
 import FileField, { type PickedFile } from './FileField'
 import { useImportDialogs } from './dialog'
@@ -39,7 +40,7 @@ export default function SqlFileDialog() {
   const profile = profiles.find((p) => p.id === profileId)
   const schemas = useQuery({
     queryKey: ['schemas', profileId, profile?.driver],
-    queryFn: () => withVault(api, () => (profile?.driver === 'sqlserver' ? api.catalogs(profileId) : api.schemas(profileId))),
+    queryFn: () => withVault(api, () => (profile && hasCatalogs(profile.driver) ? api.catalogs(profileId) : api.schemas(profileId))),
     enabled: !!target && !!profile,
   })
 

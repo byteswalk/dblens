@@ -9,6 +9,7 @@ import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panel
 
 import { useApi } from '../../app/context'
 import { type Profile, errorText } from '../../shared/api'
+import { hasCatalogs } from '../../shared/schemaOptions'
 import { layoutStorage } from '../../shared/settings'
 import ResultsPanel from '../results/ResultsPanel'
 import { useExportDialog } from '../export/dialog'
@@ -166,7 +167,7 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
       .then(() => qc.invalidateQueries({ queryKey: metaKey(profile.id) }))
   }, [rt.running, rt.exec, profile, api, qc])
   // SQL Server：会话的当前 schema 是库，补全在这个库的架构中查找
-  const catalog = profile?.driver === 'sqlserver' ? (rt.session?.schema ?? profile.database) : null
+  const catalog = profile && hasCatalogs(profile.driver) ? (rt.session?.schema ?? profile.database) : null
   const meta = useMemo(
     () => (profile ? metaReader(qc, api, profile.id, profile.driver, catalog) : null),
     [qc, api, profile?.id, profile?.driver, catalog],
@@ -179,7 +180,7 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
             variant: rt.session?.variant ?? profile.variant,
             compat: rt.session?.compat,
             schema:
-              profile.driver === 'sqlserver'
+              hasCatalogs(profile.driver)
                 ? defaultSchema(profile.driver, profile.user, profile.database)
                 : (rt.session?.schema ?? defaultSchema(profile.driver, profile.user, profile.database)),
             meta,

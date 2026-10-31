@@ -244,6 +244,16 @@ impl Dialect {
                 index_methods: vec!["NONCLUSTERED", "CLUSTERED"],
                 types: SQLSERVER_TYPES.to_vec(),
             },
+            // 表设计器在 M8b 才支持，服务层已拦截
+            Family::Informix => DesignCaps {
+                reorder: false,
+                checks: true,
+                descending_index: true,
+                on_delete: vec!["NO ACTION", "CASCADE"],
+                on_update: vec!["NO ACTION"],
+                index_methods: vec!["NORMAL"],
+                types: vec![],
+            },
         }
     }
 }

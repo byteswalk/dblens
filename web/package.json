@@ -11,7 +11,7 @@
     "test": "node scripts/gen-plsql.mjs && node scripts/gen-tsql.mjs && vitest run",
     "typecheck": "node scripts/gen-plsql.mjs && node scripts/gen-tsql.mjs && tsc --noEmit",
     "tauri": "cd .. && tauri",
-    "package": "cd .. && tauri build --config crates/dblens-desktop/tauri.bundle.json"
+    "package": "cd .. && node scripts/build-bridge.mjs && node scripts/prepare-clients.mjs && tauri build --config crates/dblens-desktop/tauri.bundle.json"
   },
   "dependencies": {
     "@ant-design/icons": "6.3.4",

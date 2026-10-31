@@ -161,7 +161,7 @@ fn case(ctx: &Ctx, p: &Params) -> Check {
         // 按数据库的习惯：Oracle、达梦大写，MySQL、PostgreSQL 小写，SQL Server 不查
         _ => match ctx.family() {
             Family::Oracle | Family::Dameng => true,
-            Family::MySql | Family::Postgres => false,
+            Family::MySql | Family::Postgres | Family::Informix => false,
             Family::SqlServer => return Check::NotApplicable,
         },
     };

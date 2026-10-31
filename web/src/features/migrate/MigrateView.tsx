@@ -72,7 +72,7 @@ function EndPicker({ label, value, profiles, onChange }: {
         placeholder={t('migrate.pickProfile')}
         value={value.profile || undefined}
         onChange={(profile) => onChange({ profile, schema: '' })}
-        options={profiles.map((p) => ({ value: p.id, label: p.name }))}
+        options={profiles.filter((p) => p.driver !== 'informix').map((p) => ({ value: p.id, label: p.name }))}
       />
       <Select
         size="small"

@@ -22,7 +22,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tower::ServiceExt;
 
 const TOKEN: &str = "live-token";
-const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "dpi_lib_dir"];
+const LIB_OPTIONS: [&str; 3] = ["oracle_client_lib_dir", "dpi_lib_dir", "jdbc_dir"];
 
 async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
     let mut req =
@@ -60,7 +60,11 @@ async fn flow(env: &str, tls: bool) {
         if let Some(lib) = params.options.get(option) {
             let path = format!(
                 "/api/drivers/{}/lib-dir",
-                if driver == DriverId::Oracle { "oracle" } else { "dameng" }
+                match driver {
+                    DriverId::Oracle => "oracle",
+                    DriverId::Informix => "informix",
+                    _ => "dameng",
+                }
             );
             let (st, s) = call(&app, "PUT", &path, Some(json!({"path": lib}))).await;
             assert_eq!((st, s["available"].clone()), (StatusCode::OK, json!(true)), "{s}");
@@ -149,6 +153,9 @@ async fn flow(env: &str, tls: bool) {
             "SELECT TOP (900) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n \
              FROM sys.all_columns a CROSS JOIN sys.all_columns b ORDER BY n"
         }
+        DriverId::Informix => {
+            "SELECT FIRST 900 ROW_NUMBER() OVER (ORDER BY a.tabid, b.tabid) AS n              FROM systables a, systables b ORDER BY n"
+        }
     };
     ws.send(Message::Text(json!({"type": "exec", "sql": sql, "max_rows": 400}).to_string().into()))
         .await
@@ -181,6 +188,11 @@ async fn flow(env: &str, tls: bool) {
     assert_eq!(st, StatusCode::NO_CONTENT);
     let (st, _) = call(&app, "DELETE", &format!("/api/profiles/{id}"), None).await;
     assert_eq!(st, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn gbase8s() {
+    flow("DBLENS_TEST_GBASE_URL", false).await;
 }
 
 #[tokio::test]

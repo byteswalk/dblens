@@ -336,7 +336,7 @@ pub(super) fn convert_default(
                 .map_err(|_| ()),
             Family::Oracle | Family::Dameng => Ok(Some(format!("{}.NEXTVAL", tgt.ident(name)))),
             Family::SqlServer => Ok(Some(format!("NEXT VALUE FOR {}", tgt.ident(name)))),
-            Family::MySql => Err(()),
+            Family::MySql | Family::Informix => Err(()),
         };
     }
     let toks = tokenize(src.family(), text).ok_or(())?;

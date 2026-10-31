@@ -184,7 +184,7 @@ pub fn classify(dialect: &Dialect, sql: &str) -> StatementInfo {
     let parsed = match dialect.family() {
         Family::MySql => Parser::parse_sql(&MySqlDialect {}, sql).ok(),
         Family::Postgres => Parser::parse_sql(&PostgreSqlDialect {}, sql).ok(),
-        Family::Oracle | Family::Dameng | Family::SqlServer => None,
+        Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix => None,
     };
     let (has_where, objects) = match parsed.as_deref() {
         Some([stmt]) => from_ast(stmt),

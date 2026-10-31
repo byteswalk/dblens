@@ -1,0 +1,22 @@
+{
+  "modules": [
+    "java.base",
+    "java.desktop",
+    "java.logging",
+    "java.management",
+    "java.naming",
+    "java.security.jgss",
+    "java.security.sasl",
+    "java.sql",
+    "java.sql.rowset",
+    "java.xml",
+    "jdk.charsets"
+  ],
+  "jdbc": [
+    {
+      "file": "ojdbc11.jar",
+      "version": "23.26.4.0.0",
+      "sha256": "df977e9291499cd4ceee7d577462c285987dd2ad0216637c0865eb98956a9e6e"
+    }
+  ]
+}

@@ -5,7 +5,7 @@ use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_dialect::{Dialect, Family, Variant};
 
 /// 有自己的模板覆盖文件的变体（PolarDB、GaussDB、HighGo 沿用家族模板）。
-const VARIANTS: [Variant; 10] = [
+const VARIANTS: [Variant; 11] = [
     Variant::MySql,
     Variant::MariaDb,
     Variant::TiDb,
@@ -16,6 +16,7 @@ const VARIANTS: [Variant; 10] = [
     Variant::Oracle,
     Variant::Dameng,
     Variant::SqlServer,
+    Variant::Gbase8s,
 ];
 
 #[test]
@@ -46,17 +47,21 @@ fn every_family_covers_the_common_keys() {
         let d = Dialect::new(v);
         for key in MetaKey::ALL {
             let optional = match key {
-                // 只有 SQL Server 有数据库这一层
-                MetaKey::Catalogs => v.family() != Family::SqlServer,
+                // 只有 SQL Server、GBase 8s 有数据库这一层
+                MetaKey::Catalogs => !matches!(v.family(), Family::SqlServer | Family::Informix),
                 MetaKey::MaterializedViews
                 | MetaKey::Synonyms
                 | MetaKey::Sequences
                 | MetaKey::VariantProbe => true,
-                MetaKey::DependentViews | MetaKey::Grants => v.family() == Family::MySql,
+                MetaKey::DependentViews | MetaKey::Grants => {
+                    matches!(v.family(), Family::MySql | Family::Informix)
+                }
+                // 表设计器在 M8b
+                MetaKey::ReferencingKeys => v.family() == Family::Informix,
                 MetaKey::TriggerDdl => v != Variant::Oracle,
-                // OceanBase 没有 information_schema.KEYWORDS；SQL Server 没有可查的保留字表（用 ident.rs 的清单）
+                // OceanBase 没有 information_schema.KEYWORDS；SQL Server、GBase 8s 没有可查的保留字表（用 ident.rs 的清单）
                 MetaKey::ReservedWords => {
-                    matches!(v, Variant::MariaDb | Variant::OceanBase | Variant::SqlServer)
+                    matches!(v, Variant::MariaDb | Variant::OceanBase | Variant::SqlServer | Variant::Gbase8s)
                 }
                 _ => false,
             };

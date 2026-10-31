@@ -44,6 +44,7 @@ import {
   schemaLabel,
 } from '../../shared/api'
 import DbIcon from '../../shared/DbIcon'
+import { hasCatalogs } from '../../shared/schemaOptions'
 import EnvTag from '../../shared/EnvTag'
 import { profileKind } from '../connections/form'
 import { withVault } from '../connections/vault'
@@ -104,7 +105,7 @@ async function loadChildren(api: Api, profiles: Profile[], k: NodeKey): Promise<
     case 'g': {
       const driver = profiles.find((p) => p.id === k.profileId)?.driver
       // SQL Server：连接下是库（系统库排在后面），库下才是架构
-      if (k.type === 'c' && driver === 'sqlserver') {
+      if (k.type === 'c' && driver && hasCatalogs(driver)) {
         return (await api.catalogs(k.profileId)).map((c) => ({
           key: encodeKey({ type: 'd', profileId: k.profileId, catalog: c.name }),
           label: c.name,
@@ -317,20 +318,26 @@ export default function ObjectTree() {
           ]
         : []
 
+  /** GBase 8s 还不支持的功能（M8b）：菜单项置灰并说明。 */
+  function later(k: NodeKey): { disabled?: boolean; title?: string } {
+    const driver = profiles.find((p) => p.id === k.profileId)?.driver
+    return driver === 'informix' ? { disabled: true, title: t('tree.menu.gbaseLater') } : {}
+  }
+
   /** schema 节点：新建表、导入到新表、执行 SQL 文件，后面接分隔线。 */
   function schemaItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 's') return []
     return [
-      { key: 'new-table', label: t('tree.menu.newTable') },
-      { key: 'import-new', label: t('tree.menu.importNew') },
+      { key: 'new-table', label: t('tree.menu.newTable'), ...later(k) },
+      { key: 'import-new', label: t('tree.menu.importNew'), ...later(k) },
       { key: 'sql-file', label: t('tree.menu.sqlFile') },
       { type: 'divider' },
       { key: 'er', label: t('tree.menu.er') },
-      { key: 'compare-model', label: t('tree.menu.compareModel') },
-      { key: 'save-model', label: t('tree.menu.saveAsModel') },
-      { key: 'export-doc', label: t('tree.menu.exportDoc') },
-      { key: 'lint', label: t('tree.menu.lint') },
-      { key: 'migrate', label: t('tree.menu.migrate') },
+      { key: 'compare-model', label: t('tree.menu.compareModel'), ...later(k) },
+      { key: 'save-model', label: t('tree.menu.saveAsModel'), ...later(k) },
+      { key: 'export-doc', label: t('tree.menu.exportDoc'), ...later(k) },
+      { key: 'lint', label: t('tree.menu.lint'), ...later(k) },
+      { key: 'migrate', label: t('tree.menu.migrate'), ...later(k) },
       { type: 'divider' },
     ]
   }
@@ -341,8 +348,8 @@ export default function ObjectTree() {
     const items: NonNullable<MenuProps['items']> = []
     const target = targetKind(k.kind)
     if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
-    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design') })
-    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import') })
+    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design'), ...later(k) })
+    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import'), ...later(k) })
     if (target) items.push({ key: 'export-data', label: t('tree.menu.exportData') })
     if (ddlKind(k.kind, k.routineKind)) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     if (target) {

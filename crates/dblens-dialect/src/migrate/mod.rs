@@ -328,7 +328,7 @@ impl Context<'_> {
             Family::Oracle => digits("SYS_C"),
             Family::Dameng => digits("CONS"),
             Family::SqlServer => ["PK__", "UQ__", "FK__", "CK__", "DF__"].iter().any(|p| n.starts_with(p)),
-            Family::Postgres => false,
+            Family::Postgres | Family::Informix => false,
         };
         (!system).then(|| self.case.apply(n))
     }

@@ -21,6 +21,7 @@ export function editorLanguage(driver: DriverId, compat?: Compat | null): 'mysql
     case 'dameng':
       return 'plsql'
     case 'sqlserver':
+    case 'informix':
       return 'sql'
   }
 }
@@ -45,6 +46,8 @@ export function formatterLanguage(driver: DriverId, variant?: string | null): Fo
       return 'plsql'
     case 'sqlserver':
       return 'transactsql'
+    case 'informix':
+      return 'sql'
   }
 }
 
@@ -71,6 +74,7 @@ const VARIANT_NAMES: Record<string, string> = {
   highgo: 'HighGo',
   oracle: 'Oracle',
   sqlserver: 'SQL Server',
+  gbase8s: 'GBase 8s',
 }
 
 /** 变体的简短名称（状态栏、对象树用）；达梦的名称随界面语言。不认识的变体返回 undefined。 */

@@ -20,6 +20,8 @@ pub fn explain(family: Family, sql: &str) -> Vec<String> {
         Family::Dameng => vec![format!("EXPLAIN FOR {sql}")],
         Family::MySql | Family::Postgres => vec![format!("EXPLAIN {sql}")],
         Family::SqlServer => vec!["SET SHOWPLAN_ALL ON".to_string(), sql.to_string()],
+        // SET EXPLAIN 写到服务器文件，读不回来；能力声明为不支持，界面不会发起
+        Family::Informix => vec![],
     }
 }
 
@@ -35,6 +37,7 @@ pub fn current_schema(family: Family) -> &'static str {
         Family::Postgres => "SELECT current_schema()",
         Family::Oracle | Family::Dameng => "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL",
         Family::SqlServer => "SELECT DB_NAME()",
+        Family::Informix => "SELECT TRIM(DBINFO('dbname')) FROM sysmaster:sysdual",
     }
 }
 
@@ -45,12 +48,14 @@ pub fn set_schema(family: Family, schema: &str) -> String {
         Family::MySql | Family::SqlServer => format!("USE {name}"),
         Family::Postgres => format!("SET search_path TO {name}"),
         Family::Oracle | Family::Dameng => format!("ALTER SESSION SET CURRENT_SCHEMA = {name}"),
+        // 和 SQL Server 一样，会话的"当前 schema"是当前数据库
+        Family::Informix => format!("DATABASE {name}"),
     }
 }
 
 /// 执行后可能改变当前 schema 的语句（按首个关键字判断），执行成功后要重新读取。
 pub fn may_change_schema(keyword: &str) -> bool {
-    matches!(keyword, "USE" | "SET" | "ALTER")
+    matches!(keyword, "USE" | "SET" | "ALTER" | "DATABASE")
 }
 
 #[cfg(test)]

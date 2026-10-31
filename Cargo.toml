@@ -19,6 +19,7 @@ dblens-desktop = { path = "crates/dblens-desktop" }
 dblens-server = { path = "crates/dblens-server" }
 dblens-service = { path = "crates/dblens-service" }
 dblens-driver-dameng = { path = "crates/dblens-driver-dameng" }
+dblens-driver-jdbc = { path = "crates/dblens-driver-jdbc" }
 dblens-driver-mysql = { path = "crates/dblens-driver-mysql" }
 dblens-driver-oracle = { path = "crates/dblens-driver-oracle" }
 dblens-driver-postgres = { path = "crates/dblens-driver-postgres" }

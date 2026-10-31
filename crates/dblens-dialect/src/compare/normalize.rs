@@ -279,6 +279,8 @@ pub(super) fn is_generated(d: &Dialect, table: &str, name: &str) -> bool {
                 || n.strip_prefix(&format!("{t}_chk_")).is_some_and(digits)
         }
         Family::SqlServer => ["PK__", "UQ__", "FK__", "CK__", "DF__"].iter().any(|p| upper.starts_with(p)),
+        // 系统生成的约束名形如 u123_45、r123_45
+        Family::Informix => false,
         Family::Postgres => {
             let prefix = format!("{}_", table.to_ascii_lowercase());
             let n = name.to_ascii_lowercase();

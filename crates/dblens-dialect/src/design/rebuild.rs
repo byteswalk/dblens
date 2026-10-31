@@ -75,7 +75,7 @@ impl Dialect {
             Family::MySql => 64,
             Family::Postgres => 63,
             Family::Oracle if self.version().unwrap_or(u32::MAX) < 120200 => 30,
-            Family::Oracle | Family::Dameng | Family::SqlServer => 128,
+            Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix => 128,
         }
     }
 
@@ -292,7 +292,7 @@ impl Dialect {
                     self.ident(&c.name)
                 )),
                 // SQL Server 在 IDENTITY_INSERT 下写入显式值时也会推进标识种子
-                Family::MySql | Family::Dameng | Family::SqlServer => {}
+                Family::MySql | Family::Dameng | Family::SqlServer | Family::Informix => {}
             }
         }
         if !mysql {

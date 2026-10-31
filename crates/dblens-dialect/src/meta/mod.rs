@@ -3,6 +3,7 @@
 //! 每个家族的查询返回同一套规范化的列（见 `sql/*.sql` 文件头），差异全部写在 SQL 里，组装代码各家族共用。
 
 mod assemble;
+pub mod coltype;
 mod rows;
 pub(crate) mod template;
 

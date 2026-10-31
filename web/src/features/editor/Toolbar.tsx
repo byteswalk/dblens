@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next'
 import { useApi } from '../../app/context'
 import EnvTag from '../../shared/EnvTag'
 import type { Profile } from '../../shared/api'
+import { hasCatalogs } from '../../shared/schemaOptions'
 import { sendCommand } from './commands'
 import { type Runner, type TabRuntime, disposeRunner } from './runner'
 import { type QueryTab, useTabs } from './tabs'
@@ -57,7 +58,7 @@ export default function Toolbar({ tab, rt, runner, profiles, refresh, onRefreshC
   // SQL Server 的会话按库切换（USE），下拉框列出库
   const { data: schemas } = useQuery({
     queryKey: ['schema-list', tab.profileId, driver],
-    queryFn: () => (driver === 'sqlserver' ? api.catalogs(tab.profileId) : api.schemas(tab.profileId)),
+    queryFn: () => (driver && hasCatalogs(driver) ? api.catalogs(tab.profileId) : api.schemas(tab.profileId)),
   })
   const guard = (p: Promise<unknown>) => p.catch((e: unknown) => message.error(e instanceof Error ? e.message : String(e)))
   const s = rt.session
@@ -126,7 +127,7 @@ export default function Toolbar({ tab, rt, runner, profiles, refresh, onRefreshC
         size="small"
         variant="filled"
         showSearch
-        placeholder={driver === 'sqlserver' ? t('editor.toolbar.database') : 'schema'}
+        placeholder={driver && hasCatalogs(driver) ? t('editor.toolbar.database') : 'schema'}
         value={s?.schema ?? undefined}
         onChange={(v: string) => guard(runner.setSchema(v))}
         disabled={rt.running}

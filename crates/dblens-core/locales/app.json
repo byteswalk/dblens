@@ -416,6 +416,18 @@
     "zh-CN": "收藏的 SQL 不能为空",
     "en": "The SQL of a favorite is required"
   },
+  "gbase.bad_option": {
+    "zh-CN": "%{field} 的值无效：%{value}",
+    "en": "Invalid value for %{field}: %{value}"
+  },
+  "gbase.later": {
+    "zh-CN": "GBase 8s 暂不支持这项功能，计划在 M8b 提供",
+    "en": "GBase 8s does not support this yet; it is planned for M8b"
+  },
+  "gbase.server_name_required": {
+    "zh-CN": "请填写 GBase 8s 的服务器名（如 gbase01）",
+    "en": "Enter the GBase 8s server name (for example gbase01)"
+  },
   "generate.needs_primary_key": {
     "zh-CN": "表 %{table} 没有主键，无法生成按主键定位的语句",
     "en": "Table %{table} has no primary key, so a statement that locates rows by primary key cannot be generated"
@@ -503,6 +515,30 @@
   "internal.task_failed": {
     "zh-CN": "后台任务异常退出（%{task}）：%{error}",
     "en": "Background task failed (%{task}): %{error}"
+  },
+  "jdbc.bad_frame": {
+    "zh-CN": "桥接进程返回了无法识别的数据",
+    "en": "The bridge process returned unreadable data"
+  },
+  "jdbc.bridge_exited": {
+    "zh-CN": "Java 桥接进程已退出，请重新连接",
+    "en": "The Java bridge process has exited. Please reconnect"
+  },
+  "jdbc.jar_missing": {
+    "zh-CN": "在 %{dir} 找不到 JDBC 驱动（%{jar}*.jar）。请从数据库厂商处取得驱动，放到这个目录，或在连接配置中指定目录",
+    "en": "No JDBC driver (%{jar}*.jar) was found in %{dir}. Get the driver from the database vendor and put it in this folder, or set the folder in the connection"
+  },
+  "jdbc.runtime_missing": {
+    "zh-CN": "找不到内置的 Java 运行环境或桥接程序，请重新安装 DBLens",
+    "en": "The bundled Java runtime or bridge program is missing. Please reinstall DBLens"
+  },
+  "jdbc.start_failed": {
+    "zh-CN": "无法启动 Java 桥接进程（%{path}）：%{error}",
+    "en": "Could not start the Java bridge process (%{path}): %{error}"
+  },
+  "jdbc.unsupported_param": {
+    "zh-CN": "这种参数类型不能传给 JDBC：%{value}",
+    "en": "This parameter type cannot be sent to JDBC: %{value}"
   },
   "lint.clause_duplicate": {
     "zh-CN": "条款编号重复：%{id}",
@@ -1496,9 +1532,17 @@
     "zh-CN": "%{lib}目录必须是绝对路径：%{dir}",
     "en": "The %{lib} directory must be an absolute path: %{dir}"
   },
+  "native.gbase_jdbc": {
+    "zh-CN": "GBase 8s JDBC 驱动",
+    "en": "GBase 8s JDBC driver"
+  },
   "native.install.dameng_dpi": {
     "zh-CN": "请安装达梦客户端（含 DPI 驱动），然后在连接设置中指定 dmdpi 所在目录，或设置 DM_HOME",
     "en": "Install the DM client (with the DPI driver), then set the directory containing dmdpi in the connection settings, or set DM_HOME"
+  },
+  "native.install.gbase_jdbc": {
+    "zh-CN": "请从 https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE 下载 gbasedbtjdbc，改名为 gbasedbtjdbc.jar 后放到一个目录，再在设置中选择该目录",
+    "en": "Download gbasedbtjdbc from https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE, rename it to gbasedbtjdbc.jar, put it in a folder and choose that folder in Settings"
   },
   "native.install.oracle_client": {
     "zh-CN": "请安装 Oracle Instant Client（Basic 或 Basic Light），然后在连接设置中指定其目录，或设置 ORACLE_HOME / PATH",
@@ -1947,6 +1991,10 @@
   "variant.dameng": {
     "zh-CN": "达梦 DM",
     "en": "DM (Dameng)"
+  },
+  "variant.gbase8s": {
+    "zh-CN": "南大通用 GBase 8s",
+    "en": "GBase 8s"
   },
   "variant.highgo": {
     "zh-CN": "瀚高 HighGo",

@@ -1,7 +1,9 @@
 {
   "bundle": {
     "resources": {
-      "../../web/dist/": "web/"
+      "../../web/dist/": "web/",
+      "../../clients-staging/": "clients/",
+      "../../THIRD-PARTY-NOTICES": "THIRD-PARTY-NOTICES"
     }
   }
 }

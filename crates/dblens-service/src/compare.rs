@@ -277,6 +277,7 @@ impl Service {
             CompareSideRef::Database { profile, catalog, schema } => {
                 let profile = self.scoped_profile(profile, catalog.as_deref())?;
                 let dialect = self.metadata.dialect(&profile).await?;
+                crate::later::ensure_full(&dialect)?;
                 // 跳过元数据缓存，以库中最新的结构为准
                 let args = MetaArgs { schema: Some(schema.clone()), ..Default::default() };
                 for key in MetaKey::TABLE_DETAIL {

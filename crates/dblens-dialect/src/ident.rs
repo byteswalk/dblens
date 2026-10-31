@@ -2,11 +2,65 @@
 
 use crate::Family;
 
+/// GBase 8s 的保留字（有序）。
+const INFORMIX_RESERVED: &[&str] = &[
+    "ALL",
+    "AND",
+    "AS",
+    "BEGIN",
+    "BETWEEN",
+    "BY",
+    "CASE",
+    "CHECK",
+    "CREATE",
+    "DEFAULT",
+    "DELETE",
+    "DISTINCT",
+    "DROP",
+    "ELSE",
+    "END",
+    "EXISTS",
+    "FIRST",
+    "FROM",
+    "GROUP",
+    "HAVING",
+    "IN",
+    "INDEX",
+    "INSERT",
+    "INTO",
+    "IS",
+    "JOIN",
+    "LIKE",
+    "NOT",
+    "NULL",
+    "ON",
+    "OR",
+    "ORDER",
+    "PRIMARY",
+    "REFERENCES",
+    "SELECT",
+    "SET",
+    "SKIP",
+    "TABLE",
+    "THEN",
+    "TO",
+    "UNION",
+    "UNIQUE",
+    "UPDATE",
+    "USER",
+    "VALUES",
+    "VIEW",
+    "WHEN",
+    "WHERE",
+];
+
 /// 总是加引号，并转义标识符中的引号字符。
 pub fn quote_ident(family: Family, name: &str) -> String {
     match family {
         Family::MySql => format!("`{}`", name.replace('`', "``")),
-        Family::Postgres | Family::Oracle | Family::Dameng => format!("\"{}\"", name.replace('"', "\"\"")),
+        Family::Postgres | Family::Oracle | Family::Dameng | Family::Informix => {
+            format!("\"{}\"", name.replace('"', "\"\""))
+        }
         Family::SqlServer => format!("[{}]", name.replace(']', "]]")),
     }
 }
@@ -22,7 +76,7 @@ pub fn placeholder(family: Family, index: usize) -> String {
     match family {
         Family::Postgres => format!("${index}"),
         Family::Oracle => format!(":{index}"),
-        Family::MySql | Family::Dameng => "?".to_string(),
+        Family::MySql | Family::Dameng | Family::Informix => "?".to_string(),
         Family::SqlServer => format!("@P{index}"),
     }
 }
@@ -31,7 +85,9 @@ pub fn placeholder(family: Family, index: usize) -> String {
 pub fn needs_quote(family: Family, name: &str) -> bool {
     let Some(first) = name.chars().next() else { return true };
     let first_ok = match family {
-        Family::MySql | Family::Postgres | Family::SqlServer => first.is_ascii_alphabetic() || first == '_',
+        Family::MySql | Family::Postgres | Family::SqlServer | Family::Informix => {
+            first.is_ascii_alphabetic() || first == '_'
+        }
         Family::Oracle | Family::Dameng => first.is_ascii_alphabetic(),
     };
     if !first_ok {
@@ -43,7 +99,7 @@ pub fn needs_quote(family: Family, name: &str) -> bool {
     }
     let case_ok = match family {
         Family::MySql | Family::SqlServer => true,
-        Family::Postgres => !name.chars().any(|c| c.is_ascii_uppercase()),
+        Family::Postgres | Family::Informix => !name.chars().any(|c| c.is_ascii_uppercase()),
         Family::Oracle | Family::Dameng => !name.chars().any(|c| c.is_ascii_lowercase()),
     };
     !case_ok || is_reserved(family, &name.to_ascii_uppercase())
@@ -62,6 +118,7 @@ fn is_reserved(family: Family, upper: &str) -> bool {
     RESERVED.binary_search(&upper).is_ok()
         || (family == Family::Dameng && DAMENG_RESERVED.binary_search(&upper).is_ok())
         || (family == Family::SqlServer && SQLSERVER_RESERVED.binary_search(&upper).is_ok())
+        || (family == Family::Informix && INFORMIX_RESERVED.binary_search(&upper).is_ok())
 }
 
 /// SQL Server 的保留字（微软文档"Reserved Keywords"中 SQL Server 一栏），不在 `RESERVED` 中的部分也要加引号。按字节序排列。
@@ -890,5 +947,14 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn informix_identifiers() {
+        assert_eq!(quote_ident(Family::Informix, "a\"b"), "\"a\"\"b\"");
+        assert_eq!(ident(Family::Informix, "name"), "name");
+        assert_eq!(ident(Family::Informix, "Name"), "\"Name\"");
+        assert_eq!(ident(Family::Informix, "first"), "\"first\"");
+        assert_eq!(placeholder(Family::Informix, 3), "?");
     }
 }

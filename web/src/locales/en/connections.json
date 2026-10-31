@@ -10,15 +10,19 @@
     },
     "oracle": {
       "label": "Oracle",
-      "note": "Requires Oracle Instant Client"
+      "note": "Requires Oracle Instant Client, or choose the JDBC driver under Advanced"
     },
     "dameng": {
       "label": "DM (Dameng)",
-      "note": "Requires the DM DPI client library"
+      "note": "Requires the DM DPI client library, or choose the JDBC driver under Advanced"
     },
     "sqlserver": {
       "label": "SQL Server",
       "note": "SQL logins and Windows authentication; browse by database after connecting"
+    },
+    "informix": {
+      "label": "GBase 8s",
+      "note": "Connects through the JDBC driver and needs gbasedbtjdbc.jar; browse by database after connecting"
     }
   },
   "product": {
@@ -53,15 +57,19 @@
     },
     "oracle": {
       "label": "Oracle",
-      "note": "Requires Oracle Instant Client"
+      "note": "Requires Oracle Instant Client, or choose the JDBC driver under Advanced"
     },
     "dameng": {
       "label": "Dameng DM",
-      "note": "Requires the Dameng DPI client library"
+      "note": "Requires the DM DPI client library, or choose the JDBC driver under Advanced"
     },
     "sqlserver": {
       "label": "SQL Server",
       "note": "Default port 1433; set a named instance under Advanced to look up the port through SQL Browser"
+    },
+    "gbase8s": {
+      "label": "GBase 8s",
+      "note": "Default port 9088; the server name is the instance GBASEDBTSERVER"
     }
   },
   "databaseLabel": {
@@ -69,7 +77,8 @@
     "postgres": "Database",
     "oracle": "Service Name",
     "dameng": "Schema",
-    "sqlserver": "Default database"
+    "sqlserver": "Default database",
+    "informix": "Database"
   },
   "validate": {
     "nameRequired": "Enter a connection name",
@@ -78,7 +87,8 @@
     "userRequired": "Enter a user name",
     "serviceOrSidRequired": "Enter a service name or SID",
     "timeoutRange": "Timeout must be between 1 and 600 seconds",
-    "extraBadLine": "Unrecognized line: {{line}} (expected key=value)"
+    "extraBadLine": "Unrecognized line: {{line}} (expected key=value)",
+    "serverNameRequired": "Enter the server name"
   },
   "env": {
     "none": "None",
@@ -166,5 +176,15 @@
     "instancePlaceholder": "Optional, e.g. SQLEXPRESS; the port is ignored when set",
     "trustCert": "Server certificate",
     "trustCertHint": "Trust the server certificate (no validation, like the SSMS option)"
+  },
+  "gbase": {
+    "serverName": "Server name"
+  },
+  "client": {
+    "label": "Client",
+    "native": "Native client",
+    "jdbc": "JDBC driver",
+    "dir": "JDBC driver folder",
+    "dirPlaceholder": "Leave empty to use the bundled driver"
   }
 }

@@ -24,8 +24,9 @@ const OPENGAUSS: &str = include_str!("../../sql/opengauss.sql");
 const TIDB: &str = include_str!("../../sql/tidb.sql");
 const OCEANBASE: &str = include_str!("../../sql/oceanbase.sql");
 const SQLSERVER: &str = include_str!("../../sql/sqlserver.sql");
+const INFORMIX: &str = include_str!("../../sql/informix.sql");
 
-pub(crate) const ALL_VARIANTS: [Variant; 13] = [
+pub(crate) const ALL_VARIANTS: [Variant; 14] = [
     Variant::MySql,
     Variant::MariaDb,
     Variant::TiDb,
@@ -39,6 +40,7 @@ pub(crate) const ALL_VARIANTS: [Variant; 13] = [
     Variant::Oracle,
     Variant::Dameng,
     Variant::SqlServer,
+    Variant::Gbase8s,
 ];
 
 /// 把模板文件按 `-- [key]` 行拆成 key → 模板正文。
@@ -70,6 +72,7 @@ fn base_file(family: Family) -> &'static str {
         Family::Oracle => ORACLE,
         Family::Dameng => DAMENG,
         Family::SqlServer => SQLSERVER,
+        Family::Informix => INFORMIX,
     }
 }
 

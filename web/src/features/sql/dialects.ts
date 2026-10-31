@@ -29,5 +29,7 @@ export function sqlDialect(driver: DriverId, variant?: string | null, compat?: C
       return { dialect: 'plsql', strict, grammar: 'Oracle' }
     case 'sqlserver':
       return { dialect: 'tsql', strict, grammar: 'T-SQL' }
+    case 'informix':
+      return { dialect: 'postgres', strict: false, grammar: 'PostgreSQL' }
   }
 }

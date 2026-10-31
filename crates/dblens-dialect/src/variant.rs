@@ -17,6 +17,8 @@ pub enum Family {
     Dameng,
     #[serde(rename = "sqlserver")]
     SqlServer,
+    #[serde(rename = "informix")]
+    Informix,
 }
 
 impl Family {
@@ -95,6 +97,8 @@ pub enum Variant {
     Dameng,
     #[serde(rename = "sqlserver")]
     SqlServer,
+    #[serde(rename = "gbase8s")]
+    Gbase8s,
 }
 
 impl Variant {
@@ -111,6 +115,7 @@ impl Variant {
             Variant::Oracle => Family::Oracle,
             Variant::Dameng => Family::Dameng,
             Variant::SqlServer => Family::SqlServer,
+            Variant::Gbase8s => Family::Informix,
         }
     }
 
@@ -130,6 +135,7 @@ impl Variant {
             Variant::Oracle => Msg::raw("Oracle"),
             Variant::Dameng => msg!("variant.dameng"),
             Variant::SqlServer => Msg::raw("SQL Server"),
+            Variant::Gbase8s => msg!("variant.gbase8s"),
         }
     }
 
@@ -141,6 +147,7 @@ impl Variant {
             DriverId::Oracle => Variant::Oracle,
             DriverId::Dameng => Variant::Dameng,
             DriverId::SqlServer => Variant::SqlServer,
+            DriverId::Informix => Variant::Gbase8s,
         }
     }
 
@@ -168,6 +175,13 @@ mod tests {
 
     fn info(product: &str, version: &str) -> ServerInfo {
         ServerInfo { product: product.into(), version: version.into() }
+    }
+
+    #[test]
+    fn gbase_is_informix_family() {
+        assert_eq!(Variant::base(DriverId::Informix), Variant::Gbase8s);
+        assert_eq!(Variant::Gbase8s.family(), Family::Informix);
+        assert_eq!(Variant::Gbase8s.display_name().render(dblens_core::Lang::En), "GBase 8s");
     }
 
     #[test]

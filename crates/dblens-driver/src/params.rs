@@ -16,6 +16,7 @@ pub enum DriverId {
     Dameng,
     #[serde(rename = "sqlserver")]
     SqlServer,
+    Informix,
 }
 
 /// 建立连接所需的参数。
@@ -50,7 +51,7 @@ impl ConnectParams {
     pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
     /// 解析 `scheme://user:pass@host:port/database?k=v`。主要用于测试和命令行。
-    /// 支持的 scheme：mysql、mariadb、postgres、postgresql、oracle、dm、dameng、sqlserver、mssql。
+    /// 支持的 scheme：mysql、mariadb、postgres、postgresql、oracle、dm、dameng、sqlserver、mssql、gbase、informix。
     /// 选项 `connect_timeout` 的单位为秒。
     pub fn from_url(s: &str) -> Result<(DriverId, ConnectParams)> {
         let u = url::Url::parse(s).map_err(|e| Error::connect(msg!("params.invalid_url", error = e)))?;
@@ -60,6 +61,7 @@ impl ConnectParams {
             "oracle" => (DriverId::Oracle, 1521),
             "dm" | "dameng" => (DriverId::Dameng, 5236),
             "sqlserver" | "mssql" => (DriverId::SqlServer, 1433),
+            "gbase" | "informix" => (DriverId::Informix, 9088),
             other => return Err(Error::connect(msg!("params.unsupported_scheme", scheme = other))),
         };
         let decode = |v: &str| percent_decode_str(v).decode_utf8_lossy().into_owned();

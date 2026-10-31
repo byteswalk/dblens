@@ -174,7 +174,7 @@ impl Dialect {
     /// 在某个 schema 中执行生成的语句前要切换的语句（表设计器、迁移）。SQL Server 的会话"当前 schema"是库，
     /// 连接时已指定库（`Profile::in_catalog`），生成的语句都带架构名，不切换，返回 None。
     pub fn schema_switch_sql(&self, schema: &str) -> Option<String> {
-        (self.family() != Family::SqlServer).then(|| self.set_schema_sql(schema))
+        (!matches!(self.family(), Family::SqlServer | Family::Informix)).then(|| self.set_schema_sql(schema))
     }
 
     pub fn logical_type(&self, native: &str) -> LogicalType {

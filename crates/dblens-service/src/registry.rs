@@ -56,6 +56,7 @@ fn native_lib(id: DriverId) -> Option<(NativeLib, &'static str)> {
     match id {
         DriverId::Oracle => Some((NativeLib::OracleClient, "oracle_client_lib_dir")),
         DriverId::Dameng => Some((NativeLib::DamengDpi, "dpi_lib_dir")),
+        DriverId::Informix => Some((NativeLib::GbaseJdbc, "jdbc_dir")),
         DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer => None,
     }
 }
@@ -71,12 +72,20 @@ fn display_name(id: DriverId) -> Msg {
         DriverId::Oracle => Msg::raw("Oracle"),
         DriverId::Dameng => msg!("variant.dameng"),
         DriverId::SqlServer => Msg::raw("SQL Server"),
+        DriverId::Informix => msg!("variant.gbase8s"),
     }
 }
 
 pub struct DriverRegistry {
     store: Arc<Store>,
     drivers: Vec<Box<dyn Driver>>,
+    /// 连接选项 `client=jdbc` 时改用的驱动（达梦、Oracle），不需要原生客户端。
+    jdbc_drivers: Vec<Box<dyn Driver>>,
+}
+
+/// 这个连接走 JDBC 桥接，不用原生客户端。
+fn uses_jdbc(profile: &Profile) -> bool {
+    profile.input.options.get("client").is_some_and(|c| c == "jdbc")
 }
 
 impl DriverRegistry {
@@ -93,13 +102,34 @@ impl DriverRegistry {
             Box::new(dblens_driver_dameng::DmDriver),
             #[cfg(feature = "sqlserver")]
             Box::new(dblens_driver_sqlserver::SqlServerDriver),
+            #[cfg(feature = "informix")]
+            Box::new(dblens_driver_jdbc::GbaseDriver),
         ];
-        Self::with_drivers(store, drivers)
+        let mut registry = Self::with_drivers(store, drivers);
+        #[cfg(feature = "informix")]
+        {
+            registry.jdbc_drivers = vec![
+                Box::new(dblens_driver_jdbc::DamengJdbcDriver),
+                Box::new(dblens_driver_jdbc::OracleJdbcDriver),
+            ];
+        }
+        registry
     }
 
     /// 指定驱动集合，供测试注入假驱动。
     pub fn with_drivers(store: Arc<Store>, drivers: Vec<Box<dyn Driver>>) -> Self {
-        Self { store, drivers }
+        Self { store, drivers, jdbc_drivers: Vec::new() }
+    }
+
+    /// 这个连接配置要用的驱动。
+    pub fn driver_for(&self, profile: &Profile) -> Result<&dyn Driver> {
+        let id = profile.input.driver;
+        if uses_jdbc(profile)
+            && let Some(d) = self.jdbc_drivers.iter().find(|d| d.id() == id)
+        {
+            return Ok(d.as_ref());
+        }
+        self.driver(id)
     }
 
     pub fn driver(&self, id: DriverId) -> Result<&dyn Driver> {
@@ -135,10 +165,17 @@ impl DriverRegistry {
     }
 
     pub fn statuses(&self) -> Result<Vec<DriverStatus>> {
-        [DriverId::Mysql, DriverId::Postgres, DriverId::Oracle, DriverId::Dameng, DriverId::SqlServer]
-            .into_iter()
-            .map(|id| self.status(id))
-            .collect()
+        [
+            DriverId::Mysql,
+            DriverId::Postgres,
+            DriverId::Oracle,
+            DriverId::Dameng,
+            DriverId::SqlServer,
+            DriverId::Informix,
+        ]
+        .into_iter()
+        .map(|id| self.status(id))
+        .collect()
     }
 
     pub fn status(&self, id: DriverId) -> Result<DriverStatus> {
@@ -180,7 +217,7 @@ impl DriverRegistry {
     pub fn connect_params(&self, profile: &Profile, password: String) -> Result<ConnectParams> {
         let id = profile.input.driver;
         let mut params = profile.params(password);
-        if let Some((_, option)) = native_lib(id) {
+        if let Some((_, option)) = native_lib(id).filter(|_| !uses_jdbc(profile)) {
             let status = self.status(id)?;
             match (status.available, status.lib_dir) {
                 (true, Some(dir)) => {
@@ -213,7 +250,7 @@ impl DriverRegistry {
         password: String,
     ) -> Result<(Box<dyn Connection>, Dialect, Option<String>)> {
         let params = self.connect_params(profile, password)?;
-        let driver = self.driver(profile.input.driver)?;
+        let driver = self.driver_for(profile)?;
         let mut conn = driver.connect(&params).await?;
         let info = conn.server_info().await?;
         let mut dialect = Dialect::detect(driver.id(), &info);
@@ -266,7 +303,7 @@ mod tests {
         let (_, r) = registry();
         let s = r.status(DriverId::Postgres).unwrap();
         assert!(s.compiled && s.available && !s.needs_native_lib && s.hint.is_none());
-        assert_eq!(r.statuses().unwrap().len(), 5);
+        assert_eq!(r.statuses().unwrap().len(), 6);
         let ms = r.status(DriverId::SqlServer).unwrap();
         assert!(ms.compiled && ms.available && !ms.needs_native_lib, "{ms:?}");
         assert!(matches!(r.set_lib_dir(DriverId::Mysql, None), Err(Error::Invalid { .. })));

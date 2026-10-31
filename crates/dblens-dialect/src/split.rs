@@ -58,6 +58,8 @@ pub struct StreamSplitter {
     family: Family,
     /// PG 家族的 Oracle 兼容模式（人大金仓、openGauss）：另外识别 PL/SQL 块和独占一行的 `/`。
     oracle_blocks: bool,
+    /// Informix：当前语句是这种过程（`PROCEDURE` 或 `FUNCTION`），要等到对应的 `END`。
+    routine: Option<&'static str>,
     /// 尚未拆完的文本，从全文的 `base` 处开始：比当前语句的开头多留几个字节，供向前查看（标识符、行首）。
     buf: String,
     base: usize,
@@ -96,6 +98,7 @@ impl StreamSplitter {
         Self {
             family,
             oracle_blocks: false,
+            routine: None,
             buf: String::new(),
             base: 0,
             i: 0,
@@ -129,6 +132,31 @@ impl StreamSplitter {
     /// 与 `$$` 引号都识别。块中出现 `$$` 时按 PG 的写法处理，语句在 `;` 处结束。
     pub fn with_oracle_blocks(self) -> Self {
         Self { oracle_blocks: self.family == Family::Postgres, ..self }
+    }
+
+    /// Informix 的过程到 `END PROCEDURE` / `END FUNCTION` 才结束，过程体内的 `;` 不切分。
+    fn in_informix_routine(&self) -> bool {
+        let Some(kind) = self.routine else { return false };
+        let mut tail = self.buf[self.stmt_start..self.i].split_whitespace().rev();
+        !(tail.next().is_some_and(|w| w.eq_ignore_ascii_case(kind))
+            && tail.next().is_some_and(|w| w.eq_ignore_ascii_case("END")))
+    }
+
+    /// 语句是否以 `CREATE [DBA] PROCEDURE|FUNCTION` 开头。
+    fn informix_routine_at(&self) -> Option<&'static str> {
+        if self.family != Family::Informix {
+            return None;
+        }
+        let head = self.buf.get(self.i..)?;
+        let mut w = head.split_whitespace();
+        if !w.next()?.eq_ignore_ascii_case("CREATE") {
+            return None;
+        }
+        let mut kind = w.next()?;
+        if kind.eq_ignore_ascii_case("DBA") {
+            kind = w.next()?;
+        }
+        ["PROCEDURE", "FUNCTION"].into_iter().find(|k| kind.eq_ignore_ascii_case(k))
     }
 
     fn plsql(&self) -> bool {
@@ -176,7 +204,7 @@ impl StreamSplitter {
             }
             let rest = &self.buf.as_bytes()[self.i..];
             // SQL Server 只按 GO 分批
-            if !self.block && self.family != Family::SqlServer {
+            if !self.block && self.family != Family::SqlServer && !self.in_informix_routine() {
                 if rest.starts_with(&self.delimiter) {
                     let end = self.i;
                     self.i += self.delimiter.len();
@@ -191,7 +219,8 @@ impl StreamSplitter {
             let c = self.char_here();
             if !is_blank(c) {
                 // 判断 PL/SQL 块要看开头的几个关键字
-                if !self.has_code && !eof && self.plsql() && !words_complete(rest, 6) {
+                let needs_words = self.plsql() || self.family == Family::Informix;
+                if !self.has_code && !eof && needs_words && !words_complete(rest, 6) {
                     return;
                 }
                 self.mark_code();
@@ -210,6 +239,7 @@ impl StreamSplitter {
         if !self.has_code {
             self.has_code = true;
             self.block = self.plsql() && starts_plsql(&self.buf.as_bytes()[self.i..]);
+            self.routine = self.informix_routine_at();
         }
     }
 
@@ -334,6 +364,10 @@ impl StreamSplitter {
                 (line_end(), false)
             }
             (b'#', _) if mysql => (line_end(), false),
+            (b'{', _) if self.family == Family::Informix => match b[i..].iter().position(|&c| c == b'}') {
+                Some(p) => (Some(i + p + 1), false),
+                None => (eof.then_some(b.len()), false),
+            },
             (b'/', Some(b'*')) => {
                 // MySQL 的 /*! … */ 与 Oracle 的 /*+ … */ 提示属于语句内容
                 let hint = match b.get(i + 2) {
@@ -933,5 +967,20 @@ mod tests {
         assert_eq!(done.iter().map(|s| s.text.as_str()).collect::<Vec<_>>(), ["SELECT 1", "SELECT 2"]);
         assert!(s.feed(" 3").is_empty());
         assert_eq!(s.finish()[0].text, "SELECT 3");
+    }
+
+    #[test]
+    fn informix_procedures_and_brace_comments() {
+        let sql = "CREATE PROCEDURE p()\n  DEFINE i INT;\n  LET i = 1;\nEND PROCEDURE;\n{ 注释; 不算 }\nSELECT 1 FROM t;";
+        let got = texts(sql, Family::Informix);
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert!(got[0].ends_with("END PROCEDURE"), "{got:?}");
+        assert!(got[1].ends_with("SELECT 1 FROM t"), "{got:?}");
+    }
+
+    #[test]
+    fn informix_function_block_ends_at_end_function() {
+        let sql = "CREATE FUNCTION f() RETURNING INT;\n  RETURN 1;\nEND FUNCTION; SELECT 2;";
+        assert_eq!(texts(sql, Family::Informix).len(), 2);
     }
 }

@@ -7,6 +7,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 
 import { type Api, type DriverId, joinCatalog } from '../../shared/api'
+import { hasCatalogs } from '../../shared/schemaOptions'
 
 export interface MetaObject {
   name: string
@@ -62,7 +63,7 @@ export function metaReader(
 ): MetaReader {
   const get = <T>(key: unknown[], fn: () => Promise<T>, fallback: T) =>
     within(qc.fetchQuery({ queryKey: key, queryFn: fn, staleTime: Infinity }), waitMs, fallback)
-  const withSynonyms = driver === 'oracle' || driver === 'dameng' || driver === 'sqlserver'
+  const withSynonyms = driver === 'oracle' || driver === 'dameng' || driver === 'sqlserver' || driver === 'informix'
   const inner = { schemas: () => get([...metaKey(profileId), '#schemas', catalog ?? ''], async () => (await api.schemas(profileId, undefined, catalog ?? undefined)).map((s) => s.name), []),
     objects: (schema: string) =>
       get(
@@ -101,7 +102,7 @@ export function metaReader(
         [],
       ),
   }
-  if (driver !== 'sqlserver' || !catalog) return inner
+  if (!hasCatalogs(driver) || !catalog) return inner
   // SQL Server：补全按架构名取元数据，请求时带上当前库
   const at = (schema: string) => joinCatalog(catalog, schema)
   return {
@@ -133,5 +134,7 @@ export function defaultSchema(driver: DriverId, user: string, database?: string 
       return user.toUpperCase()
     case 'sqlserver':
       return 'dbo'
+    case 'informix':
+      return user
   }
 }

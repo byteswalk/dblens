@@ -272,6 +272,7 @@ impl Service {
     ) -> Result<String> {
         let profile = self.scoped_profile(profile_id, catalog)?;
         let dialect = self.metadata.dialect(&profile).await?;
+        crate::later::ensure_full(&dialect)?;
         Ok(dialect.create_table_sql(schema, &new_table(&dialect, table, def)?))
     }
 
@@ -294,6 +295,7 @@ impl Service {
         let profile = self.scoped_profile(&req.profile_id, req.catalog.as_deref())?;
         let password = self.secrets.get(&profile.id)?.unwrap_or_default();
         let dialect = self.metadata.dialect(&profile).await?;
+        crate::later::ensure_full(&dialect)?;
         let (table, create_sql) = match &req.create {
             Some(def) => {
                 let t = new_table(&dialect, &req.table, def)?;

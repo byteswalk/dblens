@@ -4,6 +4,7 @@
 
 import { type DriverId, type ObjectKind, type RoutineInfo, schemaLabel, splitCatalog } from '../../shared/api'
 import { t } from '../../shared/i18n'
+import { hasCatalogs } from '../../shared/schemaOptions'
 
 export type CategoryKind = ObjectKind | 'routines' | 'sequences' | 'synonyms'
 
@@ -34,7 +35,7 @@ export function categoriesFor(driver: DriverId): Category[] {
       ? ['tables', 'views', 'routines']
       : driver === 'postgres'
         ? ['tables', 'views', 'materialized_views', 'routines', 'sequences']
-        : driver === 'sqlserver'
+        : hasCatalogs(driver)
           ? ['tables', 'views', 'routines', 'sequences', 'synonyms']
           : ['tables', 'views', 'materialized_views', 'routines', 'sequences', 'synonyms']
   return kinds.map((kind) => ({ kind, label: categoryLabel(kind) }))

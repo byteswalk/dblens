@@ -17,6 +17,7 @@ const VARIANTS = [
   'oracle',
   'dameng',
   'sqlserver',
+  'gbase8s',
 ]
 
 describe('数据库图标', () => {

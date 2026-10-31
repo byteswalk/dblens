@@ -226,7 +226,7 @@ fn qualify_next_value(tgt: &Dialect, schema: &str, default: String) -> String {
 fn drop_sql(tgt: &Dialect, schema: &str, name: &str) -> String {
     let q = tgt.qualified(Some(schema), name);
     match tgt.family() {
-        Family::MySql | Family::SqlServer => format!("DROP TABLE {q}"),
+        Family::MySql | Family::SqlServer | Family::Informix => format!("DROP TABLE {q}"),
         Family::Postgres | Family::Dameng => format!("DROP TABLE {q} CASCADE"),
         Family::Oracle => format!("DROP TABLE {q} CASCADE CONSTRAINTS"),
     }

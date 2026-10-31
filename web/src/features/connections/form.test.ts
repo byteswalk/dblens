@@ -151,15 +151,45 @@ describe('连接表单', () => {
   })
 
   it('驱动名称、字段名、校验信息按调用时的界面语言翻译', async () => {
-    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM', 'SQL Server'])
+    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM', 'SQL Server', 'GBase 8s'])
     try {
       await i18n.changeLanguage('en')
-      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)', 'SQL Server'])
+      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)', 'SQL Server', 'GBase 8s'])
       expect(databaseLabel('oracle')).toBe('Service Name')
       expect(validate(emptyForm()).name).toBe('Enter a connection name')
       expect(validate({ ...emptyForm(), extra: 'bad' }).extra).toBe('Unrecognized line: bad (expected key=value)')
     } finally {
       await i18n.changeLanguage('zh-CN')
     }
+  })
+})
+
+describe('GBase 8s', () => {
+  const gbase = { ...emptyForm(), name: 'g', host: 'h', user: 'u', product: 'gbase8s' as const, driver: 'informix' as const }
+
+  it('服务器名和 DB_LOCALE 进入连接选项', () => {
+    const input = toProfileInput({ ...gbase, serverName: ' gbase01 ', dbLocale: '' })
+    expect(input.options).toMatchObject({ server_name: 'gbase01' })
+    expect(input.options).not.toHaveProperty('db_locale')
+  })
+
+  it('必须填服务器名', () => {
+    expect(validate({ ...gbase, serverName: '' }).serverName).toBeTruthy()
+    expect(validate({ ...gbase, serverName: 'gbase01' }).serverName).toBeUndefined()
+  })
+})
+
+describe('JDBC 客户端', () => {
+  it('Oracle 选 JDBC 时写入选项，读回来不变', () => {
+    const f = { ...emptyForm('oracle'), name: 'o', host: 'h', user: 'u', database: 's', client: 'jdbc' as const, jdbcDir: 'D:\\jdbc' }
+    const input = toProfileInput(f)
+    expect(input.options).toMatchObject({ client: 'jdbc', jdbc_dir: 'D:\\jdbc' })
+    const back = fromProfile({ ...input, id: '1', variant: null } as Profile, false)
+    expect((back.client, back.jdbcDir)).toBe('D:\\jdbc')
+  })
+
+  it('默认用原生客户端，不写选项', () => {
+    const input = toProfileInput({ ...emptyForm('dameng'), name: 'd', host: 'h', user: 'u' })
+    expect(input.options).not.toHaveProperty('client')
   })
 })
