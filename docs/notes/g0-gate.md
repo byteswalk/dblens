@@ -1,6 +1,6 @@
 # G0 公开仓库改造
 
-依据：设计文档 `docs/superpowers/specs/2026-10-31-audit-edition-design.md` 第 2、3.1 节；计划 `docs/superpowers/plans/2026-10-31-g0-gate-extension-points.md`。
+依据：设计文档 `docs/superpowers/specs/2026-10-31-audit-edition-design.md` 第 2、3.2 节；计划 `docs/superpowers/plans/2026-10-31-g0-gate-extension-points.md`。
 
 单机版行为不变。这里放开的扩展点由私有仓库的 `dblens-gate` 使用。
 
