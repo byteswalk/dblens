@@ -16,7 +16,7 @@ use dblens_core::{ColumnType, Msg, msg};
 use serde::{Deserialize, Serialize};
 
 use crate::design::diff::{is_expression, text};
-use crate::{Dialect, Family};
+use crate::{Dialect, Family, Variant};
 
 pub use expr::convert_expr;
 pub use names::{NameCase, max_ident_len};
@@ -463,6 +463,11 @@ impl Context<'_> {
         }
         // 自增
         if c.auto_increment {
+            // 改不了起始值：留着标识列，迁完后新值会撞主键
+            if self.tgt.variant() == Variant::OceanBaseOracle {
+                n.push(at, None, NoteLevel::Lossy, msg!("migrate.identity_plain"));
+                return out;
+            }
             if types::identity_supported(self.tgt) {
                 out.auto_increment = true;
                 if ov.data_type.is_none() {

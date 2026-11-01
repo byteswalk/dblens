@@ -152,6 +152,10 @@
     "zh-CN": "这张表有读不到表达式的函数索引（%{indexes}），重建会丢失它们；请先手工处理",
     "en": "This table has function-based indexes whose expressions cannot be read (%{indexes}); a rebuild would lose them. Deal with them by hand first"
   },
+  "design.rebuild.identity_restart": {
+    "zh-CN": "OceanBase 的 Oracle 模式改不了自增列的起始值，重建后新值会和已有主键冲突；这张表（%{columns}）不能重建",
+    "en": "OceanBase Oracle mode cannot change where an identity column restarts, so new values would collide with existing keys after a rebuild. This table (%{columns}) cannot be rebuilt"
+  },
   "design.rebuild.no_writes": {
     "zh-CN": "重建期间不要写入这张表：复制数据之后写入的内容会丢失",
     "en": "Do not write to this table during the rebuild: data written after the copy will be lost"
@@ -1284,6 +1288,10 @@
     "zh-CN": "生成列表达式 %{expression} 不能转换，改为普通列",
     "en": "Generated column expression %{expression} cannot be converted; migrated as a plain column"
   },
+  "migrate.identity_plain": {
+    "zh-CN": "OceanBase 的 Oracle 模式迁完后改不了自增起始值，这一列改成普通列；要自增请迁移后自行建序列",
+    "en": "OceanBase Oracle mode cannot restart an identity after the data is loaded, so this becomes a plain column; create a sequence yourself after the migration if you need one"
+  },
   "migrate.identity_unsupported": {
     "zh-CN": "目标库版本不支持自增（标识列）",
     "en": "The target database version does not support identity columns"
@@ -2043,6 +2051,10 @@
   "variant.kingbase": {
     "zh-CN": "人大金仓 KingbaseES",
     "en": "KingbaseES"
+  },
+  "variant.oceanbase_oracle": {
+    "zh-CN": "OceanBase（Oracle 模式）",
+    "en": "OceanBase (Oracle mode)"
   },
   "variant.oceanbase": {
     "zh-CN": "OceanBase（MySQL 模式）",

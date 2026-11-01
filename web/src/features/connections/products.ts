@@ -9,6 +9,7 @@ export type ProductId =
   | 'mariadb'
   | 'tidb'
   | 'oceanbase'
+  | 'oceanbase_oracle'
   | 'postgres'
   | 'kingbase'
   | 'opengauss'
@@ -29,6 +30,7 @@ export const PRODUCTS: Product[] = [
   { id: 'mariadb', driver: 'mysql', port: 3306 },
   { id: 'tidb', driver: 'mysql', port: 4000 },
   { id: 'oceanbase', driver: 'mysql', port: 2881 },
+  { id: 'oceanbase_oracle', driver: 'oracle', port: 2881 },
   { id: 'postgres', driver: 'postgres', port: 5432 },
   { id: 'kingbase', driver: 'postgres', port: 54321 },
   { id: 'opengauss', driver: 'postgres', port: 5432 },
@@ -41,7 +43,7 @@ export const PRODUCTS: Product[] = [
 
 /** 界面上的分组：国产库一组，其他一组。 */
 export const PRODUCT_GROUPS: { key: 'domestic' | 'other'; products: ProductId[] }[] = [
-  { key: 'domestic', products: ['dameng', 'kingbase', 'gaussdb', 'opengauss', 'oceanbase', 'tidb', 'gbase8s'] },
+  { key: 'domestic', products: ['dameng', 'kingbase', 'gaussdb', 'opengauss', 'oceanbase', 'oceanbase_oracle', 'tidb', 'gbase8s'] },
   { key: 'other', products: ['mysql', 'mariadb', 'postgres', 'oracle', 'sqlserver'] },
 ]
 

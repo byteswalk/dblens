@@ -13,6 +13,7 @@ pub(crate) struct JdbcConnection {
     pub(crate) bridge: Arc<Bridge>,
     pub(crate) id: u64,
     pub(crate) flavor: Flavor,
+    pub(crate) oceanbase: bool,
 }
 
 impl JdbcConnection {
@@ -143,6 +144,10 @@ impl BlockingConnection for JdbcConnection {
     fn server_info(&mut self) -> Result<ServerInfo> {
         let (k, b) = self.bridge.call(&Req::ServerInfo { conn: self.id })?;
         match expect(k, &b, 0, self.flavor)? {
+            // 官方驱动报告的是 Oracle 和 OceanBase 自己的版本号，补上产品名才识别得出
+            Resp::ServerInfo { version, .. } if self.oceanbase => {
+                Ok(ServerInfo { product: "OceanBase".into(), version: format!("OceanBase {version}") })
+            }
             Resp::ServerInfo { product, version } => Ok(ServerInfo { product, version }),
             _ => Err(protocol()),
         }

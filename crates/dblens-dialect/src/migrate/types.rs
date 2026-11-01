@@ -132,7 +132,7 @@ pub(super) fn is_lob(tgt: &Dialect, l: &LogicalType) -> bool {
 
 /// 目标库能否建自增列：Oracle 12c 起才有标识列，其余都可以。
 pub(super) fn identity_supported(tgt: &Dialect) -> bool {
-    !(tgt.family() == Family::Oracle && tgt.version().is_some_and(|v| v < 120000))
+    !(tgt.family() == Family::Oracle && tgt.oracle_release().is_some_and(|v| v < 120000))
 }
 
 /// 外键动作在目标库中是否可用：Oracle、达梦只有 ON DELETE CASCADE / SET NULL；MySQL（InnoDB）不支持 SET DEFAULT；

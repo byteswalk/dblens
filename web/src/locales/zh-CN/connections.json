@@ -1,4 +1,8 @@
 {
+  "obOracle": {
+    "schema": "模式",
+    "schemaPlaceholder": "DBLENS_TEST；留空时用账号的默认模式"
+  },
   "driver": {
     "mysql": {
       "label": "MySQL 系",
@@ -39,6 +43,10 @@
     "oceanbase": {
       "label": "OceanBase",
       "note": "MySQL 模式；用户名写成 用户@租户（如 root@sys），经 OBProxy 连接时端口一般是 2883"
+    },
+    "oceanbase_oracle": {
+      "label": "OceanBase（Oracle 模式）",
+      "note": "企业版的 Oracle 模式租户；用户名写成 用户@租户；经官方 JDBC 驱动连接"
     },
     "postgres": {
       "label": "PostgreSQL"

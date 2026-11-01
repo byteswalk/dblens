@@ -78,6 +78,9 @@ pub enum Variant {
     /// OceanBase 的 MySQL 模式。
     #[serde(rename = "oceanbase")]
     OceanBase,
+    /// OceanBase 的 Oracle 模式。标准 MySQL 客户端连不上这种租户，经官方 JDBC 驱动连接。
+    #[serde(rename = "oceanbase_oracle")]
+    OceanBaseOracle,
     /// 阿里云 PolarDB 的 MySQL 版。版本字符串与 MySQL 相同，靠 `Dialect::refine` 识别。
     #[serde(rename = "polardb")]
     PolarDb,
@@ -112,7 +115,7 @@ impl Variant {
             | Variant::OpenGauss
             | Variant::GaussDb
             | Variant::HighGo => Family::Postgres,
-            Variant::Oracle => Family::Oracle,
+            Variant::Oracle | Variant::OceanBaseOracle => Family::Oracle,
             Variant::Dameng => Family::Dameng,
             Variant::SqlServer => Family::SqlServer,
             Variant::Gbase8s => Family::Informix,
@@ -126,6 +129,7 @@ impl Variant {
             Variant::MariaDb => Msg::raw("MariaDB"),
             Variant::TiDb => Msg::raw("TiDB"),
             Variant::OceanBase => msg!("variant.oceanbase"),
+            Variant::OceanBaseOracle => msg!("variant.oceanbase_oracle"),
             Variant::PolarDb => msg!("variant.polardb"),
             Variant::Postgres => Msg::raw("PostgreSQL"),
             Variant::Kingbase => msg!("variant.kingbase"),
@@ -160,6 +164,7 @@ impl Variant {
             DriverId::Mysql if v.contains("mariadb") => Variant::MariaDb,
             DriverId::Mysql if v.contains("tidb") => Variant::TiDb,
             DriverId::Mysql if v.contains("oceanbase") => Variant::OceanBase,
+            DriverId::Oracle if v.contains("oceanbase") => Variant::OceanBaseOracle,
             DriverId::Postgres if v.contains("kingbase") => Variant::Kingbase,
             DriverId::Postgres if v.contains("opengauss") => Variant::OpenGauss,
             DriverId::Postgres if v.contains("gaussdb") => Variant::GaussDb,
@@ -175,6 +180,16 @@ mod tests {
 
     fn info(product: &str, version: &str) -> ServerInfo {
         ServerInfo { product: product.into(), version: version.into() }
+    }
+
+    #[test]
+    fn oceanbase_oracle_mode_is_oracle_family() {
+        let v = Variant::detect(DriverId::Oracle, &info("Oracle", "OceanBase 4.4.2.2"));
+        assert_eq!((v, v.family()), (Variant::OceanBaseOracle, Family::Oracle));
+        assert_eq!(
+            Variant::detect(DriverId::Oracle, &info("Oracle", "Oracle AI Database 26ai")),
+            Variant::Oracle
+        );
     }
 
     #[test]

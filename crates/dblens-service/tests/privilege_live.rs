@@ -233,7 +233,8 @@ async fn profile(
     password: &str,
 ) -> String {
     let mut options = params.options.clone();
-    options.retain(|k, _| driver == DriverId::Dameng || !LIB_OPTIONS.contains(&k.as_str()));
+    let via_jdbc = driver == DriverId::Dameng || params.options.get("client").is_some_and(|c| c == "jdbc");
+    options.retain(|k, _| via_jdbc || !LIB_OPTIONS.contains(&k.as_str()));
     let p = service
         .create_profile(
             ProfileInput {
@@ -298,8 +299,12 @@ async fn drop_change_fixture(service: &Service, profile: &str, names: [&str; 2])
     let list = service.privilege_overview(profile, None).await.unwrap().principals;
     let mut found: Vec<&Principal> = list.iter().filter(|p| names.iter().any(|n| same_name(p, n))).collect();
     found.sort_by_key(|p| p.level != PrincipalLevel::Database);
+    // OceanBase 的 Oracle 模式删用户必须带 CASCADE
+    let opts = service.profile(profile).unwrap().input.options;
+    let cascade = opts.get("jdbc_kind").is_some_and(|k| k == "oceanbase");
     for p in found {
-        let change = PrivChange::Drop { principal: reference(p), cascade: false };
+        let cascade = cascade && p.kind != PrincipalKind::Role;
+        let change = PrivChange::Drop { principal: reference(p), cascade };
         service.privilege_apply(profile, None, &change, None).await.unwrap();
     }
 }
@@ -461,8 +466,9 @@ async fn flow(env: &str, fx: Fixture) {
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
     secrets.init_vault("测试主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
-    // 达梦的驱动目录是连接选项，不是全局设置
-    for option in LIB_OPTIONS.iter().filter(|_| driver != DriverId::Dameng) {
+    // 走 JDBC 时驱动目录是连接选项，不是全局设置
+    let via_jdbc = driver == DriverId::Dameng || params.options.get("client").is_some_and(|c| c == "jdbc");
+    for option in LIB_OPTIONS.iter().filter(|_| !via_jdbc) {
         if let Some(lib) = params.options.get(*option) {
             registry.set_lib_dir(driver, Some(Path::new(lib))).unwrap();
         }
@@ -751,6 +757,24 @@ async fn kingbase_pg() {
 #[tokio::test]
 async fn oracle() {
     flow("DBLENS_TEST_ORACLE_URL", ORACLE).await;
+}
+
+/// DROP USER 必须带 CASCADE，账号名带租户。
+const OB_ORACLE: Fixture = Fixture {
+    drop: &[
+        "DROP USER dblens_priv_u CASCADE",
+        "DROP USER dblens_priv_low CASCADE",
+        "DROP ROLE dblens_priv_r1",
+        "DROP ROLE dblens_priv_r2",
+        "DROP TABLE dblens_priv_t PURGE",
+    ],
+    low_login: "DBLENS_PRIV_LOW@ora_t",
+    ..ORACLE
+};
+
+#[tokio::test]
+async fn oceanbase_oracle() {
+    flow("DBLENS_TEST_OB_ORACLE_URL", OB_ORACLE).await;
 }
 
 #[tokio::test]

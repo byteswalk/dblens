@@ -42,7 +42,7 @@ pub fn max_ident_len(target: &Dialect) -> usize {
         Family::MySql => 64,
         Family::Postgres => 63,
         Family::Oracle => {
-            if target.version().is_some_and(|v| v < 120200) {
+            if target.oracle_release().is_some_and(|v| v < 120200) {
                 30
             } else {
                 128

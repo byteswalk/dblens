@@ -67,7 +67,10 @@ async fn setup(env: &str) -> Option<Live> {
     let schema = match driver {
         DriverId::Mysql => params.database.clone().unwrap(),
         DriverId::Postgres => "public".to_string(),
-        DriverId::Oracle | DriverId::Dameng => params.user.to_uppercase(),
+        // OceanBase 的用户名带 `@租户`
+        DriverId::Oracle | DriverId::Dameng => {
+            params.user.split('@').next().unwrap_or_default().to_uppercase()
+        }
         DriverId::SqlServer => "dbo".to_string(),
         DriverId::Informix => params.user.clone(),
     };
@@ -253,8 +256,11 @@ async fn workbench_flow(env: &str) {
         panic!("{events:?}")
     };
     eprintln!("{env} 出错位置：{offset:?} {error}");
-    let o = offset.expect("应有出错位置");
-    assert!(bad[o..].starts_with("FROM"), "位置 {o} 指向 {:?}", &bad[o..]);
+    // OceanBase 的 Oracle 模式只报 near '…'，没有偏移
+    if live.variant != Variant::OceanBaseOracle {
+        let o = offset.expect("应有出错位置");
+        assert!(bad[o..].starts_with("FROM"), "位置 {o} 指向 {:?}", &bad[o..]);
+    }
     s.sessions.close(id, false).await.unwrap();
 }
 
@@ -1604,7 +1610,10 @@ async fn design_flow(env: &str) {
         // TiDB、OceanBase 不建降序索引（design_caps 的 descending_index）
         columns: vec![IndexColumn {
             name: n("remark"),
-            descending: !matches!(live.variant, Variant::TiDb | Variant::OceanBase),
+            descending: !matches!(
+                live.variant,
+                Variant::TiDb | Variant::OceanBase | Variant::OceanBaseOracle
+            ),
         }],
         unique: false,
         method: None,
@@ -1708,6 +1717,13 @@ async fn design_flow(env: &str) {
         live.run(id, "DROP VIEW m3_v").await;
     }
     let p = s.preview_design(&live.profile_id, &req).await.unwrap();
+    // OceanBase 的 Oracle 模式改不了自增起始值，带自增列的表不重建
+    if live.variant == Variant::OceanBaseOracle {
+        assert!(p.rebuild.refused.is_some(), "{env}：{p:?}");
+        cleanup().await;
+        s.sessions.close(id, false).await.unwrap();
+        return;
+    }
     assert!(p.rebuild.refused.is_none(), "{env}：{p:?}");
     let st = apply(req).await;
     assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
@@ -2208,6 +2224,7 @@ async fn lint_tables_query_runs_on_every_database() {
         "DBLENS_TEST_OCEANBASE_URL",
         "DBLENS_TEST_OPENGAUSS_URL",
         "DBLENS_TEST_KINGBASE_URL",
+        "DBLENS_TEST_OB_ORACLE_URL",
     ];
     for env in envs {
         let Some(live) = setup(env).await else { continue };
@@ -2281,4 +2298,54 @@ async fn mysql_lint_reads_storage_facts() {
     assert!(objects("pk.on_update_timestamp").contains("m7c_bad.ts"));
     assert!(objects("pk.auto_increment_step").contains("m7c_auto.id"));
     assert!(objects("table.row_count").contains("m7c_bad"));
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_flow() {
+    full_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_workbench() {
+    workbench_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_objects() {
+    objects_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_ops() {
+    ops_flow("DBLENS_TEST_OB_ORACLE_URL", &[]).await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_export() {
+    export_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_editing() {
+    editing_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_import() {
+    import_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_sql_file() {
+    sql_file_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_design() {
+    design_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn oceanbase_oracle_model() {
+    model_flow("DBLENS_TEST_OB_ORACLE_URL").await;
 }

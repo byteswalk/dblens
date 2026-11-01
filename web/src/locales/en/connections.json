@@ -1,4 +1,8 @@
 {
+  "obOracle": {
+    "schema": "Schema",
+    "schemaPlaceholder": "DBLENS_TEST; leave empty for the default schema of the account"
+  },
   "driver": {
     "mysql": {
       "label": "MySQL family",
@@ -39,6 +43,10 @@
     "oceanbase": {
       "label": "OceanBase",
       "note": "MySQL mode; user name is user@tenant (e.g. root@sys); through OBProxy the port is usually 2883"
+    },
+    "oceanbase_oracle": {
+      "label": "OceanBase (Oracle mode)",
+      "note": "Oracle-mode tenant of the Enterprise Edition; user is user@tenant; connects through the official JDBC driver"
     },
     "postgres": {
       "label": "PostgreSQL"

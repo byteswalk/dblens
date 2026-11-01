@@ -151,13 +151,25 @@ impl Dialect {
         if self.oracle_mode() { s.with_oracle_blocks() } else { s }
     }
 
+    /// 用来判断 Oracle 功能的版本。OceanBase 的 Oracle 模式报告的是自己的版本号（如 4.4），不能和 Oracle 比。
+    pub fn oracle_release(&self) -> Option<u32> {
+        if self.variant == Variant::OceanBaseOracle { None } else { self.version }
+    }
+
     /// 生成执行计划要依次执行的语句，最后一条的结果集是计划（见 `session::explain`）。
     pub fn explain(&self, sql: &str) -> Vec<String> {
+        // OceanBase 的 Oracle 模式没有 EXPLAIN PLAN FOR，EXPLAIN 直接返回计划
+        if self.variant == Variant::OceanBaseOracle {
+            return vec![format!("EXPLAIN {sql}")];
+        }
         session::explain(self.family(), sql)
     }
 
     /// 生成执行计划之后无论成败都要执行的语句（见 `session::explain`）。
     pub fn explain_cleanup(&self) -> Option<&'static str> {
+        if self.variant == Variant::OceanBaseOracle {
+            return None;
+        }
         session::explain_cleanup(self.family())
     }
 
@@ -269,6 +281,15 @@ mod tests {
         assert_eq!(parts.len(), 1, "{:?} {what} 被拆成 {} 条：{sql}", d.variant(), parts.len());
         assert_eq!(parts[0].text, sql, "{:?} {what}", d.variant());
         assert_eq!(&sql[parts[0].start..parts[0].end], sql, "{:?} {what} 范围", d.variant());
+    }
+
+    #[test]
+    fn oceanbase_oracle_differs_from_oracle_in_explain_and_version() {
+        let d = Dialect::new(Variant::OceanBaseOracle).with_version(Some(40402));
+        assert_eq!(d.explain("SELECT 1 FROM DUAL"), ["EXPLAIN SELECT 1 FROM DUAL"]);
+        assert_eq!(d.explain_cleanup(), None);
+        assert_eq!(d.oracle_release(), None, "4.4 是 OceanBase 自己的版本号");
+        assert_eq!(Dialect::new(Variant::Oracle).with_version(Some(120100)).oracle_release(), Some(120100));
     }
 
     #[test]

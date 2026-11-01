@@ -29,6 +29,7 @@ export const VARIANT_ICONS: Record<string, DbIconDef> = {
   mariadb: logo(siMariadb, '#c49a6c'),
   tidb: logo(siTidb),
   oceanbase: art(ART_ICONS.oceanbase),
+  oceanbase_oracle: art(ART_ICONS.oceanbase),
   polardb: mark('PDB', '#ff6a00'),
   postgres: logo(siPostgresql, '#7f9cf0'),
   kingbase: art(ART_ICONS.kingbase),

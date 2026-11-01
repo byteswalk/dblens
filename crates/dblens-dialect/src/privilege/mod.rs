@@ -37,6 +37,7 @@ const MYSQL: &str = include_str!("../../sql/privilege/mysql.sql");
 const MARIADB: &str = include_str!("../../sql/privilege/mariadb.sql");
 const TIDB: &str = include_str!("../../sql/privilege/tidb.sql");
 const OCEANBASE: &str = include_str!("../../sql/privilege/oceanbase.sql");
+const OCEANBASE_ORACLE: &str = include_str!("../../sql/privilege/oceanbase_oracle.sql");
 const POSTGRES: &str = include_str!("../../sql/privilege/postgres.sql");
 const OPENGAUSS: &str = include_str!("../../sql/privilege/opengauss.sql");
 const ORACLE: &str = include_str!("../../sql/privilege/oracle.sql");
@@ -195,6 +196,7 @@ fn override_file(variant: Variant) -> Option<&'static str> {
         Variant::MariaDb => Some(MARIADB),
         Variant::TiDb => Some(TIDB),
         Variant::OceanBase => Some(OCEANBASE),
+        Variant::OceanBaseOracle => Some(OCEANBASE_ORACLE),
         Variant::OpenGauss | Variant::GaussDb => Some(OPENGAUSS),
         _ => None,
     }

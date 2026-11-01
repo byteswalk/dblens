@@ -22,6 +22,11 @@
       "file": "DmJdbcDriver8.jar",
       "version": "DM8 2026-07-10",
       "sha256": "35bf432bd15d722a4a67c11b0768fd4be95eee46a6f914afa60a9a5161ccfc7f"
+    },
+    {
+      "file": "oceanbase-client-2.4.14.jar",
+      "version": "2.4.14",
+      "sha256": "3168e7e3f2f14f35738d7c695e05012bf351f623757c7baada29659d2afa2ad4"
     }
   ]
 }

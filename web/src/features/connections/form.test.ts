@@ -17,6 +17,17 @@ import {
   validate,
 } from './form'
 
+describe('OceanBase 的 Oracle 模式', () => {
+  it('固定走 JDBC，不要求服务名', () => {
+    const f = { ...switchProduct(emptyForm(), 'oceanbase_oracle'), name: 'ob', host: 'h', user: 'u@t' }
+    expect([f.driver, f.port]).toEqual(['oracle', 2881])
+    const o = toProfileInput(f).options
+    expect([o?.client, o?.jdbc_kind]).toEqual(['jdbc', 'oceanbase'])
+    expect(validate(f).database).toBeUndefined()
+    expect(fromProfile({ ...toProfileInput(f), id: 'x' } as Parameters<typeof fromProfile>[0], false).product).toBe('oceanbase_oracle')
+  })
+})
+
 describe('连接表单', () => {
   it('换驱动时跟着换默认端口，手改过的端口保留；不支持 TLS 的驱动关掉 TLS', () => {
     let f = emptyForm('mysql')

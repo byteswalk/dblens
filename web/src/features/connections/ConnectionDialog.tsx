@@ -156,9 +156,11 @@ export default function ConnectionDialog() {
     }
   }
 
+  const oceanbaseOracle = form.product === 'oceanbase_oracle'
+
   const general = (
     <>
-      <NativeLibNotice driver={form.driver} />
+      {!usesJdbc(form) && <NativeLibNotice driver={form.driver} />}
       <Field label={t('connections.general.name')} error={errors.name}>
         <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="prod-mysql" />
       </Field>
@@ -210,12 +212,14 @@ export default function ConnectionDialog() {
           {t('connections.general.savePassword')}
         </Checkbox>
       </Field>}
-      <Field label={databaseLabel(form.driver)} error={errors.database}>
+      <Field label={oceanbaseOracle ? t('connections.obOracle.schema') : databaseLabel(form.driver)} error={errors.database}>
         <Input
           value={form.database}
           onChange={(e) => set('database', e.target.value)}
           placeholder={
-            form.driver === 'oracle' ? t('connections.general.oracleServicePlaceholder') : t('connections.general.optional')
+            oceanbaseOracle
+              ? t('connections.obOracle.schemaPlaceholder')
+              : form.driver === 'oracle' ? t('connections.general.oracleServicePlaceholder') : t('connections.general.optional')
           }
         />
       </Field>
@@ -270,7 +274,7 @@ export default function ConnectionDialog() {
       <Field label={t('connections.advanced.timeout')} error={errors.timeoutSecs}>
         <InputNumber min={1} max={600} value={form.timeoutSecs} onChange={(v) => set('timeoutSecs', v ?? 0)} />
       </Field>
-      {form.driver === 'oracle' && (
+      {form.driver === 'oracle' && form.product !== 'oceanbase_oracle' && (
         <Field label={t('connections.client.label')}>
           <Segmented
             value={form.client}
@@ -294,7 +298,7 @@ export default function ConnectionDialog() {
           <Input value={form.instance} onChange={(e) => set('instance', e.target.value)} placeholder={t('connections.sqlserver.instancePlaceholder')} />
         </Field>
       )}
-      {form.driver === 'oracle' && (
+      {form.driver === 'oracle' && form.product !== 'oceanbase_oracle' && (
         <Field label="SID">
           <Input value={form.oracleSid} onChange={(e) => set('oracleSid', e.target.value)} placeholder={t('connections.advanced.sidPlaceholder')} />
         </Field>

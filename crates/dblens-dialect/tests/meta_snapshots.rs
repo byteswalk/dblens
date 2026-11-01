@@ -5,11 +5,12 @@ use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_dialect::{Dialect, Family, Variant};
 
 /// 有自己的模板覆盖文件的变体（PolarDB、GaussDB、HighGo 沿用家族模板）。
-const VARIANTS: [Variant; 11] = [
+const VARIANTS: [Variant; 12] = [
     Variant::MySql,
     Variant::MariaDb,
     Variant::TiDb,
     Variant::OceanBase,
+    Variant::OceanBaseOracle,
     Variant::Postgres,
     Variant::Kingbase,
     Variant::OpenGauss,

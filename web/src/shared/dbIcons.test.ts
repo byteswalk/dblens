@@ -8,6 +8,7 @@ const VARIANTS = [
   'mariadb',
   'tidb',
   'oceanbase',
+  'oceanbase_oracle',
   'polardb',
   'postgres',
   'kingbase',

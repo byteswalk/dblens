@@ -254,7 +254,7 @@ impl Dialect {
             Family::Oracle | Family::Dameng => DesignCaps {
                 reorder: false,
                 checks: true,
-                descending_index: true,
+                descending_index: self.variant() != Variant::OceanBaseOracle,
                 on_delete: vec!["NO ACTION", "CASCADE", "SET NULL"],
                 on_update: vec![],
                 index_methods: vec!["NORMAL", "BITMAP"],

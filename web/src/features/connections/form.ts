@@ -48,8 +48,8 @@ export interface ConnectionForm {
 
 /** 新建连接时可选的驱动，按界面上的顺序。 */
 /** 达梦只走 JDBC，Oracle 可选。 */
-export function usesJdbc(f: { driver: DriverId; client: ClientKind }): boolean {
-  return f.driver === 'dameng' || (f.driver === 'oracle' && f.client === 'jdbc')
+export function usesJdbc(f: { driver: DriverId; client: ClientKind; product?: ProductId }): boolean {
+  return f.driver === 'dameng' || f.product === 'oceanbase_oracle' || (f.driver === 'oracle' && f.client === 'jdbc')
 }
 
 export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng', 'sqlserver', 'informix']
@@ -123,7 +123,7 @@ export function switchProduct(f: ConnectionForm, id: ProductId): ConnectionForm 
   return { ...switchDriver(f, next.driver), product: id, port }
 }
 
-const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'client', 'jdbc_dir', 'server_name', 'db_locale', 'trust_server_certificate']
+const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'client', 'jdbc_kind', 'jdbc_dir', 'server_name', 'db_locale', 'trust_server_certificate']
 
 export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
   const opts = p.options ?? {}
@@ -176,9 +176,10 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     if (f.trustCert) options.trust_server_certificate = 'true'
   }
   if (f.driver === 'dameng' && f.jdbcDir.trim()) options.jdbc_dir = f.jdbcDir.trim()
-  if (f.driver === 'oracle' && f.client === 'jdbc') {
+  if (f.driver === 'oracle' && usesJdbc(f)) {
     options.client = 'jdbc'
     if (f.jdbcDir.trim()) options.jdbc_dir = f.jdbcDir.trim()
+    if (f.product === 'oceanbase_oracle') options.jdbc_kind = 'oceanbase'
   }
   if (f.driver === 'informix') {
     if (f.serverName.trim()) options.server_name = f.serverName.trim()
@@ -207,7 +208,7 @@ export function validate(f: ConnectionForm): Partial<Record<keyof ConnectionForm
   if (!Number.isInteger(f.port) || f.port < 1 || f.port > 65535) e.port = t('connections.validate.portRange')
   if (needsCredentials(f) && !f.user.trim()) e.user = t('connections.validate.userRequired')
   if (f.driver === 'informix' && !f.serverName.trim()) e.serverName = t('connections.validate.serverNameRequired')
-  if (f.driver === 'oracle' && !f.database.trim() && !f.oracleSid.trim()) {
+  if (f.driver === 'oracle' && f.product !== 'oceanbase_oracle' && !f.database.trim() && !f.oracleSid.trim()) {
     e.database = t('connections.validate.serviceOrSidRequired')
   }
   if (!Number.isInteger(f.timeoutSecs) || f.timeoutSecs < 1 || f.timeoutSecs > 600) {

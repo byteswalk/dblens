@@ -11,7 +11,7 @@ use serde::Serialize;
 use super::diff::same_type;
 use super::{Diff, Renames, TableChange as C};
 use crate::meta::{DependentView, Grant, ReferencingKey, TableStorage};
-use crate::{Dialect, Family};
+use crate::{Dialect, Family, Variant};
 
 /// 生成重建脚本需要的依赖信息，由服务层读取。
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -76,7 +76,7 @@ impl Dialect {
         match self.family() {
             Family::MySql => 64,
             Family::Postgres => 63,
-            Family::Oracle if self.version().unwrap_or(u32::MAX) < 120200 => 30,
+            Family::Oracle if self.oracle_release().unwrap_or(u32::MAX) < 120200 => 30,
             Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix => 128,
         }
     }
@@ -132,6 +132,14 @@ impl Dialect {
         let refuse = |reason| Ok(RebuildOutcome::Refused { reason });
         if original.partition.is_some() {
             return refuse(msg!("design.rebuild.partitioned"));
+        }
+        // OceanBase 的 Oracle 模式没有 START WITH LIMIT VALUE，也改不了起始值：重建后自增从头开始，会撞主键
+        if self.variant() == Variant::OceanBaseOracle {
+            let identity: Vec<&str> =
+                original.columns.iter().filter(|c| c.auto_increment).map(|c| c.name.as_str()).collect();
+            if !identity.is_empty() {
+                return refuse(msg!("design.rebuild.identity_restart", columns = identity.join(", ")));
+            }
         }
         // 旧版达梦读不到函数索引的表达式：表明细里没有它，重建后就丢了
         let unknown: Vec<_> = ctx
@@ -560,5 +568,15 @@ mod tests {
         assert_eq!(ora11.temp_table_name("CUSTOMER_ORDERS_2024").len(), 30);
         let cjk = Dialect::new(Variant::MySql).temp_table_name(&"订单".repeat(20));
         assert!(cjk.len() <= 64 && cjk.ends_with("_dblens_new"));
+    }
+
+    #[test]
+    fn oceanbase_oracle_refuses_to_rebuild_identity_tables() {
+        let d = Dialect::new(Variant::OceanBaseOracle);
+        let mut id = col("ID", "NUMBER(10)");
+        id.auto_increment = true;
+        let t = Table { name: "T".into(), columns: vec![id], ..Default::default() };
+        let got = d.rebuild("S", &t, &t, &Renames::default(), &RebuildContext::default()).unwrap();
+        assert!(matches!(got, RebuildOutcome::Refused { .. }));
     }
 }

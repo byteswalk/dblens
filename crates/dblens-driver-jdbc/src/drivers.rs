@@ -46,6 +46,15 @@ pub(crate) fn oracle_url(p: &ConnectParams) -> Result<String> {
     Ok(format!("jdbc:oracle:thin:@//{}:{}/{service}", p.host, p.port))
 }
 
+/// OceanBase 的 Oracle 模式：官方驱动的 URL 和 MySQL 驱动相近，database 是模式名，用户名带 `@租户`。
+pub(crate) fn oceanbase_url(p: &ConnectParams) -> Result<String> {
+    let schema = match p.database.as_deref().filter(|d| !d.is_empty()) {
+        Some(d) => plain(d, "database")?,
+        None => String::new(),
+    };
+    Ok(format!("jdbc:oceanbase://{}:{}/{schema}", p.host, p.port))
+}
+
 /// 程序自带的目录：Windows 和压缩包在程序旁边，deb 在 `../lib/<产品>/`，macOS 的 app 在 `../Resources/`。
 fn bundled() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
@@ -122,7 +131,8 @@ fn connect_blocking(p: &ConnectParams, spec: Spec) -> Result<JdbcConnection> {
     })?;
     match expect(k, &b, 0, spec.flavor) {
         Ok(Resp::Connected(id)) => {
-            let mut conn = JdbcConnection { bridge, id, flavor: spec.flavor };
+            let oceanbase = spec.class.starts_with("com.oceanbase.");
+            let mut conn = JdbcConnection { bridge, id, flavor: spec.flavor, oceanbase };
             conn.set_lob_limit(DEFAULT_LOB_PREVIEW_BYTES);
             Ok(conn)
         }
@@ -243,11 +253,20 @@ impl Driver for OracleJdbcDriver {
     async fn connect(&self, p: &ConnectParams) -> Result<Box<dyn Connection>> {
         connect_async(p, |p| {
             p.reject_tls("Oracle")?;
-            let spec = Spec {
-                class: "oracle.jdbc.OracleDriver",
-                jar_prefix: "ojdbc",
-                flavor: Flavor::Oracle,
-                url: oracle_url(p)?,
+            let spec = if p.options.get("jdbc_kind").is_some_and(|k| k == "oceanbase") {
+                Spec {
+                    class: "com.oceanbase.jdbc.Driver",
+                    jar_prefix: "oceanbase-client",
+                    flavor: Flavor::Oracle,
+                    url: oceanbase_url(p)?,
+                }
+            } else {
+                Spec {
+                    class: "oracle.jdbc.OracleDriver",
+                    jar_prefix: "ojdbc",
+                    flavor: Flavor::Oracle,
+                    url: oracle_url(p)?,
+                }
             };
             connect_blocking(p, spec)
         })
@@ -271,6 +290,14 @@ mod tests {
             options: opts.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<BTreeMap<_, _>>(),
             connect_timeout: Duration::from_secs(10),
         }
+    }
+
+    #[test]
+    fn oceanbase_url_uses_the_database_as_schema() {
+        assert_eq!(oceanbase_url(&params(&[])).unwrap(), "jdbc:oceanbase://h:9088/db");
+        let mut p = params(&[]);
+        p.database = None;
+        assert_eq!(oceanbase_url(&p).unwrap(), "jdbc:oceanbase://h:9088/");
     }
 
     #[test]

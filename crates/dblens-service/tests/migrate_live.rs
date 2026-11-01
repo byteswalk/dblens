@@ -59,18 +59,23 @@ async fn setup(envs: [&str; 2]) -> Option<(Arc<Service>, Vec<End>, tempfile::Tem
     let mut ends = Vec::new();
     for (env, url) in envs.iter().zip(urls) {
         let (driver, params) = ConnectParams::from_url(&url).unwrap();
-        // 达梦的驱动目录是连接选项，不是全局设置
-        for option in LIB_OPTIONS.iter().filter(|_| driver != DriverId::Dameng) {
+        // 走 JDBC 时驱动目录是连接选项，不是全局设置
+        let via_jdbc =
+            driver == DriverId::Dameng || params.options.get("client").is_some_and(|c| c == "jdbc");
+        for option in LIB_OPTIONS.iter().filter(|_| !via_jdbc) {
             if let Some(lib) = params.options.get(*option) {
                 registry.set_lib_dir(driver, Some(Path::new(lib))).unwrap();
             }
         }
         let mut options = params.options.clone();
-        options.retain(|k, _| driver == DriverId::Dameng || !LIB_OPTIONS.contains(&k.as_str()));
+        options.retain(|k, _| via_jdbc || !LIB_OPTIONS.contains(&k.as_str()));
         let schema = match driver {
             DriverId::Mysql => params.database.clone().unwrap(),
             DriverId::Postgres => "public".to_string(),
-            DriverId::Oracle | DriverId::Dameng => params.user.to_uppercase(),
+            // OceanBase 的用户名带 `@租户`
+            DriverId::Oracle | DriverId::Dameng => {
+                params.user.split('@').next().unwrap_or_default().to_uppercase()
+            }
             DriverId::SqlServer => "dbo".to_string(),
             DriverId::Informix => params.user.clone(),
         };
@@ -485,11 +490,16 @@ async fn migrate_flow(src_env: &str, tgt_env: &str, p: &str) {
     let ct =
         &preview.draft.tables.iter().find(|t| t.source.to_lowercase().ends_with("_cust")).unwrap().target;
     let (q, name) = (dialect.qualified(Some(&tgt.schema), &ct.name), dialect.ident(&ct.columns[1].name));
-    run(&s, tgt, &[format!("INSERT INTO {q} ({name}) VALUES ('new')")], false).await;
-    let id_col = dialect.ident(&ct.columns[0].name);
-    let new_id =
-        number(run(&s, tgt, &[format!("SELECT {id_col} FROM {q} WHERE {name} = 'new'")], false).await);
-    assert!(new_id > ROWS as i64, "{route}：新行的主键 {new_id}");
+    // OceanBase 的 Oracle 模式迁完后改不了起始值，自增列迁成普通列
+    if tgt.variant == Variant::OceanBaseOracle {
+        assert!(ct.columns.iter().all(|c| !c.auto_increment), "{route}");
+    } else {
+        run(&s, tgt, &[format!("INSERT INTO {q} ({name}) VALUES ('new')")], false).await;
+        let id_col = dialect.ident(&ct.columns[0].name);
+        let new_id =
+            number(run(&s, tgt, &[format!("SELECT {id_col} FROM {q} WHERE {name} = 'new'")], false).await);
+        assert!(new_id > ROWS as i64, "{route}：新行的主键 {new_id}");
+    }
     if with_seq {
         let tseq = dialect.qualified(Some(&tgt.schema), &preview.draft.sequences[0].target.name);
         let sql = match tgt.driver {
@@ -650,6 +660,9 @@ macro_rules! routes {
 }
 
 routes! {
+    mysql_to_ob_oracle: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_OB_ORACLE_URL", "m5oa";
+    ob_oracle_to_mysql: "DBLENS_TEST_OB_ORACLE_URL" => "DBLENS_TEST_MYSQL_URL", "m5ob";
+    ob_oracle_to_oracle: "DBLENS_TEST_OB_ORACLE_URL" => "DBLENS_TEST_ORACLE_URL", "m5oc";
     mysql_to_pg: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_PG_URL", "m5my";
     mysql_to_oracle: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_ORACLE_URL", "m5my";
     mysql_to_dameng: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_DM_URL", "m5my";
