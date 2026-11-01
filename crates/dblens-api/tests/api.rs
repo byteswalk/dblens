@@ -6,9 +6,9 @@ use std::time::Duration;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use dblens_api::{ApiConfig, router};
+use dblens_api::{ApiConfig, AppState, api_routes, router};
 use dblens_service::fake::{FakeDriver, Log};
-use dblens_service::{DefaultPolicy, DriverRegistry, SecretBackend, Secrets, Service, Store};
+use dblens_service::{DefaultPolicy, DriverRegistry, Operator, SecretBackend, Secrets, Service, Store};
 use futures::{SinkExt, StreamExt};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -205,6 +205,54 @@ async fn ws_open(env: dblens_service::Environment, query: &str) -> (Ws, Arc<Serv
     let url = format!("ws://{addr}/api/sessions/{sid}/ws?token={TOKEN}{query}");
     let (ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
     (ws, service, sid)
+}
+
+async fn as_user(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    Operator::scope(user(), next.run(req)).await
+}
+
+fn user() -> Operator {
+    Operator { id: "u1".into(), name: "张三".into() }
+}
+
+/// 换掉鉴权层：所有请求都按 `user()` 处理，不要令牌。
+fn app_as_user(service: Arc<Service>) -> Router {
+    let config = ApiConfig { token: "unused".into(), allowed_origins: vec![], local_files: false };
+    let state = AppState { service, config: Arc::new(config) };
+    let api = api_routes().layer(axum::middleware::from_fn(as_user)).with_state(state);
+    Router::new().nest("/api", api)
+}
+
+#[tokio::test]
+async fn capabilities_report_standalone() {
+    let (app, _) = app();
+    let (status, v) = call(&app, "GET", "/api/capabilities", None).await;
+    assert_eq!((status, v["edition"].as_str()), (StatusCode::OK, Some("standalone")));
+}
+
+#[tokio::test]
+async fn routes_compose_under_a_custom_auth_layer() {
+    let (_, service) = app();
+    let app = app_as_user(service);
+    let req = Request::get("/api/sessions").body(Body::empty()).unwrap();
+    assert_eq!(app.oneshot(req).await.unwrap().status(), StatusCode::OK, "鉴权完全由外层决定");
+}
+
+#[tokio::test]
+async fn websocket_keeps_the_operator() {
+    let (_, service) = app();
+    let profile =
+        service.create_profile(serde_json::from_value(profile_json("p")).unwrap(), Some("pw")).unwrap();
+    let sid = Operator::scope(user(), service.open_session(&profile.id)).await.unwrap().id;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = app_as_user(service);
+    tokio::spawn(async move { dblens_api::serve(listener, app).await.unwrap() });
+    let url = format!("ws://{addr}/api/sessions/{sid}/ws");
+    let (mut ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 1"})).await;
+    assert_eq!(recv(&mut ws).await["type"], "statement_start", "后台任务里也能取到自己的会话");
+    assert_eq!(recv(&mut ws).await["type"], "result_start");
 }
 
 async fn send(ws: &mut Ws, v: Value) {

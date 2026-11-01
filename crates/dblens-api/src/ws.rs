@@ -22,7 +22,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::response::Response;
 use dblens_core::{Error, current_lang, msg, scope_lang};
-use dblens_service::{ExecRequest, Service, SessionEvent, SessionId};
+use dblens_service::{ExecRequest, Operator, Service, SessionEvent, SessionId};
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::sync::mpsc;
@@ -115,7 +115,9 @@ pub async fn upgrade(
     let service = s.service.clone();
     // 升级后的连接在新任务里运行，要带上这次请求的语言
     let lang = current_lang();
-    Ok(ws.on_upgrade(move |socket| scope_lang(lang, run(socket, service, id))))
+    // 升级后的连接不在请求的任务里，操作者要带过去
+    let op = Operator::current();
+    Ok(ws.on_upgrade(move |socket| Operator::scope(op, scope_lang(lang, run(socket, service, id)))))
 }
 
 /// 发给 pump 的额度为 0：客户端取消了还没读完的结果。
@@ -228,7 +230,7 @@ async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId) {
                 let (tx, rx) = mpsc::channel(1);
                 credit = Some(tx);
                 let pumping = pump(service.clone(), id, sql, max_rows.max(1), out.clone(), rx);
-                running = Some(tokio::spawn(scope_lang(current_lang(), pumping)));
+                running = Some(tokio::spawn(Operator::scope(Operator::current(), scope_lang(current_lang(), pumping))));
             }
             ClientMsg::FetchMore { max_rows } => {
                 if let Some(c) = &credit {

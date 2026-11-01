@@ -22,6 +22,13 @@ use serde_json::{Value, json};
 use crate::AppState;
 use crate::error::ApiResult;
 
+// ---- 版本和能力 ----
+
+/// 前端据此显示功能。审计版有自己的实现。
+pub async fn capabilities() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "edition": "standalone", "features": [] }))
+}
+
 // ---- 驱动 ----
 
 pub async fn drivers(State(s): State<AppState>) -> ApiResult<Json<Vec<DriverStatus>>> {

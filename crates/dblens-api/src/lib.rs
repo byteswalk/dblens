@@ -26,6 +26,7 @@ use dblens_service::Service;
 use tokio::net::TcpListener;
 
 pub use error::{ApiError, status_of};
+pub use lang::negotiate;
 pub use tasks::{DEFAULT_UPLOAD_LIMIT_MB, UPLOAD_LIMIT_SETTING};
 pub use web::with_web;
 pub use ws::{DEFAULT_MAX_ROWS, utf16_offset};
@@ -53,10 +54,9 @@ pub struct AppState {
     pub config: Arc<ApiConfig>,
 }
 
-/// 全部接口。
-pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
-    let state = AppState { service, config: Arc::new(config) };
-    let api = Router::new()
+/// 全部业务接口，不带鉴权和语言层，由调用方决定怎么包。
+pub fn api_routes() -> Router<AppState> {
+    Router::new()
         .route("/drivers", get(routes::drivers))
         .route("/drivers/{driver}/lib-dir", put(routes::set_lib_dir))
         .route("/settings", get(routes::settings))
@@ -169,6 +169,13 @@ pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
         .route("/sessions/{id}/reconnect", post(routes::reconnect))
         .route("/sessions/{id}/cancel", post(routes::cancel))
         .route("/sessions/{id}/ws", get(ws::upgrade))
+}
+
+/// 单机版的全部接口：令牌鉴权。
+pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
+    let state = AppState { service, config: Arc::new(config) };
+    let api = api_routes()
+        .route("/capabilities", get(routes::capabilities))
         .layer(middleware::from_fn_with_state(state.clone(), auth::guard))
         // 最外层：令牌错误等也按请求语言输出
         .layer(middleware::from_fn(lang::negotiate))
