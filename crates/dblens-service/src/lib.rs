@@ -17,6 +17,7 @@ mod metadata;
 mod migrate;
 mod model;
 mod objects;
+mod operator;
 mod policy;
 mod privilege;
 mod profile;
@@ -63,8 +64,10 @@ pub use model::{
     ReverseRequest, SchemaRenames, SchemaTables, TableEntry,
 };
 pub use objects::{DataOrder, GenerateKind, ObjectKind};
+pub use operator::Operator;
 pub use policy::{
-    Decision, DefaultPolicy, ExecContext, ObjectRef, Outcome, Policy, StatementInfo, StatementKind, classify,
+    Decision, DefaultPolicy, ExecContext, ObjectRef, Operation, Outcome, Policy, StatementInfo, StatementKind,
+    classify,
 };
 pub use privilege::{
     Coverage, ObjectAccessReport, PrincipalPrivileges, PrivApplyResult, PrivPreview, PrivilegeOverview,

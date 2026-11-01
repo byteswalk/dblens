@@ -309,7 +309,7 @@ impl Service {
             &l.target_tables,
         )?;
         let sqls: Vec<String> = statements.iter().map(|s| s.sql.clone()).collect();
-        let (denied, confirm) = self.check_policy(&l.target, l.target_dialect, &sqls).await;
+        let (denied, confirm) = self.check_policy(&l.target, l.target_dialect, crate::policy::Operation::Migrate, &sqls).await;
         let preview = MigrationPreview {
             source_variant: l.source_dialect.variant(),
             target_variant: l.target_dialect.variant(),

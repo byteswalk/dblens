@@ -1656,6 +1656,10 @@
     "zh-CN": "生产环境：%{keyword} 语句没有 WHERE 条件",
     "en": "Production: %{keyword} statement without a WHERE clause"
   },
+  "policy.ticket_required": {
+    "zh-CN": "这条语句需要走工单审批",
+    "en": "This statement requires an approved ticket"
+  },
   "policy.prod_statement": {
     "zh-CN": "生产环境：%{keyword} 语句",
     "en": "Production: %{keyword} statement"

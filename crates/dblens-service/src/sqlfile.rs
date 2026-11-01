@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::history::NewHistory;
 use crate::import::{TextEncoding, exec, open_text};
-use crate::policy::{Decision, ExecContext, classify};
+use crate::policy::{Decision, ExecContext, Operation, ask};
 use crate::profile::{Environment, Profile, driver_name, variant_code};
 use crate::service::Service;
 use crate::task::{
@@ -152,6 +152,7 @@ struct Run {
     dialect: Dialect,
     req: SqlFileRequest,
     file: SourceFile,
+    ctx: ExecContext,
 }
 
 impl Service {
@@ -165,7 +166,8 @@ impl Service {
         let file = self.tasks.resolve(&req.source, allow_path, true)?;
         let mut id = String::new();
         task.update(|s| id = s.id.clone());
-        let run = Run { profile, dialect, req, file };
+        let ctx = ExecContext::new(&profile, dialect, Operation::SqlFile);
+        let run = Run { profile, dialect, req, file, ctx };
         let service = self.clone();
         tokio::spawn(async move {
             let at = now_ms();
@@ -199,11 +201,6 @@ impl Service {
     /// 扫描：统计语句数，按执行策略检查。有被拒绝的语句时报错；需要确认时等用户回答。
     async fn scan_sql_file(&self, task: &TaskHandle, run: &Run) -> Result<()> {
         task.update(|s| s.phase = TaskPhase::Scanning);
-        let ctx = ExecContext {
-            profile_id: run.profile.id.clone(),
-            environment: run.profile.input.environment,
-            dialect: run.dialect,
-        };
         let policy = self.sessions.policy();
         let mut total = 0u64;
         let mut confirm: Vec<ConfirmItem> = Vec::new();
@@ -212,7 +209,7 @@ impl Service {
         let mut statements = Statements::open(&run.file, run.req.encoding, run.dialect);
         while let Some(st) = statements.next(task).await? {
             total += 1;
-            match policy.before_execute(&ctx, &classify(&run.dialect, &st.text)).await {
+            match ask(&policy, &run.ctx, &st.text).await.1 {
                 Decision::Allow => {}
                 Decision::Confirm { reason } if confirm.len() < CONFIRM_ITEMS => {
                     confirm.push(ConfirmItem {
@@ -222,7 +219,7 @@ impl Service {
                     });
                 }
                 Decision::Confirm { .. } => more += 1,
-                Decision::Deny { reason } => {
+                Decision::Deny { reason } | Decision::RequireTicket { reason } => {
                     denied = Some((st.line as u64, head(&st.text, HEAD_TEXT), reason));
                     break;
                 }

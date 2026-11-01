@@ -4,6 +4,8 @@
 //!
 //! SQL Server 按 `GO` 分批执行，一批里可以有多条语句：分析时取批中最危险的一条（见 `classify_batch`）。
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use dblens_core::{Msg, msg};
 use dblens_dialect::{Dialect, Family};
@@ -12,7 +14,8 @@ use sqlparser::ast::{ObjectName, Statement};
 use sqlparser::dialect::{GenericDialect, MsSqlDialect, MySqlDialect, PostgreSqlDialect};
 use sqlparser::parser::Parser;
 
-use crate::profile::Environment;
+use crate::operator::Operator;
+use crate::profile::{Environment, Profile};
 
 /// 语句的大类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,12 +54,42 @@ pub struct StatementInfo {
     pub objects: Vec<ObjectRef>,
 }
 
-/// 执行上下文：执行发生在哪个连接上。
+/// 语句来自哪个功能：审批规则按它区分。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Operation {
+    Editor,
+    DataEdit,
+    Design,
+    Compare,
+    Import,
+    SqlFile,
+    Export,
+    Migrate,
+    Privilege,
+}
+
+/// 执行上下文：谁、用什么功能、在哪个连接上执行。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecContext {
     pub profile_id: String,
     pub environment: Environment,
     pub dialect: Dialect,
+    pub operator: Operator,
+    pub operation: Operation,
+}
+
+impl ExecContext {
+    /// 操作者取自当前任务：后台任务要在 spawn 之前建好。
+    pub fn new(profile: &Profile, dialect: Dialect, operation: Operation) -> Self {
+        Self {
+            profile_id: profile.id.clone(),
+            environment: profile.input.environment,
+            dialect,
+            operator: Operator::current(),
+            operation,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +103,20 @@ pub enum Decision {
     Deny {
         reason: Msg,
     },
+    /// 要走工单，当前不能执行（审计版）。
+    RequireTicket {
+        reason: Msg,
+    },
+}
+
+impl Decision {
+    /// 不能执行时的原因。
+    pub fn blocked(self) -> Option<Msg> {
+        match self {
+            Decision::Deny { reason } | Decision::RequireTicket { reason } => Some(reason),
+            Decision::Allow | Decision::Confirm { .. } => None,
+        }
+    }
 }
 
 /// 执行结果的摘要，供审计类策略使用。
@@ -82,8 +129,20 @@ pub enum Outcome {
 
 #[async_trait]
 pub trait Policy: Send + Sync {
-    async fn before_execute(&self, ctx: &ExecContext, stmt: &StatementInfo) -> Decision;
-    async fn after_execute(&self, ctx: &ExecContext, stmt: &StatementInfo, outcome: &Outcome);
+    /// `sql` 是完整语句；权限修改等含密码的路径传脱敏后的文本。
+    async fn before_execute(&self, ctx: &ExecContext, stmt: &StatementInfo, sql: &str) -> Decision;
+    async fn after_execute(&self, ctx: &ExecContext, stmt: &StatementInfo, sql: &str, outcome: &Outcome);
+}
+
+/// 分析一条语句并询问策略。所有执行路径都从这里进，不直接调用 `before_execute`。
+pub(crate) async fn ask(
+    policy: &Arc<dyn Policy>,
+    ctx: &ExecContext,
+    sql: &str,
+) -> (StatementInfo, Decision) {
+    let info = classify(&ctx.dialect, sql);
+    let decision = policy.before_execute(ctx, &info, sql).await;
+    (info, decision)
 }
 
 /// 改账号和权限的语句，生产连接上要确认。
@@ -103,7 +162,7 @@ pub struct DefaultPolicy;
 
 #[async_trait]
 impl Policy for DefaultPolicy {
-    async fn before_execute(&self, ctx: &ExecContext, stmt: &StatementInfo) -> Decision {
+    async fn before_execute(&self, ctx: &ExecContext, stmt: &StatementInfo, _: &str) -> Decision {
         if ctx.environment != Environment::Prod {
             return Decision::Allow;
         }
@@ -124,7 +183,7 @@ impl Policy for DefaultPolicy {
         Decision::Confirm { reason }
     }
 
-    async fn after_execute(&self, _: &ExecContext, _: &StatementInfo, _: &Outcome) {}
+    async fn after_execute(&self, _: &ExecContext, _: &StatementInfo, _: &str, _: &Outcome) {}
 }
 
 /// 跳过开头的空白和注释后的第一个单词（大写）。
@@ -416,28 +475,56 @@ mod tests {
         assert_eq!(batch_words("SELECT [a]]b], N'c''d', \"e\" /* x /* y */ z */ f"), ["SELECT", "N", "F"]);
     }
 
+    struct Spy(std::sync::Mutex<Vec<(String, String, Operation)>>);
+
+    #[async_trait]
+    impl Policy for Spy {
+        async fn before_execute(&self, ctx: &ExecContext, _: &StatementInfo, sql: &str) -> Decision {
+            self.0.lock().unwrap().push((ctx.operator.id.clone(), sql.to_string(), ctx.operation));
+            Decision::RequireTicket { reason: msg!("policy.ticket_required") }
+        }
+        async fn after_execute(&self, _: &ExecContext, _: &StatementInfo, _: &str, _: &Outcome) {}
+    }
+
+    #[tokio::test]
+    async fn ask_passes_full_text_operator_and_operation() {
+        let spy = Arc::new(Spy(Default::default()));
+        let policy: Arc<dyn Policy> = spy.clone();
+        let ctx = ExecContext { operation: Operation::Export, ..ctx(Environment::Prod) };
+        let (info, d) = ask(&policy, &ctx, "SELECT 1").await;
+        assert_eq!(info.keyword, "SELECT");
+        assert!(d.blocked().is_some());
+        assert_eq!(spy.0.lock().unwrap()[0], ("local".into(), "SELECT 1".into(), Operation::Export));
+    }
+
     #[tokio::test]
     async fn sqlserver_admin_statements_need_confirmation_on_production() {
         let ms = Dialect::new(Variant::SqlServer);
-        let c = ExecContext { profile_id: "p".into(), environment: Environment::Prod, dialect: ms };
+        let c = ExecContext { dialect: ms, ..ctx(Environment::Prod) };
         for sql in ["KILL 53", "SHUTDOWN", "DBCC SHRINKDATABASE (x)", "RESTORE DATABASE x FROM DISK = 'a'"] {
-            let d = DefaultPolicy.before_execute(&c, &classify(&ms, sql)).await;
+            let d = DefaultPolicy.before_execute(&c, &classify(&ms, sql), sql).await;
             assert!(matches!(d, Decision::Confirm { .. }), "{sql}");
         }
         // 其他库的 KILL 不在此列
         let my = Dialect::new(Variant::MySql);
-        let c = ExecContext { profile_id: "p".into(), environment: Environment::Prod, dialect: my };
-        assert_eq!(DefaultPolicy.before_execute(&c, &classify(&my, "KILL 53")).await, Decision::Allow);
+        let c = ExecContext { dialect: my, ..ctx(Environment::Prod) };
+        assert_eq!(DefaultPolicy.before_execute(&c, &classify(&my, "KILL 53"), "KILL 53").await, Decision::Allow);
     }
 
     fn ctx(environment: Environment) -> ExecContext {
-        ExecContext { profile_id: "p".into(), environment, dialect: pg() }
+        ExecContext {
+            profile_id: "p".into(),
+            environment,
+            dialect: pg(),
+            operator: Operator::local(),
+            operation: Operation::Editor,
+        }
     }
 
     #[tokio::test]
     async fn account_statements_need_confirmation_on_production() {
         let dialect = Dialect::new(Variant::MySql);
-        let prod = ExecContext { profile_id: "p".into(), environment: Environment::Prod, dialect };
+        let prod = ExecContext { dialect, ..ctx(Environment::Prod) };
         for sql in [
             "GRANT SELECT ON t TO u",
             "REVOKE SELECT ON t FROM u",
@@ -445,10 +532,11 @@ mod tests {
             "alter user u account lock",
             "CREATE ROLE r",
         ] {
-            let d = DefaultPolicy.before_execute(&prod, &classify(&dialect, sql)).await;
+            let d = DefaultPolicy.before_execute(&prod, &classify(&dialect, sql), sql).await;
             assert!(matches!(d, Decision::Confirm { .. }), "{sql}");
         }
-        let d = DefaultPolicy.before_execute(&prod, &classify(&dialect, "CREATE TABLE t (a int)")).await;
+        let sql = "CREATE TABLE t (a int)";
+        let d = DefaultPolicy.before_execute(&prod, &classify(&dialect, sql), sql).await;
         assert_eq!(d, Decision::Allow);
         let sqlserver = Dialect::new(Variant::SqlServer);
         let info = classify(&sqlserver, "CREATE LOGIN [u] WITH PASSWORD = N'x'");
@@ -470,9 +558,9 @@ mod tests {
         ];
         for (sql, confirm) in cases {
             let stmt = classify(&pg(), sql);
-            let d = p.before_execute(&ctx(Environment::Prod), &stmt).await;
+            let d = p.before_execute(&ctx(Environment::Prod), &stmt, sql).await;
             assert_eq!(matches!(d, Decision::Confirm { .. }), confirm, "{sql}: {d:?}");
-            assert_eq!(p.before_execute(&ctx(Environment::Dev), &stmt).await, Decision::Allow, "{sql}");
+            assert_eq!(p.before_execute(&ctx(Environment::Dev), &stmt, sql).await, Decision::Allow, "{sql}");
         }
         // 无法判断是否带 WHERE 时也确认
         let unknown = classify(&Dialect::new(Variant::Oracle), "DELETE FROM t WHERE id = 1");
@@ -480,6 +568,7 @@ mod tests {
             .before_execute(
                 &ExecContext { dialect: Dialect::new(Variant::Oracle), ..ctx(Environment::Prod) },
                 &unknown,
+                "DELETE FROM t WHERE id = 1",
             )
             .await;
         assert!(matches!(d, Decision::Confirm { .. }));

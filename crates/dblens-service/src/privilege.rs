@@ -17,7 +17,7 @@ use serde::Serialize;
 
 use crate::history::NewHistory;
 use crate::import::exec;
-use crate::policy::{Decision, ExecContext, Outcome, classify};
+use crate::policy::{ExecContext, Operation, Outcome, ask};
 use crate::profile::{Environment, Profile, driver_name, variant_code};
 use crate::service::Service;
 
@@ -287,7 +287,7 @@ impl Service {
         let statements = dialect.privilege_statements(change)?;
         let masked: Vec<String> = statements.iter().map(|s| s.masked.clone()).collect();
         let sqls: Vec<String> = masked.clone();
-        let (denied, confirm) = self.check_policy(&profile, dialect, &sqls).await;
+        let (denied, confirm) = self.check_policy(&profile, dialect, Operation::Privilege, &sqls).await;
         if let Some(reason) = denied {
             return Err(Error::Denied { reason });
         }
@@ -331,14 +331,15 @@ impl Service {
         {
             return Err(Error::invalid(msg!("privilege.change.confirm_name")));
         }
-        let ctx =
-            ExecContext { profile_id: profile.id.clone(), environment: profile.input.environment, dialect };
+        let ctx = ExecContext::new(&profile, dialect, Operation::Privilege);
         let policy = self.sessions.policy();
-        let infos: Vec<_> = statements.iter().map(|s| classify(&dialect, &s.masked)).collect();
-        for info in &infos {
-            if let Decision::Deny { reason } = policy.before_execute(&ctx, info).await {
+        let mut infos = Vec::with_capacity(statements.len());
+        for s in &statements {
+            let (info, decision) = ask(&policy, &ctx, &s.masked).await;
+            if let Some(reason) = decision.blocked() {
                 return Err(Error::Denied { reason });
             }
+            infos.push(info);
         }
         let password = self.secrets.get(&profile.id)?.unwrap_or_default();
         let (mut conn, _) = self.registry.connect(&profile, password).await?;
@@ -364,7 +365,7 @@ impl Service {
                 (Ok(n), _) => Outcome::Succeeded { affected: Some(*n) },
                 (_, e) => Outcome::Failed { message: e.clone().unwrap_or_default() },
             };
-            policy.after_execute(&ctx, info, &summary).await;
+            policy.after_execute(&ctx, info, &statement.masked, &summary).await;
             if error.is_some() {
                 result.failed = Some(statement.masked.clone());
                 result.error = error;

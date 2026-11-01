@@ -17,7 +17,9 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::history::{HistoryLog, NewHistory};
 use crate::metadata::MetadataCache;
-use crate::policy::{Decision, ExecContext, Outcome, Policy, StatementInfo, StatementKind, classify};
+use crate::policy::{
+    Decision, ExecContext, Operation, Outcome, Policy, StatementInfo, StatementKind, ask,
+};
 use crate::profile::{Profile, driver_name, variant_code};
 
 pub type SessionId = u64;
@@ -288,11 +290,7 @@ impl SessionManager {
         let (tx, rx) = mpsc::channel(16);
         let actor = Actor {
             conn: Some(conn),
-            ctx: ExecContext {
-                profile_id: profile_id.to_string(),
-                environment: profile.input.environment,
-                dialect,
-            },
+            ctx: ExecContext::new(profile, dialect, Operation::Editor),
             owner: Owner {
                 name: profile.input.name.clone(),
                 driver: driver_name(profile.input.driver).to_string(),
@@ -600,14 +598,15 @@ impl Actor {
         let Actor { conn, ctx, owner, policy, history, .. } = self;
         let Some(conn) = conn.as_mut() else { return Err(Error::connect(msg!("session.disconnected"))) };
         conn.set_autocommit(false).await?;
+        let ctx = &ExecContext { operation: Operation::DataEdit, ..ctx.clone() };
         let mut done: Vec<NewHistory> = Vec::new();
         let mut failed: Option<ApplyFailure> = None;
         for st in &statements {
             let at = now_ms();
             let started = Instant::now();
-            let info = classify(&ctx.dialect, &st.sql);
+            let (info, decision) = ask(policy, ctx, &st.sql).await;
             let result: Result<u64> = async {
-                if let Decision::Deny { reason } = policy.before_execute(ctx, &info).await {
+                if let Some(reason) = decision.blocked() {
                     return Err(Error::Denied { reason });
                 }
                 let mut stream = conn.execute(&st.sql, &st.params).await?;
@@ -629,7 +628,7 @@ impl Actor {
                 Err(Error::Cancelled) => Outcome::Cancelled,
                 Err(e) => Outcome::Failed { message: e.to_string() },
             };
-            policy.after_execute(ctx, &info, &outcome).await;
+            policy.after_execute(ctx, &info, &st.sql, &outcome).await;
             done.push(NewHistory {
                 at,
                 profile_id: ctx.profile_id.clone(),
@@ -773,7 +772,7 @@ impl Actor {
         'script: for step in steps {
             let index = step.index;
             // 执行计划按生成的语句（EXPLAIN …）分类：它不修改数据，不需要确认
-            let stmt = classify(&ctx.dialect, &step.texts[0]);
+            let (stmt, decision) = ask(policy, ctx, &step.texts[0]).await;
             let start = SessionEvent::StatementStart {
                 index,
                 total,
@@ -781,7 +780,7 @@ impl Actor {
                 end: step.end,
                 info: stmt.clone(),
             };
-            match policy.before_execute(ctx, &stmt).await {
+            match decision {
                 Decision::Allow => {}
                 // 确认只对第一条（就是刚确认的那条）有效
                 Decision::Confirm { .. } if req.confirmed && index == 0 => {}
@@ -794,7 +793,7 @@ impl Actor {
                     });
                     break 'script;
                 }
-                Decision::Deny { reason } => {
+                Decision::Deny { reason } | Decision::RequireTicket { reason } => {
                     let error = Error::Denied { reason };
                     record(&step, now_ms(), None, None, Some(&error));
                     // 先发开始事件，调用方才知道被拒绝的是哪一段
@@ -876,7 +875,7 @@ impl Actor {
                 Err(Error::Cancelled) => Outcome::Cancelled,
                 Err(e) => Outcome::Failed { message: e.to_string() },
             };
-            policy.after_execute(ctx, &stmt, &outcome).await;
+            policy.after_execute(ctx, &stmt, &step.texts[0], &outcome).await;
             let elapsed_ms = started.elapsed().as_millis() as u64;
             record(&step, at, Some(elapsed_ms), affected.or(fetched), result.as_ref().err());
             match result {

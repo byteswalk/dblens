@@ -366,7 +366,7 @@ impl Service {
                 preview.text = script_text(c.target.dialect.family(), &script);
                 let texts: Vec<String> = script.steps.iter().flat_map(|s| part_of(s).texts()).collect();
                 (preview.denied, preview.confirm) =
-                    self.check_policy(profile, c.target.dialect, &texts).await;
+                    self.check_policy(profile, c.target.dialect, crate::policy::Operation::Compare, &texts).await;
                 preview.script = Some(script);
             }
             None => {

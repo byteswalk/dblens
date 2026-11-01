@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::history::NewHistory;
 use crate::import::exec;
-use crate::policy::{Decision, ExecContext, classify};
+use crate::policy::{Decision, ExecContext, Operation, ask};
 use crate::profile::{Profile, driver_name, variant_code};
 use crate::service::Service;
 use crate::task::{TaskFailure, TaskHandle, TaskKind, TaskPhase};
@@ -326,7 +326,7 @@ impl Service {
                 RebuildStep::CountCheck { .. } => None,
             })
             .collect();
-        (preview.denied, preview.confirm) = self.check_policy(&prepared.profile, dialect, &sqls).await;
+        (preview.denied, preview.confirm) = self.check_policy(&prepared.profile, dialect, Operation::Design, &sqls).await;
         prepared.preview = preview;
         prepared.plan = plan;
         Ok(prepared)
@@ -337,21 +337,21 @@ impl Service {
         &self,
         profile: &Profile,
         dialect: Dialect,
+        operation: Operation,
         sqls: &[String],
     ) -> (Option<Msg>, Vec<Msg>) {
-        let ctx =
-            ExecContext { profile_id: profile.id.clone(), environment: profile.input.environment, dialect };
+        let ctx = ExecContext::new(profile, dialect, operation);
         let policy = self.sessions.policy();
         let (mut denied, mut confirm) = (None, Vec::new());
         for sql in sqls {
-            match policy.before_execute(&ctx, &classify(&dialect, sql)).await {
+            match ask(&policy, &ctx, sql).await.1 {
                 Decision::Allow => {}
                 Decision::Confirm { reason } => {
                     if !confirm.contains(&reason) {
                         confirm.push(reason);
                     }
                 }
-                Decision::Deny { reason } => {
+                Decision::Deny { reason } | Decision::RequireTicket { reason } => {
                     denied.get_or_insert(reason);
                 }
             }
