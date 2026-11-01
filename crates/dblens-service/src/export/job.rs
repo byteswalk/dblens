@@ -253,8 +253,8 @@ impl Service {
         // 导出没有确认步骤，这里只处理不能执行的情况
         let ctx = ExecContext::new(&profile, dialect, Operation::Export);
         let policy = self.sessions.policy();
-        if let Some(reason) = ask(&policy, &ctx, &sql).await.1.blocked() {
-            return Err(Error::Denied { reason });
+        if let Some(e) = ask(&policy, &ctx, &sql).await.1.into_error() {
+            return Err(e);
         }
         if req.path.is_some() && !allow_path {
             return Err(Error::invalid(msg!("export.path_not_allowed")));

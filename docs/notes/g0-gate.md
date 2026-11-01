@@ -62,6 +62,12 @@ task-local 不会跟着 `tokio::spawn` 走：
 - 前端只放了能力开关，还没有地方使用，G1 再接。
 - 前端的 `?token=` 和 `Authorization` 头在审计版用 Cookie 时要去掉或忽略，G1 处理。
 
+## 宿主
+
+工作台嵌在审计版里时，`App` 的 `host` 属性提供两个扩展点（`web/src/shared/host.ts`）：`hidden(key)` 隐藏入口，`onTicket(request)` 接收要走工单的语句。单机版不传。
+
+`Error::TicketRequired` 让前端能区分“要走工单”和“被拒绝”，状态码同样是 403。
+
 ## 验证状态
 
 - 通过：工作区离线测试（不含桌面端测试）、clippy、前端 341 个测试和类型检查、`dblens-api` 和 `dblens-service` 的 `live` 实连测试。

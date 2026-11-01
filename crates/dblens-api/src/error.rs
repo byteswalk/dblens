@@ -26,7 +26,7 @@ pub fn status_of(e: &Error) -> StatusCode {
         Error::NotFound { .. } => StatusCode::NOT_FOUND,
         Error::Busy { .. } | Error::Cancelled => StatusCode::CONFLICT,
         Error::Locked => StatusCode::LOCKED,
-        Error::Denied { .. } => StatusCode::FORBIDDEN,
+        Error::Denied { .. } | Error::TicketRequired { .. } => StatusCode::FORBIDDEN,
         Error::Connect { .. }
         | Error::Auth { .. }
         | Error::Sql { .. }

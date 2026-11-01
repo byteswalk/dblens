@@ -62,7 +62,7 @@ async fn policy_can_block_export() {
     let spy = Arc::new(SpyPolicy { block: Some(Operation::Export), ..Default::default() });
     let (s, id, _dir) = service(spy);
     let r = s.start_export(export(&id), false).await;
-    assert!(matches!(r, Err(Error::Denied { .. })));
+    assert!(matches!(r, Err(Error::TicketRequired { .. })));
 }
 
 #[tokio::test]

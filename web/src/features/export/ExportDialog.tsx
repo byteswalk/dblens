@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useApi } from '../../app/context'
-import { type ExportFormat, type ExportOptions, errorText } from '../../shared/api'
+import { ApiError, type ExportFormat, type ExportOptions, errorText } from '../../shared/api'
+import { useHost } from '../../shared/host'
 import { desktop } from '../../shared/shell'
 import { withVault } from '../connections/vault'
 import { useExportDialog } from './dialog'
@@ -16,6 +17,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export default function ExportDialog() {
   const api = useApi()
+  const { onTicket } = useHost()
   const { t } = useTranslation()
   const { notification } = App.useApp()
   const { draft, close } = useExportDialog()
@@ -110,7 +112,13 @@ export default function ExportDialog() {
       close()
       void track(id, name)
     } catch (e) {
-      setError((e as Error).message)
+      const sql = 'sql' in draft.source ? draft.source.sql : null
+      if (e instanceof ApiError && e.body.kind === 'ticket_required' && onTicket && sql) {
+        close()
+        onTicket({ kind: 'export', profileId: draft.profileId, schema: null, sql, reason: e.message })
+      } else {
+        setError((e as Error).message)
+      }
     } finally {
       setBusy(false)
     }

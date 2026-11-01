@@ -618,8 +618,8 @@ impl Actor {
             let started = Instant::now();
             let (info, decision) = ask(policy, ctx, &st.sql).await;
             let result: Result<u64> = async {
-                if let Some(reason) = decision.blocked() {
-                    return Err(Error::Denied { reason });
+                if let Some(e) = decision.into_error() {
+                    return Err(e);
                 }
                 let mut stream = conn.execute(&st.sql, &st.params).await?;
                 let mut affected = 0;
@@ -805,8 +805,8 @@ impl Actor {
                     });
                     break 'script;
                 }
-                Decision::Deny { reason } | Decision::RequireTicket { reason } => {
-                    let error = Error::Denied { reason };
+                blocked @ (Decision::Deny { .. } | Decision::RequireTicket { .. }) => {
+                    let error = blocked.into_error().expect("不能执行的判定");
                     record(&step, now_ms(), None, None, Some(&error));
                     // 先发开始事件，调用方才知道被拒绝的是哪一段
                     queue.push_back(start);

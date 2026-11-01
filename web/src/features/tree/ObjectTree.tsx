@@ -24,6 +24,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type Key, type ReactNode, Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useHost, withoutHidden } from '../../shared/host'
 
 import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
@@ -177,6 +178,7 @@ export default function ObjectTree() {
   const { t } = useTranslation()
   const { message, modal } = App.useApp()
   const { openConnection, selectProfile } = useUi()
+  const { hidden } = useHost()
   const { newQuery, insertSql } = useQueryActions()
   const { data: profiles = [], error: profilesError } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
   const [loaded, setLoaded] = useState<Record<string, Loaded>>({})
@@ -318,6 +320,12 @@ export default function ObjectTree() {
           ]
         : []
 
+  const shownItems = withoutHidden(
+    menuItems ?? [],
+    (i) => !hidden?.(`tree:${String(i?.key)}`),
+    (i) => i?.type === 'divider',
+  )
+
   /** schema 节点：新建表、导入到新表、执行 SQL 文件，后面接分隔线。 */
   function schemaItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 's') return []
@@ -457,7 +465,7 @@ export default function ObjectTree() {
         />
       </div>
       {profilesError && <div className="err" style={{ padding: 8 }}>{(profilesError as Error).message}</div>}
-      <Dropdown trigger={['contextMenu']} menu={{ items: menuItems, onClick: (e) => onMenu(e.key) }}>
+      <Dropdown trigger={['contextMenu']} menu={{ items: shownItems, onClick: (e) => onMenu(e.key) }}>
         <div className="grow" style={{ overflow: 'auto' }}>
           <Tree
             blockNode

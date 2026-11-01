@@ -11,6 +11,7 @@ import ConnectionDialog from '../features/connections/ConnectionDialog'
 import { TABS_KEY, persistTabs, useTabs } from '../features/editor/tabs'
 import VaultDialog from '../features/connections/VaultDialog'
 import { type Api, createApi } from '../shared/api'
+import { type Host, HostContext } from '../shared/host'
 import { LANG_KEY, applyLang, parseLangPref, resolveLang } from '../shared/i18n'
 import { useSetting, useSettings } from '../shared/settings'
 import { THEME_KEY, parseThemePref, resolveTheme, useSystemDark, isDarkTheme, type Theme } from '../shared/theme'
@@ -76,7 +77,7 @@ function Boot({ api }: { api: Api }) {
   return <Themed />
 }
 
-export default function App({ token }: { token: string | null }) {
+export default function App({ token, host = {} }: { token: string | null; host?: Host }) {
   const { t } = useTranslation()
   const api = useMemo(() => (token ? createApi(token) : null), [token])
   useEffect(() => {
@@ -94,9 +95,11 @@ export default function App({ token }: { token: string | null }) {
   }
   return (
     <ApiContext.Provider value={api}>
-      <QueryClientProvider client={queryClient}>
-        <Boot api={api} />
-      </QueryClientProvider>
+      <HostContext.Provider value={host}>
+        <QueryClientProvider client={queryClient}>
+          <Boot api={api} />
+        </QueryClientProvider>
+      </HostContext.Provider>
     </ApiContext.Provider>
   )
 }

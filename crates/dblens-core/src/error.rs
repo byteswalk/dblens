@@ -46,6 +46,10 @@ pub enum Error {
     Denied {
         reason: Msg,
     },
+    /// 要走工单审批（审计版）。
+    TicketRequired {
+        reason: Msg,
+    },
     Internal {
         message: Msg,
     },
@@ -66,6 +70,7 @@ impl Error {
             Error::Busy { message } => crate::msg!("error.kind.busy", message = message),
             Error::Locked => crate::msg!("error.kind.locked"),
             Error::Denied { reason } => crate::msg!("error.kind.denied", reason = reason),
+            Error::TicketRequired { reason } => crate::msg!("error.kind.ticket_required", reason = reason),
             Error::Internal { message } => crate::msg!("error.kind.internal", message = message),
         }
     }

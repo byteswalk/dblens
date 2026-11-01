@@ -11,6 +11,7 @@
     "not_found": "Not found: {{what}}",
     "busy": "Session busy: {{message}}",
     "locked": "The password vault is locked; enter the master password first",
+    "ticket_required": "Approval required: {{reason}}",
     "denied": "Execution denied: {{reason}}",
     "internal": "Internal error: {{message}}"
   },

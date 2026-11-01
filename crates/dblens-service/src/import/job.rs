@@ -333,8 +333,8 @@ impl Service {
             checks.push(dialect.delete_all_sql(&req.schema, &req.table));
         }
         for sql in &checks {
-            if let Some(reason) = ask(&policy, &ctx, sql).await.1.blocked() {
-                return Err(Error::Denied { reason });
+            if let Some(e) = ask(&policy, &ctx, sql).await.1.into_error() {
+                return Err(e);
             }
         }
         let file = self.tasks.resolve(&req.source, allow_path, false)?;

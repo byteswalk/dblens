@@ -149,6 +149,8 @@ export function errorText(e: ErrorBody): string {
       return t('common.error.locked')
     case 'denied':
       return t('common.error.denied', v)
+    case 'ticket_required':
+      return t('common.error.ticket_required', v)
     case 'internal':
       return t('common.error.internal', v)
     default:

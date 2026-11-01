@@ -9,6 +9,7 @@ import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panel
 
 import { useApi } from '../../app/context'
 import { type Profile, errorText } from '../../shared/api'
+import { useHost } from '../../shared/host'
 import { hasCatalogs } from '../../shared/schemaOptions'
 import { layoutStorage } from '../../shared/settings'
 import ResultsPanel from '../results/ResultsPanel'
@@ -190,6 +191,23 @@ export default function QueryView({ tab, profiles }: { tab: QueryTab; profiles: 
   )
   const confirm = !rt.running && !rt.declined ? rt.exec.confirm : null
   const sub = rt.submission
+
+  // 要走工单的语句：连同后面没执行的一起交给宿主，同一次执行只问一次
+  const { onTicket } = useHost()
+  const blocked = rt.running ? undefined : rt.exec.statements.find((s) => s.error?.kind === 'ticket_required')
+  const asked = useRef<unknown>(null)
+  useEffect(() => {
+    if (!blocked?.error || !sub || !onTicket || !profile || asked.current === blocked) return
+    asked.current = blocked
+    const from = blocked.start - sub.base
+    onTicket({
+      kind: 'sql',
+      profileId: profile.id,
+      schema: rt.session?.schema ?? null,
+      sql: sub.opts.cursor === undefined ? sub.sql.slice(from) : sub.sql.slice(from, blocked.end - sub.base),
+      reason: errorText(blocked.error),
+    })
+  }, [blocked, sub, onTicket, profile, rt.session?.schema])
 
   // 自动刷新：上一轮结束后隔 refresh 秒重跑同样的语句。只重跑查询，出错或有写操作时关掉
   const [refresh, setRefresh] = useState(0)

@@ -110,10 +110,11 @@ pub enum Decision {
 }
 
 impl Decision {
-    /// 不能执行时的原因。
-    pub fn blocked(self) -> Option<Msg> {
+    /// 不能执行时的错误。
+    pub fn into_error(self) -> Option<Error> {
         match self {
-            Decision::Deny { reason } | Decision::RequireTicket { reason } => Some(reason),
+            Decision::Deny { reason } => Some(Error::Denied { reason }),
+            Decision::RequireTicket { reason } => Some(Error::TicketRequired { reason }),
             Decision::Allow | Decision::Confirm { .. } => None,
         }
     }
@@ -499,7 +500,7 @@ mod tests {
         let ctx = ExecContext { operation: Operation::Export, ..ctx(Environment::Prod) };
         let (info, d) = ask(&policy, &ctx, "SELECT 1").await;
         assert_eq!(info.keyword, "SELECT");
-        assert!(d.blocked().is_some());
+        assert!(matches!(d.into_error(), Some(Error::TicketRequired { .. })));
         assert_eq!(spy.0.lock().unwrap()[0], ("local".into(), "SELECT 1".into(), Operation::Export));
     }
 

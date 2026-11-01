@@ -11,6 +11,7 @@
     "not_found": "找不到{{what}}",
     "busy": "会话正忙：{{message}}",
     "locked": "密码库已锁定，请先输入主密码",
+    "ticket_required": "需要审批：{{reason}}",
     "denied": "执行被拒绝：{{reason}}",
     "internal": "内部错误：{{message}}"
   },

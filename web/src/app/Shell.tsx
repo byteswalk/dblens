@@ -24,6 +24,7 @@ import SearchDialog from '../features/tree/SearchDialog'
 import ModelsPanel from '../features/model/ModelsPanel'
 import OpsPanel from '../features/ops/OpsPanel'
 import ObjectTree from '../features/tree/ObjectTree'
+import { useHost } from '../shared/host'
 import { layoutStorage } from '../shared/settings'
 import StatusBar from './StatusBar'
 import TitleBar from './TitleBar'
@@ -57,14 +58,17 @@ function Welcome() {
   const { t } = useTranslation()
   const openConnection = useUi((s) => s.openConnection)
   const { newQuery } = useQueryActions()
+  const { hidden } = useHost()
   return (
     <div className="welcome">
       <IconDatabase size={48} stroke={1.2} />
       <div style={{ fontSize: 18, color: 'var(--text)' }}>{t('common.appName')}</div>
       <div className="row" style={{ gap: 8 }}>
-        <Button type="primary" icon={<IconPlus size={14} />} onClick={() => openConnection(null)}>
-          {t('app.welcome.newConnection')}
-        </Button>
+        {!hidden?.('new-connection') && (
+          <Button type="primary" icon={<IconPlus size={14} />} onClick={() => openConnection(null)}>
+            {t('app.welcome.newConnection')}
+          </Button>
+        )}
         <Button icon={<IconFileCode size={14} />} onClick={() => newQuery()}>
           {t('app.welcome.newQuery')}
         </Button>
@@ -92,6 +96,7 @@ function shortcut(e: KeyboardEvent): EditorCommand | 'new-connection' | 'new-que
 export default function Shell() {
   const { t } = useTranslation()
   const { side, toggleSide, setSettingsOpen, openConnection } = useUi()
+  const { hidden } = useHost()
   const { newQuery, closeActive } = useQueryActions()
   const hasTabs = useTabs((s) => s.tabs.length > 0)
   const sidePanel = useRef<PanelImperativeHandle | null>(null)
@@ -110,8 +115,9 @@ export default function Shell() {
       const cmd = shortcut(e)
       if (!cmd) return
       e.preventDefault()
-      if (cmd === 'new-connection') openConnection(null)
-      else if (cmd === 'new-query') newQuery()
+      if (cmd === 'new-connection') {
+        if (!hidden?.('new-connection')) openConnection(null)
+      } else if (cmd === 'new-query') newQuery()
       else if (cmd === 'close-tab') closeActive()
       else sendCommand(cmd)
     }
@@ -125,7 +131,7 @@ export default function Shell() {
       <TitleBar />
       <div className="row grow" style={{ alignItems: 'stretch', minHeight: 0 }}>
         <div className="activity">
-          {SIDES.map(({ key, icon: Icon }) => (
+          {SIDES.filter(({ key }) => !hidden?.(`side:${key}`)).map(({ key, icon: Icon }) => (
             <span
               key={key}
               className={`a${side === key ? ' on' : ''}`}
@@ -136,9 +142,11 @@ export default function Shell() {
             </span>
           ))}
           <span className="grow" />
-          <span className="a" title={t('app.settings.title')} onClick={() => setSettingsOpen(true)}>
-            <IconSettings size={20} />
-          </span>
+          {!hidden?.('settings') && (
+            <span className="a" title={t('app.settings.title')} onClick={() => setSettingsOpen(true)}>
+              <IconSettings size={20} />
+            </span>
+          )}
         </div>
         <Group orientation="horizontal" className="grow" {...layout}>
           <Panel id="side" panelRef={sidePanel} defaultSize={270} minSize={200} maxSize={600} collapsible>

@@ -53,6 +53,7 @@ import { useTabs } from '../features/editor/tabs'
 import { useImportDialogs } from '../features/import/dialog'
 import { useModelDialogs } from '../features/model/dialogs'
 import { useSearchDialog } from '../features/tree/SearchDialog'
+import { useHost, withoutHidden } from '../shared/host'
 import { useSetting, useSettings } from '../shared/settings'
 import { type WindowAction, desktop, titleBarInset } from '../shared/shell'
 import { THEME_KEY, type ThemePref, parseThemePref } from '../shared/theme'
@@ -129,6 +130,7 @@ function MenuIcon({ id }: { id: string }) {
 }
 
 export default function TitleBar() {
+  const { hidden } = useHost()
   const { t } = useTranslation()
   const info = useShellInfo()
   const { modal } = App.useApp()
@@ -210,7 +212,14 @@ export default function TitleBar() {
         autoCheckUpdate: info?.auto_check_update ?? true,
         theme,
         side: ui.side,
-      })
+      }).map((g) => ({
+        ...g,
+        items: withoutHidden(
+          g.items,
+          (i) => i === 'divider' || !hidden?.(i.key),
+          (i) => i === 'divider',
+        ),
+      }))
 
   // 只有空白处（不是菜单和按钮）才拖动窗口。下拉菜单挂在 body 下，但事件会沿 React 树冒泡到这里，要排除
   const onMouseDown = (e: MouseEvent<HTMLDivElement>) => {
@@ -272,7 +281,11 @@ export default function TitleBar() {
     </div>
     {quickShown && (
       <div className="row quickbar">
-        {QUICK.map((key, n) => {
+        {withoutHidden(
+          QUICK,
+          (key) => key === null || !hidden?.(key),
+          (key) => key === null,
+        ).map((key, n) => {
           if (key === null) return <span key={n} className="sep" />
           const entry = menus.flatMap((g) => g.items).find((i) => i !== 'divider' && i.key === key)
           if (!entry || entry === 'divider') return null

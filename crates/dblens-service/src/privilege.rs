@@ -336,8 +336,8 @@ impl Service {
         let mut infos = Vec::with_capacity(statements.len());
         for s in &statements {
             let (info, decision) = ask(&policy, &ctx, &s.masked).await;
-            if let Some(reason) = decision.blocked() {
-                return Err(Error::Denied { reason });
+            if let Some(e) = decision.into_error() {
+                return Err(e);
             }
             infos.push(info);
         }

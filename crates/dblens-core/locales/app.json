@@ -308,6 +308,10 @@
     "zh-CN": "连接失败：%{message}",
     "en": "Connection failed: %{message}"
   },
+  "error.kind.ticket_required": {
+    "zh-CN": "需要审批：%{reason}",
+    "en": "Approval required: %{reason}"
+  },
   "error.kind.denied": {
     "zh-CN": "执行被拒绝：%{reason}",
     "en": "Execution denied: %{reason}"
