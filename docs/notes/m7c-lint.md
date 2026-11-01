@@ -53,4 +53,8 @@ POST /api/lint/table   {ruleset, source, table}，只返回未通过的条款，
 
 ## 待验证（真实运行）
 
-- 用 Word、Excel 实际打开导出的文件，只解压核对过内容。
+- 无。
+
+## 后续
+
+- 用户已用 Word、Excel 打开过导出文件，目前够用，以后再细化报告格式（2026-10-31）。
