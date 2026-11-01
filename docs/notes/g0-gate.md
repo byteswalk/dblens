@@ -28,6 +28,8 @@ web/src/shared/capabilities.ts            版本和能力开关
 
 `Service::with_sources` 把后三者组装起来。
 
+`ExecContext.schema` 和 `referenced_tables` 给模式级授权用，单机版不读。
+
 ## 操作者
 
 `Operator::current()` 没有设定时是本机用户，所以单机版不用改任何调用。

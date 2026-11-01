@@ -251,7 +251,11 @@ impl Service {
             }
         };
         // 导出没有确认步骤，这里只处理不能执行的情况
-        let ctx = ExecContext::new(&profile, dialect, Operation::Export);
+        let schema = match &req.source {
+            ExportSource::Data { schema, .. } => Some(schema.clone()),
+            ExportSource::Sql(_) => None,
+        };
+        let ctx = ExecContext { schema, ..ExecContext::new(&profile, dialect, Operation::Export) };
         let policy = self.sessions.policy();
         if let Some(e) = ask(&policy, &ctx, &sql).await.1.into_error() {
             return Err(e);

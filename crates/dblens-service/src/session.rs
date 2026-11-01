@@ -607,10 +607,11 @@ impl Actor {
         if state.in_transaction || !state.autocommit {
             return Err(Error::invalid(msg!("changes.in_transaction")));
         }
-        let Actor { conn, ctx, owner, policy, history, .. } = self;
+        let Actor { conn, ctx, owner, policy, history, info: shared, .. } = self;
         let Some(conn) = conn.as_mut() else { return Err(Error::connect(msg!("session.disconnected"))) };
         conn.set_autocommit(false).await?;
-        let ctx = &ExecContext { operation: Operation::DataEdit, ..ctx.clone() };
+        let schema = shared.lock().ok().and_then(|i| i.schema.clone());
+        let ctx = &ExecContext { operation: Operation::DataEdit, schema, ..ctx.clone() };
         let mut done: Vec<NewHistory> = Vec::new();
         let mut failed: Option<ApplyFailure> = None;
         for st in &statements {
@@ -784,6 +785,8 @@ impl Actor {
         'script: for step in steps {
             let index = step.index;
             // 执行计划按生成的语句（EXPLAIN …）分类：它不修改数据，不需要确认
+            let schema = info.lock().ok().and_then(|i| i.schema.clone());
+            let ctx = &ExecContext { schema, ..ctx.clone() };
             let (stmt, decision) = ask(policy, ctx, &step.texts[0]).await;
             let start = SessionEvent::StatementStart {
                 index,

@@ -4,13 +4,14 @@
 //!
 //! SQL Server 按 `GO` 分批执行，一批里可以有多条语句：分析时取批中最危险的一条（见 `classify_batch`）。
 
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use dblens_core::{Error, Msg, Result, msg};
 use dblens_dialect::{Dialect, Family};
 use serde::{Deserialize, Serialize};
-use sqlparser::ast::{ObjectName, Statement};
+use sqlparser::ast::{ObjectName, Statement, visit_relations};
 use sqlparser::dialect::{GenericDialect, MsSqlDialect, MySqlDialect, PostgreSqlDialect};
 use sqlparser::parser::Parser;
 
@@ -77,6 +78,8 @@ pub struct ExecContext {
     pub dialect: Dialect,
     pub operator: Operator,
     pub operation: Operation,
+    /// 会话当前模式或任务指定的模式，取不到时为 None。模式级授权要用。
+    pub schema: Option<String>,
 }
 
 impl ExecContext {
@@ -88,6 +91,7 @@ impl ExecContext {
             dialect,
             operator: Operator::current(),
             operation,
+            schema: None,
         }
     }
 }
@@ -245,6 +249,22 @@ fn from_ast(stmt: &Statement) -> (Option<bool>, Vec<ObjectRef>) {
         Statement::Truncate(t) => (None, t.table_names.iter().map(|n| object(&n.name)).collect()),
         _ => (None, vec![]),
     }
+}
+
+/// 语句引用的全部表，模式级授权用。只信能完整解析的方言：其他方言和解析失败时返回 None，调用方按判不清处理。
+pub fn referenced_tables(dialect: &Dialect, sql: &str) -> Option<Vec<ObjectRef>> {
+    let stmts = match dialect.family() {
+        Family::MySql => Parser::parse_sql(&MySqlDialect {}, sql).ok()?,
+        Family::Postgres => Parser::parse_sql(&PostgreSqlDialect {}, sql).ok()?,
+        Family::SqlServer => Parser::parse_sql(&MsSqlDialect {}, sql).ok()?,
+        Family::Oracle | Family::Dameng | Family::Informix => return None,
+    };
+    let mut out = Vec::new();
+    let _ = visit_relations(&stmts, |name: &ObjectName| {
+        out.push(object(name));
+        ControlFlow::<()>::Continue(())
+    });
+    Some(out)
 }
 
 /// 分析一条语句。MySQL、PG 家族用 sqlparser 解析；Oracle/达梦（PL/SQL 语法 sqlparser 支持不全）
@@ -521,6 +541,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn referenced_tables_lists_every_relation() {
+        let pg = Dialect::new(Variant::Postgres);
+        let t = referenced_tables(&pg, "SELECT * FROM a.x JOIN y ON true WHERE id IN (SELECT id FROM b.z)")
+            .unwrap();
+        let names: Vec<(Option<&str>, &str)> =
+            t.iter().map(|o| (o.schema.as_deref(), o.name.as_str())).collect();
+        assert!(names.contains(&(Some("a"), "x")));
+        assert!(names.contains(&(None, "y")));
+        assert!(names.contains(&(Some("b"), "z")));
+        assert_eq!(referenced_tables(&pg, "SELECT 1"), Some(vec![]));
+        assert_eq!(referenced_tables(&pg, "UPDATE b.z SET a = 1").unwrap()[0].schema.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn referenced_tables_is_none_when_it_cannot_tell() {
+        assert_eq!(referenced_tables(&Dialect::new(Variant::Oracle), "SELECT * FROM t"), None);
+        assert_eq!(referenced_tables(&Dialect::new(Variant::Postgres), "这不是 SQL"), None);
+    }
+
     fn ctx(environment: Environment) -> ExecContext {
         ExecContext {
             profile_id: "p".into(),
@@ -528,6 +568,7 @@ mod tests {
             dialect: pg(),
             operator: Operator::local(),
             operation: Operation::Editor,
+            schema: None,
         }
     }
 

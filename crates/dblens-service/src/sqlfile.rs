@@ -166,7 +166,10 @@ impl Service {
         let file = self.tasks.resolve(&req.source, allow_path, true)?;
         let mut id = String::new();
         task.update(|s| id = s.id.clone());
-        let ctx = ExecContext::new(&profile, dialect, Operation::SqlFile);
+        let ctx = ExecContext {
+            schema: req.schema.clone(),
+            ..ExecContext::new(&profile, dialect, Operation::SqlFile)
+        };
         let run = Run { profile, dialect, req, file, ctx };
         let service = self.clone();
         tokio::spawn(async move {

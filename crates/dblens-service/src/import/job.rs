@@ -324,7 +324,10 @@ impl Service {
         // 列、生成列、按主键更新的条件：用空行检查一次
         dialect.import_statements(&req.schema, &table, &columns, &[], req.mode)?;
         // 执行策略：拒绝时不开始；需要确认的由界面在开始前确认
-        let ctx = ExecContext::new(&profile, dialect, Operation::Import);
+        let ctx = ExecContext {
+            schema: Some(req.schema.clone()),
+            ..ExecContext::new(&profile, dialect, Operation::Import)
+        };
         let policy = self.sessions.policy();
         let mut checks =
             vec![format!("INSERT INTO {} VALUES (1)", dialect.qualified(Some(&req.schema), &req.table))];
