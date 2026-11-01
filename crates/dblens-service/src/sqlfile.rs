@@ -159,7 +159,7 @@ impl Service {
     /// 提交执行 SQL 文件的任务，返回任务 id。
     pub async fn start_sql_file(self: &Arc<Self>, req: SqlFileRequest, allow_path: bool) -> Result<String> {
         let profile = self.profile(&req.profile_id)?;
-        let password = self.secrets.get(&profile.id)?.unwrap_or_default();
+        let password = self.password(&profile.id).await?;
         let dialect = self.metadata.dialect(&profile).await?;
         self.tasks.resolve(&req.source, allow_path, false)?;
         let task = self.tasks.create(TaskKind::SqlFile)?;

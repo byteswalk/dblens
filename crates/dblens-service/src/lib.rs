@@ -27,6 +27,7 @@ mod registry;
 mod secret;
 mod service;
 mod session;
+mod source;
 mod sqlfile;
 mod store;
 mod task;
@@ -82,6 +83,7 @@ pub use session::{
     ApplyFailure, ApplyOutcome, ExecRequest, SessionEvent, SessionId, SessionInfo, SessionManager,
     statement_at,
 };
+pub use source::{CredentialSource, ProfileSource};
 pub use sqlfile::SqlFileRequest;
 pub use store::{Store, default_data_dir};
 pub use task::{

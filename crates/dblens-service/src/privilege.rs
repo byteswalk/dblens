@@ -341,7 +341,7 @@ impl Service {
             }
             infos.push(info);
         }
-        let password = self.secrets.get(&profile.id)?.unwrap_or_default();
+        let password = self.password(&profile.id).await?;
         let (mut conn, _) = self.registry.connect(&profile, password).await?;
         let secret = change_password(change);
         let mut result = PrivApplyResult { done: Vec::new(), failed: None, error: None };

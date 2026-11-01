@@ -383,7 +383,7 @@ impl Service {
         let Some(plan) = prepared.plan else {
             return Err(Error::invalid(msg!("design.no_changes")));
         };
-        let password = self.secrets.get(&prepared.profile.id)?.unwrap_or_default();
+        let password = self.password(&prepared.profile.id).await?;
         let task = self.tasks.create(TaskKind::Design)?;
         let mut id = String::new();
         let parts = plan.parts();

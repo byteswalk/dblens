@@ -493,8 +493,8 @@ impl Service {
             self.scoped_profile(&record.plan.target.profile, record.plan.target.catalog.as_deref())?;
         let source_dialect = self.metadata.dialect(&source).await?;
         let target_dialect = self.metadata.dialect(&target).await?;
-        let source_password = self.secrets.get(&source.id)?.unwrap_or_default();
-        let target_password = self.secrets.get(&target.id)?.unwrap_or_default();
+        let source_password = self.password(&source.id).await?;
+        let target_password = self.password(&target.id).await?;
         if !self.migrations.begin(&record.id) {
             return Err(Error::invalid(msg!("migrate.running")));
         }

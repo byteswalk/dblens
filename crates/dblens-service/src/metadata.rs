@@ -15,7 +15,7 @@ use tokio::sync::Semaphore;
 use crate::policy::ObjectRef;
 use crate::profile::{Profile, scope_of};
 use crate::registry::DriverRegistry;
-use crate::secret::Secrets;
+use crate::source::CredentialSource;
 
 const SEARCH_LIMIT: usize = 500;
 
@@ -106,14 +106,18 @@ struct Pool {
 
 pub struct MetadataService {
     registry: Arc<DriverRegistry>,
-    secrets: Arc<Secrets>,
+    credentials: Arc<dyn CredentialSource>,
     cache: Arc<MetadataCache>,
     pools: Mutex<HashMap<String, Arc<Pool>>>,
 }
 
 impl MetadataService {
-    pub fn new(registry: Arc<DriverRegistry>, secrets: Arc<Secrets>, cache: Arc<MetadataCache>) -> Self {
-        Self { registry, secrets, cache, pools: Mutex::new(HashMap::new()) }
+    pub fn new(
+        registry: Arc<DriverRegistry>,
+        credentials: Arc<dyn CredentialSource>,
+        cache: Arc<MetadataCache>,
+    ) -> Self {
+        Self { registry, credentials, cache, pools: Mutex::new(HashMap::new()) }
     }
 
     pub fn cache(&self) -> &Arc<MetadataCache> {
@@ -196,7 +200,7 @@ impl MetadataService {
         let (mut conn, dialect) = match idle {
             Some(c) => c,
             None => {
-                let password = self.secrets.get(&profile.id)?.unwrap_or_default();
+                let password = self.credentials.password(&profile.id).await?.unwrap_or_default();
                 self.registry.connect(profile, password).await?
             }
         };
@@ -256,7 +260,7 @@ impl MetadataService {
         }
         let _permit =
             pool.permits.acquire().await.map_err(|_| Error::internal(msg!("metadata.pool_closed")))?;
-        let password = self.secrets.get(&profile.id)?.unwrap_or_default();
+        let password = self.credentials.password(&profile.id).await?.unwrap_or_default();
         let (conn, dialect) = self.registry.connect(profile, password).await?;
         pool.idle
             .lock()

@@ -16,6 +16,7 @@ use crate::profile::{Profile, ProfileInput};
 use crate::registry::{DriverRegistry, ServerSummary};
 use crate::secret::Secrets;
 use crate::session::{SessionId, SessionInfo, SessionManager};
+use crate::source::{CredentialSource, ProfileSource};
 use crate::store::Store;
 use crate::task::TaskManager;
 
@@ -37,6 +38,8 @@ pub struct Service {
     /// 迁移记录（M5b）。
     pub migrations: MigrationRecords,
     pub(crate) history: HistoryLog,
+    credentials: Arc<dyn CredentialSource>,
+    profiles: Arc<dyn ProfileSource>,
 }
 
 impl Service {
@@ -79,10 +82,24 @@ impl Service {
         policy: Arc<dyn Policy>,
         history: HistoryLog,
     ) -> Self {
+        let (credentials, profiles) = (secrets.clone(), store.clone());
+        Self::with_sources(store, secrets, registry, policy, history, credentials, profiles)
+    }
+
+    /// 同 `with_history`，另外指定凭据和连接配置的来源（审计版用）。
+    pub fn with_sources(
+        store: Arc<Store>,
+        secrets: Arc<Secrets>,
+        registry: Arc<DriverRegistry>,
+        policy: Arc<dyn Policy>,
+        history: HistoryLog,
+        credentials: Arc<dyn CredentialSource>,
+        profiles: Arc<dyn ProfileSource>,
+    ) -> Self {
         let cache = Arc::new(MetadataCache::new());
         Self {
             sessions: SessionManager::new(policy, cache.clone(), history.clone()),
-            metadata: MetadataService::new(registry.clone(), secrets.clone(), cache),
+            metadata: MetadataService::new(registry.clone(), credentials.clone(), cache),
             exports: ExportManager::default(),
             tasks: TaskManager::default(),
             models: ModelStore::default(),
@@ -91,15 +108,22 @@ impl Service {
             store,
             secrets,
             registry,
+            credentials,
+            profiles,
         }
     }
 
     pub fn profiles(&self) -> Result<Vec<Profile>> {
-        self.store.list_profiles()
+        self.profiles.list()
     }
 
     pub fn profile(&self, id: &str) -> Result<Profile> {
-        self.store.profile(id)
+        self.profiles.get(id)
+    }
+
+    /// 连接的密码：没有保存时为空。所有建连路径都从这里取。
+    pub(crate) async fn password(&self, profile_id: &str) -> Result<String> {
+        Ok(self.credentials.password(profile_id).await?.unwrap_or_default())
     }
 
     /// 在某个库中工作的连接配置（SQL Server 的表设计器、导入、比对、迁移等，M6b 设计文档第 6 节）：没给库名时就是连接配置本身。
@@ -152,15 +176,15 @@ impl Service {
 
     /// 连接可用的运维查询（M1c3）：按上次连接时识别出的变体选模板，没连接过时按驱动。不需要连接数据库。
     pub fn ops(&self, profile_id: &str) -> Result<&'static [OpsQuery]> {
-        let p = self.store.profile(profile_id)?;
+        let p = self.profile(profile_id)?;
         let variant = p.variant.unwrap_or_else(|| Variant::base(p.input.driver));
         Ok(Dialect::new(variant).ops_queries())
     }
 
     /// 为编辑器标签页打开一个会话（独占一个连接）。
     pub async fn open_session(&self, profile_id: &str) -> Result<SessionInfo> {
-        let p = self.store.profile(profile_id)?;
-        let password = self.secrets.get(profile_id)?.unwrap_or_default();
+        let p = self.profile(profile_id)?;
+        let password = self.password(profile_id).await?;
         let (conn, dialect) = self.registry.connect(&p, password).await?;
         let id = self.sessions.open(&p, conn, dialect)?;
         // 读不到当前 schema 不影响使用，工具栏显示为未选择
@@ -171,8 +195,8 @@ impl Service {
     /// 连接断开后，经用户确认重新连接。
     pub async fn reconnect_session(&self, id: SessionId) -> Result<SessionInfo> {
         let info = self.sessions.info(id)?;
-        let p = self.store.profile(&info.profile_id)?;
-        let password = self.secrets.get(&p.id)?.unwrap_or_default();
+        let p = self.profile(&info.profile_id)?;
+        let password = self.password(&p.id).await?;
         let (conn, dialect) = self.registry.connect(&p, password).await?;
         self.sessions.replace_connection(id, conn, dialect).await?;
         self.sessions.info(id)
@@ -225,6 +249,36 @@ mod tests {
         assert!(s.profiles().unwrap().is_empty());
         // 不保存密码时可以创建
         s.create_profile(input("pg"), None).unwrap();
+    }
+
+    struct FixedCredential;
+
+    #[async_trait::async_trait]
+    impl CredentialSource for FixedCredential {
+        async fn password(&self, _: &str) -> Result<Option<String>> {
+            Ok(Some("pw".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn sessions_use_the_configured_credential_source() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
+        let log: Log = Arc::default();
+        let registry =
+            Arc::new(DriverRegistry::with_drivers(store.clone(), vec![Box::new(FakeDriver { log })]));
+        let s = Service::with_sources(
+            store.clone(),
+            secrets,
+            registry,
+            Arc::new(DefaultPolicy),
+            HistoryLog::off(),
+            Arc::new(FixedCredential),
+            store.clone(),
+        );
+        // 密码库没有初始化，也没有存密码；假驱动只接受 pw
+        let p = s.store.create_profile(input("pg")).unwrap();
+        s.open_session(&p.id).await.unwrap();
     }
 
     #[tokio::test]

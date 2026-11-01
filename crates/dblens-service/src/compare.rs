@@ -418,7 +418,7 @@ impl Service {
             return Err(Error::Denied { reason });
         }
         let profile = c.target.profile.clone().expect("database target");
-        let password = self.secrets.get(&profile.id)?.unwrap_or_default();
+        let password = self.password(&profile.id).await?;
         let parts: Vec<Part> = script.steps.iter().map(part_of).collect();
         let task = self.tasks.create(TaskKind::Sync)?;
         let mut id = String::new();

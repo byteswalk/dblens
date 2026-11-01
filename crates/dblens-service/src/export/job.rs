@@ -224,7 +224,7 @@ impl Service {
     /// 提交时检查：连接配置、密码库、语句是否为单条查询、任务数、路径；执行在后台进行。
     pub async fn start_export(self: &Arc<Self>, req: ExportRequest, allow_path: bool) -> Result<String> {
         let profile = self.profile(&req.profile_id)?;
-        let password = self.secrets.get(&profile.id)?.unwrap_or_default();
+        let password = self.password(&profile.id).await?;
         let dialect = self.metadata.dialect(&profile).await?;
         let sql = match &req.source {
             ExportSource::Sql(sql) => {
