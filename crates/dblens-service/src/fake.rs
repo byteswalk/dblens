@@ -20,7 +20,31 @@ use dblens_driver::{
 };
 use tokio::sync::Notify;
 
+use crate::policy::{Decision, ExecContext, Operation, Outcome, Policy, StatementInfo};
+
 pub type Log = Arc<Mutex<Vec<String>>>;
+
+/// 测试用策略：`block` 指定的功能要走工单，其余放行；记下收到的执行结果。
+#[derive(Default)]
+pub struct SpyPolicy {
+    pub block: Option<Operation>,
+    pub reported: Mutex<Vec<(String, Operation)>>,
+}
+
+#[async_trait]
+impl Policy for SpyPolicy {
+    async fn before_execute(&self, ctx: &ExecContext, _: &StatementInfo, _: &str) -> Decision {
+        if self.block == Some(ctx.operation) {
+            Decision::RequireTicket { reason: dblens_core::msg!("policy.ticket_required") }
+        } else {
+            Decision::Allow
+        }
+    }
+
+    async fn after_execute(&self, ctx: &ExecContext, _: &StatementInfo, sql: &str, _: &Outcome) {
+        self.reported.lock().unwrap().push((sql.to_string(), ctx.operation));
+    }
+}
 
 pub struct FakeDriver {
     pub log: Log,

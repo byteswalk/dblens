@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::history::NewHistory;
 use crate::import::exec;
-use crate::policy::{Decision, ExecContext, Operation, ask};
+use crate::policy::{Decision, ExecContext, Operation, ask, report};
 use crate::profile::{Profile, driver_name, variant_code};
 use crate::service::Service;
 use crate::task::{TaskFailure, TaskHandle, TaskKind, TaskPhase};
@@ -395,10 +395,11 @@ impl Service {
         });
         let service = self.clone();
         let (profile, dialect, schema) = (prepared.profile, prepared.dialect, req.schema);
+        let ctx = ExecContext::new(&profile, dialect, Operation::Design);
         let mut schemas = prepared.related;
         schemas.push(schema.clone());
         tokio::spawn(async move {
-            let run = Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema };
+            let run = Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema, ctx };
             let result = run.execute(parts, password).await;
             for s in &schemas {
                 service.metadata.cache().invalidate(&profile.id, Some(s));
@@ -416,6 +417,7 @@ pub(crate) struct Run<'a> {
     pub profile: &'a Profile,
     pub dialect: Dialect,
     pub schema: &'a str,
+    pub ctx: ExecContext,
 }
 
 impl Run<'_> {
@@ -439,6 +441,7 @@ impl Run<'_> {
         let (at, started) = (now_ms(), Instant::now());
         let result = exec(conn, sql, &[]).await;
         self.record(sql, at, started, result.as_ref().ok().copied(), result.as_ref().err());
+        report(&self.service.sessions.policy(), &self.ctx, sql, &result).await;
         result
     }
 
@@ -719,6 +722,7 @@ mod tests {
                     profile: &profile,
                     dialect: Dialect::new(Variant::MySql),
                     schema: "shop",
+                    ctx: ExecContext::new(&profile, Dialect::new(Variant::MySql), Operation::Design),
                 };
                 let r = run.execute(vec![Part::Rebuild(plan)], "pw".into()).await;
                 task.finish(r);

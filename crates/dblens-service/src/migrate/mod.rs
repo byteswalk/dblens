@@ -21,6 +21,7 @@ use dblens_dialect::migrate::{
 use dblens_dialect::{DdlKind, Dialect, Variant};
 use serde::{Deserialize, Serialize};
 
+use crate::policy::{ExecContext, Operation};
 use crate::import::OnError;
 use crate::profile::Profile;
 use crate::service::Service;
@@ -309,7 +310,7 @@ impl Service {
             &l.target_tables,
         )?;
         let sqls: Vec<String> = statements.iter().map(|s| s.sql.clone()).collect();
-        let (denied, confirm) = self.check_policy(&l.target, l.target_dialect, crate::policy::Operation::Migrate, &sqls).await;
+        let (denied, confirm) = self.check_policy(&l.target, l.target_dialect, Operation::Migrate, &sqls).await;
         let preview = MigrationPreview {
             source_variant: l.source_dialect.variant(),
             target_variant: l.target_dialect.variant(),
@@ -515,6 +516,7 @@ impl Service {
         });
         let lang = current_lang();
         let record_id = record.id.clone();
+        let exec = ExecContext::new(&target, target_dialect, Operation::Migrate);
         let ctx = Ctx {
             service: self.clone(),
             task: task.clone(),
@@ -525,6 +527,7 @@ impl Service {
             target_dialect,
             source_password,
             target_password,
+            exec,
         };
         // 错误文字、报告都用开始迁移时的界面语言
         tokio::spawn(scope_lang(lang, async move {

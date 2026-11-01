@@ -18,6 +18,8 @@ mod migrate;
 mod model;
 mod objects;
 mod operator;
+#[cfg(test)]
+mod path_tests;
 mod policy;
 mod privilege;
 mod profile;

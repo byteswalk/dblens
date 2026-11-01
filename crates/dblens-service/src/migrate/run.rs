@@ -20,6 +20,7 @@ use super::record::{
 use super::values::{key_text, normalize, to_target};
 use crate::design::Run;
 use crate::import::exec;
+use crate::policy::{ExecContext, report};
 use crate::profile::Profile;
 use crate::service::Service;
 use crate::task::{TaskFailure, TaskHandle};
@@ -57,6 +58,8 @@ pub(crate) struct Ctx {
     pub target_dialect: Dialect,
     pub source_password: String,
     pub target_password: String,
+    /// 目标库上写入的策略上下文。
+    pub exec: ExecContext,
 }
 
 fn lock_error() -> Error {
@@ -107,6 +110,11 @@ impl Ctx {
         Ok(c)
     }
 
+    /// 把目标库上一条语句（或一张表的摘要）的结果告诉策略。
+    pub async fn report(&self, sql: &str, result: &Result<u64>) {
+        report(&self.service.sessions.policy(), &self.exec, sql, result).await;
+    }
+
     fn run(&self) -> Run<'_> {
         Run {
             service: &self.service,
@@ -114,6 +122,7 @@ impl Ctx {
             profile: &self.target,
             dialect: self.target_dialect,
             schema: "",
+            ctx: self.exec.clone(),
         }
     }
 }
@@ -302,6 +311,9 @@ async fn data(ctx: &Ctx) -> Result<()> {
             let _permit = permit;
             let started = Instant::now();
             let result = copy_table(&ctx, &c).await;
+            let rows = ctx.with(|r| r.tables.get(&c.source).map_or(0, |t| t.rows)).unwrap_or(0);
+            let summary = format!("-- copy {} -> {}", c.source, c.target);
+            ctx.report(&summary, &result.as_ref().map(|_| rows).map_err(Clone::clone)).await;
             let _ = ctx.with(|r| {
                 if let Some(t) = r.tables.get_mut(&c.source) {
                     t.elapsed_ms += started.elapsed().as_millis() as u64;
@@ -355,7 +367,9 @@ async fn adjust(ctx: &Ctx) -> Result<()> {
     for c in &copies {
         let column = c.identity.as_deref().unwrap_or_default();
         if let Some(sql) = identity_reset_sql(&td, &target_schema, &c.target, column)? {
-            let error = exec(&mut tgt, &sql, &[]).await.err().map(|e| e.to_string());
+            let result = exec(&mut tgt, &sql, &[]).await;
+            ctx.report(&sql, &result).await;
+            let error = result.err().map(|e| e.to_string());
             out.push(Adjustment { object: format!("{}.{column}", c.target), sql, error });
         }
     }
@@ -371,7 +385,9 @@ async fn adjust(ctx: &Ctx) -> Result<()> {
             }
         };
         for sql in sequence_restart_sql(&td, &target_schema, seq, &next.max(1).to_string())? {
-            let error = exec(&mut tgt, &sql, &[]).await.err().map(|e| e.to_string());
+            let result = exec(&mut tgt, &sql, &[]).await;
+            ctx.report(&sql, &result).await;
+            let error = result.err().map(|e| e.to_string());
             let failed = error.is_some();
             out.push(Adjustment { object: seq.name.clone(), sql, error });
             if failed {
@@ -558,6 +574,8 @@ mod tests {
             st(2, StatementKind::Unique, "b", &["b"], "ALTER TABLE b ADD UNIQUE"),
         ];
         let task = s.tasks.create(TaskKind::Migrate).unwrap();
+        let dialect = Dialect::new(Variant::Postgres);
+        let exec = ExecContext::new(&profile, dialect, crate::policy::Operation::Migrate);
         let ctx = Ctx {
             service: s.clone(),
             task: task.clone(),
@@ -568,6 +586,7 @@ mod tests {
             target_dialect: Dialect::new(Variant::Postgres),
             source_password: String::new(),
             target_password: String::new(),
+            exec,
         };
         run(&ctx).await.unwrap();
         task.finish(Ok(()));

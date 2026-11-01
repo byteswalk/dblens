@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::design::{Part, Run};
 use crate::model::{FileError, ModelWrite, SchemaRenames};
+use crate::policy::{ExecContext, Operation};
 use crate::profile::Profile;
 use crate::service::Service;
 use crate::task::{TaskKind, TaskPhase};
@@ -366,7 +367,7 @@ impl Service {
                 preview.text = script_text(c.target.dialect.family(), &script);
                 let texts: Vec<String> = script.steps.iter().flat_map(|s| part_of(s).texts()).collect();
                 (preview.denied, preview.confirm) =
-                    self.check_policy(profile, c.target.dialect, crate::policy::Operation::Compare, &texts).await;
+                    self.check_policy(profile, c.target.dialect, Operation::Compare, &texts).await;
                 preview.script = Some(script);
             }
             None => {
@@ -434,8 +435,9 @@ impl Service {
         };
         let service = self.clone();
         let (dialect, schema) = (c.target.dialect, c.target.schema.clone());
+        let ctx = ExecContext::new(&profile, dialect, Operation::Compare);
         tokio::spawn(async move {
-            let run = Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema };
+            let run = Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema, ctx };
             let mut result = run.execute(parts, password).await;
             service.metadata.cache().invalidate(&profile.id, Some(&schema));
             if let (Ok(()), Some((model, mschema, list))) = (&result, cleared) {
@@ -623,6 +625,7 @@ pub(crate) mod tests {
             profile: &profile,
             dialect: Dialect::new(Variant::MySql),
             schema: "shop",
+            ctx: ExecContext::new(&profile, Dialect::new(Variant::MySql), Operation::Compare),
         };
         let r = run.execute(parts, "pw".into()).await;
         task.finish(r);

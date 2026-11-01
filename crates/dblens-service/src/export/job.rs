@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use super::write::{ExportFormat, ExportOptions, ExportWarnings, writer};
 use crate::history::NewHistory;
 use crate::objects::DataOrder;
-use crate::policy::{StatementKind, classify};
+use crate::policy::{ExecContext, Operation, StatementKind, ask, classify, report};
 use crate::profile::{driver_name, variant_code};
 use crate::service::Service;
 
@@ -242,6 +242,12 @@ impl Service {
                 self.metadata.data_sql(&profile, schema, object, filter, order.as_ref(), false).await?
             }
         };
+        // 导出没有确认步骤，这里只处理不能执行的情况
+        let ctx = ExecContext::new(&profile, dialect, Operation::Export);
+        let policy = self.sessions.policy();
+        if let Some(reason) = ask(&policy, &ctx, &sql).await.1.blocked() {
+            return Err(Error::Denied { reason });
+        }
         if req.path.is_some() && !allow_path {
             return Err(Error::invalid(msg!("export.path_not_allowed")));
         }
@@ -328,6 +334,7 @@ impl Service {
             .await;
             let result = if cancelled.load(Ordering::SeqCst) { Err(Error::Cancelled) } else { result };
             let n = rows.load(Ordering::Relaxed);
+            report(&policy, &ctx, &sql, &result.as_ref().map(|_| n).map_err(Clone::clone)).await;
             service.history.record(NewHistory {
                 at,
                 profile_id: profile.id.clone(),

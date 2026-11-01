@@ -56,7 +56,10 @@ async fn copy(
         }
         let target_read = TableRead { schema: &ts, table: &c.target, columns: &[], key: &[], filter: None };
         if c.replace || (state != TableState::Pending && !c.append) {
-            exec(tgt, &format!("DELETE FROM {}", td.qualified(Some(&ts), &c.target)), &[]).await?;
+            let sql = format!("DELETE FROM {}", td.qualified(Some(&ts), &c.target));
+            let result = exec(tgt, &sql, &[]).await;
+            ctx.report(&sql, &result).await;
+            result?;
         }
         let base =
             if c.append { Some(as_u64(scalar(tgt, &target_read.count(&td), &[]).await?)) } else { None };

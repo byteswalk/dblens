@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use dblens_core::{Msg, msg};
+use dblens_core::{Error, Msg, Result, msg};
 use dblens_dialect::{Dialect, Family};
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ObjectName, Statement};
@@ -156,6 +156,21 @@ const ACCOUNT_KEYWORDS: [&str; 8] = [
     "CREATE LOGIN",
     "ALTER LOGIN",
 ];
+
+/// 把一条语句的执行结果告诉策略。批量写入只在结束时用一条摘要回报。
+pub(crate) async fn report(
+    policy: &Arc<dyn Policy>,
+    ctx: &ExecContext,
+    sql: &str,
+    result: &Result<u64>,
+) {
+    let outcome = match result {
+        Ok(n) => Outcome::Succeeded { affected: Some(*n) },
+        Err(Error::Cancelled) => Outcome::Cancelled,
+        Err(e) => Outcome::Failed { message: e.to_string() },
+    };
+    policy.after_execute(ctx, &classify(&ctx.dialect, sql), sql, &outcome).await;
+}
 
 /// 个人版的默认策略。
 pub struct DefaultPolicy;

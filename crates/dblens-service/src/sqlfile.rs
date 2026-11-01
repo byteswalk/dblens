@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::history::NewHistory;
 use crate::import::{TextEncoding, exec, open_text};
-use crate::policy::{Decision, ExecContext, Operation, ask};
+use crate::policy::{Decision, ExecContext, Operation, ask, report};
 use crate::profile::{Environment, Profile, driver_name, variant_code};
 use crate::service::Service;
 use crate::task::{
@@ -278,11 +278,14 @@ impl Service {
             }
             let mut index = 0u64;
             let mut first_error: Option<Error> = None;
+            let policy = self.sessions.policy();
             let mut statements = Statements::open(&run.file, run.req.encoding, run.dialect);
             while let Some(st) = statements.next(task).await? {
                 let n = index;
                 index += 1;
-                match exec(&mut conn, &st.text, &[]).await {
+                let result = exec(&mut conn, &st.text, &[]).await;
+                report(&policy, &run.ctx, &st.text, &result).await;
+                match result {
                     Ok(affected) => task.update(|s| {
                         s.progress.statements_done += 1;
                         s.progress.affected += affected;

@@ -16,7 +16,7 @@ use super::file::{FileOptions, FileReader, FileRow};
 use super::text;
 use super::values::{EmptyAs, convert};
 use crate::history::NewHistory;
-use crate::policy::{ExecContext, Operation, ask};
+use crate::policy::{ExecContext, Operation, ask, report};
 use crate::profile::{Profile, driver_name, variant_code};
 use crate::service::Service;
 use crate::task::{FileSource, TaskFailure, TaskHandle, TaskKind, TaskPhase};
@@ -379,6 +379,9 @@ impl Service {
                 task.update(|s| n = s.progress.rows_written);
                 n
             };
+            let summary =
+                format!("-- {}", msg!("import.history", file = file.name, table = plan.table.name).current());
+            report(&policy, &ctx, &summary, &result.as_ref().map(|_| written).map_err(Clone::clone)).await;
             service.history.record(NewHistory {
                 at,
                 profile_id: plan.profile.id.clone(),
@@ -386,10 +389,7 @@ impl Service {
                 driver: driver_name(plan.profile.input.driver).to_string(),
                 variant: Some(variant_code(plan.dialect.variant())),
                 schema: Some(plan.schema.clone()),
-                sql: format!(
-                    "-- {}",
-                    msg!("import.history", file = file.name, table = plan.table.name).current()
-                ),
+                sql: summary,
                 elapsed_ms: Some(started.elapsed().as_millis() as u64),
                 rows: Some(written),
                 error: result.as_ref().err().map(ToString::to_string),
