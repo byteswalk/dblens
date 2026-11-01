@@ -349,6 +349,8 @@ trait Policy: Send + Sync {
 - M9 已完成：M9a 账号权限查看、M9b 修改、M9c GBase 8s（设计 `docs/superpowers/specs/2026-10-30-m9-privileges-design.md`，说明 `docs/notes/m9a-privileges.md`、`docs/notes/m9b-privileges.md`）。
 - 2026-10-31 达梦去掉原生 DPI，统一走 JDBC 桥接，第 5 节的达梦驱动描述已过时。Oracle 可选 JDBC 桥接。
 - 2026-10-31 用户决定首次发布延后，另行通知。
+- 2026-10-31 用户决定分单机版和审计版，审计版走执行网关，取代原“团队版”（设计 `docs/superpowers/specs/2026-10-31-audit-edition-design.md`）。
+- G0 已完成（详细计划 `docs/superpowers/plans/2026-10-31-g0-gate-extension-points.md`，说明 `docs/notes/g0-gate.md`）。
 - 国产库第三批：GBase 8s 已完成，OceanBase 的 Oracle 模式未定。GoldenDB 走 MySQL 协议，等新授权后实测。
 
 ## 12. 风险与待验证项
