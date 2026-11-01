@@ -26,8 +26,7 @@ fn service(spy: Arc<SpyPolicy>) -> (Arc<Service>, String, tempfile::TempDir) {
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
     secrets.init_vault("master").unwrap();
     let log: Log = Arc::default();
-    let registry =
-        Arc::new(DriverRegistry::with_drivers(store.clone(), vec![Box::new(FakeDriver { log })]));
+    let registry = Arc::new(DriverRegistry::with_drivers(store.clone(), vec![Box::new(FakeDriver { log })]));
     let s = Service::with_history(store, secrets, registry, spy, HistoryLog::off());
     let dir = tempfile::tempdir().unwrap();
     s.exports.set_dir(dir.path().join("exports"));
@@ -72,7 +71,8 @@ async fn export_reports_its_result() {
     let (s, id, _dir) = service(spy.clone());
     let job = s.start_export(export(&id), false).await.unwrap();
     let reported = reported_after(&spy, || {
-        s.exports.status(&job).unwrap().state != ExportState::Running && !spy.reported.lock().unwrap().is_empty()
+        s.exports.status(&job).unwrap().state != ExportState::Running
+            && !spy.reported.lock().unwrap().is_empty()
     })
     .await;
     assert_eq!(reported, [("SELECT 1".to_string(), Operation::Export)]);

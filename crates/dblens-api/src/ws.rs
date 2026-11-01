@@ -230,7 +230,10 @@ async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId) {
                 let (tx, rx) = mpsc::channel(1);
                 credit = Some(tx);
                 let pumping = pump(service.clone(), id, sql, max_rows.max(1), out.clone(), rx);
-                running = Some(tokio::spawn(Operator::scope(Operator::current(), scope_lang(current_lang(), pumping))));
+                running = Some(tokio::spawn(Operator::scope(
+                    Operator::current(),
+                    scope_lang(current_lang(), pumping),
+                )));
             }
             ClientMsg::FetchMore { max_rows } => {
                 if let Some(c) = &credit {

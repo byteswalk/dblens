@@ -326,7 +326,8 @@ impl Service {
                 RebuildStep::CountCheck { .. } => None,
             })
             .collect();
-        (preview.denied, preview.confirm) = self.check_policy(&prepared.profile, dialect, Operation::Design, &sqls).await;
+        (preview.denied, preview.confirm) =
+            self.check_policy(&prepared.profile, dialect, Operation::Design, &sqls).await;
         prepared.preview = preview;
         prepared.plan = plan;
         Ok(prepared)
@@ -399,7 +400,8 @@ impl Service {
         let mut schemas = prepared.related;
         schemas.push(schema.clone());
         tokio::spawn(async move {
-            let run = Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema, ctx };
+            let run =
+                Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema, ctx };
             let result = run.execute(parts, password).await;
             for s in &schemas {
                 service.metadata.cache().invalidate(&profile.id, Some(s));

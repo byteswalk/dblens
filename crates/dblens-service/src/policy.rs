@@ -135,11 +135,7 @@ pub trait Policy: Send + Sync {
 }
 
 /// 分析一条语句并询问策略。所有执行路径都从这里进，不直接调用 `before_execute`。
-pub(crate) async fn ask(
-    policy: &Arc<dyn Policy>,
-    ctx: &ExecContext,
-    sql: &str,
-) -> (StatementInfo, Decision) {
+pub(crate) async fn ask(policy: &Arc<dyn Policy>, ctx: &ExecContext, sql: &str) -> (StatementInfo, Decision) {
     let info = classify(&ctx.dialect, sql);
     let decision = policy.before_execute(ctx, &info, sql).await;
     (info, decision)
@@ -158,12 +154,7 @@ const ACCOUNT_KEYWORDS: [&str; 8] = [
 ];
 
 /// 把一条语句的执行结果告诉策略。批量写入只在结束时用一条摘要回报。
-pub(crate) async fn report(
-    policy: &Arc<dyn Policy>,
-    ctx: &ExecContext,
-    sql: &str,
-    result: &Result<u64>,
-) {
+pub(crate) async fn report(policy: &Arc<dyn Policy>, ctx: &ExecContext, sql: &str, result: &Result<u64>) {
     let outcome = match result {
         Ok(n) => Outcome::Succeeded { affected: Some(*n) },
         Err(Error::Cancelled) => Outcome::Cancelled,
@@ -523,7 +514,10 @@ mod tests {
         // 其他库的 KILL 不在此列
         let my = Dialect::new(Variant::MySql);
         let c = ExecContext { dialect: my, ..ctx(Environment::Prod) };
-        assert_eq!(DefaultPolicy.before_execute(&c, &classify(&my, "KILL 53"), "KILL 53").await, Decision::Allow);
+        assert_eq!(
+            DefaultPolicy.before_execute(&c, &classify(&my, "KILL 53"), "KILL 53").await,
+            Decision::Allow
+        );
     }
 
     fn ctx(environment: Environment) -> ExecContext {

@@ -69,8 +69,8 @@ pub use model::{
 pub use objects::{DataOrder, GenerateKind, ObjectKind};
 pub use operator::Operator;
 pub use policy::{
-    Decision, DefaultPolicy, ExecContext, ObjectRef, Operation, Outcome, Policy, StatementInfo, StatementKind,
-    classify,
+    Decision, DefaultPolicy, ExecContext, ObjectRef, Operation, Outcome, Policy, StatementInfo,
+    StatementKind, classify,
 };
 pub use privilege::{
     Coverage, ObjectAccessReport, PrincipalPrivileges, PrivApplyResult, PrivPreview, PrivilegeOverview,

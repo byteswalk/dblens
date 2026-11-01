@@ -359,10 +359,10 @@ impl TaskManager {
         let (_, dir) = self.dirs()?;
         let info = UploadInfo { id: id.to_string(), name: name.to_string(), size };
         let owner = Operator::current().id;
-        self.uploads
-            .lock()
-            .map_err(|_| lock_error())?
-            .insert(id.to_string(), Upload { owner, info: info.clone(), path: dir.join(id), at: Instant::now() });
+        self.uploads.lock().map_err(|_| lock_error())?.insert(
+            id.to_string(),
+            Upload { owner, info: info.clone(), path: dir.join(id), at: Instant::now() },
+        );
         Ok(info)
     }
 

@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "packageManager": "pnpm@11.8.0",
   "scripts": {
     "gen": "node scripts/gen-plsql.mjs && node scripts/gen-tsql.mjs",

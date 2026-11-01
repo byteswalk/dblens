@@ -437,7 +437,8 @@ impl Service {
         let (dialect, schema) = (c.target.dialect, c.target.schema.clone());
         let ctx = ExecContext::new(&profile, dialect, Operation::Compare);
         tokio::spawn(async move {
-            let run = Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema, ctx };
+            let run =
+                Run { service: &service, task: &task, profile: &profile, dialect, schema: &schema, ctx };
             let mut result = run.execute(parts, password).await;
             service.metadata.cache().invalidate(&profile.id, Some(&schema));
             if let (Ok(()), Some((model, mschema, list))) = (&result, cleared) {

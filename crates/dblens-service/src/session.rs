@@ -18,9 +18,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::history::{HistoryLog, NewHistory};
 use crate::metadata::MetadataCache;
 use crate::operator::Operator;
-use crate::policy::{
-    Decision, ExecContext, Operation, Outcome, Policy, StatementInfo, StatementKind, ask,
-};
+use crate::policy::{Decision, ExecContext, Operation, Outcome, Policy, StatementInfo, StatementKind, ask};
 use crate::profile::{Profile, driver_name, variant_code};
 
 pub type SessionId = u64;
