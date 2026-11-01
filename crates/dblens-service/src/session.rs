@@ -17,6 +17,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::history::{HistoryLog, NewHistory};
 use crate::metadata::MetadataCache;
+use crate::operator::Operator;
 use crate::policy::{
     Decision, ExecContext, Operation, Outcome, Policy, StatementInfo, StatementKind, ask,
 };
@@ -238,6 +239,8 @@ struct Handle {
     tx: mpsc::Sender<Command>,
     cancel: Arc<Mutex<CancelHandle>>,
     info: Arc<Mutex<SessionInfo>>,
+    /// 打开会话的操作者：别人看不到，也用不了。
+    owner: String,
 }
 
 /// 管理全部会话。会话之间互不影响，每个会话的命令按顺序处理。
@@ -268,7 +271,12 @@ impl SessionManager {
             .sessions
             .lock()
             .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "sessions")))?;
-        sessions.get(&id).map(f).ok_or_else(|| Error::not_found(msg!("noun.session", id = id)))
+        let me = Operator::current().id;
+        sessions
+            .get(&id)
+            .filter(|h| h.owner == me)
+            .map(f)
+            .ok_or_else(|| Error::not_found(msg!("noun.session", id = id)))
     }
 
     /// 用一个已建立的连接创建会话（连接由调用方通过 `DriverRegistry::connect` 建立）。
@@ -306,7 +314,7 @@ impl SessionManager {
         self.sessions
             .lock()
             .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "sessions")))?
-            .insert(id, Handle { tx, cancel, info });
+            .insert(id, Handle { tx, cancel, info, owner: Operator::current().id });
         Ok(id)
     }
 
@@ -335,8 +343,12 @@ impl SessionManager {
             .sessions
             .lock()
             .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "sessions")))?;
-        let mut out: Vec<SessionInfo> =
-            sessions.values().filter_map(|h| h.info.lock().ok().map(|i| i.clone())).collect();
+        let me = Operator::current().id;
+        let mut out: Vec<SessionInfo> = sessions
+            .values()
+            .filter(|h| h.owner == me)
+            .filter_map(|h| h.info.lock().ok().map(|i| i.clone()))
+            .collect();
         out.sort_by_key(|i| i.id);
         Ok(out)
     }
@@ -407,6 +419,8 @@ impl SessionManager {
 
     /// 关闭会话。有未提交的修改时按 `commit` 提交或回滚。
     pub async fn close(&self, id: SessionId, commit: bool) -> Result<()> {
+        // 下面的移除不看所有者，先确认
+        self.handle(id, |_| ())?;
         let result = self.call(id, |reply| Command::Close { commit, reply }).await;
         self.sessions
             .lock()

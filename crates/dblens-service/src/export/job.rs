@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use super::write::{ExportFormat, ExportOptions, ExportWarnings, writer};
 use crate::history::NewHistory;
 use crate::objects::DataOrder;
+use crate::operator::Operator;
 use crate::policy::{ExecContext, Operation, StatementKind, ask, classify, report};
 use crate::profile::{driver_name, variant_code};
 use crate::service::Service;
@@ -81,6 +82,8 @@ pub struct ExportStatus {
 }
 
 struct Job {
+    /// 发起导出的操作者：别人看不到，也下载不了。
+    owner: String,
     status: ExportStatus,
     rows: Arc<AtomicU64>,
     cancelled: Arc<AtomicBool>,
@@ -143,10 +146,15 @@ impl ExportManager {
         });
     }
 
+    fn mine<'a>(jobs: &'a HashMap<String, Job>, id: &str) -> Result<&'a Job> {
+        let me = Operator::current().id;
+        jobs.get(id).filter(|j| j.owner == me).ok_or_else(|| not_found(id))
+    }
+
     pub fn status(&self, id: &str) -> Result<ExportStatus> {
         let mut jobs = self.jobs.lock().map_err(|_| lock_error())?;
         Self::purge(&mut jobs);
-        let j = jobs.get(id).ok_or_else(|| not_found(id))?;
+        let j = Self::mine(&jobs, id)?;
         Ok(ExportStatus { rows: j.rows.load(Ordering::Relaxed), ..j.status.clone() })
     }
 
@@ -154,7 +162,7 @@ impl ExportManager {
     pub async fn cancel_or_remove(&self, id: &str) -> Result<()> {
         let handle = {
             let mut jobs = self.jobs.lock().map_err(|_| lock_error())?;
-            let j = jobs.get(id).ok_or_else(|| not_found(id))?;
+            let j = Self::mine(&jobs, id)?;
             if j.status.state == ExportState::Running {
                 j.cancelled.store(true, Ordering::SeqCst);
                 j.cancel.lock().map_err(|_| lock_error())?.clone()
@@ -176,7 +184,7 @@ impl ExportManager {
     /// 浏览器模式下载用：已完成的临时文件的路径和文件名。下载后由调用方删除文件、移除任务。
     pub fn take_file(&self, id: &str) -> Result<(PathBuf, String)> {
         let mut jobs = self.jobs.lock().map_err(|_| lock_error())?;
-        let j = jobs.get(id).ok_or_else(|| not_found(id))?;
+        let j = Self::mine(&jobs, id)?;
         if j.status.state != ExportState::Done || !j.temp {
             return Err(Error::invalid(msg!("export.no_file")));
         }
@@ -279,6 +287,7 @@ impl Service {
         self.exports.jobs.lock().map_err(|_| lock_error())?.insert(
             id.clone(),
             Job {
+                owner: ctx.operator.id.clone(),
                 status,
                 rows: rows.clone(),
                 cancelled: cancelled.clone(),

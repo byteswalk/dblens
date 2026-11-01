@@ -12,6 +12,8 @@ use dblens_driver::CancelHandle;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
+use crate::operator::Operator;
+
 /// 同时进行的任务上限。
 pub const MAX_RUNNING_TASKS: usize = 4;
 /// 已结束的任务、上传后没有使用的文件保留多久。
@@ -132,6 +134,8 @@ pub struct TaskStatus {
 }
 
 struct Entry {
+    /// 发起任务的操作者：别人看不到，也用不了。
+    owner: String,
     status: Mutex<TaskStatus>,
     cancelled: AtomicBool,
     cancel: Mutex<Option<CancelHandle>>,
@@ -247,6 +251,7 @@ pub struct UploadInfo {
 }
 
 struct Upload {
+    owner: String,
     info: UploadInfo,
     path: PathBuf,
     at: Instant,
@@ -353,10 +358,11 @@ impl TaskManager {
     pub fn finish_upload(&self, id: &str, name: &str, size: u64) -> Result<UploadInfo> {
         let (_, dir) = self.dirs()?;
         let info = UploadInfo { id: id.to_string(), name: name.to_string(), size };
+        let owner = Operator::current().id;
         self.uploads
             .lock()
             .map_err(|_| lock_error())?
-            .insert(id.to_string(), Upload { info: info.clone(), path: dir.join(id), at: Instant::now() });
+            .insert(id.to_string(), Upload { owner, info: info.clone(), path: dir.join(id), at: Instant::now() });
         Ok(info)
     }
 
@@ -366,8 +372,11 @@ impl TaskManager {
         match src {
             FileSource::Upload { upload } => {
                 let mut ups = self.uploads.lock().map_err(|_| lock_error())?;
-                let u =
-                    ups.get(upload).ok_or_else(|| Error::not_found(msg!("import.no_upload", id = upload)))?;
+                let me = Operator::current().id;
+                let u = ups
+                    .get(upload)
+                    .filter(|u| u.owner == me)
+                    .ok_or_else(|| Error::not_found(msg!("import.no_upload", id = upload)))?;
                 let file = SourceFile { path: u.path.clone(), name: u.info.name.clone(), upload: true };
                 if take {
                     ups.remove(upload);
@@ -402,6 +411,7 @@ impl TaskManager {
         }
         let id = uuid::Uuid::new_v4().simple().to_string();
         let entry = Arc::new(Entry {
+            owner: Operator::current().id,
             status: Mutex::new(TaskStatus {
                 id: id.clone(),
                 kind,
@@ -433,7 +443,14 @@ impl TaskManager {
     }
 
     fn get(&self, id: &str) -> Result<Arc<Entry>> {
-        self.tasks.lock().map_err(|_| lock_error())?.get(id).cloned().ok_or_else(|| not_found(id))
+        let me = Operator::current().id;
+        self.tasks
+            .lock()
+            .map_err(|_| lock_error())?
+            .get(id)
+            .filter(|e| e.owner == me)
+            .cloned()
+            .ok_or_else(|| not_found(id))
     }
 
     pub fn status(&self, id: &str) -> Result<TaskStatus> {

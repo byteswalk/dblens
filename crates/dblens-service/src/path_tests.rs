@@ -11,6 +11,7 @@ use crate::export::{ExportFormat, ExportOptions, ExportRequest, ExportSource, Ex
 use crate::fake::{FakeDriver, Log, SpyPolicy};
 use crate::history::HistoryLog;
 use crate::import::TextEncoding;
+use crate::operator::Operator;
 use crate::policy::{ExecContext, Operation};
 use crate::profile::tests::input;
 use crate::registry::DriverRegistry;
@@ -123,4 +124,52 @@ async fn design_run_reports_each_statement() {
     let reported = spy.reported.lock().unwrap().clone();
     assert_eq!(reported.len(), 2);
     assert_eq!(reported[0], ("ALTER TABLE t ADD c int".to_string(), Operation::Design));
+}
+
+fn stranger() -> Operator {
+    Operator { id: "other".into(), name: String::new() }
+}
+
+#[tokio::test]
+async fn sessions_belong_to_their_operator() {
+    let (s, id, _dir) = service(Arc::default());
+    let info = s.open_session(&id).await.unwrap();
+    let other = Operator::scope(stranger(), async { (s.sessions.info(info.id), s.sessions.list()) }).await;
+    assert!(matches!(other.0, Err(Error::NotFound { .. })));
+    assert!(other.1.unwrap().is_empty());
+    let hijack = Operator::scope(stranger(), s.sessions.execute(info.id, "ROWS 1", false)).await;
+    assert!(matches!(hijack, Err(Error::NotFound { .. })));
+    let closed = Operator::scope(stranger(), s.sessions.close(info.id, false)).await;
+    assert!(matches!(closed, Err(Error::NotFound { .. })));
+    assert!(s.sessions.info(info.id).is_ok(), "所有者不受影响");
+}
+
+#[tokio::test]
+async fn tasks_and_uploads_belong_to_their_operator() {
+    let (s, _, _dir) = service(Arc::default());
+    let task = s.tasks.create(TaskKind::SqlFile).unwrap();
+    let id = {
+        let mut id = String::new();
+        task.update(|st| id = st.id.clone());
+        id
+    };
+    let r = Operator::scope(stranger(), async { s.tasks.status(&id) }).await;
+    assert!(matches!(r, Err(Error::NotFound { .. })));
+    assert!(s.tasks.status(&id).is_ok());
+    let (up, path) = s.tasks.begin_upload().unwrap();
+    std::fs::write(&path, "x").unwrap();
+    s.tasks.finish_upload(&up, "a.sql", 1).unwrap();
+    let src = FileSource::Upload { upload: up };
+    assert!(Operator::scope(stranger(), async { s.tasks.resolve(&src, false, false) }).await.is_err());
+    assert!(s.tasks.resolve(&src, false, false).is_ok());
+}
+
+#[tokio::test]
+async fn exports_belong_to_their_operator() {
+    let (s, id, _dir) = service(Arc::default());
+    let job = s.start_export(export(&id), false).await.unwrap();
+    let r = Operator::scope(stranger(), async { (s.exports.status(&job), s.exports.take_file(&job)) }).await;
+    assert!(matches!(r.0, Err(Error::NotFound { .. })));
+    assert!(matches!(r.1, Err(Error::NotFound { .. })));
+    assert!(s.exports.status(&job).is_ok());
 }
