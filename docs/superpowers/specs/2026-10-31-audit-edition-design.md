@@ -151,6 +151,8 @@ dblens-gate/
 
 ### 3.6 管理界面选型
 
+> 2026-11-01 更新：管理端改用 Ant Design Pro 6，工作台以同源 iframe 嵌入，详见私有仓库 `docs/superpowers/specs/2026-11-01-gate-ui-design.md`。下表中的“不用 ProComponents”和工程结构已作废。
+
 沿用现有 React 19、antd 6、TanStack Query、zustand、i18next，不另起技术栈。
 
 | 方面 | 决定 | 理由 |
