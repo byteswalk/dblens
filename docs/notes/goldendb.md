@@ -41,7 +41,7 @@ Oracle 模式租户开 Oracle 兼容（`sql_mode` 含 `ORA_COMPATIBLE_MODE`、`A
 
 租户模式由向导第 2 步的基线模板决定，`mysql_cluster.json` 是 MySQL 模式。`sql_mode` 只有 `STRICT_TRANS_TABLES`，别名不变大写，`DATE` 列正常，`lower_case_table_names` 也是 1。服务端预处理、回收站、`ON DUPLICATE KEY UPDATE` 被拒绝这几点和 Oracle 模式相同。
 
-**读不到触发器**：`SHOW TRIGGERS` 和 `information_schema.TRIGGERS` 都是空的，只有按名字 `SHOW CREATE TRIGGER` 才看得到。`super` 和对库有全部权限的普通账号结果相同，是租户本身的行为。所以重建表时触发器会丢失，预览里有警告（`design.rebuild.triggers_unknown`）。
+**读不到触发器**：`SHOW TRIGGERS` 和 `information_schema.TRIGGERS` 都是空的，只有按名字 `SHOW CREATE TRIGGER` 才看得到。`super` 和对库有全部权限的普通账号结果相同，是租户本身的行为。`sys.all_triggers`、`dba_triggers`、`user_triggers` 也是空的。Insight 的“业务管理 → 数据字典管理”选“触发器”能看到名字，数据在元数据服务里，经 SQL 读不到，也没有定义文本。所以重建表时触发器会丢失，预览里有警告（`design.rebuild.triggers_unknown`）。
 
 `super` 对 `sys` 视图没有权限，所以 `locks` 改查 `performance_schema` 和 `information_schema.INNODB_TRX`，两种租户通用。
 
