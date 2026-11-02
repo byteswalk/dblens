@@ -81,6 +81,9 @@ pub enum Variant {
     /// OceanBase 的 Oracle 模式。标准 MySQL 客户端连不上这种租户，经官方 JDBC 驱动连接。
     #[serde(rename = "oceanbase_oracle")]
     OceanBaseOracle,
+    /// GoldenDB。服务器报告的是 MySQL，经官方 JDBC 驱动连接时才知道是它。
+    #[serde(rename = "goldendb")]
+    GoldenDb,
     /// 阿里云 PolarDB 的 MySQL 版。版本字符串与 MySQL 相同，靠 `Dialect::refine` 识别。
     #[serde(rename = "polardb")]
     PolarDb,
@@ -107,9 +110,12 @@ pub enum Variant {
 impl Variant {
     pub fn family(self) -> Family {
         match self {
-            Variant::MySql | Variant::MariaDb | Variant::TiDb | Variant::OceanBase | Variant::PolarDb => {
-                Family::MySql
-            }
+            Variant::MySql
+            | Variant::MariaDb
+            | Variant::TiDb
+            | Variant::OceanBase
+            | Variant::GoldenDb
+            | Variant::PolarDb => Family::MySql,
             Variant::Postgres
             | Variant::Kingbase
             | Variant::OpenGauss
@@ -130,6 +136,7 @@ impl Variant {
             Variant::TiDb => Msg::raw("TiDB"),
             Variant::OceanBase => msg!("variant.oceanbase"),
             Variant::OceanBaseOracle => msg!("variant.oceanbase_oracle"),
+            Variant::GoldenDb => Msg::raw("GoldenDB"),
             Variant::PolarDb => msg!("variant.polardb"),
             Variant::Postgres => Msg::raw("PostgreSQL"),
             Variant::Kingbase => msg!("variant.kingbase"),
@@ -156,14 +163,15 @@ impl Variant {
     }
 
     /// 根据驱动和服务器返回的版本字符串识别具体产品，识别不出时退回基础变体。
-    /// 注意：PolarDB-MySQL、GoldenDB 等的 `VERSION()` 与 MySQL 无法区分，会识别为 MySQL；
-    /// PolarDB 再用 `Dialect::refine` 识别。
+    /// 注意：PolarDB-MySQL 的 `VERSION()` 与 MySQL 无法区分，会识别为 MySQL，再用 `Dialect::refine` 识别。
+    /// GoldenDB 也一样，JDBC 连接在版本号前补上了产品名。
     pub fn detect(driver: DriverId, info: &ServerInfo) -> Variant {
         let v = info.version.to_ascii_lowercase();
         match driver {
             DriverId::Mysql if v.contains("mariadb") => Variant::MariaDb,
             DriverId::Mysql if v.contains("tidb") => Variant::TiDb,
             DriverId::Mysql if v.contains("oceanbase") => Variant::OceanBase,
+            DriverId::Mysql if v.contains("goldendb") => Variant::GoldenDb,
             DriverId::Oracle if v.contains("oceanbase") => Variant::OceanBaseOracle,
             DriverId::Postgres if v.contains("kingbase") => Variant::Kingbase,
             DriverId::Postgres if v.contains("opengauss") => Variant::OpenGauss,
@@ -211,6 +219,8 @@ mod tests {
             Variant::detect(DriverId::Mysql, &info("MySQL", "5.7.25-OceanBase_CE-v4.2.1.2")),
             Variant::OceanBase
         );
+        let gd = Variant::detect(DriverId::Mysql, &info("GoldenDB", "GoldenDB 8.9.99"));
+        assert_eq!((gd, gd.family()), (Variant::GoldenDb, Family::MySql));
     }
 
     #[test]

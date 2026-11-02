@@ -47,9 +47,14 @@ export interface ConnectionForm {
 }
 
 /** 新建连接时可选的驱动，按界面上的顺序。 */
-/** 达梦只走 JDBC，Oracle 可选。 */
+/** 达梦和 GoldenDB 只走 JDBC，Oracle 可选。 */
 export function usesJdbc(f: { driver: DriverId; client: ClientKind; product?: ProductId }): boolean {
-  return f.driver === 'dameng' || f.product === 'oceanbase_oracle' || (f.driver === 'oracle' && f.client === 'jdbc')
+  return (
+    f.driver === 'dameng' ||
+    f.product === 'oceanbase_oracle' ||
+    f.product === 'goldendb' ||
+    (f.driver === 'oracle' && f.client === 'jdbc')
+  )
 }
 
 export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng', 'sqlserver', 'informix']
@@ -180,6 +185,11 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     options.client = 'jdbc'
     if (f.jdbcDir.trim()) options.jdbc_dir = f.jdbcDir.trim()
     if (f.product === 'oceanbase_oracle') options.jdbc_kind = 'oceanbase'
+  }
+  if (f.product === 'goldendb') {
+    options.client = 'jdbc'
+    options.jdbc_kind = 'goldendb'
+    if (f.jdbcDir.trim()) options.jdbc_dir = f.jdbcDir.trim()
   }
   if (f.driver === 'informix') {
     if (f.serverName.trim()) options.server_name = f.serverName.trim()

@@ -48,6 +48,10 @@
       "label": "OceanBase（Oracle 模式）",
       "note": "企业版的 Oracle 模式租户；用户名写成 用户@租户；经官方 JDBC 驱动连接"
     },
+    "goldendb": {
+      "label": "GoldenDB",
+      "note": "经官方 JDBC 驱动连接，端口是连接实例的端口；驱动 jar 要自己放到 JDBC 驱动目录"
+    },
     "postgres": {
       "label": "PostgreSQL"
     },

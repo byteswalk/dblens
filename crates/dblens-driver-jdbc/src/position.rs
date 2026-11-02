@@ -3,6 +3,7 @@
 //! 所以在该行里找方括号中的词，取离列号最近的一处；方括号为空（语句意外结束）时按列号取，超出行尾取行尾。
 
 use dblens_core::{Error, char_position};
+use dblens_driver::mysql_error_offset;
 
 /// 解析 `第 L 行, 第 C 列[T]`，返回行号、列号和词。没有列号时返回 None。
 fn parse(message: &str) -> Option<(usize, usize, &str)> {
@@ -43,6 +44,17 @@ pub(crate) fn with_position(e: Error, sql: &str) -> Error {
     match e {
         Error::Sql { code, message, position: None } => {
             let position = locate(sql, &message).map(|b| char_position(sql, b));
+            Error::Sql { code, message, position }
+        }
+        other => other,
+    }
+}
+
+/// MySQL 协议的语法错误，写法见 `mysql_error_offset`。
+pub(crate) fn with_mysql_position(e: Error, sql: &str) -> Error {
+    match e {
+        Error::Sql { code, message, position: None } => {
+            let position = mysql_error_offset(sql, &message).map(|b| char_position(sql, b));
             Error::Sql { code, message, position }
         }
         other => other,

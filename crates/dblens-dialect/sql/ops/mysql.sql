@@ -5,7 +5,7 @@
 -- name.zh-CN: 会话列表
 -- name.en: Sessions
 -- category: session
-SELECT p.ID AS id, p.USER AS user, p.HOST AS host, p.DB AS db, p.COMMAND AS command,
+SELECT p.ID AS id, p.USER AS `user`, p.HOST AS host, p.DB AS db, p.COMMAND AS command,
        p.TIME AS seconds, p.STATE AS state, LEFT(p.INFO, 200) AS current_sql,
        CONCAT('KILL ', p.ID) AS kill_sql
 FROM information_schema.PROCESSLIST p
@@ -15,7 +15,7 @@ ORDER BY p.TIME DESC
 -- name.zh-CN: 正在执行的语句
 -- name.en: Running Statements
 -- category: session
-SELECT p.ID AS id, p.USER AS user, p.HOST AS host, p.DB AS db, p.TIME AS seconds, p.STATE AS state,
+SELECT p.ID AS id, p.USER AS `user`, p.HOST AS host, p.DB AS db, p.TIME AS seconds, p.STATE AS state,
        LEFT(p.INFO, 500) AS current_sql, CONCAT('KILL ', p.ID) AS kill_sql
 FROM information_schema.PROCESSLIST p
 WHERE p.COMMAND NOT IN ('Sleep', 'Daemon', 'Binlog Dump') AND p.ID <> CONNECTION_ID()

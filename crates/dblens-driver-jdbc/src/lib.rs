@@ -7,4 +7,4 @@ mod frame;
 mod position;
 mod process;
 
-pub use drivers::{DamengJdbcDriver, GbaseDriver, OracleJdbcDriver};
+pub use drivers::{DamengJdbcDriver, GbaseDriver, MysqlJdbcDriver, OracleJdbcDriver};

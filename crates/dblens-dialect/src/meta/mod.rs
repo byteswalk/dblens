@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use dblens_core::Value;
 
+pub(crate) use assemble::goldendb_triggers;
 pub use assemble::{
     DependentView, Grant, LintTable, ObjectInfo, ReferencingKey, SchemaInfo, TableRows, TableStorage,
     dependent_views, function_indexes, grants, lint_tables, objects, referencing_keys, reserved_words,

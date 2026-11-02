@@ -24,15 +24,17 @@ const OPENGAUSS: &str = include_str!("../../sql/opengauss.sql");
 const TIDB: &str = include_str!("../../sql/tidb.sql");
 const OCEANBASE: &str = include_str!("../../sql/oceanbase.sql");
 const OCEANBASE_ORACLE: &str = include_str!("../../sql/oceanbase_oracle.sql");
+const GOLDENDB: &str = include_str!("../../sql/goldendb.sql");
 const SQLSERVER: &str = include_str!("../../sql/sqlserver.sql");
 const INFORMIX: &str = include_str!("../../sql/informix.sql");
 
-pub(crate) const ALL_VARIANTS: [Variant; 15] = [
+pub(crate) const ALL_VARIANTS: [Variant; 16] = [
     Variant::MySql,
     Variant::MariaDb,
     Variant::TiDb,
     Variant::OceanBase,
     Variant::OceanBaseOracle,
+    Variant::GoldenDb,
     Variant::PolarDb,
     Variant::Postgres,
     Variant::Kingbase,
@@ -84,6 +86,7 @@ fn override_file(variant: Variant) -> Option<&'static str> {
         Variant::TiDb => Some(TIDB),
         Variant::OceanBase => Some(OCEANBASE),
         Variant::OceanBaseOracle => Some(OCEANBASE_ORACLE),
+        Variant::GoldenDb => Some(GOLDENDB),
         Variant::Kingbase => Some(KINGBASE),
         Variant::OpenGauss | Variant::GaussDb => Some(OPENGAUSS),
         _ => None,
@@ -158,6 +161,7 @@ pub(crate) fn render(
             name => args.name.is_some(),
             kind => args.kind.is_some(),
             filter => args.filter.is_some(),
+            schema_ident => args.schema.as_deref().map(|s| ident::quote_ident(family, s)),
             version => version,
             oracle_mode => oracle_mode,
         })

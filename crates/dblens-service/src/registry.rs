@@ -78,7 +78,7 @@ fn display_name(id: DriverId) -> Msg {
 pub struct DriverRegistry {
     store: Arc<Store>,
     drivers: Vec<Box<dyn Driver>>,
-    /// 连接选项 `client=jdbc` 时改用的驱动（Oracle），不需要原生客户端。
+    /// 连接选项 `client=jdbc` 时改用的驱动（Oracle、GoldenDB），不需要原生客户端。
     jdbc_drivers: Vec<Box<dyn Driver>>,
 }
 
@@ -107,7 +107,10 @@ impl DriverRegistry {
         let mut registry = Self::with_drivers(store, drivers);
         #[cfg(feature = "informix")]
         {
-            registry.jdbc_drivers = vec![Box::new(dblens_driver_jdbc::OracleJdbcDriver)];
+            registry.jdbc_drivers = vec![
+                Box::new(dblens_driver_jdbc::OracleJdbcDriver),
+                Box::new(dblens_driver_jdbc::MysqlJdbcDriver),
+            ];
         }
         registry
     }

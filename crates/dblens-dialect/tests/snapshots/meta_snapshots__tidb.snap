@@ -67,14 +67,14 @@ SELECT c.TABLE_NAME AS table_name,
        CASE
          WHEN c.COLUMN_DEFAULT IS NULL THEN NULL
          WHEN c.GENERATION_EXPRESSION <> '' THEN NULL
-         WHEN c.EXTRA LIKE '%DEFAULT\_GENERATED%' THEN c.COLUMN_DEFAULT
+         WHEN c.EXTRA LIKE '%DEFAULT!_GENERATED%' ESCAPE '!' THEN c.COLUMN_DEFAULT
          -- TiDB 的 EXTRA 中没有 DEFAULT_GENERATED：时间列的 CURRENT_TIMESTAMP 默认值按表达式处理
-         WHEN c.DATA_TYPE IN ('datetime', 'timestamp') AND UPPER(c.COLUMN_DEFAULT) LIKE 'CURRENT\_TIMESTAMP%' THEN c.COLUMN_DEFAULT
+         WHEN c.DATA_TYPE IN ('datetime', 'timestamp') AND UPPER(c.COLUMN_DEFAULT) LIKE 'CURRENT!_TIMESTAMP%' ESCAPE '!' THEN c.COLUMN_DEFAULT
          WHEN c.DATA_TYPE IN ('tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'decimal', 'float', 'double', 'year', 'bit') THEN c.COLUMN_DEFAULT
          ELSE CONCAT('''', REPLACE(REPLACE(c.COLUMN_DEFAULT, '\\', '\\\\'), '''', ''''''), '''')
        END AS default_value,
        NULLIF(c.COLUMN_COMMENT, '') AS comment,
-       CASE WHEN c.EXTRA LIKE '%auto\_increment%'
+       CASE WHEN c.EXTRA LIKE '%auto!_increment%' ESCAPE '!'
               OR (c.COLUMN_KEY = 'PRI' AND t.TIDB_ROW_ID_SHARDING_INFO LIKE 'PK!_AUTO!_RANDOM!_BITS%' ESCAPE '!')
             THEN 1 ELSE 0 END AS auto_increment,
        NULLIF(c.GENERATION_EXPRESSION, '') AS `generated`

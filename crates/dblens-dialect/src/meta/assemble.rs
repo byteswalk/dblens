@@ -514,6 +514,25 @@ pub fn trigger_ddl(rows: &MetaRows) -> Result<Vec<String>> {
     Ok(rows.iter().map(|r| format!("{}{}", r.name("head"), r.name("body")).trim_end().to_string()).collect())
 }
 
+/// 把 GoldenDB 的 `SHOW TRIGGERS` 换成 `triggers` 查询的列。Oracle 兼容模式下名字是大写的，而表名按小写保存
+/// （`lower_case_table_names=1`），所以转成小写。`Statement` 是完整的 CREATE TRIGGER。`SHOW` 不能按表过滤，在这里过滤。
+pub(crate) fn goldendb_triggers(rows: &MetaRows, table: Option<&str>) -> MetaRows {
+    let columns = ["table_name", "name", "timing", "events", "definition"].map(String::from).to_vec();
+    let out = rows
+        .iter()
+        .filter(|r| table.is_none_or(|t| r.name("table").eq_ignore_ascii_case(t)))
+        .map(|r| {
+            ["table", "trigger"]
+                .map(|c| r.name(c).to_lowercase())
+                .into_iter()
+                .chain(["timing", "event", "statement"].map(|c| r.name(c)))
+                .map(dblens_core::Value::String)
+                .collect()
+        })
+        .collect();
+    MetaRows::new(columns, out)
+}
+
 #[cfg(test)]
 mod tests {
     use dblens_core::{LogicalType, Value};
@@ -700,6 +719,23 @@ mod tests {
                 vec![vec![s("emp"), s("trg_emp"), s("BEFORE"), s("INSERT,UPDATE"), s("BEGIN END")]],
             ),
         }
+    }
+
+    #[test]
+    fn goldendb_triggers_come_from_show_and_filter_by_table() {
+        let row = |tr: &str, on: &str| {
+            [tr, "INSERT", on, "CREATE TRIGGER x BEFORE INSERT ON y FOR EACH ROW SET NEW.a = 1", "BEFORE"]
+                .map(|s| dblens_core::Value::String(s.into()))
+                .to_vec()
+        };
+        let columns = ["Trigger", "Event", "Table", "Statement", "Timing"].map(String::from).to_vec();
+        let rows = MetaRows::new(columns, vec![row("TR_A", "T_A"), row("TR_B", "T_B")]);
+        assert_eq!(goldendb_triggers(&rows, None).len(), 2);
+        let one = goldendb_triggers(&rows, Some("t_b"));
+        let r = one.iter().next().unwrap();
+        assert_eq!((one.len(), r.name("table_name"), r.name("name")), (1, "t_b".into(), "tr_b".into()));
+        assert_eq!((r.name("timing"), r.name("events")), ("BEFORE".into(), "INSERT".into()));
+        assert!(r.name("definition").starts_with("CREATE TRIGGER"));
     }
 
     #[test]

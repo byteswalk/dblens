@@ -55,6 +55,19 @@ pub(crate) fn oceanbase_url(p: &ConnectParams) -> Result<String> {
     Ok(format!("jdbc:oceanbase://{}:{}/{schema}", p.host, p.port))
 }
 
+/// GoldenDB 的官方驱动。参数绑定在客户端完成，代理对部分服务端预处理语句的处理有问题。
+/// 关掉驱动自己的日志（里面有 SQL 原文），并按行流式读取，否则结果集会全部读进内存。
+pub(crate) fn goldendb_url(p: &ConnectParams) -> Result<String> {
+    let db = match p.database.as_deref().filter(|d| !d.is_empty()) {
+        Some(d) => plain(d, "database")?,
+        None => String::new(),
+    };
+    Ok(format!(
+        "jdbc:goldendb://{}:{}/{db}?logger=com.goldendb.jdbc.log.NullLogger&useSSL=false&useUnicode=true&characterEncoding=utf8&tinyInt1isBit=false&defaultFetchSize=-2147483648&clobberStreamingResults=true",
+        p.host, p.port
+    ))
+}
+
 /// 程序自带的目录：Windows 和压缩包在程序旁边，deb 在 `../lib/<产品>/`，macOS 的 app 在 `../Resources/`。
 fn bundled() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
@@ -131,8 +144,12 @@ fn connect_blocking(p: &ConnectParams, spec: Spec) -> Result<JdbcConnection> {
     })?;
     match expect(k, &b, 0, spec.flavor) {
         Ok(Resp::Connected(id)) => {
-            let oceanbase = spec.class.starts_with("com.oceanbase.");
-            let mut conn = JdbcConnection { bridge, id, flavor: spec.flavor, oceanbase };
+            let vendor = match spec.class {
+                "com.oceanbase.jdbc.Driver" => Some("OceanBase"),
+                "com.goldendb.jdbc.Driver" => Some("GoldenDB"),
+                _ => None,
+            };
+            let mut conn = JdbcConnection { bridge, id, flavor: spec.flavor, vendor };
             conn.set_lob_limit(DEFAULT_LOB_PREVIEW_BYTES);
             Ok(conn)
         }
@@ -274,6 +291,41 @@ impl Driver for OracleJdbcDriver {
     }
 }
 
+/// MySQL 协议数据库的 JDBC 版，目前只有 GoldenDB：标准客户端读不了它的部分元数据。
+pub struct MysqlJdbcDriver;
+
+#[async_trait]
+impl Driver for MysqlJdbcDriver {
+    fn id(&self) -> DriverId {
+        DriverId::Mysql
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            catalogs: false,
+            schemas: true,
+            transactional_ddl: false,
+            cancel: true,
+            explain: true,
+            multiple_result_sets: false,
+        }
+    }
+
+    async fn connect(&self, p: &ConnectParams) -> Result<Box<dyn Connection>> {
+        connect_async(p, |p| {
+            p.reject_tls("GoldenDB")?;
+            let spec = Spec {
+                class: "com.goldendb.jdbc.Driver",
+                jar_prefix: "gdb",
+                flavor: Flavor::Mysql,
+                url: goldendb_url(p)?,
+            };
+            connect_blocking(p, spec)
+        })
+        .await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,6 +350,13 @@ mod tests {
         let mut p = params(&[]);
         p.database = None;
         assert_eq!(oceanbase_url(&p).unwrap(), "jdbc:oceanbase://h:9088/");
+    }
+
+    #[test]
+    fn goldendb_url_keeps_logs_off_and_streams_rows() {
+        let url = goldendb_url(&params(&[])).unwrap();
+        assert!(url.starts_with("jdbc:goldendb://h:9088/db?"), "{url}");
+        assert!(url.contains("NullLogger") && url.contains("defaultFetchSize=-2147483648"), "{url}");
     }
 
     #[test]

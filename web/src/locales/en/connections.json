@@ -48,6 +48,10 @@
       "label": "OceanBase (Oracle mode)",
       "note": "Oracle-mode tenant of the Enterprise Edition; user is user@tenant; connects through the official JDBC driver"
     },
+    "goldendb": {
+      "label": "GoldenDB",
+      "note": "Connects through the official JDBC driver; the port is that of the connection instance. Put the driver jar in the JDBC driver folder yourself"
+    },
     "postgres": {
       "label": "PostgreSQL"
     },

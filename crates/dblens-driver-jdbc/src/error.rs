@@ -8,6 +8,7 @@ pub(crate) enum Flavor {
     Gbase,
     Dameng,
     Oracle,
+    Mysql,
 }
 
 impl Flavor {
@@ -19,6 +20,21 @@ impl Flavor {
             Flavor::Dameng if code == -6515 || sqlstate == "HY008" => Error::Cancelled,
             // ORA-01013：用户请求取消当前操作
             Flavor::Oracle if code == 1013 => Error::Cancelled,
+            // 1317：语句被 KILL QUERY 打断；70100：驱动发起的取消
+            Flavor::Mysql if code == 1317 || sqlstate == "70100" => Error::Cancelled,
+            // GoldenDB 的驱动在信息后面追加客户端和服务器地址
+            Flavor::Mysql => {
+                let message = message
+                    .split(
+                        "
+LinkInfo:",
+                    )
+                    .next()
+                    .unwrap_or_default()
+                    .trim_end()
+                    .to_string();
+                Error::Sql { code: code.to_string(), message, position: None }
+            }
             Flavor::Oracle => Error::Sql { code: format!("ORA-{code:05}"), message, position: None },
             _ => Error::Sql { code: code.to_string(), message, position: None },
         }
@@ -30,6 +46,7 @@ impl Flavor {
             Flavor::Gbase => matches!(code, -951 | -952),
             Flavor::Dameng => code == -2501,
             Flavor::Oracle => matches!(code, 1017 | 28000 | 28001),
+            Flavor::Mysql => matches!(code, 1044 | 1045),
         };
         if auth {
             Error::Auth { message: Msg::raw(format!("[{code}] {message}")) }

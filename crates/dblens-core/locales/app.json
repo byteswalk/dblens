@@ -176,6 +176,10 @@
     "zh-CN": "除表空间外的存储参数不会保留",
     "en": "Storage parameters other than the tablespace are not kept"
   },
+  "design.rebuild.triggers_unknown": {
+    "zh-CN": "这里可能读不到触发器：表上如果有触发器，重建后会丢失，要先确认并自己重建。",
+    "en": "Triggers may not be listed here: any trigger on this table is lost by the rebuild, so check first and recreate it yourself."
+  },
   "design.rebuild.views_recompiled": {
     "zh-CN": "依赖这张表的视图（%{views}）会暂时失效，最后重新编译",
     "en": "Views depending on this table (%{views}) become invalid for a while and are recompiled at the end"

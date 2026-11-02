@@ -67,6 +67,7 @@ const VARIANT_NAMES: Record<string, string> = {
   tidb: 'TiDB',
   oceanbase: 'OceanBase',
   oceanbase_oracle: 'OceanBase Oracle',
+  goldendb: 'GoldenDB',
   polardb: 'PolarDB',
   postgres: 'PostgreSQL',
   kingbase: 'KingbaseES',

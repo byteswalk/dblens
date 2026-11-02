@@ -65,7 +65,7 @@ SELECT c.TABLE_NAME AS table_name,
        CASE WHEN c.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END AS nullable,
        CASE WHEN c.GENERATION_EXPRESSION IS NOT NULL THEN NULL ELSE NULLIF(c.COLUMN_DEFAULT, 'NULL') END AS default_value,
        NULLIF(c.COLUMN_COMMENT, '') AS comment,
-       CASE WHEN c.EXTRA LIKE '%auto\_increment%' THEN 1 ELSE 0 END AS auto_increment,
+       CASE WHEN c.EXTRA LIKE '%auto!_increment%' ESCAPE '!' THEN 1 ELSE 0 END AS auto_increment,
        NULLIF(c.GENERATION_EXPRESSION, '') AS `generated`
 FROM information_schema.COLUMNS c
 JOIN information_schema.TABLES t

@@ -335,6 +335,10 @@ impl Dialect {
             }
         }
         let mut warnings = vec![msg!("design.rebuild.no_writes")];
+        // GoldenDB 的 MySQL 模式租户列不出触发器，读到空不代表没有
+        if self.variant() == Variant::GoldenDb && original.triggers.is_empty() {
+            warnings.push(msg!("design.rebuild.triggers_unknown"));
+        }
         if matches!(self.family(), Family::Oracle | Family::Dameng | Family::SqlServer)
             && !ctx.views.is_empty()
         {

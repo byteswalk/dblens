@@ -6,14 +6,15 @@ use dblens_driver::{CancelHandle, ColumnMeta, ExecEvent, ServerInfo};
 
 use crate::error::{Flavor, expect, protocol};
 use crate::frame::{Column, Req, Resp};
-use crate::position::with_position;
+use crate::position::{with_mysql_position, with_position};
 use crate::process::Bridge;
 
 pub(crate) struct JdbcConnection {
     pub(crate) bridge: Arc<Bridge>,
     pub(crate) id: u64,
     pub(crate) flavor: Flavor,
-    pub(crate) oceanbase: bool,
+    /// 驱动报告的信息认不出产品时，补在版本号前的产品名。
+    pub(crate) vendor: Option<&'static str>,
 }
 
 impl JdbcConnection {
@@ -111,8 +112,11 @@ impl BlockingConnection for JdbcConnection {
         let (k, b) =
             self.bridge.call(&Req::Execute { conn: self.id, sql: sql.into(), params: params.to_vec() })?;
         let first = expect(k, &b, 0, self.flavor);
-        let first =
-            if self.flavor == Flavor::Dameng { first.map_err(|e| with_position(e, sql)) } else { first };
+        let first = match self.flavor {
+            Flavor::Dameng => first.map_err(|e| with_position(e, sql)),
+            Flavor::Mysql => first.map_err(|e| with_mysql_position(e, sql)),
+            _ => first,
+        };
         let stage = match first? {
             Resp::Result(cols) => Stage::Start(cols.into_iter().map(meta).collect()),
             Resp::Affected(n) => Stage::Affected(n),
@@ -144,9 +148,10 @@ impl BlockingConnection for JdbcConnection {
     fn server_info(&mut self) -> Result<ServerInfo> {
         let (k, b) = self.bridge.call(&Req::ServerInfo { conn: self.id })?;
         match expect(k, &b, 0, self.flavor)? {
-            // 官方驱动报告的是 Oracle 和 OceanBase 自己的版本号，补上产品名才识别得出
-            Resp::ServerInfo { version, .. } if self.oceanbase => {
-                Ok(ServerInfo { product: "OceanBase".into(), version: format!("OceanBase {version}") })
+            // OceanBase 的官方驱动报告 Oracle，GoldenDB 的报告 MySQL，补上产品名才认得出
+            Resp::ServerInfo { version, .. } if self.vendor.is_some() => {
+                let vendor = self.vendor.unwrap_or_default();
+                Ok(ServerInfo { product: vendor.into(), version: format!("{vendor} {version}") })
             }
             Resp::ServerInfo { product, version } => Ok(ServerInfo { product, version }),
             _ => Err(protocol()),

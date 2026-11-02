@@ -478,9 +478,19 @@ async fn migrate_flow(src_env: &str, tgt_env: &str, p: &str) {
         let mut got: Vec<Table> = s.metadata.tables(&tp, &tgt.schema, Some(&t.target.name)).await.unwrap();
         assert_eq!(got.len(), 1, "{route}：{} 没有建成", t.target.name);
         let got = Table { triggers: vec![], ..got.remove(0) };
+        // GoldenDB 的 Oracle 兼容模式下，目录把 DATE 列报成 datetime，SHOW CREATE TABLE 才是 date
+        let same = |lines: Vec<String>| -> Vec<String> {
+            if !tgt_env.contains("GOLDENDB") {
+                return lines;
+            }
+            lines
+                .into_iter()
+                .map(|l| l.replace("Timestamp { tz: false, precision: Some(0) }", "Date"))
+                .collect()
+        };
         assert_eq!(
-            shape(&dialect, &t.target, &t.target),
-            shape(&dialect, &got, &t.target),
+            same(shape(&dialect, &t.target, &t.target)),
+            same(shape(&dialect, &got, &t.target)),
             "{route}：{} 读回后与草稿不同",
             t.target.name
         );
@@ -660,6 +670,10 @@ macro_rules! routes {
 }
 
 routes! {
+    mysql_to_goldendb: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_GOLDENDB_URL", "m5ga";
+    goldendb_to_mysql: "DBLENS_TEST_GOLDENDB_URL" => "DBLENS_TEST_MYSQL_URL", "m5gb";
+    mysql_to_goldendb_my: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_GOLDENDB_MY_URL", "m5gc";
+    goldendb_my_to_mysql: "DBLENS_TEST_GOLDENDB_MY_URL" => "DBLENS_TEST_MYSQL_URL", "m5gd";
     mysql_to_ob_oracle: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_OB_ORACLE_URL", "m5oa";
     ob_oracle_to_mysql: "DBLENS_TEST_OB_ORACLE_URL" => "DBLENS_TEST_MYSQL_URL", "m5ob";
     ob_oracle_to_oracle: "DBLENS_TEST_OB_ORACLE_URL" => "DBLENS_TEST_ORACLE_URL", "m5oc";

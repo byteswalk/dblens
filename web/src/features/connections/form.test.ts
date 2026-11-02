@@ -23,6 +23,8 @@ describe('OceanBase 的 Oracle 模式', () => {
     expect([f.driver, f.port]).toEqual(['oracle', 2881])
     const o = toProfileInput(f).options
     expect([o?.client, o?.jdbc_kind]).toEqual(['jdbc', 'oceanbase'])
+    const g = { ...switchProduct(emptyForm(), 'goldendb'), name: 'g', host: 'h', user: 'u', jdbcDir: 'D:/jdbc' }
+    expect(toProfileInput(g).options).toMatchObject({ client: 'jdbc', jdbc_kind: 'goldendb', jdbc_dir: 'D:/jdbc' })
     expect(validate(f).database).toBeUndefined()
     expect(fromProfile({ ...toProfileInput(f), id: 'x' } as Parameters<typeof fromProfile>[0], false).product).toBe('oceanbase_oracle')
   })

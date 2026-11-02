@@ -226,6 +226,8 @@ async fn workbench_flow(env: &str) {
         DriverId::SqlServer => "master",
         DriverId::Informix => "sysmaster",
     };
+    // GoldenDB 的代理不能 USE information_schema
+    let other = if env.contains("GOLDENDB") { "_gdb_query_rewrite" } else { other };
     s.sessions.set_schema(id, other).await.unwrap();
     assert_eq!(s.sessions.info(id).unwrap().schema.as_deref(), Some(other));
     s.sessions.set_schema(id, &schema).await.unwrap();
@@ -312,8 +314,10 @@ async fn cancel_flow(env: &str, slow: &str) {
     s.sessions.cancel(id).await.unwrap();
     let events =
         tokio::time::timeout(Duration::from_secs(8), fetch).await.expect("取消后 8 秒内应结束").unwrap();
+    // SLEEP() 被打断时返回 1 而不报错，按时结束就算取消成功
     assert!(
-        events.iter().any(|e| matches!(e, SessionEvent::Failed { error: Error::Cancelled, .. })),
+        slow.contains("SLEEP(")
+            || events.iter().any(|e| matches!(e, SessionEvent::Failed { error: Error::Cancelled, .. })),
         "{events:?}"
     );
     s.sessions.execute(id, &select_one, false).await.unwrap();
@@ -796,6 +800,12 @@ async fn export_flow(env: &str) {
     let dir = tempfile::tempdir().unwrap();
     let (big, rows_sql, rows) = match live.driver {
         DriverId::Informix => unreachable!("GBase 8s 没跑这个流程"),
+        // GoldenDB 把大的文本表达式标成 MEDIUMBLOB，转换后才是文本
+        DriverId::Mysql if env.contains("GOLDENDB") => (
+            "SELECT 1 AS id, '中文' AS name, CONVERT(REPEAT('数', 100000) USING utf8mb4) AS txt, CHAR_LENGTH(REPEAT('数', 100000)) AS len",
+            "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 990) SELECT n FROM t",
+            990,
+        ),
         DriverId::Mysql => (
             "SELECT 1 AS id, '中文' AS name, REPEAT('数', 100000) AS txt, CHAR_LENGTH(REPEAT('数', 100000)) AS len",
             "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 990) SELECT n FROM t",
@@ -857,7 +867,9 @@ async fn export_flow(env: &str) {
     let (st, path) = export(big, ExportFormat::Json, "big.json").await;
     done(&st);
     let v: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    assert_eq!(v[0]["txt"].as_str().unwrap().chars().count(), len, "{env}");
+    // GoldenDB 的 Oracle 模式租户把未加引号的别名转成大写
+    let txt = if env == "DBLENS_TEST_GOLDENDB_URL" { "TXT" } else { "txt" };
+    assert_eq!(v[0][txt].as_str().unwrap().chars().count(), len, "{env}");
 
     // INSERT：完整的大字段写在一条语句里
     let (st, path) = export(big, ExportFormat::Insert, "big.sql").await;
@@ -1203,20 +1215,31 @@ async fn import_flow(env: &str) {
     assert_eq!(one("SELECT note FROM m2b_t WHERE id = 1".into()).await.as_deref(), Some("含,逗号"), "{env}");
 
     // 按主键更新：2401–2600，一半已存在
-    let st =
-        run(request(upload(s, "u.csv", &csv(2401..=2600, &|k| format!("更新{k}"))), WriteMode::Upsert)).await;
-    assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
-    assert_eq!(count("m2b_t").await.as_deref(), Some("2600"), "{env}");
-    assert_eq!(
-        one("SELECT name FROM m2b_t WHERE id = 2401".into()).await.as_deref(),
-        Some("更新2401"),
-        "{env}"
-    );
-    assert_eq!(
-        one("SELECT name FROM m2b_t WHERE id = 2400".into()).await.as_deref(),
-        Some("名2400"),
-        "{env}"
-    );
+    // GoldenDB 的代理拒绝 ON DUPLICATE KEY UPDATE，这个模式报服务器原文
+    let upsert_refused = env.contains("GOLDENDB");
+    if upsert_refused {
+        let st =
+            run(request(upload(s, "u.csv", &csv(2401..=2600, &|k| format!("更新{k}"))), WriteMode::Upsert))
+                .await;
+        assert_eq!(st.state, TaskState::Failed, "{env}：{st:?}");
+        assert!(matches!(&st.error, Some(Error::Sql { code, .. }) if code == "12071"), "{st:?}");
+    } else {
+        let st =
+            run(request(upload(s, "u.csv", &csv(2401..=2600, &|k| format!("更新{k}"))), WriteMode::Upsert))
+                .await;
+        assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
+        assert_eq!(count("m2b_t").await.as_deref(), Some("2600"), "{env}");
+        assert_eq!(
+            one("SELECT name FROM m2b_t WHERE id = 2401".into()).await.as_deref(),
+            Some("更新2401"),
+            "{env}"
+        );
+        assert_eq!(
+            one("SELECT name FROM m2b_t WHERE id = 2400".into()).await.as_deref(),
+            Some("名2400"),
+            "{env}"
+        );
+    }
 
     // 清空后导入
     let st = run(request(upload(s, "r.csv", &csv(1..=3, &|k| format!("新{k}"))), WriteMode::Replace)).await;
@@ -1495,7 +1518,17 @@ async fn design_flow(env: &str) {
     let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
     let oracle_drop =
         |what: &str| format!("BEGIN EXECUTE IMMEDIATE 'DROP {what}'; EXCEPTION WHEN OTHERS THEN NULL; END;");
+    // GoldenDB 的回收站里的表还占着约束名，同名约束的表再删或再建会报 3822，所以每次换名字，删表前先删约束
+    let goldendb = env.contains("GOLDENDB");
+    let check_name = if goldendb {
+        format!("ck_m3_{}", std::time::SystemTime::UNIX_EPOCH.elapsed().unwrap().as_secs())
+    } else {
+        "ck_m3_amount".to_string()
+    };
     let cleanup = || async {
+        if goldendb {
+            live.submit(id, ExecRequest::new(format!("ALTER TABLE m3_t DROP CHECK {check_name}"))).await;
+        }
         let sqls = match live.driver {
             DriverId::Oracle => {
                 vec![oracle_drop("VIEW m3_v"), oracle_drop("TABLE m3_items"), oracle_drop("TABLE m3_t")]
@@ -1539,7 +1572,7 @@ async fn design_flow(env: &str) {
         primary_key: Some(PrimaryKey { name: Some(n("pk_m3_t")), columns: vec![n("id")] }),
         uniques: vec![UniqueConstraint { name: Some(n("uk_m3_code")), columns: vec![n("code")] }],
         checks: vec![CheckConstraint {
-            name: Some(n("ck_m3_amount")),
+            name: Some(n(&check_name)),
             expression: format!("{} >= 0", n("amount")),
         }],
         indexes: vec![Index {
@@ -1751,7 +1784,10 @@ async fn design_flow(env: &str) {
         "{env}"
     );
     assert_eq!(after.checks.len(), draft.checks.len(), "{env}");
-    assert_eq!(after.triggers.len(), trigger.len().min(1), "{env}：触发器重建");
+    // GoldenDB 的 MySQL 模式租户列不出触发器，重建会丢失，预览里有警告
+    let triggers_hidden = env == "DBLENS_TEST_GOLDENDB_MY_URL";
+    let want = if triggers_hidden { 0 } else { trigger.len().min(1) };
+    assert_eq!(after.triggers.len(), want, "{env}：触发器重建");
     let one = |sql: String| async move { text(&first_value(&live.run(id, &sql).await)) };
     assert_eq!(one("SELECT COUNT(*) FROM m3_t".into()).await.as_deref(), Some("3"), "{env}");
     assert_eq!(
@@ -1768,7 +1804,7 @@ async fn design_flow(env: &str) {
     } else {
         assert_eq!(max, 4, "{env}");
     }
-    if !trigger.is_empty() {
+    if !trigger.is_empty() && !triggers_hidden {
         let remark = one("SELECT remark FROM m3_t WHERE code = 'd'".into()).await;
         assert_eq!(remark.as_deref(), Some("trg"), "{env}");
     }
@@ -2225,6 +2261,8 @@ async fn lint_tables_query_runs_on_every_database() {
         "DBLENS_TEST_OPENGAUSS_URL",
         "DBLENS_TEST_KINGBASE_URL",
         "DBLENS_TEST_OB_ORACLE_URL",
+        "DBLENS_TEST_GOLDENDB_URL",
+        "DBLENS_TEST_GOLDENDB_MY_URL",
     ];
     for env in envs {
         let Some(live) = setup(env).await else { continue };
@@ -2348,4 +2386,116 @@ async fn oceanbase_oracle_design() {
 #[tokio::test]
 async fn oceanbase_oracle_model() {
     model_flow("DBLENS_TEST_OB_ORACLE_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_flow() {
+    full_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_workbench() {
+    workbench_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_cancel() {
+    // 共用机器，不用笛卡尔积这种耗资源的语句
+    cancel_flow("DBLENS_TEST_GOLDENDB_URL", "SELECT SLEEP(20)").await;
+}
+
+#[tokio::test]
+async fn goldendb_objects() {
+    objects_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_ops() {
+    ops_flow("DBLENS_TEST_GOLDENDB_URL", &[]).await;
+}
+
+#[tokio::test]
+async fn goldendb_export() {
+    export_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_editing() {
+    editing_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_import() {
+    import_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_sql_file() {
+    sql_file_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_design() {
+    design_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_model() {
+    model_flow("DBLENS_TEST_GOLDENDB_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_flow() {
+    full_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_workbench() {
+    workbench_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_cancel() {
+    // 共用机器，不用笛卡尔积这种耗资源的语句
+    cancel_flow("DBLENS_TEST_GOLDENDB_MY_URL", "SELECT SLEEP(20)").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_objects() {
+    objects_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_ops() {
+    ops_flow("DBLENS_TEST_GOLDENDB_MY_URL", &[]).await;
+}
+
+#[tokio::test]
+async fn goldendb_my_export() {
+    export_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_editing() {
+    editing_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_import() {
+    import_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_sql_file() {
+    sql_file_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_design() {
+    design_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+#[tokio::test]
+async fn goldendb_my_model() {
+    model_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
 }

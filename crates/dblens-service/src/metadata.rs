@@ -213,7 +213,7 @@ impl MetadataService {
         };
         let result = match conn.execute(&q.sql, &q.params).await {
             Ok(mut stream) => match collect_all(stream.as_mut(), 1000).await {
-                Ok(events) => MetaRows::from_events(events),
+                Ok(events) => MetaRows::from_events(events).map(|r| dialect.adapt_rows(key, args, r)),
                 Err(e) => Err(e),
             },
             Err(e) => Err(e),

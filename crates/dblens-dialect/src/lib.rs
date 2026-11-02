@@ -216,6 +216,14 @@ impl Dialect {
         ))
     }
 
+    /// 查询结果交给 `meta` 之前的调整。GoldenDB 的触发器来自 `SHOW TRIGGERS`，列名不同。
+    pub fn adapt_rows(&self, key: MetaKey, args: &MetaArgs, rows: MetaRows) -> MetaRows {
+        if self.variant == Variant::GoldenDb && key == MetaKey::Triggers {
+            return meta::goldendb_triggers(&rows, args.table.as_deref());
+        }
+        rows
+    }
+
     /// 生成元数据查询；该方言没有这种查询时返回 None。
     pub fn meta_query(&self, key: MetaKey, args: &MetaArgs) -> Result<Option<MetaQuery>> {
         match meta::sections(self.variant).get(key.as_str()) {
