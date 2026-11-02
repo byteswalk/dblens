@@ -11,6 +11,7 @@ import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import DbIcon from '../../shared/DbIcon'
 import type { OpsQuery } from '../../shared/api'
+import { useHost } from '../../shared/host'
 import { useQueryActions } from '../editor/actions'
 import { useTabs } from '../editor/tabs'
 import { groupByCategory, pickProfile } from './ops'
@@ -23,6 +24,7 @@ export default function OpsPanel() {
   const { data: profiles = [] } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
   const selected = useUi((s) => s.selectedProfile)
   const openConnection = useUi((s) => s.openConnection)
+  const { hidden } = useHost()
   const activeProfile = useTabs((s) => s.tabs.find((x) => x.id === s.active)?.profileId)
   const [chosen, setChosen] = useState<string | null>(null)
   const profileId = pickProfile(profiles, chosen, selected, activeProfile)
@@ -35,9 +37,11 @@ export default function OpsPanel() {
   if (!profileId) {
     return (
       <Empty style={{ marginTop: 48 }} description={t('app.ops.noProfile')} image={Empty.PRESENTED_IMAGE_SIMPLE}>
-        <Button type="primary" onClick={() => openConnection(null)}>
-          {t('app.ops.newConnection')}
-        </Button>
+        {!hidden?.('new-connection') && (
+          <Button type="primary" onClick={() => openConnection(null)}>
+            {t('app.ops.newConnection')}
+          </Button>
+        )}
       </Empty>
     )
   }
