@@ -114,7 +114,7 @@
     "rebuildForced": "Some changes are not supported by the database; the table must be rebuilt",
     "changes": "Changes",
     "sql": "SQL",
-    "countCheck": "Check row counts: {{source}} and {{target}} must match (done by DBLens; check it yourself when running by hand)",
+    "countCheck": "Check row counts: {{source}} and {{target}} must match (done by DBLENS; check it yourself when running by hand)",
     "cancel": "Cancel",
     "copy": "Copy SQL",
     "copied": "Copied",

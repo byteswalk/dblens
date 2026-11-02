@@ -6,7 +6,7 @@
     "reload": "Reload"
   },
   "boot": {
-    "serverUnreachable": "Cannot connect to the DBLens service",
+    "serverUnreachable": "Cannot connect to the DBLENS service",
     "missingToken": "Missing access token",
     "missingTokenHint": "Open this page with the link that dblens-server prints at startup (it ends with #token=…)."
   },
@@ -108,7 +108,7 @@
       "title": "Help",
       "checkUpdate": "Check for Updates…",
       "autoCheck": "Check for Updates at Startup",
-      "about": "About DBLens"
+      "about": "About DBLENS"
     }
   },
   "exec": {

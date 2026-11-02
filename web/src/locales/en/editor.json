@@ -65,7 +65,7 @@
   },
   "runner": {
     "tabClosed": "The tab has been closed",
-    "serviceDisconnected": "The connection to the DBLens service was lost"
+    "serviceDisconnected": "The connection to the DBLENS service was lost"
   },
   "dialect": {
     "dameng": "DM"

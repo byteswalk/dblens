@@ -113,7 +113,7 @@
     "rebuildForced": "库不支持其中的改动，必须重建表",
     "changes": "变更",
     "sql": "SQL",
-    "countCheck": "核对行数：{{source}} 与 {{target}} 的行数一致（由 DBLens 执行；手动执行时请自行核对）",
+    "countCheck": "核对行数：{{source}} 与 {{target}} 的行数一致（由 DBLENS 执行；手动执行时请自行核对）",
     "cancel": "取消",
     "copy": "复制 SQL",
     "copied": "已复制",

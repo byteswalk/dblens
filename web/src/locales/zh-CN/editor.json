@@ -65,7 +65,7 @@
   },
   "runner": {
     "tabClosed": "标签页已关闭",
-    "serviceDisconnected": "与 DBLens 服务的连接已断开"
+    "serviceDisconnected": "与 DBLENS 服务的连接已断开"
   },
   "dialect": {
     "dameng": "达梦"

@@ -128,7 +128,7 @@
     "modeOracle": "Compatibility mode: {{mode}} (Oracle rules: empty string is NULL, DATE has a time)",
     "modeNative": "Compatibility mode: {{mode}}",
     "modeUnadapted": "Compatibility mode {{mode}} is not supported yet; native rules are used and some features may fail",
-    "productMismatch": "{{chosen}} was selected but the server is {{detected}}; DBLens follows the detected server"
+    "productMismatch": "{{chosen}} was selected but the server is {{detected}}; DBLENS follows the detected server"
   },
   "general": {
     "name": "Name",
@@ -179,7 +179,7 @@
       "integrated": "Current Windows user"
     },
     "windowsHint": "Write the user name as DOMAIN-or-HOST\\user (NTLM); available on Windows only",
-    "integratedHint": "Logs in as the Windows account running the DBLens service, without a user name or password; in browser mode that is the server's account, not the browser machine's. Available on Windows only",
+    "integratedHint": "Logs in as the Windows account running the DBLENS service, without a user name or password; in browser mode that is the server's account, not the browser machine's. Available on Windows only",
     "instance": "Instance",
     "instancePlaceholder": "Optional, e.g. SQLEXPRESS; the port is ignored when set",
     "trustCert": "Server certificate",

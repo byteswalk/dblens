@@ -241,10 +241,10 @@ pub fn set_auto_check(app: &AppHandle, on: bool) {
     }
 }
 
-/// "关于 DBLens"对话框。
+/// "关于 DBLENS"对话框。
 pub fn about(app: &AppHandle) {
     let text = format!(
-        "DBLens 数洞 {}
+        "DBLENS 数洞 {}
 
 {RELEASES_PAGE}",
         app.package_info().version

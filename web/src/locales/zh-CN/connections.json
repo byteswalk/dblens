@@ -179,7 +179,7 @@
       "integrated": "当前 Windows 用户"
     },
     "windowsHint": "用户名写成 域或机器名\\用户（NTLM）；只能在 Windows 上使用",
-    "integratedHint": "用运行 DBLens 服务的 Windows 账号登录，不需要用户名和密码；浏览器访问时是服务端的账号，不是浏览器所在电脑的账号。只能在 Windows 上使用",
+    "integratedHint": "用运行 DBLENS 服务的 Windows 账号登录，不需要用户名和密码；浏览器访问时是服务端的账号，不是浏览器所在电脑的账号。只能在 Windows 上使用",
     "instance": "实例名",
     "instancePlaceholder": "可选，如 SQLEXPRESS；填写后忽略端口",
     "trustCert": "服务器证书",

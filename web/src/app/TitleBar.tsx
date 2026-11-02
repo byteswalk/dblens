@@ -142,7 +142,7 @@ export default function TitleBar() {
   const { data: profiles } = useQuery({ queryKey: ['profiles'], queryFn: () => api.profiles() })
   const tab = useTabs((s) => s.tabs.find((t) => t.id === s.active))
   const profile = profiles?.find((p) => p.id === tab?.profileId)
-  // 标题："当前标签 · 连接 — DBLens 数洞"
+  // 标题："当前标签 · 连接 — DBLENS 数洞"
   const appName = t('common.appName')
   const title = !tab
     ? appName

@@ -4,7 +4,7 @@
 
 | 平台 | 产物 | 自动更新 |
 |---|---|---|
-| Windows x64 | `DBLens_<版本>_x64-setup.exe`（NSIS），按当前用户安装到 `%LOCALAPPDATA%\DBLens`，不需要管理员权限 | 支持 |
+| Windows x64 | `DBLENS_<版本>_x64-setup.exe`（NSIS），按当前用户安装到 `%LOCALAPPDATA%\DBLENS`，不需要管理员权限 | 支持 |
 | macOS | 通用 dmg（Intel + Apple Silicon） | 支持 |
 | Linux x64 | deb、rpm、AppImage | 只有 AppImage 支持；deb、rpm 只提示新版本 |
 | Linux ARM64（信创） | deb | 只提示新版本 |
@@ -76,7 +76,7 @@ GBase 8s 经 Java 桥接连接，安装包要带桥接程序和精简 JRE。
      "platforms": {
        "windows-x86_64": {
          "signature": "…",
-         "url": "https://github.com/byteswalk/dblens/releases/download/v<版本>/DBLens_<版本>_x64-setup.exe"
+         "url": "https://github.com/byteswalk/dblens/releases/download/v<版本>/DBLENS_<版本>_x64-setup.exe"
        }
      }
    }
@@ -87,7 +87,7 @@ GBase 8s 经 Java 桥接连接，安装包要带桥接程序和精简 JRE。
    ```bash
    git tag v<版本>
    git push origin v<版本>
-   gh release create v<版本> --draft --title "DBLens v<版本>" --notes-file docs/releases/v<版本>.md <安装包> <latest.json>
+   gh release create v<版本> --draft --title "DBLENS v<版本>" --notes-file docs/releases/v<版本>.md <安装包> <latest.json>
    ```
 
 7. 在 GitHub 上检查草稿：安装包齐全，`latest.json` 中有各平台的地址和签名。然后点 Publish。
@@ -143,15 +143,15 @@ pnpm package
 - 0.1.1 安装包用测试私钥签名；
 - 测试密钥用完后已删除。
 
-1. **按当前用户安装**：`DBLens_0.1.0_x64-setup.exe /S`。
-   - 装到 `%LOCALAPPDATA%\DBLens`，主程序为 `DBLens.exe`，前端页面在 `web/`；
+1. **按当前用户安装**：`DBLENS_0.1.0_x64-setup.exe /S`。
+   - 装到 `%LOCALAPPDATA%\DBLENS`，主程序为 `DBLENS.exe`，前端页面在 `web/`；
    - 卸载信息写在 HKCU 下，不需要管理员权限。
 2. **完整的自动更新流程**：
    - 0.1.0 启动 5 秒后读取 `latest.json`，弹窗显示"发现新版本 0.1.1（当前 0.1.0）"和更新说明；
    - 点"下载并安装"后下载、校验签名、以 passive 模式安装，再自动重启为 0.1.1；
    - 数据目录和窗口状态保留，注册表中的版本变为 0.1.1。
 3. **签名不对时拒绝安装**：把 `latest.json` 中的签名换成另一个文件的签名后，弹出"安装更新失败：安装包签名校验失败……"，版本保持 0.1.0。
-4. **"帮助"菜单**：有"检查更新…""启动时自动检查更新""关于 DBLens"三项。取消勾选自动检查后，`update.json` 中立即写入 `"auto_check": false`，`endpoint` 保留。
+4. **"帮助"菜单**：有"检查更新…""启动时自动检查更新""关于 DBLENS"三项。取消勾选自动检查后，`update.json` 中立即写入 `"auto_check": false`，`endpoint` 保留。
 5. **卸载**：`uninstall.exe /S` 删除程序文件和注册表项，数据目录保留。
 6. **更新源必须是 https**：
    - 正式配置下 `http://` 更新源会被拒绝（"更新源必须使用 https 地址"），内网更新源也要用 https；

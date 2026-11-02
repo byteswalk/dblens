@@ -1,4 +1,4 @@
-# DBLens（数洞）
+# DBLENS（数洞）
 
 跨平台数据库管理工具，后端 Rust，前端 Web UI，形态是 Tauri 桌面应用加可选的浏览器模式。
 

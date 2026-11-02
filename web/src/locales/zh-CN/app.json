@@ -6,7 +6,7 @@
     "reload": "重新加载"
   },
   "boot": {
-    "serverUnreachable": "无法连接 DBLens 服务",
+    "serverUnreachable": "无法连接 DBLENS 服务",
     "missingToken": "缺少访问令牌",
     "missingTokenHint": "请使用 dblens-server 启动时打印的链接打开本页（链接末尾带 #token=…）。"
   },
@@ -107,7 +107,7 @@
       "title": "帮助",
       "checkUpdate": "检查更新…",
       "autoCheck": "启动时自动检查更新",
-      "about": "关于 DBLens"
+      "about": "关于 DBLENS"
     }
   },
   "exec": {

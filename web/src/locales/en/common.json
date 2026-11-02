@@ -1,5 +1,5 @@
 {
-  "appName": "DBLens",
+  "appName": "DBLENS",
   "error": {
     "connect": "Connection failed: {{message}}",
     "auth": "Authentication failed: {{message}}",
@@ -20,5 +20,5 @@
     "zh-CN": "中文",
     "en": "English"
   },
-  "networkError": "Network error; check the connection to the DBLens service"
+  "networkError": "Network error; check the connection to the DBLENS service"
 }

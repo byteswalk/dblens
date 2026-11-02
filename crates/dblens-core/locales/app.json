@@ -33,8 +33,8 @@
     "en": "The previous SQL has not finished yet"
   },
   "app.name": {
-    "zh-CN": "DBLens 数洞",
-    "en": "DBLens"
+    "zh-CN": "DBLENS 数洞",
+    "en": "DBLENS"
   },
   "changes.bad_key": {
     "zh-CN": "改动的行标识与表 %{table} 的主键（或唯一键）不一致",
@@ -517,8 +517,8 @@
     "en": "No JDBC driver (%{jar}*.jar) was found in %{dir}. Get the driver from the database vendor and put it in this folder, or set the folder in the connection"
   },
   "jdbc.runtime_missing": {
-    "zh-CN": "找不到内置的 Java 运行环境或桥接程序，请重新安装 DBLens",
-    "en": "The bundled Java runtime or bridge program is missing. Please reinstall DBLens"
+    "zh-CN": "找不到内置的 Java 运行环境或桥接程序，请重新安装 DBLENS",
+    "en": "The bundled Java runtime or bridge program is missing. Please reinstall DBLENS"
   },
   "jdbc.start_failed": {
     "zh-CN": "无法启动 Java 桥接进程（%{path}）：%{error}",
@@ -1177,8 +1177,8 @@
     "en": "Values of this type (%{ty}) cannot be turned into an SQL literal"
   },
   "menu.about": {
-    "zh-CN": "关于 DBLens",
-    "en": "About DBLens"
+    "zh-CN": "关于 DBLENS",
+    "en": "About DBLENS"
   },
   "menu.auto_check": {
     "zh-CN": "启动时自动检查更新",
@@ -1538,7 +1538,7 @@
   },
   "model.read_only": {
     "zh-CN": "模型文件格式 %{format} 比本程序新，只能查看；请升级数洞",
-    "en": "Model format %{format} is newer than this version supports; it is read-only. Please upgrade DBLens"
+    "en": "Model format %{format} is newer than this version supports; it is read-only. Please upgrade DBLENS"
   },
   "model.script_ext": {
     "zh-CN": "脚本只能保存为 .sql 文件",
@@ -1857,8 +1857,8 @@
     "en": "Failed to start: %{error}"
   },
   "server.started": {
-    "zh-CN": "DBLens 服务已启动：%{url}",
-    "en": "DBLens server started: %{url}"
+    "zh-CN": "DBLENS 服务已启动：%{url}",
+    "en": "DBLENS server started: %{url}"
   },
   "server.token": {
     "zh-CN": "访问令牌：%{token}",
@@ -1945,8 +1945,8 @@
     "en": "Cannot determine the user data directory"
   },
   "store.too_new": {
-    "zh-CN": "本地数据库版本 %{version} 比程序支持的 %{supported} 更新，请升级 DBLens",
-    "en": "The local database version %{version} is newer than this program supports (%{supported}); upgrade DBLens"
+    "zh-CN": "本地数据库版本 %{version} 比程序支持的 %{supported} 更新，请升级 DBLENS",
+    "en": "The local database version %{version} is newer than this program supports (%{supported}); upgrade DBLENS"
   },
   "task.no_report": {
     "zh-CN": "这个任务没有可下载的报告",

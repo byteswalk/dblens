@@ -1,5 +1,5 @@
 {
-  "appName": "DBLens 数洞",
+  "appName": "DBLENS 数洞",
   "error": {
     "connect": "连接失败：{{message}}",
     "auth": "认证失败：{{message}}",
@@ -20,5 +20,5 @@
     "zh-CN": "中文",
     "en": "English"
   },
-  "networkError": "网络错误，请检查与 DBLens 服务的连接"
+  "networkError": "网络错误，请检查与 DBLENS 服务的连接"
 }
