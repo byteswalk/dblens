@@ -5,7 +5,7 @@
 //! 每条语句执行完（成功、失败、被拒绝或被取消）记一条历史；执行计划和等待确认而没有执行的语句不记。
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -236,6 +236,7 @@ enum Command {
 struct Handle {
     tx: mpsc::Sender<Command>,
     cancel: Arc<Mutex<CancelHandle>>,
+    stop: Arc<AtomicBool>,
     info: Arc<Mutex<SessionInfo>>,
     /// 打开会话的操作者：别人看不到，也用不了。
     owner: String,
@@ -293,6 +294,7 @@ impl SessionManager {
             schema: None,
         }));
         let cancel = Arc::new(Mutex::new(conn.cancel_handle()));
+        let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = mpsc::channel(16);
         let actor = Actor {
             conn: Some(conn),
@@ -306,13 +308,14 @@ impl SessionManager {
             history: self.history.clone(),
             info: info.clone(),
             cancel: cancel.clone(),
+            stop: stop.clone(),
             rx,
         };
         tokio::spawn(actor.run());
         self.sessions
             .lock()
             .map_err(|_| Error::internal(msg!("internal.lock_poisoned", lock = "sessions")))?
-            .insert(id, Handle { tx, cancel, info, owner: Operator::current().id });
+            .insert(id, Handle { tx, cancel, stop, info, owner: Operator::current().id });
         Ok(id)
     }
 
@@ -358,6 +361,10 @@ impl SessionManager {
 
     /// 提交一次执行请求。请求不合法（如执行计划给了多条语句）时直接报错，不产生事件。
     pub async fn submit(&self, id: SessionId, req: ExecRequest) -> Result<()> {
+        // 会话正忙时这次提交不生效，不能清掉那次执行的取消
+        if !self.info(id)?.busy {
+            self.handle(id, |h| h.stop.store(false, Ordering::SeqCst))?;
+        }
         self.call(id, |reply| Command::Execute { req, reply }).await
     }
 
@@ -383,8 +390,10 @@ impl SessionManager {
         self.call(id, |reply| Command::Next { max_rows: max_rows.max(1), reply }).await
     }
 
-    /// 取消正在执行的语句。可以在会话忙碌时调用；没有在执行时什么也不做。
+    /// 取消正在执行的语句，后面的语句不再执行。可以在会话忙碌时调用；没有在执行时什么也不做。
     pub async fn cancel(&self, id: SessionId) -> Result<()> {
+        // 数据已被驱动读完时数据库层面的取消没有效果，语句会正常结束，要靠这个标记停下
+        self.handle(id, |h| h.stop.store(true, Ordering::SeqCst))?;
         let cancel = self.handle(id, |h| h.cancel.clone())?;
         let handle = cancel
             .lock()
@@ -438,6 +447,8 @@ struct Actor {
     history: HistoryLog,
     info: Arc<Mutex<SessionInfo>>,
     cancel: Arc<Mutex<CancelHandle>>,
+    /// 调用方要求取消：当前语句结束后不再执行后面的语句。
+    stop: Arc<AtomicBool>,
     rx: mpsc::Receiver<Command>,
 }
 
@@ -751,7 +762,7 @@ impl Actor {
         steps: Vec<Step>,
         req: &ExecRequest,
     ) -> Option<(bool, oneshot::Sender<Result<()>>)> {
-        let Actor { conn, ctx, owner, policy, metadata, history, info, rx, .. } = self;
+        let Actor { conn, ctx, owner, policy, metadata, history, info, stop: cancelled, rx, .. } = self;
         let conn = conn.as_mut()?;
         let set = |f: &dyn Fn(&mut SessionInfo)| {
             if let Ok(mut i) = info.lock() {
@@ -923,6 +934,9 @@ impl Actor {
                         break 'script;
                     }
                 }
+            }
+            if cancelled.load(Ordering::SeqCst) {
+                break 'script;
             }
         }
         queue.push_back(SessionEvent::Done);

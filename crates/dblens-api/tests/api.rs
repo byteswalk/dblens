@@ -28,6 +28,7 @@ fn app() -> (Router, Arc<Service>) {
         token: TOKEN.into(),
         allowed_origins: vec!["tauri://localhost".into()],
         local_files: false,
+        max_result_rows: None,
     };
     (router(service.clone(), config), service)
 }
@@ -217,7 +218,12 @@ fn user() -> Operator {
 
 /// 换掉鉴权层：所有请求都按 `user()` 处理，不要令牌。
 fn app_as_user(service: Arc<Service>) -> Router {
-    let config = ApiConfig { token: "unused".into(), allowed_origins: vec![], local_files: false };
+    let config = ApiConfig {
+        token: "unused".into(),
+        allowed_origins: vec![],
+        local_files: false,
+        max_result_rows: None,
+    };
     let state = AppState { service, config: Arc::new(config) };
     let api = api_routes().layer(axum::middleware::from_fn(as_user)).with_state(state);
     Router::new().nest("/api", api)
@@ -295,6 +301,68 @@ async fn rows_wait_for_fetch_more() {
         rest.iter().map(|v| v["type"].as_str().unwrap()).collect::<Vec<_>>(),
         ["result_end", "statement_end", "done"]
     );
+}
+
+/// 带行数上限的服务，返回连好的 WebSocket。
+async fn ws_capped(cap: usize) -> Ws {
+    let (_, service) = app();
+    let config = ApiConfig {
+        token: TOKEN.into(),
+        allowed_origins: vec![],
+        local_files: false,
+        max_result_rows: Some(cap),
+    };
+    let profile =
+        service.create_profile(serde_json::from_value(profile_json("p")).unwrap(), Some("pw")).unwrap();
+    let sid = service.open_session(&profile.id).await.unwrap().id;
+    let app = router(service, config);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { dblens_api::serve(listener, app).await.unwrap() });
+    let url = format!("ws://{addr}/api/sessions/{sid}/ws?token={TOKEN}");
+    tokio_tungstenite::connect_async(url).await.unwrap().0
+}
+
+/// 取到 `done`，返回事件类型和收到的总行数。
+async fn drain(ws: &mut Ws) -> (Vec<String>, usize) {
+    let (mut kinds, mut rows) = (Vec::new(), 0);
+    loop {
+        let v = recv(ws).await;
+        rows += v["rows"].as_array().map_or(0, Vec::len);
+        let kind = v["type"].as_str().unwrap().to_string();
+        kinds.push(kind.clone());
+        if kind == "done" {
+            return (kinds, rows);
+        }
+    }
+}
+
+#[tokio::test]
+async fn row_cap_is_enforced_by_the_server() {
+    let mut ws = ws_capped(3).await;
+    // 一批要 100 行也只给到上限，客户端绕不过去
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 10", "max_rows": 100})).await;
+    let (kinds, rows) = drain(&mut ws).await;
+    assert_eq!(rows, 3);
+    assert!(kinds.iter().any(|k| k == "message"), "{kinds:?}");
+}
+
+#[tokio::test]
+async fn row_cap_stops_the_following_statements() {
+    let mut ws = ws_capped(3).await;
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 10; ROWS 2", "max_rows": 100})).await;
+    let (kinds, rows) = drain(&mut ws).await;
+    assert_eq!(rows, 3);
+    assert_eq!(kinds.iter().filter(|k| *k == "statement_start").count(), 1, "{kinds:?}");
+}
+
+#[tokio::test]
+async fn row_cap_leaves_results_within_the_limit_alone() {
+    let mut ws = ws_capped(3).await;
+    send(&mut ws, json!({"type": "exec", "sql": "ROWS 3", "max_rows": 100})).await;
+    let (kinds, rows) = drain(&mut ws).await;
+    assert_eq!(rows, 3);
+    assert!(!kinds.iter().any(|k| k == "message"), "恰好等于上限不算超出：{kinds:?}");
 }
 
 #[tokio::test]

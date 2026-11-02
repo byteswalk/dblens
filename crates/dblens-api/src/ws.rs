@@ -13,6 +13,7 @@
 //! `statement_end`、`confirm_required`、`failed`、`done`），协议层面的错误发 `{"type":"error","error":{…}}`。
 //! 每发出一个装满 `max_rows` 行的 `rows` 事件就停下，等客户端 `fetch_more` 后再取下一批（背压）；
 //! 不满一批说明结果集已取完，接着发后面的事件。其他事件不受限制。
+//! 配了 `max_result_rows` 时，一个结果集超过上限就截断，发一条 `message`，取消这次执行。
 //! 事件中的 `start`/`end`、`failed` 的 `offset` 是 UTF-16 代码单元偏移（与 Monaco 编辑器一致），不是字节偏移。
 //! 连接断开时，正在执行的语句会被取消，剩余事件被丢弃，会话恢复空闲。
 
@@ -113,11 +114,12 @@ pub async fn upgrade(
 ) -> ApiResult<Response> {
     s.service.sessions.info(id)?;
     let service = s.service.clone();
+    let cap = s.config.max_result_rows;
     // 升级后的连接在新任务里运行，要带上这次请求的语言
     let lang = current_lang();
     // 升级后的连接不在请求的任务里，操作者要带过去
     let op = Operator::current();
-    Ok(ws.on_upgrade(move |socket| Operator::scope(op, scope_lang(lang, run(socket, service, id)))))
+    Ok(ws.on_upgrade(move |socket| Operator::scope(op, scope_lang(lang, run(socket, service, id, cap)))))
 }
 
 /// 发给 pump 的额度为 0：客户端取消了还没读完的结果。
@@ -145,24 +147,49 @@ async fn discard(service: &Service, id: SessionId, sql: &str, out: &mpsc::Sender
     }
 }
 
+/// 这批行累计超过上限时截到上限，返回是否截断。
+fn apply_cap(event: &mut SessionEvent, sent: &mut usize, cap: Option<usize>) -> bool {
+    match event {
+        SessionEvent::ResultStart { .. } => *sent = 0,
+        SessionEvent::Rows { rows } => {
+            *sent += rows.len();
+            if let Some(cap) = cap.filter(|c| *sent > *c) {
+                rows.truncate(rows.len() - (*sent - cap));
+                return true;
+            }
+        }
+        _ => {}
+    }
+    false
+}
+
 /// 从会话取事件发给客户端；每发出装满的一批行就等一次 `fetch_more`。
 async fn pump(
     service: Arc<Service>,
     id: SessionId,
     sql: String,
     mut max_rows: usize,
+    cap: Option<usize>,
     out: mpsc::Sender<String>,
     mut credit: mpsc::Receiver<usize>,
 ) {
+    let mut sent = 0;
     loop {
         match service.sessions.next(id, max_rows).await {
-            Ok(Some(event)) => {
+            Ok(Some(mut event)) => {
                 // 装满一批才等 fetch_more：不满说明结果集已经取完，接着发后面的事件
                 let full = matches!(&event, SessionEvent::Rows { rows } if rows.len() >= max_rows);
                 let done = event == SessionEvent::Done;
+                let capped = apply_cap(&mut event, &mut sent, cap);
                 let _ = out.send(encode(event, &sql)).await;
                 if done {
                     return;
+                }
+                if capped {
+                    let text = msg!("api.row_cap", cap = cap.unwrap_or_default()).current();
+                    let _ = out.send(encode(SessionEvent::Message { text }, &sql)).await;
+                    let _ = service.sessions.cancel(id).await;
+                    return discard(&service, id, &sql, &out).await;
                 }
                 if full {
                     match credit.recv().await {
@@ -188,7 +215,7 @@ async fn pump(
     }
 }
 
-async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId) {
+async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId, cap: Option<usize>) {
     let (mut sink, mut stream) = socket.split();
     let (out, mut outbox) = mpsc::channel::<String>(64);
     let writer = tokio::spawn(async move {
@@ -229,7 +256,7 @@ async fn run(socket: WebSocket, service: Arc<Service>, id: SessionId) {
                 }
                 let (tx, rx) = mpsc::channel(1);
                 credit = Some(tx);
-                let pumping = pump(service.clone(), id, sql, max_rows.max(1), out.clone(), rx);
+                let pumping = pump(service.clone(), id, sql, max_rows.max(1), cap, out.clone(), rx);
                 running = Some(tokio::spawn(Operator::scope(
                     Operator::current(),
                     scope_lang(current_lang(), pumping),

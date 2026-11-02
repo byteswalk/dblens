@@ -146,6 +146,13 @@ impl ExportManager {
         });
     }
 
+    /// 定时清理入口：没人查询状态时临时文件也要按时删除。
+    pub fn sweep(&self) {
+        if let Ok(mut jobs) = self.jobs.lock() {
+            Self::purge(&mut jobs);
+        }
+    }
+
     fn mine<'a>(jobs: &'a HashMap<String, Job>, id: &str) -> Result<&'a Job> {
         let me = Operator::current().id;
         jobs.get(id).filter(|j| j.owner == me).ok_or_else(|| not_found(id))
@@ -425,6 +432,21 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         panic!("导出没有结束");
+    }
+
+    #[tokio::test]
+    async fn sweep_removes_old_temp_files() {
+        let (s, p, _log, _dir) = service();
+        let id = s.start_export(request(&p, "SELECT ROWS 2", ExportFormat::Csv), false).await.unwrap();
+        wait(&s, &id).await;
+        let file = {
+            let mut jobs = s.exports.jobs.lock().unwrap();
+            let j = jobs.get_mut(&id).unwrap();
+            j.finished = Instant::now().checked_sub(KEEP);
+            j.file.clone()
+        };
+        s.exports.sweep();
+        assert!(!file.exists());
     }
 
     #[tokio::test]

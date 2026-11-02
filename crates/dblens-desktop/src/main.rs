@@ -82,7 +82,12 @@ fn run(data_dir: PathBuf) -> Result<(), String> {
         .setup(move |app| {
             let mut api = router(
                 service,
-                ApiConfig { token: token.clone(), allowed_origins: Vec::new(), local_files: true },
+                ApiConfig {
+                    token: token.clone(),
+                    allowed_origins: Vec::new(),
+                    local_files: true,
+                    max_result_rows: None,
+                },
             );
             match web_dir(app.path().resource_dir().ok()) {
                 Some(dir) => {

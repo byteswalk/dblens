@@ -54,7 +54,10 @@ async fn flow(env: &str, tls: bool) {
     secrets.init_vault("主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
-    let app = router(service, ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files: false });
+    let app = router(
+        service,
+        ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files: false, max_result_rows: None },
+    );
 
     // 达梦的驱动目录是连接选项，不是全局设置
     let lib_options = if driver == DriverId::Dameng { [].as_slice() } else { LIB_OPTIONS.as_slice() };
@@ -212,7 +215,10 @@ async fn sqlserver_catalogs() {
     secrets.init_vault("主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
-    let app = router(service, ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files: false });
+    let app = router(
+        service,
+        ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files: false, max_result_rows: None },
+    );
     let profile = json!({
         "name": "mssql", "driver": driver, "host": params.host, "port": params.port, "user": params.user,
         "database": params.database, "options": params.options, "environment": "test",

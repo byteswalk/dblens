@@ -19,7 +19,10 @@ fn app(local_files: bool) -> Router {
     let service = Arc::new(Service::with_history(store, secrets, registry, Arc::new(DefaultPolicy), history));
     // 迁移记录放在单独的临时目录（默认目录可能有其他测试留下的记录）
     service.migrations.set_dir(tempfile::tempdir().unwrap().keep().join("migrations"));
-    router(service, ApiConfig { token: "t".into(), allowed_origins: vec![], local_files })
+    router(
+        service,
+        ApiConfig { token: "t".into(), allowed_origins: vec![], local_files, max_result_rows: None },
+    )
 }
 
 async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {

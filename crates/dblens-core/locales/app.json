@@ -28,6 +28,10 @@
     "zh-CN": "设置项 %{key} 的值超过 64 KiB",
     "en": "The value of setting %{key} exceeds 64 KiB"
   },
+  "api.row_cap": {
+    "zh-CN": "结果超过 %{cap} 行，已停止读取，后面的语句没有执行。需要完整结果请使用导出",
+    "en": "The result exceeds %{cap} rows; reading stopped and the following statements were not run. Use export for the full result"
+  },
   "api.still_running": {
     "zh-CN": "上一段 SQL 还没有执行完",
     "en": "The previous SQL has not finished yet"

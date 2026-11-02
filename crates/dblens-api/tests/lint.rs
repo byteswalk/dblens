@@ -17,7 +17,10 @@ fn app() -> Router {
     let registry = Arc::new(DriverRegistry::with_drivers(store.clone(), vec![]));
     let history = HistoryLog::inline(store.clone());
     let service = Arc::new(Service::with_history(store, secrets, registry, Arc::new(DefaultPolicy), history));
-    router(service, ApiConfig { token: "t".into(), allowed_origins: vec![], local_files: true })
+    router(
+        service,
+        ApiConfig { token: "t".into(), allowed_origins: vec![], local_files: true, max_result_rows: None },
+    )
 }
 
 async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {

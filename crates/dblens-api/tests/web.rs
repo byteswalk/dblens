@@ -19,7 +19,8 @@ fn app(dir: &std::path::Path) -> Router {
         vec![Box::new(FakeDriver { log: Arc::default() })],
     ));
     let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
-    let config = ApiConfig { token: "t".into(), allowed_origins: vec![], local_files: false };
+    let config =
+        ApiConfig { token: "t".into(), allowed_origins: vec![], local_files: false, max_result_rows: None };
     with_web(router(service, config), dir.to_path_buf())
 }
 
