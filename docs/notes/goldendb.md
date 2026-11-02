@@ -61,6 +61,7 @@ Oracle 模式租户开 Oracle 兼容（`sql_mode` 含 `ORA_COMPATIBLE_MODE`、`A
 - 迁移：MySQL → 这里，这里 → MySQL。
 - MySQL 模式租户：同样的 11 个流程和双向迁移，触发器除外。
 - 回归：MySQL、MariaDB、TiDB、OceanBase 的完整流程和表设计器。
+- 真实鼠标（浏览器模式）：新建连接表单、保存、对象树、执行查询，连的是 MySQL 模式租户。系统库（`_gdb_*`、`dbagent`、`heartbeat_info`、`recyclebin`）归在“系统”下。
 
 ## 没有验证
 

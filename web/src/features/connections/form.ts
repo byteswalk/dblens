@@ -170,7 +170,7 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     const i = line.indexOf('=')
     if (i > 0) options[line.slice(0, i).trim()] = line.slice(i + 1).trim()
   }
-  if (supportsTls(f.driver) && f.tls !== 'disable') {
+  if (supportsTls(f.driver) && f.product !== 'goldendb' && f.tls !== 'disable') {
     options.tls = f.tls
     if (f.tls === 'verify' && f.tlsCa.trim()) options.tls_ca = f.tlsCa.trim()
   }

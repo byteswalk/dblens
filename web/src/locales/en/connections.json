@@ -197,6 +197,7 @@
     "native": "Native client",
     "jdbc": "JDBC driver",
     "dir": "JDBC driver folder",
-    "dirPlaceholder": "Leave empty to use the bundled driver"
+    "dirPlaceholder": "Leave empty to use the bundled driver",
+    "goldendbDirPlaceholder": "Folder holding the gdb-mysql-connector-java driver jar"
   }
 }

@@ -239,7 +239,7 @@ export default function ConnectionDialog() {
     </>
   )
 
-  const tls = supportsTls(form.driver) ? (
+  const tls = supportsTls(form.driver) && form.product !== 'goldendb' ? (
     <>
       <Field label={t('connections.tls.mode')}>
         <Radio.Group
@@ -266,7 +266,7 @@ export default function ConnectionDialog() {
       )}
     </>
   ) : (
-    <Alert type="info" showIcon message={t('connections.tls.unsupported', { driver: driverLabel(form.driver) })} />
+    <Alert type="info" showIcon message={t('connections.tls.unsupported', { driver: form.product === 'goldendb' ? 'GoldenDB' : driverLabel(form.driver) })} />
   )
 
   const advanced = (
@@ -285,7 +285,7 @@ export default function ConnectionDialog() {
       )}
       {usesJdbc(form) && (
         <Field label={t('connections.client.dir')}>
-          <Input value={form.jdbcDir} onChange={(e) => set('jdbcDir', e.target.value)} placeholder={t('connections.client.dirPlaceholder')} />
+          <Input value={form.jdbcDir} onChange={(e) => set('jdbcDir', e.target.value)} placeholder={t(form.product === 'goldendb' ? 'connections.client.goldendbDirPlaceholder' : 'connections.client.dirPlaceholder')} />
         </Field>
       )}
       {form.driver === 'informix' && (
