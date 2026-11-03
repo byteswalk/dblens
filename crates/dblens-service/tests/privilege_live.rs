@@ -461,6 +461,14 @@ fn assert_no_sentinel(env: &str, dir: &Path) {
 async fn flow(env: &str, fx: Fixture) {
     let Ok(url) = std::env::var(env) else { return };
     let (driver, params) = ConnectParams::from_url(&url).unwrap();
+    // Oracle、达梦的测试表建在连接账号的 schema 里，测试库换账号时跟着变（OceanBase 的用户名带 `@租户`）
+    let fx = match driver {
+        DriverId::Oracle | DriverId::Dameng => {
+            let schema = params.user.split('@').next().unwrap_or_default().to_uppercase();
+            Fixture { schema: Box::leak(schema.into_boxed_str()), ..fx }
+        }
+        _ => fx,
+    };
     let dir = tempfile::tempdir().unwrap();
     let store = Arc::new(Store::open(dir.path()).unwrap());
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));

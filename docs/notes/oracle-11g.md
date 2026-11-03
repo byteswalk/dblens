@@ -27,7 +27,7 @@
 
 - 11g 原生客户端、JDBC 桥接各跑一遍工作区全量测试，全部通过。
 - 迁移：PG、达梦和 11g 之间双向都通过。目标是 11g 时自增列迁成普通列；源是 11g 时源表本来就没有自增列。
-- 回归：PG、达梦、MySQL、Oracle 26ai、OceanBase Oracle 模式全量，只有 26ai 的 `privilege_live` 一处失败：“谁能访问”报告里没有经两层角色拿到权限的测试用户。把权限查询还原成改动前也一样失败，11g 上同一测试通过，是原来就有的问题，另行处理。
+- 回归：PG、达梦、MySQL、Oracle 26ai、OceanBase Oracle 模式全量。26ai 的 `privilege_live` 原先失败，是测试把 schema 写死成 `DBLENS_TEST`，而 26ai 的测试连接 10 月 31 日起改用 `DBLENS_JDBC` 账号：表建在 `DBLENS_JDBC` 下，报告查的是 `DBLENS_TEST` 里不存在的同名表。测试改为按连接账号取 schema 后，26ai、11g、达梦都通过。
 - 浏览器模式真实鼠标：11g 连接的对象树、新建表（自增勾选框不可用，主键正常，建表成功）、查询 `v$version`。
 - 顺手修了设计器“选项”里 schema 下拉框没有宽度、没选值时缩成一条的问题。
 
