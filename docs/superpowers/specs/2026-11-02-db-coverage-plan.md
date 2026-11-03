@@ -9,7 +9,7 @@
 | 达梦 | `COMPATIBLE_MODE=0` | DM8 测试库 8.1.5.60；用户真实库 DM8 0x7000c |
 | 人大金仓 | Oracle、PG | V9R2C16 |
 | openGauss | A、PG | 7.0.0-RC1 |
-| GaussDB | A、PG | 开发者版，内核 507.0，只连通浏览，没有单独适配 |
+| GaussDB | A、PG | 混合云开发者版，内核 507.0（说明 `docs/notes/gaussdb.md`） |
 | OceanBase | MySQL | 社区版 4.4.2.1 |
 | OceanBase | Oracle | 企业版试用 4.4.2.2 |
 | GoldenDB | Oracle、MySQL 租户 | V6.1.03.12SP5 |
@@ -57,7 +57,7 @@
 
 ### GaussDB
 
-用户给的下载页（华为云 GaussDB 下载）是混合云开发者版，集中式，就是现在 `gaussdb-dev` 容器装的那一类。下一步正式适配：服务层全流程在 A、PG 两种模式下跑通，修掉已知问题（读不到角色成员关系，权限页不完整），确认下载页最新版本后换装。分布式版和 DWS 没有免费安装包，先不做。
+用户给的下载页（华为云 GaussDB 下载）是混合云开发者版，集中式，就是现在 `gaussdb-dev` 容器装的那一类。下一步正式适配：服务层全流程在 A、PG 两种模式下跑通，修掉已知问题（读不到角色成员关系，权限页不完整），确认下载页最新版本后换装。分布式版和 DWS 没有免费安装包，先不做。2026-11-03 完成，见 `docs/notes/gaussdb.md`。
 
 ### Oracle
 
@@ -92,9 +92,9 @@ MySQL 5.7、8.0；PostgreSQL 12、14。元数据读取写了 8.0.13、8.0.16 以
 2. 金仓 V8R6，V9R1C10 的四种模式
 3. MySQL 5.7、8.0
 4. openGauss 5.0、6.0.6、7.0.0 LTS
-5. GaussDB 正式适配
+5. GaussDB 正式适配。已完成（2026-11-03）
 6. 达梦兼容模式和大小写不敏感
 7. PostgreSQL 12、14
 8. SQLite
 
-要用户提供的：金仓、GaussDB、Oracle 19c 等需要登录才能下载的安装包。
+要用户提供的：金仓、Oracle 19c 等需要登录才能下载的安装包。

@@ -246,7 +246,9 @@ pub fn paginate_rownum(sql: &str, offset: u64, limit: u64) -> String {
         format!("SELECT * FROM (\n{inner}\n) WHERE ROWNUM <= {limit}")
     } else {
         let end = offset + limit;
-        format!("SELECT * FROM (SELECT q.*, ROWNUM DBLENS_RN FROM (\n{inner}\n) q WHERE ROWNUM <= {end}) WHERE DBLENS_RN > {offset}")
+        format!(
+            "SELECT * FROM (SELECT q.*, ROWNUM DBLENS_RN FROM (\n{inner}\n) q WHERE ROWNUM <= {end}) WHERE DBLENS_RN > {offset}"
+        )
     }
 }
 
@@ -474,7 +476,10 @@ mod tests {
             "SELECT * FROM t -- 注释\nOFFSET 0 ROWS FETCH NEXT 50 ROWS ONLY"
         );
         assert!(paginate(Family::Dameng, "SELECT 1", 0, 1).ends_with("\nLIMIT 1 OFFSET 0"));
-        assert_eq!(paginate_rownum("SELECT * FROM t -- 注释;", 0, 50), "SELECT * FROM (\nSELECT * FROM t -- 注释\n) WHERE ROWNUM <= 50");
+        assert_eq!(
+            paginate_rownum("SELECT * FROM t -- 注释;", 0, 50),
+            "SELECT * FROM (\nSELECT * FROM t -- 注释\n) WHERE ROWNUM <= 50"
+        );
         assert_eq!(
             paginate_rownum("SELECT a FROM t ORDER BY a", 20, 10),
             "SELECT * FROM (SELECT q.*, ROWNUM DBLENS_RN FROM (\nSELECT a FROM t ORDER BY a\n) q WHERE ROWNUM <= 30) WHERE DBLENS_RN > 20"

@@ -556,10 +556,13 @@ impl Context<'_> {
             };
             out.columns.push(dblens_core::schema::IndexColumn { name, descending: c.descending });
         }
-        if let Some(m) = text(&x.method) {
+        // 默认方法不带过去：GaussDB 的 UBTREE 是 Ustore 表的默认 B 树，PostgreSQL 没有
+        if let Some(m) = text(&x.method)
+            .filter(|m| !["btree", "normal", "ubtree"].iter().any(|d| m.eq_ignore_ascii_case(d)))
+        {
             if self.same_family() {
                 out.method = Some(m.to_string());
-            } else if !["btree", "normal"].iter().any(|d| m.eq_ignore_ascii_case(d)) {
+            } else {
                 n.push(None, Some(&x.name), NoteLevel::Lossy, msg!("migrate.index_method", method = m));
             }
         }

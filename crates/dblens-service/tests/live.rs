@@ -97,7 +97,18 @@ async fn setup(env: &str) -> Option<Live> {
     let profile = service.create_profile(input, Some(&params.password)).unwrap();
     let (variant, compat, version) = (summary.variant, summary.compat, summary.version_code);
     let jdbc = via_jdbc;
-    Some(Live { _dir: dir, service, profile_id: profile.id, driver, variant, compat, version, jdbc, schema, database })
+    Some(Live {
+        _dir: dir,
+        service,
+        profile_id: profile.id,
+        driver,
+        variant,
+        compat,
+        version,
+        jdbc,
+        schema,
+        database,
+    })
 }
 
 impl Live {
@@ -269,7 +280,8 @@ async fn workbench_flow(env: &str) {
     };
     eprintln!("{env} 出错位置：{offset:?} {error}");
     // OceanBase 的 Oracle 模式只报 near '…'，没有偏移；Oracle 经 JDBC 时驱动不给出错位置
-    let no_offset = live.variant == Variant::OceanBaseOracle || (live.driver == DriverId::Oracle && live.jdbc);
+    let no_offset =
+        live.variant == Variant::OceanBaseOracle || (live.driver == DriverId::Oracle && live.jdbc);
     if !no_offset {
         let o = offset.expect("应有出错位置");
         assert!(bad[o..].starts_with("FROM"), "位置 {o} 指向 {:?}", &bad[o..]);

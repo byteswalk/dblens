@@ -119,7 +119,8 @@ impl<'a> FromSql<'a> for RawValue<'a> {
 }
 
 /// 兼容库自定义的类型对应的标准类型：域类型取基础类型（人大金仓 Oracle 模式的 `date` 是 timestamp 上的域，
-/// `blob`、`clob` 也是域）；openGauss 的 `clob`、`nvarchar2` 等是独立的类型，二进制格式与对应的标准类型相同。
+/// `blob`、`clob` 也是域）；openGauss 的 `clob`、`nvarchar2` 等是独立的类型，二进制格式与对应的标准类型相同
+/// （GaussDB A 模式的 `date` 是 `datea`，格式同 timestamp）。
 /// `int1`、`tinyint`、`int16`（16 字节整数，openGauss 的序列参数用它）没有对应的标准类型，原样返回，
 /// 由 `decode_as` 单独处理。
 fn standard_type(ty: &Type) -> Option<Type> {
@@ -130,7 +131,7 @@ fn standard_type(ty: &Type) -> Option<Type> {
         "clob" | "nclob" | "nvarchar2" | "varchar2" | "long" => Some(Type::TEXT),
         "blob" | "raw" => Some(Type::BYTEA),
         "number" => Some(Type::NUMERIC),
-        "smalldatetime" => Some(Type::TIMESTAMP),
+        "smalldatetime" | "datea" => Some(Type::TIMESTAMP),
         "binary_double" => Some(Type::FLOAT8),
         "binary_float" => Some(Type::FLOAT4),
         "int1" | "tinyint" | "int16" => Some(ty.clone()),

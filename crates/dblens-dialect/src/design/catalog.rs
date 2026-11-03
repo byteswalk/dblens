@@ -211,7 +211,8 @@ const SQLSERVER_TYPES: &[TypeEntry] = &[
 impl Dialect {
     pub fn design_caps(&self) -> DesignCaps {
         let v = self.version().unwrap_or(u32::MAX);
-        let auto_increment = !(self.family() == Family::Oracle && self.oracle_release().is_some_and(|r| r < 120100));
+        let auto_increment =
+            !(self.family() == Family::Oracle && self.oracle_release().is_some_and(|r| r < 120100));
         match self.family() {
             Family::MySql => DesignCaps {
                 reorder: true,

@@ -173,6 +173,8 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "TEXT" | "NAME" | "CITEXT" => L::Text,
             "BYTEA" => L::Blob,
             "DATE" => L::Date,
+            // GaussDB A 模式的 DATE 是 datea，和 Oracle 一样带时分秒
+            "DATEA" => L::Timestamp { tz: false, precision: Some(0) },
             // 带时区的 time（timetz）没有对应逻辑类型
             "TIME" if !tz => L::Time { precision: prec(6) },
             "TIMESTAMP" => L::Timestamp { tz, precision: prec(6) },
@@ -799,6 +801,7 @@ mod tests {
                 ("timestamp with time zone", ts(true, Some(6))),
                 ("timestamptz", ts(true, Some(6))),
                 ("timestamptz(2)", ts(true, Some(2))),
+                ("datea", ts(false, Some(0))),
                 ("time", L::Time { precision: Some(6) }),
                 ("time(3) without time zone", L::Time { precision: Some(3) }),
                 ("time with time zone", L::Other),

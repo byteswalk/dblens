@@ -196,8 +196,8 @@ impl Binder<'_> {
                 };
                 self.sql.push_str(&format!(" ON DUPLICATE KEY UPDATE {}", sets.join(", ")));
             }
-            // openGauss 没有 ON CONFLICT，用它自己的 ON DUPLICATE KEY UPDATE（可引用 EXCLUDED）
-            _ if self.dialect.variant() == Variant::OpenGauss => {
+            // openGauss、GaussDB 没有 ON CONFLICT，用它们的 ON DUPLICATE KEY UPDATE（可引用 EXCLUDED）
+            _ if matches!(self.dialect.variant(), Variant::OpenGauss | Variant::GaussDb) => {
                 self.sql.push_str(" ON DUPLICATE KEY UPDATE ");
                 if others.is_empty() {
                     self.sql.push_str("NOTHING");
@@ -409,12 +409,14 @@ mod tests {
             ["INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::numeric), ($4, $5, $6) \
               ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, price = EXCLUDED.price"]
         );
-        assert_eq!(
-            sql(Variant::OpenGauss, "public", WriteMode::Upsert),
-            [
-                "INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::numeric), ($4, $5, $6) ON DUPLICATE KEY UPDATE name = EXCLUDED.name, price = EXCLUDED.price"
-            ]
-        );
+        for v in [Variant::OpenGauss, Variant::GaussDb] {
+            assert_eq!(
+                sql(v, "public", WriteMode::Upsert),
+                [
+                    "INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::numeric), ($4, $5, $6) ON DUPLICATE KEY UPDATE name = EXCLUDED.name, price = EXCLUDED.price"
+                ]
+            );
+        }
         // Oracle、达梦：一行一条 MERGE
         let ora = sql(Variant::Oracle, "HR", WriteMode::Upsert);
         assert_eq!(ora.len(), 2);

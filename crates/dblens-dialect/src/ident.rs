@@ -309,7 +309,7 @@ const SQLSERVER_RESERVED: &[&str] = &[
     "WRITETEXT",
 ];
 
-/// PostgreSQL、MySQL（8.0/8.4）、Oracle、达梦以及国产库第一批（TiDB 等）的保留字与特殊值函数名（如 CURRENT_USER、SYSDATE）的并集，按字节序排列。
+/// PostgreSQL、MySQL（8.0/8.4）、Oracle、达梦、GaussDB 以及国产库第一批（TiDB 等）的保留字与特殊值函数名（如 CURRENT_USER、SYSDATE）的并集，按字节序排列。
 /// 多加引号不会出错，所以宁多勿少；个别词只在部分方言中保留（如 PUBLIC），由 `is_reserved` 按家族豁免。新增方言时要补充。
 const RESERVED: &[&str] = &[
     "ACCESS",
@@ -383,6 +383,7 @@ const RESERVED: &[&str] = &[
     "DAY_MICROSECOND",
     "DAY_MINUTE",
     "DAY_SECOND",
+    "DBTIMEZONE",
     "DEC",
     "DECIMAL",
     "DECLARE",
@@ -418,6 +419,7 @@ const RESERVED: &[&str] = &[
     "EXPLAIN",
     "EXTERNAL",
     "FALSE",
+    "FENCED",
     "FETCH",
     "FILE",
     "FIRST_VALUE",
@@ -563,6 +565,7 @@ const RESERVED: &[&str] = &[
     "PRECISION",
     "PRIMARY",
     "PRIOR",
+    "PRIORER",
     "PRIVILEGES",
     "PROCEDURE",
     "PUBLIC",

@@ -47,6 +47,10 @@ async fn connect(env: &str) -> Option<Live> {
         let probe = fetch(&mut conn, &q.sql, &q.params).await;
         d = d.refine(&probe);
     }
+    for sql in d.session_setup() {
+        let mut stream = conn.execute(sql, &[]).await.unwrap();
+        collect_all(stream.as_mut(), 1).await.unwrap();
+    }
     Some(Live { conn, d, banner: info.version })
 }
 
@@ -553,7 +557,8 @@ async fn oracle_metadata() {
     let xe = live.banner.contains("Express Edition");
     let fixture = include_str!("fixtures/oracle.sql");
     if v11 {
-        let skip: Vec<&str> = ORACLE11_SKIP.iter().chain(if xe { &ORACLE_XE_SKIP[..] } else { &[] }).copied().collect();
+        let skip: Vec<&str> =
+            ORACLE11_SKIP.iter().chain(if xe { &ORACLE_XE_SKIP[..] } else { &[] }).copied().collect();
         live.run_script_with(fixture, &skip, &[("dept", ORACLE11_DEPT), ("emp", ORACLE11_EMP)]).await;
     } else {
         live.run_script(fixture).await;
@@ -689,28 +694,37 @@ async fn oceanbase_metadata() {
     assert!(emp.indexes.iter().all(|i| i.columns.iter().all(|c| !c.name.starts_with("__"))), "{emp:?}");
 }
 
-#[tokio::test]
-async fn opengauss_metadata() {
-    let Some(mut live) = connect("DBLENS_TEST_OPENGAUSS_URL").await else { return };
-    // 这个目标也可以指向 GaussDB：两者用同一份查询
+/// openGauss 的两个目标也可以指向 GaussDB：两者用同一份查询。GaussDB 的触发器只认 `EXECUTE PROCEDURE`；
+/// 不支持表继承和域；表默认用 Ustore 存储，不支持 GIN 索引和物化视图。
+async fn opengauss_family(env: &str, oracle_mode: bool) {
+    let Some(mut live) = connect(env).await else { return };
     assert!(matches!(live.d.variant(), Variant::OpenGauss | Variant::GaussDb), "{:?}", live.d.variant());
-    assert!(!live.d.oracle_mode());
+    assert_eq!(live.d.oracle_mode(), oracle_mode);
     let script = include_str!("fixtures/opengauss.sql");
-    if live.d.variant() == Variant::GaussDb {
-        live.run_script(&script.replace("EXECUTE FUNCTION", "EXECUTE PROCEDURE")).await;
+    let gauss = live.d.variant() == Variant::GaussDb;
+    if gauss {
+        let script = script
+            .replace("EXECUTE FUNCTION", "EXECUTE PROCEDURE")
+            .replace(", c_domain dblens_meta.posint", "");
+        let skip = ["inh_child", "dom_ty", "idx_gin", "mv_dept", "mv_dept_c", "mv_dept_cc"];
+        live.run_script_with(&script, &skip, &[]).await;
     } else {
         live.run_script(script).await;
     }
-    check_pg_family(&mut live, PgFx { sequence_cache: false, ..PgFx::FULL }).await;
+    check_pg_family(&mut live, PgFx { sequence_cache: false, materialized_views: !gauss }).await;
+    if oracle_mode {
+        check_oracle_mode_objects(&mut live).await;
+    }
+}
+
+#[tokio::test]
+async fn opengauss_metadata() {
+    opengauss_family("DBLENS_TEST_OPENGAUSS_URL", false).await;
 }
 
 #[tokio::test]
 async fn opengauss_a_metadata() {
-    let Some(mut live) = connect("DBLENS_TEST_OPENGAUSS_A_URL").await else { return };
-    assert_eq!((live.d.variant(), live.d.oracle_mode()), (Variant::OpenGauss, true));
-    live.run_script(include_str!("fixtures/opengauss.sql")).await;
-    check_pg_family(&mut live, PgFx { sequence_cache: false, ..PgFx::FULL }).await;
-    check_oracle_mode_objects(&mut live).await;
+    opengauss_family("DBLENS_TEST_OPENGAUSS_A_URL", true).await;
 }
 
 /// 人大金仓沿用 PG 的脚本：开发版授权不允许建物化视图；PG 模式不接受负的小数位。

@@ -258,10 +258,14 @@ impl DriverRegistry {
             let mut stream = conn.execute(&q.sql, &q.params).await?;
             let rows = MetaRows::from_events(collect_all(stream.as_mut(), 100).await?)?;
             drop(stream);
-            if matches!(dialect.variant(), Variant::Kingbase | Variant::OpenGauss) {
+            if matches!(dialect.variant(), Variant::Kingbase | Variant::OpenGauss | Variant::GaussDb) {
                 mode = rows.iter().next().and_then(|r| r.str("mode"));
             }
             dialect = dialect.refine(&rows);
+        }
+        for sql in dialect.session_setup() {
+            let mut stream = conn.execute(sql, &[]).await?;
+            collect_all(stream.as_mut(), 1).await?;
         }
         // 记下识别结果供界面显示图标；写不进去不影响连接
         if let Err(e) = self.store.set_profile_variant(&profile.id, dialect.variant()) {

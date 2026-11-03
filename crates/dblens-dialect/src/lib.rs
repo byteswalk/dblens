@@ -55,10 +55,10 @@ impl Dialect {
         Self { version, ..self }
     }
 
-    /// 指定兼容模式；只有人大金仓、openGauss 会是 `Oracle`，其他变体忽略。
+    /// 指定兼容模式；只有人大金仓、openGauss、GaussDB 会是 `Oracle`，其他变体忽略。
     pub fn with_compat(self, compat: Compat) -> Self {
         match self.variant {
-            Variant::Kingbase | Variant::OpenGauss => Self { compat, ..self },
+            Variant::Kingbase | Variant::OpenGauss | Variant::GaussDb => Self { compat, ..self },
             _ => self,
         }
     }
@@ -80,7 +80,7 @@ impl Dialect {
     pub fn refine(self, probe: &MetaRows) -> Self {
         match self.variant {
             Variant::MySql if !probe.is_empty() => Self { variant: Variant::PolarDb, ..self },
-            Variant::Kingbase | Variant::OpenGauss => match probe.iter().next() {
+            Variant::Kingbase | Variant::OpenGauss | Variant::GaussDb => match probe.iter().next() {
                 Some(row) => {
                     let compat = Compat::from_mode(&row.str("mode").unwrap_or_default());
                     let version = row.int("version_num").and_then(pg_version_num).or(self.version);
@@ -96,9 +96,19 @@ impl Dialect {
         self.compat
     }
 
-    /// 人大金仓、openGauss 的 Oracle 兼容模式。
+    /// 人大金仓、openGauss、GaussDB 的 Oracle 兼容模式。
     pub fn oracle_mode(&self) -> bool {
         self.compat == Compat::Oracle
+    }
+
+    /// 连上并识别方言后在会话里执行的语句。GaussDB 的 A 模式按 `nls_date_format`（默认 `DD-MON-RR`）解析
+    /// 日期，连 `DATE '2024-02-29'` 都会报错，导入、编辑和本工具生成的日期字面量都要用 ISO 格式。
+    pub fn session_setup(&self) -> &'static [&'static str] {
+        if self.variant == Variant::GaussDb && self.oracle_mode() {
+            &["SET nls_date_format = 'YYYY-MM-DD HH24:MI:SS'"]
+        } else {
+            &[]
+        }
     }
 
     pub fn version(&self) -> Option<u32> {

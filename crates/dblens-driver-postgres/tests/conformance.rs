@@ -68,7 +68,11 @@ fn oracle_mode_cases() -> Vec<(&'static str, Value)> {
         .into_iter()
         .filter(|(sql, _)| !sql.contains("'NaN'"))
         .map(|(sql, v)| match v {
-            Value::Date(d) => (sql, Value::DateTime(d.and_hms_opt(0, 0, 0).unwrap())),
+            // GaussDB 的 A 模式按 nls_date_format（默认 DD-MON-RR）解析日期字面量，这里写明格式
+            Value::Date(d) => (
+                "SELECT TO_DATE('2024-02-29', 'YYYY-MM-DD')",
+                Value::DateTime(d.and_hms_opt(0, 0, 0).unwrap()),
+            ),
             v => (sql, v),
         })
         .collect();
