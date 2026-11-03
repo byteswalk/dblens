@@ -55,10 +55,12 @@ impl Dialect {
         Self { version, ..self }
     }
 
-    /// 指定兼容模式；只有人大金仓、openGauss、GaussDB 会是 `Oracle`，其他变体忽略。
+    /// 指定兼容模式；只有人大金仓、openGauss、GaussDB、达梦会是 `Oracle`，其他变体忽略。
     pub fn with_compat(self, compat: Compat) -> Self {
         match self.variant {
-            Variant::Kingbase | Variant::OpenGauss | Variant::GaussDb => Self { compat, ..self },
+            Variant::Kingbase | Variant::OpenGauss | Variant::GaussDb | Variant::Dameng => {
+                Self { compat, ..self }
+            }
             _ => self,
         }
     }
@@ -76,7 +78,8 @@ impl Dialect {
     /// 用 `MetaKey::VariantProbe` 的查询结果细化方言：
     /// - MySQL：`SHOW VARIABLES LIKE 'polardb_version'` 有结果即为 PolarDB；
     /// - 人大金仓、openGauss：`mode` 列给出兼容模式，`version_num` 列（`server_version_num`）给出所基于的
-    ///   PG 版本，替换由产品版本号解析出的版本（人大金仓的 `V009R002` 会被解析成 9.2）。
+    ///   PG 版本，替换由产品版本号解析出的版本（人大金仓的 `V009R002` 会被解析成 9.2）；
+    /// - 达梦：`mode` 列是 `COMPATIBLE_MODE`，2 为 Oracle 兼容。
     pub fn refine(self, probe: &MetaRows) -> Self {
         match self.variant {
             Variant::MySql if !probe.is_empty() => Self { variant: Variant::PolarDb, ..self },
@@ -88,6 +91,11 @@ impl Dialect {
                 }
                 None => self,
             },
+            Variant::Dameng => {
+                let mode = probe.iter().next().and_then(|r| r.str("mode"));
+                let compat = if mode.as_deref() == Some("2") { Compat::Oracle } else { Compat::Native };
+                Self { compat, ..self }
+            }
             _ => self,
         }
     }
@@ -96,7 +104,7 @@ impl Dialect {
         self.compat
     }
 
-    /// 人大金仓、openGauss、GaussDB 的 Oracle 兼容模式。
+    /// 人大金仓、openGauss、GaussDB 的 Oracle 兼容模式，达梦的 `COMPATIBLE_MODE = 2`。
     pub fn oracle_mode(&self) -> bool {
         self.compat == Compat::Oracle
     }
@@ -207,6 +215,10 @@ impl Dialect {
     }
 
     pub fn native_type(&self, logical: &LogicalType) -> String {
+        // 达梦 Oracle 兼容模式下 DATE 带时分秒，建出来就是 TIMESTAMP(0)，直接这样写，读回的结构才和规划一致
+        if self.variant == Variant::Dameng && self.oracle_mode() && *logical == LogicalType::Date {
+            return "TIMESTAMP(0)".into();
+        }
         types::native_type(self.family(), logical)
     }
 
@@ -400,6 +412,20 @@ mod tests {
         let kb = Dialect::new(Variant::Kingbase);
         assert_eq!(kb.with_compat(Compat::Oracle).split(sql).len(), 2);
         assert_eq!(kb.split(sql).len(), 3);
+    }
+
+    #[test]
+    fn dameng_compatible_mode_2_is_oracle() {
+        let dm = Dialect::new(Variant::Dameng);
+        assert!(dm.has_meta(MetaKey::VariantProbe));
+        let ora = dm.refine(&probe("2", ""));
+        assert!(ora.oracle_mode());
+        assert_eq!(ora.native_type(&LogicalType::Date), "TIMESTAMP(0)");
+        for mode in ["0", "3", "4", "7"] {
+            let d = dm.refine(&probe(mode, ""));
+            assert!(!d.oracle_mode(), "{mode}");
+            assert_eq!(d.native_type(&LogicalType::Date), "DATE");
+        }
     }
 
     #[test]

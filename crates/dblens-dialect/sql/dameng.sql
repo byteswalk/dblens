@@ -431,3 +431,7 @@ SELECT CAST(NULL AS VARCHAR(1)) AS "engine",
 FROM ALL_TABLES t
 WHERE t.OWNER = {{ bind("schema") }}
   AND t.TABLE_NAME = {{ bind("table") }}
+
+-- [variant_probe]
+-- dm.ini 的 COMPATIBLE_MODE：2 是 Oracle 兼容（空串即 NULL，DATE 建成 TIMESTAMP(0)），其余按原生处理。
+SELECT SF_GET_PARA_VALUE(1, 'COMPATIBLE_MODE') AS "mode" FROM DUAL

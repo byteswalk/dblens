@@ -158,15 +158,33 @@ struct Fx {
     descending: bool,
     /// dept.id 是自增列。Oracle 12c 以前没有标识列。
     identity: bool,
+    /// 夹具里小写的列名存成大写。达梦大小写不敏感的库按书写的原样存。
+    upper_cols: bool,
 }
 
 impl Fx {
     fn lower(schema: &'static str) -> Fx {
-        Fx { schema, upper: false, triggers: true, routines: true, descending: true, identity: true }
+        Fx {
+            schema,
+            upper: false,
+            triggers: true,
+            routines: true,
+            descending: true,
+            identity: true,
+            upper_cols: false,
+        }
     }
 
     fn upper(schema: &'static str) -> Fx {
-        Fx { schema, upper: true, triggers: true, routines: true, descending: true, identity: true }
+        Fx {
+            schema,
+            upper: true,
+            triggers: true,
+            routines: true,
+            descending: true,
+            identity: true,
+            upper_cols: true,
+        }
     }
 
     fn obj(&self, name: &str) -> String {
@@ -174,7 +192,7 @@ impl Fx {
     }
 
     fn col(&self, name: &str) -> String {
-        if self.upper { name.to_ascii_uppercase() } else { name.to_string() }
+        if self.upper_cols { name.to_ascii_uppercase() } else { name.to_string() }
     }
 }
 
@@ -600,7 +618,12 @@ async fn oracle_metadata() {
 async fn dameng_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_DM_URL").await else { return };
     live.run_script(include_str!("fixtures/dameng.sql")).await;
-    let fx = Fx::upper("DBLENS_TEST");
+    // 夹具不带 schema 名，对象建在连接账号同名的 schema 下
+    let url = std::env::var("DBLENS_TEST_DM_URL").unwrap();
+    let user = ConnectParams::from_url(&url).unwrap().1.user.to_ascii_uppercase();
+    let sensitive = fetch(&mut live.conn, "SELECT SF_GET_CASE_SENSITIVE_FLAG() AS f FROM DUAL", &[]).await;
+    let upper_cols = sensitive.iter().next().and_then(|r| r.str("f")).as_deref() == Some("1");
+    let fx = Fx { upper_cols, ..Fx::upper(Box::leak(user.into_boxed_str())) };
     let all = check_common(&mut live, fx).await;
     let s = fx.schema;
 

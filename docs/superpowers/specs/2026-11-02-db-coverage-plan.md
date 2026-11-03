@@ -6,7 +6,7 @@
 
 | 产品 | 模式 | 实测版本 |
 |---|---|---|
-| 达梦 | `COMPATIBLE_MODE=0` | DM8 测试库 8.1.5.60；用户真实库 DM8 0x7000c |
+| 达梦 | `COMPATIBLE_MODE` 0、2、3、4、7；大小写敏感和不敏感 | DM8 测试库 8.1.5.60；用户真实库 DM8 0x7000c（说明 `docs/notes/dameng-compat.md`） |
 | 人大金仓 | Oracle、PG | V9R2C16 |
 | openGauss | A、PG | 7.0.0-RC1 |
 | GaussDB | A、PG | 混合云开发者版，内核 507.0（说明 `docs/notes/gaussdb.md`） |
@@ -38,7 +38,7 @@
 
 另一个影响更大的是建库时的 `CASE_SENSITIVE`（大小写敏感，默认是），现场常有建成不敏感的库，标识符加不加引号行为不同。
 
-做法：用 5237 实例依次切到 2、3、4、7 跑服务层全流程；另建一个 `CASE_SENSITIVE=N` 的实例跑一遍。
+做法：用 5237 实例依次切到 2、3、4、7 跑服务层全流程；另建一个 `CASE_SENSITIVE=N` 的实例跑一遍。2026-11-03 完成，见 `docs/notes/dameng-compat.md`。
 
 ### 人大金仓
 
@@ -93,7 +93,7 @@ MySQL 5.7、8.0；PostgreSQL 12、14。元数据读取写了 8.0.13、8.0.16 以
 3. MySQL 5.7、8.0
 4. openGauss 5.0、6.0.6、7.0.0 LTS
 5. GaussDB 正式适配。已完成（2026-11-03）
-6. 达梦兼容模式和大小写不敏感
+6. 达梦兼容模式和大小写不敏感。已完成（2026-11-03）
 7. PostgreSQL 12、14
 8. SQLite
 

@@ -122,6 +122,18 @@ impl Live {
         self.variant == Variant::Oracle && self.version.is_some_and(|v| v < 120100)
     }
 
+    /// 不带引号的名字是否存成大写：Oracle 是；达梦看建库时的 CASE_SENSITIVE，不敏感的库按书写的原样存。
+    async fn folds_upper(&self, id: SessionId) -> bool {
+        match self.driver {
+            DriverId::Oracle => true,
+            DriverId::Dameng => {
+                let v = first_value(&self.run(id, "SELECT SF_GET_CASE_SENSITIVE_FLAG() FROM DUAL").await);
+                matches!(&v, Value::Int(1)) || v == Value::Decimal("1".into())
+            }
+            _ => false,
+        }
+    }
+
     fn dual(&self, expr: &str) -> String {
         match self.driver {
             DriverId::Oracle | DriverId::Dameng => format!("SELECT {expr} FROM DUAL"),
@@ -590,7 +602,7 @@ async fn objects_flow(env: &str) {
     let profile = s.profile(&live.profile_id).unwrap();
     let info = s.open_session(&live.profile_id).await.unwrap();
     let id = info.id;
-    let upper = matches!(live.driver, DriverId::Oracle | DriverId::Dameng);
+    let upper = live.folds_upper(id).await;
     let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
     let drops: &[&str] = match live.driver {
         DriverId::Oracle => &[
@@ -957,7 +969,7 @@ async fn editing_flow(env: &str) {
     let live = &live;
     let s = &live.service;
     let id = s.open_session(&live.profile_id).await.unwrap().id;
-    let upper = matches!(live.driver, DriverId::Oracle | DriverId::Dameng);
+    let upper = live.folds_upper(id).await;
     let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
     let drop = match live.driver {
         DriverId::Oracle => vec![
@@ -1176,7 +1188,7 @@ async fn import_flow(env: &str) {
     let live = &live;
     let s = &live.service;
     let id = s.open_session(&live.profile_id).await.unwrap().id;
-    let upper = matches!(live.driver, DriverId::Oracle | DriverId::Dameng);
+    let upper = live.folds_upper(id).await;
     let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
     let drop = match live.driver {
         DriverId::Oracle => vec![
@@ -1551,7 +1563,7 @@ async fn design_flow(env: &str) {
     let live = &live;
     let s = &live.service;
     let id = s.open_session(&live.profile_id).await.unwrap().id;
-    let upper = matches!(live.driver, DriverId::Oracle | DriverId::Dameng);
+    let upper = live.folds_upper(id).await;
     let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
     let oracle_drop =
         |what: &str| format!("BEGIN EXECUTE IMMEDIATE 'DROP {what}'; EXCEPTION WHEN OTHERS THEN NULL; END;");
@@ -1984,7 +1996,7 @@ async fn model_flow(env: &str) {
     let live = &live;
     let s = &live.service;
     let id = s.open_session(&live.profile_id).await.unwrap().id;
-    let upper = matches!(live.driver, DriverId::Oracle | DriverId::Dameng);
+    let upper = live.folds_upper(id).await;
     let n = |name: &str| if upper { name.to_uppercase() } else { name.to_string() };
     let varchar = if live.driver == DriverId::Oracle { "VARCHAR2" } else { "VARCHAR" };
     let drop_sql = &|schema: Option<&str>, table: &str| {

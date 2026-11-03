@@ -266,6 +266,10 @@ UNION
 SELECT 'VERSIONS_OPERATION' FROM DUAL
 ORDER BY 1
 
+-- [variant_probe] []
+-- dm.ini 的 COMPATIBLE_MODE：2 是 Oracle 兼容（空串即 NULL，DATE 建成 TIMESTAMP(0)），其余按原生处理。
+SELECT SF_GET_PARA_VALUE(1, 'COMPATIBLE_MODE') AS "mode" FROM DUAL
+
 -- [referencing_keys] [String("HR"), String("EMP")]
 -- Table designer rebuild: foreign keys of OTHER tables that reference this table's PK / UNIQUE constraints.
 SELECT c.OWNER AS "table_schema",

@@ -255,13 +255,17 @@ impl DriverRegistry {
         let mut dialect = Dialect::detect(driver.id(), &info);
         let mut mode = None;
         if let Some(q) = dialect.meta_query(MetaKey::VariantProbe, &MetaArgs::default())? {
-            let mut stream = conn.execute(&q.sql, &q.params).await?;
-            let rows = MetaRows::from_events(collect_all(stream.as_mut(), 100).await?)?;
-            drop(stream);
-            if matches!(dialect.variant(), Variant::Kingbase | Variant::OpenGauss | Variant::GaussDb) {
-                mode = rows.iter().next().and_then(|r| r.str("mode"));
+            // 探测失败不挡连接，按原生模式处理：达梦的低权限账号没有读 INI 参数的权限
+            match probe(conn.as_mut(), &q.sql, &q.params).await {
+                Ok(rows) => {
+                    if matches!(dialect.variant(), Variant::Kingbase | Variant::OpenGauss | Variant::GaussDb)
+                    {
+                        mode = rows.iter().next().and_then(|r| r.str("mode"));
+                    }
+                    dialect = dialect.refine(&rows);
+                }
+                Err(e) => tracing::warn!("连接 {} 探测兼容模式失败，按原生模式处理：{e}", profile.id),
             }
-            dialect = dialect.refine(&rows);
         }
         for sql in dialect.session_setup() {
             let mut stream = conn.execute(sql, &[]).await?;
@@ -290,6 +294,12 @@ impl DriverRegistry {
             mode,
         })
     }
+}
+
+/// 执行兼容模式探测查询，取回全部行。
+async fn probe(conn: &mut dyn Connection, sql: &str, params: &[dblens_core::Value]) -> Result<MetaRows> {
+    let mut stream = conn.execute(sql, params).await?;
+    MetaRows::from_events(collect_all(stream.as_mut(), 100).await?)
 }
 
 #[cfg(test)]
