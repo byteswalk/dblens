@@ -19,6 +19,8 @@ use dblens_driver::{ConnectParams, Connection, Driver, DriverId, collect_all};
 struct Live {
     conn: Box<dyn Connection>,
     d: Dialect,
+    /// 服务器报告的版本串（Oracle 是 banner，能看出 XE 版）。
+    banner: String,
 }
 
 async fn fetch(conn: &mut Box<dyn Connection>, sql: &str, params: &[Value]) -> MetaRows {
@@ -45,7 +47,7 @@ async fn connect(env: &str) -> Option<Live> {
         let probe = fetch(&mut conn, &q.sql, &q.params).await;
         d = d.refine(&probe);
     }
-    Some(Live { conn, d })
+    Some(Live { conn, d, banner: info.version })
 }
 
 fn args(schema: &str) -> MetaArgs {
@@ -539,16 +541,20 @@ const ORACLE11_EMP: &str = "CREATE TABLE META_EMP (
   CONSTRAINT META_EMP_SAL_CK CHECK (salary >= 0),
   CONSTRAINT META_EMP_FLAG_CK CHECK (flag IN (0, 1))
 )";
-/// 11g 没有的（标识列、23ai 的类型；和虚拟列同表达式的函数索引报 ORA-54018），以及测试用的 XE 版没有的（分区、位图索引）。
-const ORACLE11_SKIP: [&str; 6] = ["ds_23", "idt", "idx_upper", "part", "part_list", "idx_bitmap"];
+/// 11g 没有的：标识列、23ai 的类型；和虚拟列同表达式的函数索引报 ORA-54018。
+const ORACLE11_SKIP: [&str; 3] = ["ds_23", "idt", "idx_upper"];
+/// XE 版没有分区和位图索引。
+const ORACLE_XE_SKIP: [&str; 3] = ["part", "part_list", "idx_bitmap"];
 
 #[tokio::test]
 async fn oracle_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_ORACLE_URL").await else { return };
     let v11 = live.d.oracle_release().is_some_and(|v| v < 120100);
+    let xe = live.banner.contains("Express Edition");
     let fixture = include_str!("fixtures/oracle.sql");
     if v11 {
-        live.run_script_with(fixture, &ORACLE11_SKIP, &[("dept", ORACLE11_DEPT), ("emp", ORACLE11_EMP)]).await;
+        let skip: Vec<&str> = ORACLE11_SKIP.iter().chain(if xe { &ORACLE_XE_SKIP[..] } else { &[] }).copied().collect();
+        live.run_script_with(fixture, &skip, &[("dept", ORACLE11_DEPT), ("emp", ORACLE11_EMP)]).await;
     } else {
         live.run_script(fixture).await;
     }
@@ -562,6 +568,8 @@ async fn oracle_metadata() {
     assert_eq!(col("NAME").default.as_deref(), Some("'无名'"));
     if !v11 {
         assert!(col("SEQ_NO").auto_increment && col("SEQ_NO").default.is_none(), "标识列");
+    }
+    if !xe {
         assert!(table(&all, "META_PART_T").partition.as_deref().unwrap().starts_with("RANGE"));
     }
     assert!(!emp.columns.iter().any(|c| c.name.starts_with("SYS_")), "隐藏的系统列不列出");
