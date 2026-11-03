@@ -351,7 +351,7 @@ trait Policy: Send + Sync {
 - 2026-10-31 用户决定首次发布延后，另行通知。
 - 2026-10-31 用户决定分单机版和审计版，审计版走执行网关，取代原“团队版”（设计 `docs/superpowers/specs/2026-10-31-audit-edition-design.md`）。
 - G0 已完成（详细计划 `docs/superpowers/plans/2026-10-31-g0-gate-extension-points.md`，说明 `docs/notes/g0-gate.md`）。
-- 国产库第三批完成：GBase 8s；OceanBase 的 Oracle 模式（说明 `docs/notes/oceanbase-oracle.md`）。GoldenDB 走 MySQL 协议，等新授权后实测。
+- 国产库第三批完成：GBase 8s；OceanBase 的 Oracle 模式（说明 `docs/notes/oceanbase-oracle.md`）。GoldenDB 经官方 JDBC 驱动支持，Oracle 模式和 MySQL 模式租户都已实测（说明 `docs/notes/goldendb.md`）。
 
 ## 12. 风险与待验证项
 
