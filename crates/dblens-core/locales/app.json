@@ -216,6 +216,10 @@
     "zh-CN": "修改 %{column} 时，GBase 8s 会删除其他表引用这一列的外键，脚本最后会重建。类型改变时重建可能失败，要先改外键列",
     "en": "Changing %{column} makes GBase 8s drop foreign keys in other tables that reference it; the script recreates them last. If the type changes that can fail, so change the referencing columns first"
   },
+  "design.auto_increment_unsupported": {
+    "zh-CN": "该库版本不支持自增列（Oracle 12c 起才有），%{column} 请改用序列",
+    "en": "This database version has no auto-increment columns (Oracle 12c and later); use a sequence for %{column}"
+  },
   "design.unsupported.identity": {
     "zh-CN": "该库不能改变已有列 %{column} 的自增属性",
     "en": "This database cannot change the auto-increment of existing column %{column}"
@@ -1301,8 +1305,8 @@
     "en": "OceanBase Oracle mode cannot restart an identity after the data is loaded, so this becomes a plain column; create a sequence yourself after the migration if you need one"
   },
   "migrate.identity_unsupported": {
-    "zh-CN": "目标库版本不支持自增（标识列）",
-    "en": "The target database version does not support identity columns"
+    "zh-CN": "目标库版本没有自增列（Oracle 12c 起才有），这一列改成普通列；要自增请迁移后自行建序列和触发器",
+    "en": "The target database version has no identity columns (Oracle 12c and later), so this becomes a plain column; create a sequence and trigger yourself after the migration if you need one"
   },
   "migrate.index_expression": {
     "zh-CN": "索引表达式 %{expression} 不能转换，不迁移",

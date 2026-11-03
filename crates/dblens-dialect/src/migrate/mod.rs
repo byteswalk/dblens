@@ -476,7 +476,8 @@ impl Context<'_> {
                     out.data_type = ColumnType { native, logical };
                 }
             } else {
-                n.push(at, None, NoteLevel::Unsupported, msg!("migrate.identity_unsupported"));
+                // Oracle 12c 以前：改成普通列，数据照迁，自增由用户迁完后用序列加触发器补
+                n.push(at, None, NoteLevel::Lossy, msg!("migrate.identity_unsupported"));
             }
             return out;
         }

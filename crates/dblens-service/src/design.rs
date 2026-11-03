@@ -9,7 +9,7 @@ use dblens_core::schema::Table;
 use dblens_core::{Error, Msg, Result, msg};
 use dblens_dialect::design::{
     DesignCaps, DesignIssue, DesignStatement, Rebuild, RebuildContext, RebuildOutcome, RebuildStep, Renames,
-    TableChange, diff_table, validate,
+    TableChange, diff_table,
 };
 use dblens_dialect::meta::{self, MetaArgs, MetaKey, MetaRows, TableStorage};
 use dblens_dialect::{Dialect, Family};
@@ -247,7 +247,7 @@ impl Service {
             _ => false,
         };
         let mut preview = DesignPreview {
-            errors: validate(&draft),
+            errors: dialect.design_issues(&draft),
             changes: vec![],
             statements: vec![],
             rebuild: RebuildInfo { reasons: vec![], active: false, refused: None },

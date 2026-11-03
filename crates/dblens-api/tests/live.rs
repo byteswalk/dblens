@@ -59,8 +59,9 @@ async fn flow(env: &str, tls: bool) {
         ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files: false, max_result_rows: None },
     );
 
-    // 达梦的驱动目录是连接选项，不是全局设置
-    let lib_options = if driver == DriverId::Dameng { [].as_slice() } else { LIB_OPTIONS.as_slice() };
+    // 达梦和走 JDBC 桥接的连接，驱动目录是连接选项，不是全局设置
+    let via_jdbc = driver == DriverId::Dameng || params.options.get("client").is_some_and(|c| c == "jdbc");
+    let lib_options = if via_jdbc { [].as_slice() } else { LIB_OPTIONS.as_slice() };
     for option in lib_options {
         if let Some(lib) = params.options.get(*option) {
             let path = format!(

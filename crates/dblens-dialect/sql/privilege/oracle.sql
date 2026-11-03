@@ -5,10 +5,13 @@ SELECT u.username AS id, u.username AS name, NULL AS host, 'user' AS principal_k
        NULL AS can_login,
        CASE WHEN u.account_status LIKE '%LOCKED%' THEN 1 ELSE 0 END AS locked,
        TO_CHAR(u.expiry_date, 'YYYY-MM-DD HH24:MI:SS') AS expires_at,
-{% if version >= 120000 %}
+{% if version >= 120100 %}
        CASE WHEN u.oracle_maintained = 'Y' THEN 1 ELSE 0 END AS builtin,
 {% else %}
-       0 AS builtin,
+       -- 12c 以前没有 ORACLE_MAINTAINED，用和元数据 [schemas] 相同的系统账号名单
+       CASE WHEN u.username IN ('SYS','SYSTEM','OUTLN','DBSNMP','APPQOSSYS','CTXSYS','MDSYS','MDDATA','ORDSYS','ORDDATA','ORDPLUGINS','SI_INFORMTN_SCHEMA','XDB','WMSYS','EXFSYS','OLAPSYS','DIP','ANONYMOUS','SYSMAN','LBACSYS','DVSYS','DVF','ORACLE_OCM','XS$NULL','MGMT_VIEW','OWBSYS','OWBSYS_AUDIT','SPATIAL_CSW_ADMIN_USR','SPATIAL_WFS_ADMIN_USR','APEX_PUBLIC_USER','FLOWS_FILES')
+              OR u.username LIKE 'APEX!_%' ESCAPE '!' OR u.username LIKE 'FLOWS!_%' ESCAPE '!'
+            THEN 1 ELSE 0 END AS builtin,
 {% endif %}
        u.account_status AS attr_status,
        u.profile AS attr_profile,
@@ -16,10 +19,12 @@ SELECT u.username AS id, u.username AS name, NULL AS host, 'user' AS principal_k
 FROM dba_users u
 UNION ALL
 SELECT r.role, r.role, NULL, 'role', 'server', NULL, NULL, NULL,
-{% if version >= 120000 %}
+{% if version >= 120100 %}
        CASE WHEN r.oracle_maintained = 'Y' THEN 1 ELSE 0 END,
 {% else %}
-       0,
+       -- 没有名单可用：安装脚本以 SYS 建的角色，SYS 带管理选项持有
+       CASE WHEN EXISTS (SELECT 1 FROM dba_role_privs g WHERE g.grantee = 'SYS' AND g.granted_role = r.role
+                                                       AND g.admin_option = 'YES') THEN 1 ELSE 0 END,
 {% endif %}
        NULL, NULL, NULL
 FROM dba_roles r

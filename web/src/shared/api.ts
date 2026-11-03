@@ -1035,6 +1035,7 @@ export interface DesignCaps {
   reorder: boolean
   checks: boolean
   descending_index: boolean
+  auto_increment: boolean
   on_delete: string[]
   on_update: string[]
   index_methods: string[]

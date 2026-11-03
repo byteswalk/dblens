@@ -36,7 +36,14 @@ export default function OptionsPane({ source, schema, isNew, draft, storage, iss
         {t('design.option.schema')}
         {isNew ? (
           <Cell error={schema ? undefined : t('design.option.schemaRequired')}>
-            <Select size="small" showSearch value={schema || undefined} options={schemas.map((s) => ({ value: s }))} onChange={onSchema} />
+            <Select
+              size="small"
+              showSearch
+              style={{ width: '100%' }}
+              value={schema || undefined}
+              options={schemas.map((s) => ({ value: s }))}
+              onChange={onSchema}
+            />
           </Cell>
         ) : (
           <Input size="small" value={schema} disabled />

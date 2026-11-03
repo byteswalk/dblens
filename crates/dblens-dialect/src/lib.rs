@@ -138,6 +138,9 @@ impl Dialect {
     }
 
     pub fn paginate(&self, sql: &str, offset: u64, limit: u64) -> String {
+        if self.family() == Family::Oracle && self.oracle_release().is_some_and(|v| v < 120100) {
+            return literal::paginate_rownum(sql, offset, limit);
+        }
         literal::paginate(self.family(), sql, offset, limit)
     }
 

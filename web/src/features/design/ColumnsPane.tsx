@@ -177,7 +177,7 @@ export default function ColumnsPane({ draft, original, caps, issues, selected, o
       width: 56,
       align: 'center' as const,
       render: (_: unknown, c: DraftColumn) => (
-        <Checkbox checked={c.auto_increment} disabled={c.deleted} onChange={(e) => set(c.key, { auto_increment: e.target.checked })} />
+        <Checkbox checked={c.auto_increment} disabled={c.deleted || caps?.auto_increment === false} onChange={(e) => set(c.key, { auto_increment: e.target.checked })} />
       ),
     },
     {

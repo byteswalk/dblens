@@ -220,7 +220,7 @@ fn bytes_literal(family: Family, b: &[u8]) -> Result<String> {
 /// 仅适用于自身不含 LIMIT/FETCH 的查询。
 /// 子句另起一行，原查询末尾的行注释不会吞掉它。
 /// 采用追加而非包装：允许重复列名，ORDER BY 仍然有效（MariaDB 会忽略派生表内的 ORDER BY）。
-/// Oracle 需要 12c 及以上；11g 的 ROWNUM 分页尚未实现。SQL Server 的 OFFSET 要求查询带 ORDER BY。
+/// Oracle 12c 以前用 [`paginate_rownum`]。SQL Server 的 OFFSET 要求查询带 ORDER BY。
 pub fn paginate(family: Family, sql: &str, offset: u64, limit: u64) -> String {
     let inner = sql.trim_start().trim_end_matches(|c: char| c == ';' || c.is_whitespace());
     match family {
@@ -235,6 +235,18 @@ pub fn paginate(family: Family, sql: &str, offset: u64, limit: u64) -> String {
             Some(_) => format!("SELECT SKIP {offset} FIRST {limit}{}", &inner[6..]),
             None => inner.to_string(),
         },
+    }
+}
+
+/// Oracle 12c 以前没有 `OFFSET … FETCH`，用 ROWNUM 包两层。只取前几行时不加序号列；
+/// 有偏移时结果多一列 `DBLENS_RN`。内层查询有重名列时报 ORA-00918。
+pub fn paginate_rownum(sql: &str, offset: u64, limit: u64) -> String {
+    let inner = sql.trim_start().trim_end_matches(|c: char| c == ';' || c.is_whitespace());
+    if offset == 0 {
+        format!("SELECT * FROM (\n{inner}\n) WHERE ROWNUM <= {limit}")
+    } else {
+        let end = offset + limit;
+        format!("SELECT * FROM (SELECT q.*, ROWNUM DBLENS_RN FROM (\n{inner}\n) q WHERE ROWNUM <= {end}) WHERE DBLENS_RN > {offset}")
     }
 }
 
@@ -462,6 +474,11 @@ mod tests {
             "SELECT * FROM t -- 注释\nOFFSET 0 ROWS FETCH NEXT 50 ROWS ONLY"
         );
         assert!(paginate(Family::Dameng, "SELECT 1", 0, 1).ends_with("\nLIMIT 1 OFFSET 0"));
+        assert_eq!(paginate_rownum("SELECT * FROM t -- 注释;", 0, 50), "SELECT * FROM (\nSELECT * FROM t -- 注释\n) WHERE ROWNUM <= 50");
+        assert_eq!(
+            paginate_rownum("SELECT a FROM t ORDER BY a", 20, 10),
+            "SELECT * FROM (SELECT q.*, ROWNUM DBLENS_RN FROM (\nSELECT a FROM t ORDER BY a\n) q WHERE ROWNUM <= 30) WHERE DBLENS_RN > 20"
+        );
         assert_eq!(
             paginate(Family::SqlServer, "SELECT * FROM t ORDER BY id;", 10, 5),
             "SELECT * FROM t ORDER BY id\nOFFSET 10 ROWS FETCH NEXT 5 ROWS ONLY"

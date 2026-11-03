@@ -150,15 +150,17 @@ struct Fx {
     triggers: bool,
     routines: bool,
     descending: bool,
+    /// dept.id 是自增列。Oracle 12c 以前没有标识列。
+    identity: bool,
 }
 
 impl Fx {
     fn lower(schema: &'static str) -> Fx {
-        Fx { schema, upper: false, triggers: true, routines: true, descending: true }
+        Fx { schema, upper: false, triggers: true, routines: true, descending: true, identity: true }
     }
 
     fn upper(schema: &'static str) -> Fx {
-        Fx { schema, upper: true, triggers: true, routines: true, descending: true }
+        Fx { schema, upper: true, triggers: true, routines: true, descending: true, identity: true }
     }
 
     fn obj(&self, name: &str) -> String {
@@ -196,7 +198,7 @@ async fn check_common(live: &mut Live, fx: Fx) -> Vec<Table> {
     let dept = table(&all, &dept_name);
     assert_eq!(dept.comment.as_deref(), Some("部门表"));
     let id = &dept.columns[0];
-    assert!(id.name == fx.col("id") && id.auto_increment && !id.nullable, "{id:?}");
+    assert!(id.name == fx.col("id") && id.auto_increment == fx.identity && !id.nullable, "{id:?}");
     assert_eq!(dept.primary_key.as_ref().unwrap().columns, [fx.col("id")]);
     assert_eq!(dept.uniques[0].columns, [fx.col("name")]);
 
@@ -511,11 +513,46 @@ async fn check_pg_family(live: &mut Live, pg: PgFx) {
     assert_eq!(live.d.has_meta(MetaKey::Synonyms), live.d.variant() != Variant::Postgres);
 }
 
+/// 11g 的写法：没有标识列、`DEFAULT ON NULL`、隐藏列，默认值不能引用序列。
+const ORACLE11_DEPT: &str = "CREATE TABLE META_DEPT (
+  id NUMBER NOT NULL,
+  name VARCHAR2(50) NOT NULL,
+  CONSTRAINT META_DEPT_PK PRIMARY KEY (id),
+  CONSTRAINT META_DEPT_NAME_UK UNIQUE (name)
+)";
+const ORACLE11_EMP: &str = "CREATE TABLE META_EMP (
+  id NUMBER(19) NOT NULL,
+  dept_id NUMBER,
+  manager_id NUMBER(19),
+  name VARCHAR2(100 CHAR) DEFAULT '无名' NOT NULL,
+  salary NUMBER(10,2),
+  created TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
+  notes CLOB,
+  photo BLOB,
+  name_upper VARCHAR2(100 CHAR) GENERATED ALWAYS AS (UPPER(name)) VIRTUAL,
+  status VARCHAR2(10) DEFAULT 'NEW',
+  flag NUMBER(1) DEFAULT 0 NOT NULL,
+  CONSTRAINT META_EMP_PK PRIMARY KEY (id),
+  CONSTRAINT META_EMP_DEPT_FK FOREIGN KEY (dept_id) REFERENCES META_DEPT (id) ON DELETE CASCADE,
+  CONSTRAINT META_EMP_MGR_FK FOREIGN KEY (manager_id) REFERENCES META_EMP (id) ON DELETE SET NULL,
+  CONSTRAINT META_EMP_UK UNIQUE (dept_id, name),
+  CONSTRAINT META_EMP_SAL_CK CHECK (salary >= 0),
+  CONSTRAINT META_EMP_FLAG_CK CHECK (flag IN (0, 1))
+)";
+/// 11g 没有的（标识列、23ai 的类型；和虚拟列同表达式的函数索引报 ORA-54018），以及测试用的 XE 版没有的（分区、位图索引）。
+const ORACLE11_SKIP: [&str; 6] = ["ds_23", "idt", "idx_upper", "part", "part_list", "idx_bitmap"];
+
 #[tokio::test]
 async fn oracle_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_ORACLE_URL").await else { return };
-    live.run_script(include_str!("fixtures/oracle.sql")).await;
-    let fx = Fx::upper("DBLENS_TEST");
+    let v11 = live.d.oracle_release().is_some_and(|v| v < 120100);
+    let fixture = include_str!("fixtures/oracle.sql");
+    if v11 {
+        live.run_script_with(fixture, &ORACLE11_SKIP, &[("dept", ORACLE11_DEPT), ("emp", ORACLE11_EMP)]).await;
+    } else {
+        live.run_script(fixture).await;
+    }
+    let fx = Fx { identity: !v11, ..Fx::upper("DBLENS_TEST") };
     let all = check_common(&mut live, fx).await;
     let s = fx.schema;
 
@@ -523,11 +560,13 @@ async fn oracle_metadata() {
     let col = |n: &str| emp.columns.iter().find(|c| c.name == n).unwrap_or_else(|| panic!("没有列 {n}"));
     // Oracle 在 LONG 类型的默认值后面存了空白，组装时要去掉
     assert_eq!(col("NAME").default.as_deref(), Some("'无名'"));
-    assert!(col("SEQ_NO").auto_increment && col("SEQ_NO").default.is_none(), "标识列");
+    if !v11 {
+        assert!(col("SEQ_NO").auto_increment && col("SEQ_NO").default.is_none(), "标识列");
+        assert!(table(&all, "META_PART_T").partition.as_deref().unwrap().starts_with("RANGE"));
+    }
     assert!(!emp.columns.iter().any(|c| c.name.starts_with("SYS_")), "隐藏的系统列不列出");
     assert_eq!(logical(emp, "NAME"), LogicalType::VarChar { len: Some(100) });
     assert!(emp.checks.iter().all(|c| !c.expression.ends_with("IS NOT NULL")), "{:?}", emp.checks);
-    assert!(table(&all, "META_PART_T").partition.as_deref().unwrap().starts_with("RANGE"));
 
     let seq = meta::sequences(&live.rows(MetaKey::Sequences, &args(s)).await).unwrap();
     assert!(seq.iter().all(|q| !q.name.starts_with("ISEQ1584")), "标识列自带的序列不列出：{seq:?}");

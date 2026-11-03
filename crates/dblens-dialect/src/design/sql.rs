@@ -1,12 +1,12 @@
 //! 设计器的 DDL 生成（M3 设计文档第 4 节）：判断库不支持的改动，按方言把变更列表生成为语句。
 //! 每项变更生成一条或几条语句，语句带着它对应的变更序号，预览时可以对照。
 
-use dblens_core::schema::{CheckConstraint, Column, ForeignKey, Index};
+use dblens_core::schema::{CheckConstraint, Column, ForeignKey, Index, Table};
 use dblens_core::{Error, Msg, Result, Value, msg};
 use serde::Serialize;
 
 use super::diff::{is_expression, text};
-use super::{Diff, TableChange as C};
+use super::{DesignIssue, Diff, IssueSection, TableChange as C};
 use crate::{Dialect, Family, Variant};
 
 /// 一条生成的语句。`changes` 是它对应的变更序号（一项变更也可能生成几条语句）。
@@ -32,6 +32,22 @@ impl Dialect {
     }
 
     /// 库确定不支持的改动及原因；不为空时改用重建表。
+    /// 校验草稿：通用检查（`validate`）加上这个库做不到的设置。
+    pub fn design_issues(&self, draft: &Table) -> Vec<DesignIssue> {
+        let mut out = super::validate(draft);
+        if !self.design_caps().auto_increment {
+            for (i, c) in draft.columns.iter().enumerate().filter(|(_, c)| c.auto_increment) {
+                out.push(DesignIssue::new(
+                    IssueSection::Columns,
+                    Some(i),
+                    Some("auto_increment"),
+                    msg!("design.auto_increment_unsupported", column = c.name),
+                ));
+            }
+        }
+        out
+    }
+
     pub fn design_unsupported(&self, diff: &Diff) -> Vec<Msg> {
         let mut out = Vec::new();
         if !self.design_caps().reorder && !diff.appended {

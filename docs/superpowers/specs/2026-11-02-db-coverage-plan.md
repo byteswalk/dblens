@@ -18,7 +18,7 @@
 | MySQL | — | 9.7.4 |
 | MariaDB | — | 12.3.3 |
 | PostgreSQL | — | 18.6 |
-| Oracle | — | 26ai Free 23.26.3 |
+| Oracle | — | 26ai Free 23.26.3；11g XE 11.2.0.2（说明 `docs/notes/oracle-11g.md`） |
 | SQL Server | — | 2017、2022、2025 |
 
 除 SQL Server、达梦外，每个库只测过一个版本，而且多是最新版。现场常见的是老版本。
@@ -88,7 +88,7 @@ MySQL 5.7、8.0；PostgreSQL 12、14。元数据读取写了 8.0.13、8.0.16 以
 
 ## 顺序
 
-1. Oracle 11g、19c（信创的主场景是从 Oracle 迁出）
+1. Oracle 11g、19c（信创的主场景是从 Oracle 迁出）。11g 已完成（2026-11-03），19c 等安装包
 2. 金仓 V8R6，V9R1C10 的四种模式
 3. MySQL 5.7、8.0
 4. openGauss 5.0、6.0.6、7.0.0 LTS

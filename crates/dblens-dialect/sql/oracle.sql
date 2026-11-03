@@ -236,13 +236,14 @@ WHERE i.table_owner = {{ bind("schema") }}
   AND i.index_type NOT IN ('LOB', 'IOT - TOP', 'IOT - NESTED')
   AND NVL(i.dropped, 'NO') = 'NO'
   AND NVL(i.secondary, 'N') = 'N'
-  AND (i.owner, i.index_name) NOT IN (SELECT k.index_owner, k.index_name FROM all_constraints k
-                                      WHERE k.owner = {{ bind("schema") }} AND k.constraint_type IN ('P', 'U')
-                                        AND k.index_owner IS NOT NULL AND k.index_name IS NOT NULL
+  -- 11.2 的 ALL_CONSTRAINTS.INDEX_OWNER 可能为空（USER_CONSTRAINTS 里有值），空时按约束的属主算
+  AND NOT EXISTS (SELECT 1 FROM all_constraints k
+                  WHERE k.owner = {{ bind("schema") }} AND k.constraint_type IN ('P', 'U')
+                    AND k.index_name = i.index_name AND NVL(k.index_owner, k.owner) = i.owner
 {% if table %}
-                                        AND k.table_name = {{ bind("table") }}
+                    AND k.table_name = {{ bind("table") }}
 {% endif %}
-                                     )
+                 )
 {% if table %}
   AND i.table_name = {{ bind("table") }}
 {% else %}

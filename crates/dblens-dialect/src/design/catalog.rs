@@ -30,6 +30,8 @@ pub struct DesignCaps {
     /// 支持检查约束（MySQL 8.0.16 以前只解析不执行）。
     pub checks: bool,
     pub descending_index: bool,
+    /// 能建自增列（Oracle 12c 起才有标识列）。
+    pub auto_increment: bool,
     /// 外键可选的动作；空表示不支持这一项（如 Oracle 没有 ON UPDATE）。
     pub on_delete: Vec<&'static str>,
     pub on_update: Vec<&'static str>,
@@ -209,9 +211,11 @@ const SQLSERVER_TYPES: &[TypeEntry] = &[
 impl Dialect {
     pub fn design_caps(&self) -> DesignCaps {
         let v = self.version().unwrap_or(u32::MAX);
+        let auto_increment = !(self.family() == Family::Oracle && self.oracle_release().is_some_and(|r| r < 120100));
         match self.family() {
             Family::MySql => DesignCaps {
                 reorder: true,
+                auto_increment,
                 // MySQL 8.0.16、MariaDB 10.2 起执行检查约束；OceanBase 报告 5.7 但执行检查约束；
                 // TiDB 默认只解析不执行（tidb_enable_check_constraint 关闭）
                 checks: match self.variant() {
@@ -237,6 +241,7 @@ impl Dialect {
             },
             Family::Postgres => DesignCaps {
                 reorder: false,
+                auto_increment,
                 checks: true,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],
@@ -253,6 +258,7 @@ impl Dialect {
             },
             Family::Oracle | Family::Dameng => DesignCaps {
                 reorder: false,
+                auto_increment,
                 checks: true,
                 descending_index: self.variant() != Variant::OceanBaseOracle,
                 on_delete: vec!["NO ACTION", "CASCADE", "SET NULL"],
@@ -262,6 +268,7 @@ impl Dialect {
             },
             Family::SqlServer => DesignCaps {
                 reorder: false,
+                auto_increment,
                 checks: true,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "CASCADE", "SET NULL", "SET DEFAULT"],
@@ -271,6 +278,7 @@ impl Dialect {
             },
             Family::Informix => DesignCaps {
                 reorder: false,
+                auto_increment,
                 checks: true,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "CASCADE"],
