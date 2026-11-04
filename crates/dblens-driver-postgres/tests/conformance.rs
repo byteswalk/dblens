@@ -91,6 +91,11 @@ fn pg_fixture(params: ConnectParams) -> Fixture {
     base(params, pg_cases())
 }
 
+/// openGauss 5.0 用二进制格式发 numeric 的 NaN 时发成全零，客户端读到的是 0，所以不测 NaN。
+fn opengauss_fixture(params: ConnectParams) -> Fixture {
+    base(params, pg_cases().into_iter().filter(|(sql, _)| !sql.contains("'NaN'")).collect())
+}
+
 fn oracle_mode_fixture(params: ConnectParams) -> Fixture {
     base(params, oracle_mode_cases())
 }
@@ -102,13 +107,13 @@ mod postgres {
 
 mod opengauss {
     use super::*;
-    dblens_driver::conformance_tests!("DBLENS_TEST_OPENGAUSS_URL", pg_fixture);
+    dblens_driver::conformance_tests!("DBLENS_TEST_OPENGAUSS_URL", opengauss_fixture);
 }
 
 /// 只存 SHA256 密码的账号：openGauss 自己的认证消息（vendor/PATCHES.md）。
 mod opengauss_sha {
     use super::*;
-    dblens_driver::conformance_tests!("DBLENS_TEST_OPENGAUSS_SHA_URL", pg_fixture);
+    dblens_driver::conformance_tests!("DBLENS_TEST_OPENGAUSS_SHA_URL", opengauss_fixture);
 }
 
 mod opengauss_a {

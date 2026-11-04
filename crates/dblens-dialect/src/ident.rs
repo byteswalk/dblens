@@ -613,6 +613,7 @@ const RESERVED: &[&str] = &[
     "SESSION_USER",
     "SET",
     "SHARE",
+    "SHARE_MEMORY",
     "SHOW",
     "SHRINK",
     "SIGNAL",

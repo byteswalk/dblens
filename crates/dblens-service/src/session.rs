@@ -144,13 +144,17 @@ fn plan(dialect: &Dialect, req: &ExecRequest) -> Result<Vec<Step>> {
         .collect())
 }
 
-/// 数据库报告的出错位置（语句内从 1 开始的字符偏移）换算成提交的 SQL 中的字节偏移。
-/// 执行计划的语句是生成的，位置对不上编辑器，不换算。
-fn error_offset(error: &Error, step: &Step) -> Option<usize> {
+/// 数据库报告的出错位置（语句内从 1 开始的字符偏移；openGauss 5.0 及以前是字节偏移）换算成提交的 SQL 中的
+/// 字节偏移。执行计划的语句是生成的，位置对不上编辑器，不换算。
+fn error_offset(error: &Error, step: &Step, in_bytes: bool) -> Option<usize> {
     let Error::Sql { position: Some(p), .. } = error else { return None };
     let [text] = step.texts.as_slice() else { return None };
-    let chars = (*p as usize).checked_sub(1)?;
-    let byte = text.char_indices().nth(chars).map_or(text.len(), |(b, _)| b);
+    let n = (*p as usize).checked_sub(1)?;
+    let byte = if in_bytes {
+        (0..=n.min(text.len())).rev().find(|&b| text.is_char_boundary(b)).unwrap_or(0)
+    } else {
+        text.char_indices().nth(n).map_or(text.len(), |(b, _)| b)
+    };
     Some(step.start + byte)
 }
 
@@ -928,7 +932,7 @@ impl Actor {
                         set(&|i| i.broken = true);
                     }
                     let stop = disconnected || matches!(error, Error::Cancelled) || !req.continue_on_error;
-                    let offset = error_offset(&error, &step);
+                    let offset = error_offset(&error, &step, ctx.dialect.error_position_in_bytes());
                     queue.push_back(SessionEvent::Failed { index, error, offset });
                     if stop {
                         break 'script;

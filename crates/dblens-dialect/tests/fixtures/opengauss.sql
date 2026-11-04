@@ -45,9 +45,9 @@ CREATE INDEX idx_emp_partial ON dblens_meta.emp (salary) WHERE salary > 1000
 -- @@ trg_fn
 CREATE FUNCTION dblens_meta.trg_emp() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$
 -- @@ trg
-CREATE TRIGGER trg_emp_biu BEFORE INSERT OR UPDATE ON dblens_meta.emp FOR EACH ROW EXECUTE FUNCTION dblens_meta.trg_emp()
+CREATE TRIGGER trg_emp_biu BEFORE INSERT OR UPDATE ON dblens_meta.emp FOR EACH ROW EXECUTE PROCEDURE dblens_meta.trg_emp()
 -- @@ trg2
-CREATE TRIGGER trg_emp_trunc AFTER TRUNCATE ON dblens_meta.emp FOR EACH STATEMENT EXECUTE FUNCTION dblens_meta.trg_emp()
+CREATE TRIGGER trg_emp_trunc AFTER TRUNCATE ON dblens_meta.emp FOR EACH STATEMENT EXECUTE PROCEDURE dblens_meta.trg_emp()
 -- @@ v_emp
 CREATE VIEW dblens_meta.v_emp AS SELECT e.id, e.name, d.name AS dept_name FROM dblens_meta.emp e LEFT JOIN dblens_meta.dept d ON d.id = e.dept_id
 -- @@ v_emp_c

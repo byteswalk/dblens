@@ -30,11 +30,11 @@ SELECT g.grantee, g.grant_scope, g.db_name, g.schema_name, g.object_kind, g.obje
 FROM (
   SELECT CASE WHEN (x.acl).grantee = 0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid((x.acl).grantee) END AS grantee,
          'object' AS grant_scope, NULL AS db_name, n.nspname AS schema_name,
-         CASE x.relkind WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized_view' WHEN 'S' THEN 'sequence' ELSE 'table' END AS object_kind,
+         CASE x.relkind WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized_view' WHEN 'S' THEN 'sequence' WHEN 'L' THEN 'sequence' WHEN 'z' THEN 'sequence' ELSE 'table' END AS object_kind,
          x.relname AS object_name, NULL AS column_name, (x.acl).privilege_type AS privilege, (x.acl).is_grantable AS grantable,
          pg_catalog.pg_get_userbyid((x.acl).grantor) AS grantor
   FROM (SELECT c.relname, c.relkind, c.relnamespace, pg_catalog.aclexplode(c.relacl) AS acl
-        FROM pg_catalog.pg_class c WHERE c.relkind IN ('r', 'v', 'm', 'f', 'S')) x
+        FROM pg_catalog.pg_class c WHERE c.relkind IN ('r', 'v', 'm', 'f', 'S', 'L', 'z')) x
   JOIN pg_catalog.pg_namespace n ON n.oid = x.relnamespace
   WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg!_%' ESCAPE '!' AND n.nspname NOT LIKE 'dbe!_%' ESCAPE '!'
   UNION ALL

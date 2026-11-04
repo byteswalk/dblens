@@ -286,9 +286,10 @@ ORDER BY 1, 2
 
 -- [table_storage] [String("HR"), String("EMP")]
 -- reltuples is -1 (PG 14+) or 0 until the table is analyzed.
+-- "charset" / "collation" are quoted: openGauss 5.0 does not accept them as bare column labels.
 SELECT NULL::text AS engine,
-       NULL::text AS charset,
-       NULL::text AS collation,
+       NULL::text AS "charset",
+       NULL::text AS "collation",
        ts.spcname AS tablespace,
        c.reltuples::bigint AS row_count
 FROM pg_catalog.pg_class c
@@ -300,9 +301,10 @@ WHERE n.nspname = $1
 
 -- [lint_tables] [String("HR")]
 -- Design lint: row estimate only. reltuples is -1 (PG 14+) or 0 until the table is analyzed.
+-- "charset" is quoted: openGauss 5.0 does not accept it as a bare column label.
 SELECT c.relname AS name,
        NULL::text AS engine,
-       NULL::text AS charset,
+       NULL::text AS "charset",
        c.reltuples::bigint AS row_count
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace

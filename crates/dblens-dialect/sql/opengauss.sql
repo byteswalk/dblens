@@ -48,6 +48,7 @@ ORDER BY c.relname
 
 -- [sequences]
 -- No pg_sequence: parameters come from pg_sequence_parameters, which has no cache size.
+-- relkind: 'S' sequence, 'L' large sequence; openGauss 7.0 LTS marks ordinary sequences 'z'.
 SELECT c.relname AS name,
        (pg_catalog.pg_sequence_parameters(c.oid)).start_value AS start_value,
        (pg_catalog.pg_sequence_parameters(c.oid)).increment AS increment,
@@ -58,7 +59,7 @@ SELECT c.relname AS name,
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = {{ bind("schema") }}
-  AND c.relkind = 'S'
+  AND c.relkind IN ('S', 'L', 'z')
   AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d
                   WHERE d.classid = 'pg_catalog.pg_class'::regclass AND d.objid = c.oid
                     AND d.refclassid = 'pg_catalog.pg_class'::regclass AND d.deptype IN ('a', 'i'))

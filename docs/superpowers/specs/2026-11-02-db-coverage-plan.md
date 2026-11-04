@@ -8,7 +8,7 @@
 |---|---|---|
 | 达梦 | `COMPATIBLE_MODE` 0、2、3、4、7；大小写敏感和不敏感 | DM8 测试库 8.1.5.60；用户真实库 DM8 0x7000c（说明 `docs/notes/dameng-compat.md`） |
 | 人大金仓 | Oracle、PG | V9R2C16 |
-| openGauss | A、PG | 7.0.0-RC1 |
+| openGauss | A、PG | 5.0.0、6.0.6、7.0.0 LTS（说明 `docs/notes/opengauss-lts.md`） |
 | GaussDB | A、PG | 混合云开发者版，内核 507.0（说明 `docs/notes/gaussdb.md`） |
 | OceanBase | MySQL | 社区版 4.4.2.1 |
 | OceanBase | Oracle | 企业版试用 4.4.2.2 |
@@ -53,7 +53,7 @@
 
 ### openGauss
 
-现有 7.0.0-RC1 换成 7.0.0 LTS，再加 6.0.6 LTS 和 5.0 LTS。每个版本测 A、PG 两种模式和 SHA256 认证。
+现有 7.0.0-RC1 换成 7.0.0 LTS，再加 6.0.6 LTS 和 5.0 LTS。每个版本测 A、PG 两种模式和 SHA256 认证。2026-11-04 完成，见 `docs/notes/opengauss-lts.md`。
 
 ### GaussDB
 
@@ -91,7 +91,7 @@ MySQL 5.7、8.0；PostgreSQL 12、14。元数据读取写了 8.0.13、8.0.16 以
 1. Oracle 11g、19c（信创的主场景是从 Oracle 迁出）。11g 已完成（2026-11-03），19c 等安装包
 2. 金仓 V8R6，V9R1C10 的四种模式
 3. MySQL 5.7、8.0
-4. openGauss 5.0、6.0.6、7.0.0 LTS
+4. openGauss 5.0、6.0.6、7.0.0 LTS。已完成（2026-11-04）
 5. GaussDB 正式适配。已完成（2026-11-03）
 6. 达梦兼容模式和大小写不敏感。已完成（2026-11-03）
 7. PostgreSQL 12、14

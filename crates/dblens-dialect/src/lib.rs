@@ -43,12 +43,14 @@ pub struct Dialect {
     /// 编码后的服务器版本（见 `parse_version`），未知时为 None。人大金仓、openGauss 是所基于的 PG 版本。
     version: Option<u32>,
     compat: Compat,
+    /// 数据库报告的出错位置按字节而不是字符计：openGauss 5.0 及以前。
+    byte_positions: bool,
 }
 
 impl Dialect {
     /// 版本未知的方言：元数据模板按最新版本渲染。
     pub fn new(variant: Variant) -> Self {
-        Self { variant, version: None, compat: Compat::Native }
+        Self { variant, version: None, compat: Compat::Native, byte_positions: false }
     }
 
     pub fn with_version(self, version: Option<u32>) -> Self {
@@ -67,7 +69,16 @@ impl Dialect {
 
     /// 根据驱动和服务器版本识别兼容库和版本号。
     pub fn detect(driver: DriverId, info: &ServerInfo) -> Self {
-        Self::new(Variant::detect(driver, info)).with_version(parse_version(&info.version))
+        let d = Self::new(Variant::detect(driver, info)).with_version(parse_version(&info.version));
+        // 版本号之后会换成所基于的 PG 版本（9.2.4），产品版本只在这里看得到
+        let byte_positions =
+            d.variant == Variant::OpenGauss && opengauss_major(&info.version).is_some_and(|m| m < 6);
+        Self { byte_positions, ..d }
+    }
+
+    /// 出错位置是否按字节计（其余按字符计，都从 1 开始）。
+    pub fn error_position_in_bytes(&self) -> bool {
+        self.byte_positions
     }
 
     /// 还没有服务器信息时使用该驱动的基础方言。
@@ -270,6 +281,12 @@ fn pg_version_num(n: i64) -> Option<u32> {
 }
 
 /// 跨模块回归：各模块生成的 SQL 经 `Dialect::split` 必须仍是原样的一条语句。
+/// openGauss 版本串（`(openGauss 5.0.0 build …)`、`(openGauss-lite 7.0.0 build …)`）里的产品主版本。
+fn opengauss_major(version: &str) -> Option<u32> {
+    let rest = version.split("openGauss").nth(1)?.trim_start_matches("-lite").trim_start();
+    rest.split('.').next()?.parse().ok()
+}
+
 #[cfg(test)]
 mod tests {
     use dblens_core::schema::{Column, PrimaryKey, Table};
@@ -412,6 +429,21 @@ mod tests {
         let kb = Dialect::new(Variant::Kingbase);
         assert_eq!(kb.with_compat(Compat::Oracle).split(sql).len(), 2);
         assert_eq!(kb.split(sql).len(), 3);
+    }
+
+    #[test]
+    fn opengauss_5_reports_error_positions_in_bytes() {
+        assert_eq!(opengauss_major("(openGauss 5.0.0 build ) compiled at 2023-04-18"), Some(5));
+        assert_eq!(opengauss_major("(openGauss-lite 7.0.0 build 2397a86f) compiled"), Some(7));
+        assert_eq!(opengauss_major("PostgreSQL 18.6"), None);
+        let og = |v: &str| {
+            Dialect::detect(
+                DriverId::Postgres,
+                &ServerInfo { product: "PostgreSQL".into(), version: v.into() },
+            )
+        };
+        assert!(og("(openGauss 5.0.0 build ) compiled at 2023-04-18").error_position_in_bytes());
+        assert!(!og("(openGauss-lite 6.0.6 build abb18fca) compiled").error_position_in_bytes());
     }
 
     #[test]

@@ -717,8 +717,9 @@ async fn oceanbase_metadata() {
     assert!(emp.indexes.iter().all(|i| i.columns.iter().all(|c| !c.name.starts_with("__"))), "{emp:?}");
 }
 
-/// openGauss 的两个目标也可以指向 GaussDB：两者用同一份查询。GaussDB 的触发器只认 `EXECUTE PROCEDURE`；
-/// 不支持表继承和域；表默认用 Ustore 存储，不支持 GIN 索引和物化视图。
+/// openGauss 的两个目标也可以指向 GaussDB：两者用同一份查询。夹具的触发器写 `EXECUTE PROCEDURE`，
+/// openGauss 6.0 及以前和 GaussDB 都不认 `EXECUTE FUNCTION`。GaussDB 不支持表继承和域；
+/// 表默认用 Ustore 存储，不支持 GIN 索引和物化视图。
 async fn opengauss_family(env: &str, oracle_mode: bool) {
     let Some(mut live) = connect(env).await else { return };
     assert!(matches!(live.d.variant(), Variant::OpenGauss | Variant::GaussDb), "{:?}", live.d.variant());
@@ -726,11 +727,12 @@ async fn opengauss_family(env: &str, oracle_mode: bool) {
     let script = include_str!("fixtures/opengauss.sql");
     let gauss = live.d.variant() == Variant::GaussDb;
     if gauss {
-        let script = script
-            .replace("EXECUTE FUNCTION", "EXECUTE PROCEDURE")
-            .replace(", c_domain dblens_meta.posint", "");
+        let script = script.replace(", c_domain dblens_meta.posint", "");
         let skip = ["inh_child", "dom_ty", "idx_gin", "mv_dept", "mv_dept_c", "mv_dept_cc"];
         live.run_script_with(&script, &skip, &[]).await;
+    } else if live.banner.contains("openGauss 5.") {
+        // openGauss 5.0 不支持表继承
+        live.run_script_with(script, &["inh_child"], &[]).await;
     } else {
         live.run_script(script).await;
     }

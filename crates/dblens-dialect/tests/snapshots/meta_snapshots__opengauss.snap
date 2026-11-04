@@ -58,6 +58,7 @@ ORDER BY c.relname
 
 -- [sequences] [String("HR"), String("%员工%"), String("%员工%")]
 -- No pg_sequence: parameters come from pg_sequence_parameters, which has no cache size.
+-- relkind: 'S' sequence, 'L' large sequence; openGauss 7.0 LTS marks ordinary sequences 'z'.
 SELECT c.relname AS name,
        (pg_catalog.pg_sequence_parameters(c.oid)).start_value AS start_value,
        (pg_catalog.pg_sequence_parameters(c.oid)).increment AS increment,
@@ -68,7 +69,7 @@ SELECT c.relname AS name,
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = $1
-  AND c.relkind = 'S'
+  AND c.relkind IN ('S', 'L', 'z')
   AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d
                   WHERE d.classid = 'pg_catalog.pg_class'::regclass AND d.objid = c.oid
                     AND d.refclassid = 'pg_catalog.pg_class'::regclass AND d.deptype IN ('a', 'i'))
@@ -339,9 +340,10 @@ ORDER BY 1, 2
 
 -- [table_storage] [String("HR"), String("EMP")]
 -- reltuples is -1 (PG 14+) or 0 until the table is analyzed.
+-- "charset" / "collation" are quoted: openGauss 5.0 does not accept them as bare column labels.
 SELECT NULL::text AS engine,
-       NULL::text AS charset,
-       NULL::text AS collation,
+       NULL::text AS "charset",
+       NULL::text AS "collation",
        ts.spcname AS tablespace,
        c.reltuples::bigint AS row_count
 FROM pg_catalog.pg_class c
@@ -353,9 +355,10 @@ WHERE n.nspname = $1
 
 -- [lint_tables] [String("HR")]
 -- Design lint: row estimate only. reltuples is -1 (PG 14+) or 0 until the table is analyzed.
+-- "charset" is quoted: openGauss 5.0 does not accept it as a bare column label.
 SELECT c.relname AS name,
        NULL::text AS engine,
-       NULL::text AS charset,
+       NULL::text AS "charset",
        c.reltuples::bigint AS row_count
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
