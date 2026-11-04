@@ -94,3 +94,10 @@ SELECT t.ENGINE AS engine,
 FROM information_schema.TABLES t
 WHERE t.TABLE_SCHEMA = {{ bind("schema") }}
   AND t.TABLE_NAME = {{ bind("table") }}
+
+-- [reserved_words]
+-- VERSION() 报 8.0.11，但有 KEYWORDS 表（mysql.sql 按 8.0.13 判断会返回空）
+SELECT k.WORD AS word
+FROM information_schema.KEYWORDS k
+WHERE k.RESERVED = 1
+ORDER BY k.WORD

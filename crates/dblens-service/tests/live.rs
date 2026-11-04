@@ -18,7 +18,7 @@ use dblens_core::{ColumnType, Error, LogicalType, Value};
 use dblens_dialect::compare::{CompareOptions, CompareRenames, SchemaChange, TableStatus};
 use dblens_dialect::design::{Renames, TableChange, diff_table};
 use dblens_dialect::meta::{MetaArgs, MetaKey};
-use dblens_dialect::{Compat, DdlKind, Direction, RowChange, Variant, WriteMode};
+use dblens_dialect::{Compat, DdlKind, Dialect, Direction, RowChange, Variant, WriteMode};
 use dblens_driver::{ConnectParams, DriverId};
 use dblens_service::document::{DocFormat, DocInfo, DocKind, DocSource, DocumentRequest};
 use dblens_service::{
@@ -115,6 +115,11 @@ impl Live {
     /// M6b 的功能请求中的库名：SQL Server 是连接的库，其他库不填。
     fn catalog(&self) -> Option<String> {
         if self.driver == DriverId::SqlServer { self.database.clone() } else { None }
+    }
+
+    /// 设计器对这个库开放的功能（检查约束、降序索引等）。
+    fn caps(&self) -> dblens_dialect::design::DesignCaps {
+        Dialect::new(self.variant).with_compat(self.compat).with_version(self.version).design_caps()
     }
 
     /// Oracle 12c 以前：没有标识列，自增用序列加触发器。
@@ -844,9 +849,17 @@ async fn export_flow(env: &str) {
             "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 990) SELECT n FROM t",
             990,
         ),
+        // MySQL 5.7 没有 WITH RECURSIVE，用三位数字交叉连接
         DriverId::Mysql => (
             "SELECT 1 AS id, '中文' AS name, REPEAT('数', 100000) AS txt, CHAR_LENGTH(REPEAT('数', 100000)) AS len",
-            "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 990) SELECT n FROM t",
+            "SELECT a.d + 10 * b.d + 100 * c.d + 1 AS n \
+             FROM (SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 \
+             UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) a \
+             CROSS JOIN (SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 \
+             UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b \
+             CROSS JOIN (SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 \
+             UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) c \
+             WHERE a.d + 10 * b.d + 100 * c.d < 990",
             990,
         ),
         DriverId::Postgres => (
@@ -1640,6 +1653,10 @@ async fn design_flow(env: &str) {
         }],
         ..Default::default()
     };
+    // MySQL 8.0.16 以前只解析不保存检查约束（设计器提示不生效），读不回，不测
+    if !live.caps().checks && live.variant == Variant::MySql {
+        draft.checks.clear();
+    }
     let request =
         |name: Option<&str>, draft: Table, renames: Renames, rebuild: bool, fingerprint: Option<String>| {
             DesignRequest {
@@ -1714,14 +1731,8 @@ async fn design_flow(env: &str) {
     d.columns.push(extra);
     d.indexes = vec![Index {
         name: n("ix_m3_remark"),
-        // TiDB、OceanBase 不建降序索引（design_caps 的 descending_index）
-        columns: vec![IndexColumn {
-            name: n("remark"),
-            descending: !matches!(
-                live.variant,
-                Variant::TiDb | Variant::OceanBase | Variant::OceanBaseOracle
-            ),
-        }],
+        // TiDB、OceanBase、MySQL 8.0 以前不建降序索引
+        columns: vec![IndexColumn { name: n("remark"), descending: live.caps().descending_index }],
         unique: false,
         method: None,
     }];
@@ -1907,12 +1918,23 @@ async fn design_flow(env: &str) {
         assert_eq!(one("SELECT COUNT(*) FROM m3_v".into()).await.as_deref(), Some("4"), "{env}：视图仍可用");
     }
 
-    // 5. 中途失败：加列后检查约束出错。PG、SQL Server 全部回滚；其他库已执行的保留
+    // 5. 中途失败：加列后检查约束出错。PG、SQL Server 全部回滚；其他库已执行的保留。
+    // MySQL 8.0.16 以前不校验检查约束，改用服务器会拒绝的索引（VARCHAR 列上的 SPATIAL 索引）
     let t =
         s.design_table(&live.profile_id, live.catalog().as_deref(), &live.schema, &n("m3_t")).await.unwrap();
     let mut d = t.table.clone();
     d.columns.push(col("z", types[1]));
-    d.checks.push(CheckConstraint { name: Some(n("ck_m3_bad")), expression: "no_such_column > 0".into() });
+    if live.caps().checks || live.variant != Variant::MySql {
+        d.checks
+            .push(CheckConstraint { name: Some(n("ck_m3_bad")), expression: "no_such_column > 0".into() });
+    } else {
+        d.indexes.push(Index {
+            name: n("ix_m3_bad"),
+            columns: vec![IndexColumn { name: n("z"), descending: false }],
+            unique: false,
+            method: Some("SPATIAL".into()),
+        });
+    }
     let st = apply(request(Some("m3_t"), d, Renames::default(), false, Some(t.fingerprint))).await;
     assert_eq!(st.state, TaskState::Failed, "{env}：{st:?}");
     let cols = s

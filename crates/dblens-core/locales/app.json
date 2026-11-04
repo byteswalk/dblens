@@ -1276,6 +1276,10 @@
     "zh-CN": "检查约束 %{expression} 不能转换，不迁移",
     "en": "Check constraint %{expression} cannot be converted; not migrated"
   },
+  "migrate.checks_unsupported": {
+    "zh-CN": "目标库不执行检查约束，检查约束不迁移",
+    "en": "The target does not enforce check constraints; check constraints are not migrated"
+  },
   "migrate.data_needs_table": {
     "zh-CN": "只迁数据时目标中必须已有这些表：%{tables}",
     "en": "Migrating data only requires these tables to exist in the target: %{tables}"
@@ -1283,6 +1287,10 @@
   "migrate.default_dropped": {
     "zh-CN": "默认值 %{default} 不能转换，不迁移",
     "en": "Default %{default} cannot be converted; not migrated"
+  },
+  "migrate.descending_index": {
+    "zh-CN": "目标库不支持降序索引，按升序建",
+    "en": "The target does not support descending indexes; created as ascending"
   },
   "migrate.existing_unchosen": {
     "zh-CN": "目标中已有这些表，请选择处理方式：%{tables}",

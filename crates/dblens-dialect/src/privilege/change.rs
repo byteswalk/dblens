@@ -135,6 +135,8 @@ pub struct PrivCaps {
     /// 账号是操作系统用户，新建时密码可选（GBase 8s）：不填只授权，填了才建内部用户。
     pub os_accounts: bool,
     pub lock: bool,
+    /// 有角色（MySQL 8.0 起）。
+    pub roles: bool,
     /// 建角色必须给密码（openGauss）。
     pub role_password: bool,
     /// 用户带 host（MySQL 系）。
@@ -243,6 +245,7 @@ impl Dialect {
             write: true,
             os_accounts: family == Family::Informix,
             lock: family != Family::Postgres || gauss,
+            roles: !(self.variant() == Variant::MySql && self.version().is_some_and(|v| v < 80000)),
             role_password: gauss,
             host: family == Family::MySql,
             drop_cascade: matches!(family, Family::Postgres | Family::Oracle | Family::Dameng),
@@ -256,6 +259,9 @@ impl Dialect {
         match change {
             PrivChange::CreateUser { name, host, password } => {
                 self.create_user(required(name)?, host.as_deref(), password)
+            }
+            PrivChange::CreateRole { .. } | PrivChange::AddRole { .. } if !self.privilege_caps().roles => {
+                Err(unsupported())
             }
             PrivChange::CreateRole { name, level, password } => {
                 self.create_role(required(name)?, *level, password.as_ref())
@@ -892,6 +898,20 @@ mod tests {
         };
         assert_eq!(masked(Variant::SqlServer, &rm), ["ALTER ROLE [r] DROP MEMBER [u]"]);
         assert_eq!(masked(Variant::Postgres, &rm), ["REVOKE \"r\" FROM \"u\""]);
+    }
+
+    #[test]
+    fn mysql57_has_no_roles() {
+        let d57 = Dialect::new(Variant::MySql).with_version(Some(50744));
+        assert!(!d57.privilege_caps().roles);
+        let create =
+            PrivChange::CreateRole { name: "r".into(), level: PrincipalLevel::Server, password: None };
+        assert!(d57.privilege_statements(&create).is_err());
+        let add = PrivChange::AddRole { member: user("u", Some("%")), role: role("r"), admin: false };
+        assert!(d57.privilege_statements(&add).is_err());
+        assert!(Dialect::new(Variant::MySql).with_version(Some(80044)).privilege_caps().roles);
+        // TiDB 报 8.0.11，有角色
+        assert!(Dialect::new(Variant::TiDb).with_version(Some(80011)).privilege_caps().roles);
     }
 
     #[test]

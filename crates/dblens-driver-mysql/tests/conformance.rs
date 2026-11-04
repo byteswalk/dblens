@@ -10,7 +10,8 @@ fn common_type_cases() -> Vec<(&'static str, Value)> {
         ("SELECT NULL", Value::Null),
         ("SELECT CAST(42 AS SIGNED)", Value::Int(42)),
         ("SELECT CAST(42 AS UNSIGNED)", Value::UInt(42)),
-        ("SELECT CAST(1.5 AS DOUBLE)", Value::Float(1.5)),
+        // CAST(… AS DOUBLE) 要 MySQL 8.0.17；带指数的字面量各版本都是 DOUBLE
+        ("SELECT 1.5E0", Value::Float(1.5)),
         ("SELECT CAST('123.4500' AS DECIMAL(10,4))", Value::Decimal("123.4500".into())),
         ("SELECT '数洞'", Value::String("数洞".into())),
         ("SELECT CAST('2024-02-29' AS DATE)", Value::Date(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap())),
@@ -30,9 +31,13 @@ fn base(params: ConnectParams, type_cases: Vec<(&'static str, Value)>) -> Fixtur
         driver: Box::new(MySqlDriver),
         params,
         select_one: "SELECT 1",
+        // MySQL 5.7 没有 WITH RECURSIVE：用四位数字交叉连接，最多 10000 行
         gen_rows: |n| {
+            let d = "(SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 \
+                     UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)";
             format!(
-                "WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < {n}) SELECT n FROM s ORDER BY n"
+                "SELECT n FROM (SELECT a.d + 10 * b.d + 100 * c.d + 1000 * e.d + 1 AS n \
+                 FROM {d} a, {d} b, {d} c, {d} e) s WHERE n <= {n} ORDER BY n"
             )
         },
         long_running: "SELECT COUNT(*) FROM information_schema.columns a, information_schema.columns b, information_schema.columns c",

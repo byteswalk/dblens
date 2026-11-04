@@ -114,7 +114,7 @@ function PrincipalDetail({ tab, catalog, principal, principals, memberships, cap
           </Button>
         )}
         <Button size="small" type="text" onClick={() => onForm('grant')}>{t('privilege.action.grant')}</Button>
-        <Button size="small" type="text" onClick={() => onForm('add_role')}>{t('privilege.action.addRole')}</Button>
+        {caps.roles && <Button size="small" type="text" onClick={() => onForm('add_role')}>{t('privilege.action.addRole')}</Button>}
         <Button size="small" type="text" danger onClick={() => onChange({ op: 'drop', principal: ref })}>{t(caps.os_accounts && principal.kind === 'user' ? 'privilege.action.removeUser' : 'privilege.action.drop')}</Button>
       </div>}
       <Tabs
@@ -277,7 +277,7 @@ export default function PrivilegesView({ tab }: { tab: QueryTab }) {
                 menu={{
                   items: [
                     { key: 'new_user', label: t('privilege.action.newUser') },
-                    { key: 'new_role', label: t('privilege.action.newRole') },
+                    ...(data.caps.roles ? [{ key: 'new_role', label: t('privilege.action.newRole') }] : []),
                   ],
                   onClick: ({ key }) => setForm(key as FormKind),
                 }}

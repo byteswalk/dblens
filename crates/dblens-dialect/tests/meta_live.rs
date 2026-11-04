@@ -115,7 +115,14 @@ impl Live {
     async fn check_reserved_words(&mut self) {
         let rows = self.rows(MetaKey::ReservedWords, &MetaArgs::default()).await;
         let words = meta::reserved_words(&rows).unwrap();
-        assert!(words.len() > 50, "{:?} 只取到 {} 个保留字", self.d.variant(), words.len());
+        // MySQL 8.0.13 以前没有 KEYWORDS 表，查询按设计返回空
+        let old_mysql = self.d.variant() == Variant::MySql && self.d.version().is_some_and(|v| v < 80013);
+        assert!(
+            words.len() > 50 || (old_mysql && words.is_empty()),
+            "{:?} 只取到 {} 个保留字",
+            self.d.variant(),
+            words.len()
+        );
         let lower = matches!(self.d.family(), Family::MySql | Family::Postgres);
         let unquoted: Vec<&String> = words
             .iter()
@@ -160,6 +167,8 @@ struct Fx {
     identity: bool,
     /// 夹具里小写的列名存成大写。达梦大小写不敏感的库按书写的原样存。
     upper_cols: bool,
+    /// 检查约束能读回。MySQL 8.0.16 以前只解析不保存。
+    checks: bool,
 }
 
 impl Fx {
@@ -172,6 +181,7 @@ impl Fx {
             descending: true,
             identity: true,
             upper_cols: false,
+            checks: true,
         }
     }
 
@@ -184,6 +194,7 @@ impl Fx {
             descending: true,
             identity: true,
             upper_cols: true,
+            checks: true,
         }
     }
 
@@ -241,7 +252,7 @@ async fn check_common(live: &mut Live, fx: Fx) -> Vec<Table> {
     let mgr = emp.foreign_keys.iter().find(|f| f.ref_table == emp_name).unwrap();
     assert_eq!(mgr.on_delete.as_deref(), Some("SET NULL"));
     assert_eq!(emp.uniques[0].columns, [fx.col("dept_id"), fx.col("name")]);
-    assert!(emp.checks.iter().any(|c| has(&c.expression, "salary")), "{:?}", emp.checks);
+    assert_eq!(emp.checks.iter().any(|c| has(&c.expression, "salary")), fx.checks, "{:?}", emp.checks);
     let created =
         emp.indexes.iter().find(|i| i.columns[0].name == fx.col("created")).expect("created 上的索引");
     assert_eq!(created.columns[0].descending, fx.descending);
@@ -314,7 +325,18 @@ async fn check_mysql_family(live: &mut Live, fx: Fx) -> Vec<Table> {
 async fn mysql_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_MYSQL_URL").await else { return };
     assert_eq!(live.d.variant(), Variant::MySql, "不是 PolarDB");
-    live.run_script(include_str!("fixtures/mysql.sql")).await;
+    let script = include_str!("fixtures/mysql.sql");
+    // 5.7：没有函数索引、表达式默认值（8.0.13）和检查约束（8.0.16），DESC 按升序建
+    if live.d.version().is_some_and(|v| v < 80000) {
+        let def = script.lines().find(|l| l.starts_with("CREATE TABLE dblens_meta.def_t")).unwrap();
+        let def = def.replace("DEFAULT (UUID())", "DEFAULT 'x'");
+        live.run_script_with(script, &[], &[("def_t", &def)]).await;
+        let fx = Fx { descending: false, checks: false, ..Fx::lower("dblens_meta") };
+        let all = check_mysql_family(&mut live, fx).await;
+        assert_eq!(logical(table(&all, "ds_t"), "c_json"), LogicalType::Json);
+        return;
+    }
+    live.run_script(script).await;
     live.run_script(include_str!("fixtures/mysql_only.sql")).await;
     let all = check_mysql_family(&mut live, Fx::lower("dblens_meta")).await;
     let func = table(&all, "emp").indexes.iter().find(|i| i.name == "idx_emp_upper_name").unwrap();

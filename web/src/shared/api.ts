@@ -421,6 +421,7 @@ export interface PrivCaps {
   write: boolean
   os_accounts: boolean
   lock: boolean
+  roles: boolean
   role_password: boolean
   host: boolean
   drop_cascade: boolean

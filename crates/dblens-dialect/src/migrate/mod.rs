@@ -410,7 +410,10 @@ impl Context<'_> {
                 target.foreign_keys.push(f);
             }
         }
-        if self.settings.options.checks {
+        // 目标只解析不执行检查约束（MySQL 8.0.16 以前、TiDB）：建了也读不回，不迁移
+        if self.settings.options.checks && !t.checks.is_empty() && !self.tgt.design_caps().checks {
+            n.push(None, None, NoteLevel::Lossy, msg!("migrate.checks_unsupported"));
+        } else if self.settings.options.checks {
             for c in &t.checks {
                 if let Some(c) = self.check(c, &ov, &cols, n) {
                     target.checks.push(c);
@@ -555,6 +558,11 @@ impl Context<'_> {
                 }
             };
             out.columns.push(dblens_core::schema::IndexColumn { name, descending: c.descending });
+        }
+        // 目标接受 DESC 但按升序建（MySQL 8.0 以前、TiDB、OceanBase）：按升序迁移并提示
+        if out.columns.iter().any(|c| c.descending) && !self.tgt.design_caps().descending_index {
+            out.columns.iter_mut().for_each(|c| c.descending = false);
+            n.push(None, Some(&x.name), NoteLevel::Lossy, msg!("migrate.descending_index"));
         }
         // 默认方法不带过去：GaussDB 的 UBTREE 是 Ustore 表的默认 B 树，PostgreSQL 没有
         if let Some(m) = text(&x.method)

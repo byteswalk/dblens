@@ -2,14 +2,20 @@
 -- 主体 id 与 information_schema 的 GRANTEE 同形：'user'@'host'。@limited 段在主查询报 SQL 错误时使用。
 
 -- [caps]
-SELECT 1 AS full_view, @@partial_revokes AS partial_revokes
+-- partial_revokes 是 8.0.16 加的
+SELECT 1 AS full_view, {% if version >= 80016 %}@@partial_revokes{% else %}0{% endif %} AS partial_revokes
 
 -- [principals]
 SELECT CONCAT('''', u.User, '''@''', u.Host, '''') AS id,
        u.User AS name,
        u.Host AS host,
+{% if version >= 80000 %}
        CASE WHEN EXISTS (SELECT 1 FROM mysql.role_edges r WHERE r.FROM_USER = u.User AND r.FROM_HOST = u.Host)
                  OR (u.account_locked = 'Y' AND u.authentication_string = '') THEN 'role' ELSE 'user' END AS principal_kind,
+{% else %}
+       -- 5.7 没有角色
+       'user' AS principal_kind,
+{% endif %}
        'server' AS principal_level,
        CASE WHEN u.account_locked = 'Y' THEN 0 ELSE 1 END AS can_login,
        u.account_locked AS locked,
@@ -34,6 +40,9 @@ FROM information_schema.USER_PRIVILEGES p
 ORDER BY p.GRANTEE
 
 -- [memberships]
+{% if version < 80000 %}
+SELECT NULL AS member_id, NULL AS role_id, NULL AS admin_option, NULL AS inherits, NULL AS default_role FROM DUAL WHERE 1 = 0
+{% else %}
 SELECT CONCAT('''', e.TO_USER, '''@''', e.TO_HOST, '''') AS member_id,
        CONCAT('''', e.FROM_USER, '''@''', e.FROM_HOST, '''') AS role_id,
        e.WITH_ADMIN_OPTION AS admin_option,
@@ -43,6 +52,7 @@ FROM mysql.role_edges e
 LEFT JOIN mysql.default_roles d
        ON d.USER = e.TO_USER AND d.HOST = e.TO_HOST
       AND d.DEFAULT_ROLE_USER = e.FROM_USER AND d.DEFAULT_ROLE_HOST = e.FROM_HOST
+{% endif %}
 
 -- [grants_of]
 SELECT p.GRANTEE AS grantee, 'global' AS grant_scope, NULL AS db_name, NULL AS schema_name, NULL AS object_kind,

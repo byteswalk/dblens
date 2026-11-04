@@ -393,3 +393,30 @@ fn existing_tables_follow_the_chosen_action() {
     let fk = script.iter().find(|s| s.kind == StatementKind::ForeignKey).unwrap();
     assert_eq!(fk.requires, ["orders", "customers"]);
 }
+
+#[test]
+fn mysql57_target_drops_checks_and_descending() {
+    let (mut tables, sequences) = pg_source();
+    tables[0].indexes[0].columns[0].descending = true;
+    let mut i = input(Variant::Postgres, Variant::MySql, &tables, &sequences);
+    i.target = Dialect::new(Variant::MySql).with_version(Some(50744));
+    let draft = migrate(&i, &MigrationSettings::default());
+    let t = &draft.tables[0].target;
+    assert!(t.checks.is_empty());
+    assert!(t.indexes.iter().all(|x| x.columns.iter().all(|c| !c.descending)));
+    let lossy: Vec<_> = draft
+        .notes
+        .iter()
+        .filter(|n| n.level == NoteLevel::Lossy && n.object == "customers")
+        .map(|n| n.message.render(Lang::En))
+        .collect();
+    assert!(lossy.iter().any(|m| m.contains("check constraints are not migrated")), "{lossy:?}");
+    assert!(lossy.iter().any(|m| m.contains("descending indexes")), "{lossy:?}");
+
+    // 8.0.16 起照常迁移
+    i.target = Dialect::new(Variant::MySql).with_version(Some(80044));
+    let draft = migrate(&i, &MigrationSettings::default());
+    let t = &draft.tables[0].target;
+    assert_eq!(t.checks.len(), 1);
+    assert!(t.indexes[0].columns[0].descending);
+}

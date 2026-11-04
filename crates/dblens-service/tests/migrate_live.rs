@@ -175,6 +175,8 @@ fn drops(end: &End, names: &[String], seq: &str) -> Vec<String> {
 fn source_ddl(end: &End, p: &str) -> Vec<String> {
     let opengauss = end.variant == Variant::OpenGauss;
     let n = ROWS;
+    let d10 = "(SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 \
+               UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)";
     match end.driver {
         DriverId::Informix => vec![
             format!(
@@ -268,8 +270,10 @@ fn source_ddl(end: &End, p: &str) -> Vec<String> {
                  flag TINYINT(1), day DATE, ts DATETIME(3), bin VARBINARY(16))"
             ),
             format!(
-                "INSERT INTO {p}_cust (name, amount, note) WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < {n}) \
-                 SELECT CONCAT('name', n), n * 1.5, CONCAT('备注', n) FROM s"
+                // MySQL 5.7 没有 WITH RECURSIVE：四位数字交叉连接
+                "INSERT INTO {p}_cust (name, amount, note) SELECT CONCAT('name', n), n * 1.5, CONCAT('备注', n) \
+                 FROM (SELECT a.d + 10 * b.d + 100 * c.d + 1000 * e.d + 1 AS n FROM {d10} a, {d10} b, {d10} c, {d10} e) s \
+                 WHERE n <= {n} ORDER BY n"
             ),
             format!(
                 "INSERT INTO {p}_ord (id, cust_id, qty, status) VALUES (1, 1, 2, 'paid'), (2, 3, 1, 'new')"

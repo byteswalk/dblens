@@ -209,10 +209,15 @@ WHERE r.ROUTINE_SCHEMA = {{ bind("schema") }}
   AND r.ROUTINE_TYPE = {{ bind("kind") }}
 
 -- [reserved_words]
+-- KEYWORDS 是 8.0.13 加的；更早的版本只用 ident.rs 的内置表
+{% if version >= 80013 %}
 SELECT k.WORD AS word
 FROM information_schema.KEYWORDS k
 WHERE k.RESERVED = 1
 ORDER BY k.WORD
+{% else %}
+SELECT NULL AS word FROM DUAL WHERE 1 = 0
+{% endif %}
 
 -- [variant_probe]
 SHOW VARIABLES LIKE 'polardb_version'

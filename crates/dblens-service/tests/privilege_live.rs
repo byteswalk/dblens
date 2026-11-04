@@ -483,6 +483,9 @@ async fn flow(env: &str, fx: Fixture) {
     }
     let service = Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy));
     let admin = profile(&service, driver, &params, &params.user, &params.password).await;
+    if !service.privilege_overview(&admin, None).await.unwrap().caps.roles {
+        return flow_without_roles(env, &service, &admin).await;
+    }
 
     run(&service, &admin, fx.drop, true).await;
     run(&service, &admin, fx.create, false).await;
@@ -715,6 +718,70 @@ async fn gbase_changes(service: &Service, admin: &str, owner: &str) {
     assert_eq!(found.kind, PrincipalKind::User);
     let principal = PrincipalRef { name: os.into(), ..user(PrincipalKind::User) };
     apply(PrivChange::Drop { principal, cascade: false }).await;
+}
+
+/// 没有角色的库（MySQL 5.7）：只用直接授权，角色操作要被拒绝。
+async fn flow_without_roles(env: &str, service: &Service, admin: &str) {
+    let (u, t) = ("'dblens_priv_u'@'%'", "dblens_priv_t");
+    let drop: &[&str] = &["DROP USER IF EXISTS 'dblens_priv_u'@'%'", "DROP TABLE IF EXISTS dblens_priv_t"];
+    run(service, admin, drop, true).await;
+    run(
+        service,
+        admin,
+        &[
+            "CREATE TABLE dblens_priv_t (id INT PRIMARY KEY)",
+            "CREATE USER 'dblens_priv_u'@'%' IDENTIFIED BY 'Dblens_Priv_9x!'",
+            "GRANT SELECT ON dblens_test.dblens_priv_t TO 'dblens_priv_u'@'%'",
+        ],
+        false,
+    )
+    .await;
+
+    let overview = service.privilege_overview(admin, None).await.unwrap();
+    assert_eq!(overview.coverage, Coverage::Complete, "{env}");
+    assert!(overview.principals.iter().all(|p| p.kind == PrincipalKind::User), "{env}");
+    let detail = service.principal_privileges(admin, None, u).await.unwrap();
+    assert!(
+        detail.direct.iter().any(|g| g.privilege == "SELECT" && g.target.object.as_deref() == Some(t)),
+        "{env}: {:?}",
+        detail.direct
+    );
+    let report = service.object_access(admin, None, "dblens_test", t).await.unwrap();
+    assert!(report.access.iter().any(|a| a.principal == u), "{env}");
+
+    let member = reference(pick(&overview.principals, "dblens_priv_u", false));
+    let target =
+        GrantTarget { schema: Some("dblens_test".into()), object: Some(t.into()), ..Default::default() };
+    let grant = |privilege: &str, revoke: bool| {
+        let (grantee, scope, target, privilege) =
+            (member.clone(), GrantScope::Object, target.clone(), privilege.to_string());
+        if revoke {
+            PrivChange::Revoke { grantee, scope, target, privilege, grantable: true, grantor: None }
+        } else {
+            PrivChange::Grant { grantee, scope, target, privilege, with_grant: true }
+        }
+    };
+    apply(service, admin, grant("UPDATE", false)).await;
+    let detail = service.principal_privileges(admin, None, u).await.unwrap();
+    assert!(
+        detail.direct.iter().any(|g| g.privilege == "UPDATE" && g.grantable),
+        "{env}: {:?}",
+        detail.direct
+    );
+    apply(service, admin, grant("UPDATE", true)).await;
+    apply(service, admin, PrivChange::SetLocked { principal: member.clone(), locked: true }).await;
+    apply(service, admin, PrivChange::SetLocked { principal: member.clone(), locked: false }).await;
+
+    let role = PrivChange::CreateRole {
+        name: "dblens_priv_r".into(),
+        level: PrincipalLevel::Server,
+        password: None,
+    };
+    let refused = service.privilege_apply(admin, None, &role, None).await;
+    assert!(refused.is_err() || refused.unwrap().error.is_some(), "{env}: 5.7 不能建角色");
+
+    apply(service, admin, PrivChange::Drop { principal: member, cascade: false }).await;
+    run(service, admin, drop, true).await;
 }
 
 #[tokio::test]
