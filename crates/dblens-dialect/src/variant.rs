@@ -60,9 +60,10 @@ impl Compat {
         }
     }
 
-    /// 已适配的模式名：openGauss 的 B、C 和人大金仓的 mysql、sqlserver 等返回 false。
+    /// 已适配的模式名：openGauss 的 B、C 和人大金仓的 sqlserver 等返回 false。人大金仓的 mysql 模式按原生规则
+    /// 处理即可（生成的 SQL 避开了它改变语义的 `||`、`numeric`）。
     pub fn is_adapted_mode(mode: &str) -> bool {
-        ["oracle", "a", "pg"].iter().any(|m| mode.eq_ignore_ascii_case(m))
+        ["oracle", "a", "pg", "mysql"].iter().any(|m| mode.eq_ignore_ascii_case(m))
     }
 }
 

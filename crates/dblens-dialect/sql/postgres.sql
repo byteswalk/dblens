@@ -112,7 +112,8 @@ SELECT c.relname AS table_name,
        pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS default_value,
 {% endif %}
        pg_catalog.col_description(c.oid, a.attnum) AS comment,
-       ({% if version >= 100000 %}a.attidentity IN ('a', 'd') OR {% endif %}(d.adbin IS NOT NULL AND pg_catalog.pg_get_expr(d.adbin, d.adrelid) LIKE 'nextval(%'
+       -- attidentity：'a'、'd' 是标识列；人大金仓 MySQL 模式的 AUTO_INCREMENT 是 'i'，SQL Server 模式的 IDENTITY 是 'q'
+       ({% if version >= 100000 %}a.attidentity IN ('a', 'd', 'i', 'q') OR {% endif %}(d.adbin IS NOT NULL AND pg_catalog.pg_get_expr(d.adbin, d.adrelid) LIKE 'nextval(%'
             AND EXISTS (SELECT 1 FROM pg_catalog.pg_depend dp
                         WHERE dp.refclassid = 'pg_catalog.pg_class'::regclass AND dp.refobjid = c.oid
                           AND dp.refobjsubid = a.attnum AND dp.deptype = 'a'
@@ -136,6 +137,7 @@ WHERE n.nspname = {{ bind("schema") }}
 ORDER BY c.relname, a.attnum
 
 -- [keys]
+-- 引用列不写 confkey[k.pos]：人大金仓的 SQL Server 模式把方括号当标识符引号。
 SELECT c.relname AS table_name,
        con.conname AS constraint_name,
        CASE con.contype WHEN 'p' THEN 'P' WHEN 'u' THEN 'U' ELSE 'F' END AS constraint_type,
@@ -157,7 +159,7 @@ CROSS JOIN LATERAL pg_catalog.unnest(con.conkey) WITH ORDINALITY AS k(attnum, po
 JOIN pg_catalog.pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
 LEFT JOIN pg_catalog.pg_class rc ON rc.oid = con.confrelid
 LEFT JOIN pg_catalog.pg_namespace rn ON rn.oid = rc.relnamespace
-LEFT JOIN pg_catalog.pg_attribute ra ON ra.attrelid = con.confrelid AND ra.attnum = con.confkey[k.pos]
+LEFT JOIN pg_catalog.pg_attribute ra ON ra.attrelid = con.confrelid AND ra.attnum = (SELECT f.n FROM pg_catalog.unnest(con.confkey) WITH ORDINALITY AS f(n, p) WHERE f.p = k.pos)
 WHERE n.nspname = {{ bind("schema") }}
   AND con.contype IN ('p', 'u', 'f')
   AND c.relkind IN ('r', 'p')
@@ -271,6 +273,7 @@ ORDER BY line
 SELECT word FROM pg_catalog.pg_get_keywords() WHERE catcode IN ('R', 'T') ORDER BY word
 
 -- [referencing_keys]
+-- 引用列不写 confkey[k.pos]：人大金仓的 SQL Server 模式把方括号当标识符引号。
 -- Table designer rebuild: foreign keys of OTHER tables that reference this table.
 SELECT n.nspname AS table_schema,
        c.relname AS table_name,
@@ -289,7 +292,7 @@ JOIN pg_catalog.pg_class t ON t.oid = con.confrelid
 JOIN pg_catalog.pg_namespace tn ON tn.oid = t.relnamespace
 CROSS JOIN LATERAL pg_catalog.unnest(con.conkey) WITH ORDINALITY AS k(attnum, pos)
 JOIN pg_catalog.pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
-JOIN pg_catalog.pg_attribute ra ON ra.attrelid = con.confrelid AND ra.attnum = con.confkey[k.pos]
+JOIN pg_catalog.pg_attribute ra ON ra.attrelid = con.confrelid AND ra.attnum = (SELECT f.n FROM pg_catalog.unnest(con.confkey) WITH ORDINALITY AS f(n, p) WHERE f.p = k.pos)
 WHERE con.contype = 'f'
   AND tn.nspname = {{ bind("schema") }}
   AND t.relname = {{ bind("table") }}

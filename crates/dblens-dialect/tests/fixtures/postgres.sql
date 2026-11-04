@@ -59,13 +59,13 @@ COMMENT ON COLUMN dblens_meta.mv_dept.cnt IS '员工数'
 -- @@ p_meta
 CREATE PROCEDURE dblens_meta.p_meta(a integer) LANGUAGE plpgsql AS $$ BEGIN NULL; END $$
 -- @@ f_meta
-CREATE FUNCTION dblens_meta.f_meta(a integer) RETURNS integer LANGUAGE sql AS $$ SELECT a + 1 $$
+CREATE FUNCTION dblens_meta.f_meta(a integer) RETURNS integer LANGUAGE sql AS $$ SELECT CAST(a + 1 AS integer) $$
 -- @@ f_meta2
-CREATE FUNCTION dblens_meta.f_meta(a text, b integer) RETURNS text LANGUAGE sql AS $$ SELECT a || b::text $$
+CREATE FUNCTION dblens_meta.f_meta(a text, b integer) RETURNS text LANGUAGE sql AS $$ SELECT a OPERATOR(pg_catalog.||) b::text $$
 -- @@ f_meta_c
 COMMENT ON FUNCTION dblens_meta.f_meta(integer) IS '加一函数'
 -- @@ agg_fn
-CREATE FUNCTION dblens_meta.agg_sfunc(integer, integer) RETURNS integer LANGUAGE sql AS $$ SELECT $1 + $2 $$
+CREATE FUNCTION dblens_meta.agg_sfunc(integer, integer) RETURNS integer LANGUAGE sql AS $$ SELECT CAST($1 + $2 AS integer) $$
 -- @@ agg
 CREATE AGGREGATE dblens_meta.sum_meta(integer) (SFUNC = dblens_meta.agg_sfunc, STYPE = integer)
 -- @@ part_t

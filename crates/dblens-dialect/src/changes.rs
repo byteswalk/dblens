@@ -94,9 +94,10 @@ impl<'a> Builder<'a> {
         }
         self.params.push(v.clone());
         self.sql.push_str(&self.dialect.placeholder(self.params.len()));
-        // PG 驱动不能直接绑定 NUMERIC 参数：精确小数按文本传，由数据库转换（整数列也接受 numeric 的赋值和比较）
+        // PG 驱动不能直接绑定 NUMERIC 参数：精确小数按文本传，由数据库转换（整数列也接受 numeric 的赋值和比较）。
+        // 写 pg_catalog.numeric：人大金仓的 MySQL、SQL Server 模式把 numeric 当 DECIMAL(10,0)，会截掉小数
         if self.dialect.family() == Family::Postgres && matches!(v, Value::Decimal(_)) {
-            self.sql.push_str("::text::numeric");
+            self.sql.push_str("::text::pg_catalog.numeric");
         }
         self.preview.push_str(&self.dialect.literal(v)?);
         Ok(())
@@ -322,7 +323,7 @@ mod tests {
         let st = Dialect::new(Variant::Postgres).change_statements("public", &orders(), &[change]).unwrap();
         assert_eq!(
             st[0].sql,
-            "UPDATE public.orders SET name = $1, note = $2, price = $3::text::numeric, rate = $4 \
+            "UPDATE public.orders SET name = $1, note = $2, price = $3::text::pg_catalog.numeric, rate = $4 \
              WHERE id = $5 AND name = $6 AND price IS NULL"
         );
         assert_eq!(st[0].params.len(), 6);

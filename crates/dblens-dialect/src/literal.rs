@@ -104,7 +104,7 @@ fn decimal_literal(family: Family, s: &str) -> Result<String> {
         return Ok(s.to_string());
     }
     if family == Family::Postgres && matches!(s, "NaN" | "Infinity" | "-Infinity") {
-        return Ok(format!("'{s}'::numeric"));
+        return Ok(format!("'{s}'::pg_catalog.numeric"));
     }
     Err(Error::invalid(msg!("literal.bad_number", value = s)))
 }
@@ -283,7 +283,7 @@ mod tests {
         assert!(literal(Family::MySql, &Value::Float(f64::NAN)).is_err());
         // 不是数字的 Decimal 文本不能原样拼进 SQL
         assert!(literal(Family::MySql, &Value::Decimal("1; DROP TABLE t".into())).is_err());
-        assert_eq!(lit(Family::Postgres, Value::Decimal("NaN".into())), "'NaN'::numeric");
+        assert_eq!(lit(Family::Postgres, Value::Decimal("NaN".into())), "'NaN'::pg_catalog.numeric");
         assert!(literal(Family::Oracle, &Value::Decimal("NaN".into())).is_err());
     }
 

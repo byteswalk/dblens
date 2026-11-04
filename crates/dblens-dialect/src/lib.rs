@@ -467,7 +467,8 @@ mod tests {
                 && Compat::is_adapted_mode("pg")
                 && Compat::is_adapted_mode("ORACLE")
         );
-        assert!(!Compat::is_adapted_mode("B") && !Compat::is_adapted_mode("mysql"));
+        assert!(Compat::is_adapted_mode("mysql"));
+        assert!(!Compat::is_adapted_mode("B") && !Compat::is_adapted_mode("sqlserver"));
         assert_eq!(pg_version_num(120001), Some(120100));
         assert_eq!(pg_version_num(180006), Some(180600));
         assert_eq!(pg_version_num(90204), Some(90204));

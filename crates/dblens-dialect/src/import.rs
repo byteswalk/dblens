@@ -137,8 +137,9 @@ impl Binder<'_> {
         if self.dialect.family() != Family::Postgres || matches!(v, Value::Null) {
             return;
         }
+        // pg_catalog.numeric：人大金仓的 MySQL、SQL Server 模式把 numeric 当 DECIMAL(10,0)
         if matches!(v, Value::Decimal(_)) {
-            self.sql.push_str("::text::numeric");
+            self.sql.push_str("::text::pg_catalog.numeric");
         } else if matches!(col.data_type.logical, LogicalType::Interval | LogicalType::Other) {
             self.sql.push_str("::text::");
             self.sql.push_str(&col.data_type.native);
@@ -366,7 +367,9 @@ mod tests {
     fn append_uses_multi_row_insert() {
         assert_eq!(
             sql(Variant::Postgres, "public", WriteMode::Append),
-            ["INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::numeric), ($4, $5, $6)"]
+            [
+                "INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::pg_catalog.numeric), ($4, $5, $6)"
+            ]
         );
         assert_eq!(
             sql(Variant::MySql, "shop", WriteMode::Replace),
@@ -406,14 +409,16 @@ mod tests {
         );
         assert_eq!(
             sql(Variant::Postgres, "public", WriteMode::Upsert),
-            ["INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::numeric), ($4, $5, $6) \
-              ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, price = EXCLUDED.price"]
+            [
+                "INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::pg_catalog.numeric), ($4, $5, $6) \
+              ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, price = EXCLUDED.price"
+            ]
         );
         for v in [Variant::OpenGauss, Variant::GaussDb] {
             assert_eq!(
                 sql(v, "public", WriteMode::Upsert),
                 [
-                    "INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::numeric), ($4, $5, $6) ON DUPLICATE KEY UPDATE name = EXCLUDED.name, price = EXCLUDED.price"
+                    "INSERT INTO public.orders (id, name, price) VALUES ($1, $2, $3::text::pg_catalog.numeric), ($4, $5, $6) ON DUPLICATE KEY UPDATE name = EXCLUDED.name, price = EXCLUDED.price"
                 ]
             );
         }

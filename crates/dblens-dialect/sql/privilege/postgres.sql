@@ -106,7 +106,8 @@ FROM (
 ) g
 
 -- [owned]
-SELECT n.nspname || '.' || c.relname AS object_name, c.relkind::text AS object_kind
+-- 拼字符串写 OPERATOR(pg_catalog.||)：人大金仓的 MySQL 模式把 || 当逻辑或，SQL Server 模式没有这个运算符。
+SELECT n.nspname OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) c.relname AS object_name, c.relkind::text AS object_kind
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 JOIN pg_catalog.pg_roles r ON r.oid = c.relowner

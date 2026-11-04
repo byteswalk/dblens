@@ -1,6 +1,7 @@
 -- PostgreSQL ops queries (M1c3). Also used by KingbaseES, GaussDB and HighGo; openGauss overrides what it
 -- names differently (opengauss.sql). A database that still lacks a view shows its own error.
 -- slow_sql needs the pg_stat_statements extension (PostgreSQL 13+ column names).
+-- 拼字符串写 OPERATOR(pg_catalog.||)：人大金仓的 MySQL 模式把 || 当逻辑或，SQL Server 模式没有这个运算符。
 
 -- [sessions]
 -- name.zh-CN: 会话列表
@@ -10,7 +11,7 @@ SELECT a.pid, a.usename AS user, a.client_addr::text AS host, a.datname AS db,
        a.application_name AS application, a.state,
        ROUND(EXTRACT(EPOCH FROM now() - a.query_start)) AS seconds,
        LEFT(a.query, 200) AS current_sql,
-       'SELECT pg_terminate_backend(' || a.pid || ')' AS kill_sql
+       'SELECT pg_terminate_backend(' OPERATOR(pg_catalog.||) a.pid OPERATOR(pg_catalog.||) ')' AS kill_sql
 FROM pg_stat_activity a
 WHERE a.backend_type = 'client backend'
 ORDER BY a.query_start NULLS LAST
@@ -22,7 +23,7 @@ ORDER BY a.query_start NULLS LAST
 SELECT a.pid, a.usename AS user, a.client_addr::text AS host, a.datname AS db,
        ROUND(EXTRACT(EPOCH FROM now() - a.query_start)) AS seconds,
        a.wait_event_type, a.wait_event, LEFT(a.query, 500) AS current_sql,
-       'SELECT pg_terminate_backend(' || a.pid || ')' AS kill_sql
+       'SELECT pg_terminate_backend(' OPERATOR(pg_catalog.||) a.pid OPERATOR(pg_catalog.||) ')' AS kill_sql
 FROM pg_stat_activity a
 WHERE a.backend_type = 'client backend' AND a.state = 'active' AND a.pid <> pg_backend_pid()
 ORDER BY a.query_start
@@ -34,7 +35,7 @@ ORDER BY a.query_start
 SELECT w.pid AS waiting_pid, LEFT(w.query, 200) AS waiting_sql,
        b.pid AS blocking_pid, LEFT(b.query, 200) AS blocking_sql,
        ROUND(EXTRACT(EPOCH FROM now() - w.query_start)) AS wait_seconds,
-       'SELECT pg_terminate_backend(' || b.pid || ')' AS kill_sql
+       'SELECT pg_terminate_backend(' OPERATOR(pg_catalog.||) b.pid OPERATOR(pg_catalog.||) ')' AS kill_sql
 FROM pg_stat_activity w
 CROSS JOIN LATERAL unnest(pg_blocking_pids(w.pid)) AS bp(pid)
 JOIN pg_stat_activity b ON b.pid = bp.pid

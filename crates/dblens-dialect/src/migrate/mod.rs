@@ -515,6 +515,14 @@ impl Context<'_> {
 
     /// 表达式（检查约束、生成列、索引表达式）：同家族且列名不变时原样，否则只转换简单表达式。
     fn expression(&self, e: &str, cols: &BTreeMap<String, String>) -> Option<String> {
+        // 人大金仓的 MySQL 模式把 numeric 显示成 number（如 `(0)::number`），其他 PG 系库没有这个类型名
+        let normalized;
+        let e = if self.src.variant() == Variant::Kingbase && self.tgt.variant() != Variant::Kingbase {
+            normalized = kingbase_number_casts(e);
+            normalized.as_str()
+        } else {
+            e
+        };
         if self.same_family() && cols.iter().all(|(a, b)| a == b) {
             return Some(e.to_string());
         }
@@ -681,6 +689,24 @@ impl Context<'_> {
         };
         Some(CheckConstraint { name: self.constraint(&c.name), expression })
     }
+}
+
+/// `::number` 换成 `::numeric`（后面不能紧跟标识符字符，`::number_x` 这类名字不动）。
+fn kingbase_number_casts(e: &str) -> String {
+    let mut out = String::with_capacity(e.len());
+    let mut rest = e;
+    while let Some(i) = rest.find("::number") {
+        let after = &rest[i + "::number".len()..];
+        out.push_str(&rest[..i]);
+        if after.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
+            out.push_str("::number");
+        } else {
+            out.push_str("::numeric");
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    out
 }
 
 /// 索引、约束在提示中的名字：有名字用名字，否则用列清单。

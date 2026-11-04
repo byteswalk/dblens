@@ -420,3 +420,10 @@ fn mysql57_target_drops_checks_and_descending() {
     assert_eq!(t.checks.len(), 1);
     assert!(t.indexes[0].columns[0].descending);
 }
+
+#[test]
+fn kingbase_number_cast_becomes_numeric() {
+    assert_eq!(kingbase_number_casts("(amount >= (0)::number)"), "(amount >= (0)::numeric)");
+    assert_eq!(kingbase_number_casts("x::number_t > (1)::number"), "x::number_t > (1)::numeric");
+    assert_eq!(kingbase_number_casts("a > 0"), "a > 0");
+}

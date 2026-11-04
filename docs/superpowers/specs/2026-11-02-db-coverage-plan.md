@@ -51,6 +51,8 @@
 
 代码里金仓的兼容模式只有 Oracle 和原生（PG），要加 MySQL、SQL Server 两种：协议仍是 PG，标识符引用、类型名、分页、过程块语法跟着模式变。
 
+2026-11-04 实测（见 `docs/notes/kingbase-versions.md`）：两种模式下 PG 写法基本都能用，不另做方言，生成的 SQL 避开它们改变语义的写法即可。V8R6、V9R1C10 的 oracle、pg、mysql 模式全量通过；sqlserver 模式的自增列和 time、datetime2 类型未解决。
+
 ### openGauss
 
 现有 7.0.0-RC1 换成 7.0.0 LTS，再加 6.0.6 LTS 和 5.0 LTS。每个版本测 A、PG 两种模式和 SHA256 认证。2026-11-04 完成，见 `docs/notes/opengauss-lts.md`。
@@ -91,7 +93,7 @@ MySQL 5.7.44、8.0.44 于 2026-11-04 验证，见 `docs/notes/mysql-versions.md`
 ## 顺序
 
 1. Oracle 11g、19c（信创的主场景是从 Oracle 迁出）。11g 已完成（2026-11-03），19c 等安装包
-2. 金仓 V8R6，V9R1C10 的四种模式
+2. 金仓 V8R6，V9R1C10 的四种模式。已完成（2026-11-04），sqlserver 模式的自增列待定
 3. MySQL 5.7、8.0。已完成（2026-11-04），5.7 的 TLS 待定
 4. openGauss 5.0、6.0.6、7.0.0 LTS。已完成（2026-11-04）
 5. GaussDB 正式适配。已完成（2026-11-03）

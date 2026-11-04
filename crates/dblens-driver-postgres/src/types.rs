@@ -120,7 +120,7 @@ impl<'a> FromSql<'a> for RawValue<'a> {
 
 /// 兼容库自定义的类型对应的标准类型：域类型取基础类型（人大金仓 Oracle 模式的 `date` 是 timestamp 上的域，
 /// `blob`、`clob` 也是域）；openGauss 的 `clob`、`nvarchar2` 等是独立的类型，二进制格式与对应的标准类型相同
-/// （GaussDB A 模式的 `date` 是 `datea`，格式同 timestamp）。
+/// （GaussDB A 模式的 `date` 是 `datea`，格式同 timestamp）。只有 OID 不是内置类型时才查这里，同名的标准类型不受影响。
 /// `int1`、`tinyint`、`int16`（16 字节整数，openGauss 的序列参数用它）没有对应的标准类型，原样返回，
 /// 由 `decode_as` 单独处理。
 fn standard_type(ty: &Type) -> Option<Type> {
@@ -129,9 +129,19 @@ fn standard_type(ty: &Type) -> Option<Type> {
     }
     match ty.name() {
         "clob" | "nclob" | "nvarchar2" | "varchar2" | "long" => Some(Type::TEXT),
+        // 人大金仓 MySQL、SQL Server 模式 sys 模式下的字符、二进制、GUID 类型（SQL Server 模式的 datetime2 格式不同，不在此列）
+        "varcharbyte" | "bpcharbyte" | "nchar" | "nvarchar" => Some(Type::TEXT),
+        "binary" | "varbinary" => Some(Type::BYTEA),
+        // SQL Server 模式的 uniqueidentifier 取值的类型名是 uuid（另一个 OID）
+        "uniqueidentifier" | "uuid" => Some(Type::UUID),
         "blob" | "raw" => Some(Type::BYTEA),
         "number" => Some(Type::NUMERIC),
         "smalldatetime" | "datea" => Some(Type::TIMESTAMP),
+        // 人大金仓 MySQL、SQL Server 模式在 sys 模式下另有同名的日期时间类型，二进制格式与标准类型相同
+        "date" => Some(Type::DATE),
+        "time" => Some(Type::TIME),
+        "datetime" | "timestamp" => Some(Type::TIMESTAMP),
+        "year" => Some(Type::INT4),
         "binary_double" => Some(Type::FLOAT8),
         "binary_float" => Some(Type::FLOAT4),
         "int1" | "tinyint" | "int16" => Some(ty.clone()),
@@ -160,6 +170,7 @@ fn decode_as(ty: &Type, raw: &[u8]) -> std::result::Result<Value, BoxError> {
         Type::TIME => from!(NaiveTime, Value::Time),
         Type::TIMESTAMP => from!(NaiveDateTime, Value::DateTime),
         Type::TIMESTAMPTZ => from!(DateTime<Utc>, |v| Value::DateTimeTz(v.fixed_offset())),
+        Type::UUID => from!(uuid::Uuid, Value::Uuid),
         // openGauss 的 int1 是 0–255，人大金仓的 tinyint 是 -128–127，都是 1 个字节
         _ if raw.len() == 1 && ty.name() == "int1" => Value::Int(raw[0].into()),
         _ if raw.len() == 1 && ty.name() == "tinyint" => Value::Int((raw[0] as i8).into()),

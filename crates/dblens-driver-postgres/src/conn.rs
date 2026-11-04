@@ -21,10 +21,10 @@ pub struct PgConnection {
 }
 
 impl PgConnection {
-    /// 手动提交模式下，在第一条语句前开启事务。
+    /// 手动提交模式下，在第一条语句前开启事务。写 START TRANSACTION：人大金仓的 SQL Server 模式不认单独的 BEGIN。
     async fn ensure_tx(&mut self) -> Result<()> {
         if !self.autocommit && !self.in_tx {
-            self.client.batch_execute("BEGIN").await.map_err(map_err)?;
+            self.client.batch_execute("START TRANSACTION").await.map_err(map_err)?;
             self.in_tx = true;
         }
         Ok(())

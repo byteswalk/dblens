@@ -22,7 +22,8 @@ fn base(params: ConnectParams, type_cases: Vec<(&'static str, Value)>) -> Fixtur
     }
 }
 
-/// PostgreSQL 的类型用例；人大金仓、openGauss 的 PG 模式也全部适用。
+/// PostgreSQL 的类型用例；人大金仓、openGauss 的 PG 模式也全部适用。字面量写成 CAST：人大金仓的
+/// SQL Server 模式不认 `DATE '…'` 这类写法，MySQL 模式不认 `TIMESTAMPTZ '…'`；SQL Server 模式的 timestamp 是 rowversion。
 fn pg_cases() -> Vec<(&'static str, Value)> {
     vec![
         ("SELECT NULL::text", Value::Null),
@@ -32,20 +33,20 @@ fn pg_cases() -> Vec<(&'static str, Value)> {
         ("SELECT 1.5::float8", Value::Float(1.5)),
         ("SELECT 123.4500::numeric(10,4)", Value::Decimal("123.4500".into())),
         (
-            "SELECT 12345678901234567890.123456789::numeric",
+            "SELECT 12345678901234567890.123456789::pg_catalog.numeric",
             Value::Decimal("12345678901234567890.123456789".into()),
         ),
         ("SELECT 'NaN'::numeric", Value::Decimal("NaN".into())),
         ("SELECT '数洞'::text", Value::String("数洞".into())),
-        ("SELECT DATE '2024-02-29'", Value::Date(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap())),
+        ("SELECT CAST('2024-02-29' AS date)", Value::Date(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap())),
         (
-            "SELECT TIMESTAMP '2024-02-29 13:45:30.123456'",
+            "SELECT CAST('2024-02-29 13:45:30.123456' AS pg_catalog.timestamp)",
             Value::DateTime(
                 NaiveDate::from_ymd_opt(2024, 2, 29).unwrap().and_hms_micro_opt(13, 45, 30, 123456).unwrap(),
             ),
         ),
         (
-            "SELECT TIMESTAMPTZ '2024-02-29 13:45:30+08'",
+            "SELECT CAST('2024-02-29 13:45:30+08' AS timestamptz)",
             Value::DateTimeTz(
                 FixedOffset::east_opt(0).unwrap().with_ymd_and_hms(2024, 2, 29, 5, 45, 30).unwrap(),
             ),
@@ -56,7 +57,7 @@ fn pg_cases() -> Vec<(&'static str, Value)> {
             "SELECT 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid",
             Value::Uuid("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11".parse().unwrap()),
         ),
-        ("SELECT INTERVAL '1 day 02:03:04'", Value::Interval("0 mons 1 days 02:03:04".into())),
+        ("SELECT CAST('1 day 02:03:04' AS interval)", Value::Interval("0 mons 1 days 02:03:04".into())),
         ("SELECT 'x'::char(1)::\"char\"", Value::Other { type_name: "char".into(), text: "x".into() }),
     ]
 }
@@ -129,4 +130,59 @@ mod kingbase {
 mod kingbase_pg {
     use super::*;
     dblens_driver::conformance_tests!("DBLENS_TEST_KINGBASE_PG_URL", pg_fixture);
+}
+
+/// 人大金仓 MySQL 模式：日期时间是 sys 模式下的同名类型（OID 不同，格式与标准类型相同）。
+fn kingbase_mysql_fixture(params: ConnectParams) -> Fixture {
+    let day = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+    let mut cases = pg_cases();
+    cases.extend([
+        (
+            "SELECT CAST('2024-02-29 13:45:30' AS datetime)",
+            Value::DateTime(day.and_hms_opt(13, 45, 30).unwrap()),
+        ),
+        (
+            "SELECT CAST('2024-02-29 13:45:30' AS timestamp)",
+            Value::DateTime(day.and_hms_opt(13, 45, 30).unwrap()),
+        ),
+        (
+            "SELECT CAST('13:45:30' AS time)",
+            Value::Time(chrono::NaiveTime::from_hms_opt(13, 45, 30).unwrap()),
+        ),
+    ]);
+    base(params, cases)
+}
+
+/// 人大金仓 SQL Server 模式：numeric 不接受 'NaN'，`"char"` 是普通的 char；字符、GUID、日期时间是 sys 模式下的类型。
+/// 它的 time、datetime2 按 100 纳秒计，和同名的 MySQL 模式类型分不开，驱动读不对，不测。
+fn kingbase_sqlserver_fixture(params: ConnectParams) -> Fixture {
+    let day = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+    let mut cases: Vec<_> = pg_cases()
+        .into_iter()
+        .filter(|(sql, _)| !sql.contains("'NaN'") && !sql.contains("\"char\""))
+        .collect();
+    cases.extend([
+        ("SELECT CAST('数洞' AS varchar(10))", Value::String("数洞".into())),
+        ("SELECT CAST('数洞' AS nvarchar(10))", Value::String("数洞".into())),
+        ("SELECT CAST('ab' AS char(3))", Value::String("ab ".into())),
+        (
+            "SELECT CAST('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' AS uniqueidentifier)",
+            Value::Uuid("a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11".parse().unwrap()),
+        ),
+        (
+            "SELECT CAST('2024-02-29 13:45:30' AS datetime)",
+            Value::DateTime(day.and_hms_opt(13, 45, 30).unwrap()),
+        ),
+    ]);
+    base(params, cases)
+}
+
+mod kingbase_mysql {
+    use super::*;
+    dblens_driver::conformance_tests!("DBLENS_TEST_KINGBASE_MYSQL_URL", kingbase_mysql_fixture);
+}
+
+mod kingbase_sqlserver {
+    use super::*;
+    dblens_driver::conformance_tests!("DBLENS_TEST_KINGBASE_SQLSERVER_URL", kingbase_sqlserver_fixture);
 }

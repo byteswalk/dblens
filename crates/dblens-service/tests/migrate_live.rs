@@ -309,7 +309,7 @@ fn source_ddl(end: &End, p: &str) -> Vec<String> {
             format!("CREATE SEQUENCE {p}_seq START WITH 1"),
             format!("SELECT nextval('{p}_seq') FROM generate_series(1, 5)"),
             format!(
-                "INSERT INTO {p}_cust (name, amount, note) SELECT 'name' || g, g * 1.5, '备注' || g FROM generate_series(1, {n}) g"
+                "INSERT INTO {p}_cust (name, amount, note) SELECT concat('name', g), g * 1.5, concat('备注', g) FROM generate_series(1, {n}) g"
             ),
             format!(
                 "INSERT INTO {p}_ord (id, cust_id, qty, status) VALUES (1, 1, 2, 'paid'), (2, 3, 1, 'new')"

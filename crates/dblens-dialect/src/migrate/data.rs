@@ -93,10 +93,11 @@ impl TableRead<'_> {
 }
 
 /// 占位符：PG 驱动不能直接绑定 NUMERIC 参数，精确小数按文本传、由数据库转换（与导入相同）。
+/// 写 pg_catalog.numeric：人大金仓的 MySQL、SQL Server 模式把 numeric 当 DECIMAL(10,0)。
 fn placeholder(d: &Dialect, n: usize, v: &Value) -> String {
     let p = d.placeholder(n);
     if d.family() == Family::Postgres && matches!(v, Value::Decimal(_)) {
-        format!("{p}::text::numeric")
+        format!("{p}::text::pg_catalog.numeric")
     } else {
         p
     }
@@ -223,7 +224,7 @@ mod tests {
         // PG 的精确小数参数按文本传
         assert_eq!(
             read("t", &cols, &id, None).select(&pg, Some(&[Value::Decimal("5".into())])),
-            "SELECT id, name FROM app.t WHERE ((id > $1::text::numeric)) ORDER BY id"
+            "SELECT id, name FROM app.t WHERE ((id > $1::text::pg_catalog.numeric)) ORDER BY id"
         );
         let ora = d(Variant::Oracle);
         let ab = s(&["A", "B"]);

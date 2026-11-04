@@ -61,10 +61,11 @@ ORDER BY r.name, r.kind
 -- [routine_source]
 -- As postgres.sql for functions and procedures; a package is rebuilt from the stored spec / body text
 -- (pkgspecsrc / pkgbodysrc hold what follows AS, without the final semicolon).
+-- 拼字符串写 OPERATOR(pg_catalog.||)：人大金仓的 MySQL 模式把 || 当逻辑或，SQL Server 模式没有这个运算符。
 SELECT r.line, r.text
 FROM (
   SELECT (ROW_NUMBER() OVER (ORDER BY pg_catalog.pg_get_function_identity_arguments(p.oid), p.oid))::int AS line,
-         pg_catalog.pg_get_functiondef(p.oid) || E'\n' AS text
+         pg_catalog.pg_get_functiondef(p.oid) OPERATOR(pg_catalog.||) E'\n' AS text
   FROM pg_catalog.pg_proc p
   JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = {{ bind("schema") }}
@@ -74,8 +75,8 @@ FROM (
     AND p.prokind = CASE {{ bind("kind") }}::text WHEN 'PROCEDURE' THEN 'p' WHEN 'FUNCTION' THEN 'f' END
 {% endif %}
   UNION ALL
-  SELECT 1, 'CREATE OR REPLACE PACKAGE ' || pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(k.pkgname)
-            || ' AS' || k.pkgspecsrc || ';' || E'\n'
+  SELECT 1, 'CREATE OR REPLACE PACKAGE ' OPERATOR(pg_catalog.||) pg_catalog.quote_ident(n.nspname) OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) pg_catalog.quote_ident(k.pkgname)
+            OPERATOR(pg_catalog.||) ' AS' OPERATOR(pg_catalog.||) k.pkgspecsrc OPERATOR(pg_catalog.||) ';' OPERATOR(pg_catalog.||) E'\n'
   FROM pg_catalog._pkg k
   JOIN pg_catalog.pg_namespace n ON n.oid = k.pkgnamespace
   WHERE n.nspname = {{ bind("schema") }}
@@ -86,8 +87,8 @@ FROM (
     AND 1 = 0
 {% endif %}
   UNION ALL
-  SELECT 1, 'CREATE OR REPLACE PACKAGE BODY ' || pg_catalog.quote_ident(n.nspname) || '.' || pg_catalog.quote_ident(k.pkgname)
-            || ' AS' || k.pkgbodysrc || ';' || E'\n'
+  SELECT 1, 'CREATE OR REPLACE PACKAGE BODY ' OPERATOR(pg_catalog.||) pg_catalog.quote_ident(n.nspname) OPERATOR(pg_catalog.||) '.' OPERATOR(pg_catalog.||) pg_catalog.quote_ident(k.pkgname)
+            OPERATOR(pg_catalog.||) ' AS' OPERATOR(pg_catalog.||) k.pkgbodysrc OPERATOR(pg_catalog.||) ';' OPERATOR(pg_catalog.||) E'\n'
   FROM pg_catalog._pkg k
   JOIN pg_catalog.pg_namespace n ON n.oid = k.pkgnamespace
   WHERE n.nspname = {{ bind("schema") }}

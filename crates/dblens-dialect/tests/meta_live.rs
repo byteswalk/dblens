@@ -251,7 +251,9 @@ async fn check_common(live: &mut Live, fx: Fx) -> Vec<Table> {
     assert_eq!(fk.ref_columns, [fx.col("id")]);
     let mgr = emp.foreign_keys.iter().find(|f| f.ref_table == emp_name).unwrap();
     assert_eq!(mgr.on_delete.as_deref(), Some("SET NULL"));
-    assert_eq!(emp.uniques[0].columns, [fx.col("dept_id"), fx.col("name")]);
+    // 人大金仓 MySQL 模式的 serial 按 MySQL 的含义带 UNIQUE，唯一约束不止一个
+    let uk = [fx.col("dept_id"), fx.col("name")];
+    assert!(emp.uniques.iter().any(|u| u.columns == uk), "{:?}", emp.uniques);
     assert_eq!(emp.checks.iter().any(|c| has(&c.expression, "salary")), fx.checks, "{:?}", emp.checks);
     let created =
         emp.indexes.iter().find(|i| i.columns[0].name == fx.col("created")).expect("created 上的索引");
