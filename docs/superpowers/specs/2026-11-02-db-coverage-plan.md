@@ -77,7 +77,7 @@
 
 MySQL 5.7、8.0；PostgreSQL 12、14。元数据读取写了 8.0.13、8.0.16 以前的分支，但没在老版本上跑过。
 
-MySQL 5.7.44、8.0.44 于 2026-11-04 验证，见 `docs/notes/mysql-versions.md`；5.7 的 TLS（服务器只有 DHE、RSA 密钥交换）改用 native-tls 后解决（2026-11-05），Linux 构建待验证。
+MySQL 5.7.44、8.0.44 于 2026-11-04 验证，见 `docs/notes/mysql-versions.md`；5.7 的 TLS（服务器只有 DHE、RSA 密钥交换）改用 native-tls 后解决（2026-11-05），Linux x64、ARM64（glibc 2.28）都能编译，x64 实测通过。
 
 ### SQLite
 
