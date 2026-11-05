@@ -24,12 +24,20 @@ VM .106 上的 Docker 容器，镜像是华为云 SWR 同步的 Docker Hub 官�
 | 权限页查 `mysql.role_edges`、`default_roles`、`@@partial_revokes`，5.7 都没有 | 权限模板按版本分支：5.7 没有角色，成员关系为空；新增能力位 `roles`，5.7 上拒绝建角色、加入角色，界面隐藏这两个入口 |
 | 保留字查 `information_schema.KEYWORDS`（8.0.13 才有） | 5.7 返回空，只用内置表。TiDB 报 8.0.11 但有这张表，单独覆盖 |
 
-## 没解决：5.7 的 TLS
+## TLS 改用系统实现
 
-5.7.44 官方镜像用 OpenSSL 1.0.2 编译，ECDHE 握手失败，只能走 DHE 或 RSA 密钥交换；rustls 不支持这两种，`tls=require` 时报 `HandshakeFailure`。8.0 正常。用 openssl 在 VM 上验证过：ECDHE 套件被拒，DHE、RSA 套件可以连上。
+5.7.44 官方镜像用 OpenSSL 1.0.2 编译，ECDHE 握手失败，只能走 DHE 或 RSA 密钥交换（在 VM 上用 openssl 验证过：ECDHE 套件被拒，DHE、RSA 套件能连上）。rustls 不支持这两种，`tls=require` 时报 `HandshakeFailure`。
+
+2026-11-05 起 MySQL 驱动（mysql_async）的 TLS 从 rustls 换成 native-tls：
+
+- Windows 用 SChannel，macOS 用 Security.framework，Linux 上把 OpenSSL（openssl-src 3.6）静态编进去，不依赖系统的 libssl。
+- `require`、`verify`、`tls_ca` 的含义不变。PG、SQL Server 驱动仍用 rustls。
+- openssl、openssl-sys 用 0.10.81、0.9.117：更新的版本发布不满 7 天。openssl-src 停在 3.x、pem 停在 3.x 是上游依赖的版本约束。
+- Windows 上已验证：5.7、8.0、9.7、MariaDB 的加密连接、证书校验失败、加密连接上的取消都通过。
+- **Linux 构建没有验证**：静态编入 OpenSSL 时构建环境要有 perl 和 make。审计版引擎用 cargo-zigbuild 从 Windows 交叉编译，需要另行确认这条路能编出来，或者改在 Linux 容器里构建。
 
 ## 测试
 
 - 8.0.44：工作区全量通过，包括和 PostgreSQL、达梦之间的双向迁移。
-- 5.7.44：除 TLS 的两项（驱动 TLS 测试、接口测试的加密连接）外全部通过。
+- 5.7.44：全量通过，包括加密连接（换成 native-tls 之后）。
 - 夹具改成各版本通用的写法：`WITH RECURSIVE` 换成数字交叉连接，`CAST(… AS DOUBLE)` 换成 `1.5E0`，5.7 的元数据夹具不建函数索引和表达式默认值，权限测试在没有角色的库上走直接授权的流程。

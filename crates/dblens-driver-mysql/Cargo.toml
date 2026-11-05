@@ -11,9 +11,12 @@ chrono.workspace = true
 dblens-core.workspace = true
 dblens-driver.workspace = true
 mysql_async.workspace = true
-rustls.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+
+# Linux 上把 OpenSSL 静态编进去，不依赖系统的 libssl（麒麟、统信与构建机的版本可能不同）
+[target.'cfg(target_os = "linux")'.dependencies]
+native-tls = { version = "0.2", features = ["vendored"] }
 
 [dev-dependencies]
 dblens-driver = { workspace = true, features = ["conformance"] }

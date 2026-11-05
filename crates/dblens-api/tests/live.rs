@@ -150,8 +150,16 @@ async fn flow(env: &str, tls: bool) {
             .unwrap();
     let sql = match driver {
         DriverId::Postgres => "SELECT g FROM generate_series(1, 900) AS g ORDER BY g",
+        // MySQL 5.7 没有 WITH RECURSIVE，用三位数字交叉连接
         DriverId::Mysql => {
-            "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 900) SELECT n FROM t ORDER BY n"
+            "SELECT a.d + 10 * b.d + 100 * c.d + 1 AS n \
+             FROM (SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 \
+             UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) a \
+             CROSS JOIN (SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 \
+             UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b \
+             CROSS JOIN (SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 \
+             UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8) c \
+             ORDER BY n"
         }
         DriverId::Oracle | DriverId::Dameng => "SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 900 ORDER BY 1",
         DriverId::SqlServer => {
