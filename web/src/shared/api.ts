@@ -204,7 +204,7 @@ export interface ServerSummary {
   unadapted_mode: boolean
 }
 
-export type Compat = 'native' | 'oracle'
+export type Compat = 'native' | 'oracle' | 'sqlserver'
 
 export interface SecretStatus {
   backend: 'keyring' | 'vault'
@@ -1036,6 +1036,8 @@ export interface DesignCaps {
   reorder: boolean
   checks: boolean
   descending_index: boolean
+  /** 支持生成列（人大金仓的 SQL Server 模式没有） */
+  generated: boolean
   auto_increment: boolean
   on_delete: string[]
   on_update: string[]

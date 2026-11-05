@@ -454,6 +454,11 @@ impl Context<'_> {
         };
         // 生成列
         if let Some(g) = text(&c.generated) {
+            // 目标没有生成列（人大金仓的 SQL Server 模式）：只建普通列
+            if !self.tgt.design_caps().generated {
+                n.push(at, None, NoteLevel::Lossy, msg!("migrate.generated_unsupported", expression = g));
+                return out;
+            }
             let converted = match ov.expression.as_deref() {
                 Some(e) => Some(e.trim().to_string()).filter(|e| !e.is_empty()),
                 None => self.expression(g, cols),

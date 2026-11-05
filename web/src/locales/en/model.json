@@ -42,6 +42,7 @@
     "compat": "Compatibility mode",
     "compatNative": "Native",
     "compatOracle": "Oracle compatible",
+    "compatSqlServer": "SQL Server compatible",
     "profile": "Connection",
     "schemas": "Schemas",
     "reverseOk": "Generate",

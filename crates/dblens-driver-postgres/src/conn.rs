@@ -7,7 +7,7 @@ use tokio_postgres::{Client, NoTls};
 
 use crate::error::map_err;
 use crate::exec::PgExec;
-use crate::types::PgParam;
+use crate::types::{PgParam, is_tick_candidate};
 
 pub struct PgConnection {
     pub(crate) client: Client,
@@ -18,9 +18,21 @@ pub struct PgConnection {
     /// 加密连接时的 TLS 连接器；取消请求也要用它建立连接（服务器可能只接受加密连接）。
     pub(crate) tls: Option<tokio_postgres_rustls::MakeRustlsConnect>,
     pub(crate) lob_limit: usize,
+    /// 按 100 纳秒编码的类型的 OID（人大金仓 SQL Server 模式的 time、datetime2），第一次遇到候选类型时查出。
+    pub(crate) tick_types: Option<Vec<u32>>,
 }
 
 impl PgConnection {
+    /// 查出按 100 纳秒编码的类型。查询失败（不是人大金仓、事务已出错）时当作没有。
+    async fn load_tick_types(&self) -> Vec<u32> {
+        const SQL: &str = "SELECT t.oid FROM pg_catalog.pg_type t \
+                           WHERE t.typsend::text IN ('sqlserver_time_send', 'sqlserver_datetime2_send')";
+        match self.client.query(SQL, &[]).await {
+            Ok(rows) => rows.iter().filter_map(|r| r.try_get::<_, u32>(0).ok()).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
     /// 手动提交模式下，在第一条语句前开启事务。写 START TRANSACTION：人大金仓的 SQL Server 模式不认单独的 BEGIN。
     async fn ensure_tx(&mut self) -> Result<()> {
         if !self.autocommit && !self.in_tx {
@@ -48,7 +60,12 @@ impl Connection for PgConnection {
     ) -> Result<Box<dyn ExecStream + 'a>> {
         self.ensure_tx().await?;
         let stmt = self.client.prepare(sql).await.map_err(map_err)?;
-        let pg_params: Vec<PgParam<'a>> = params.iter().map(PgParam).collect();
+        let candidate = stmt.columns().iter().map(|c| c.type_()).chain(stmt.params()).any(is_tick_candidate);
+        if candidate && self.tick_types.is_none() {
+            self.tick_types = Some(self.load_tick_types().await);
+        }
+        let ticks = self.tick_types.clone().unwrap_or_default();
+        let pg_params: Vec<PgParam<'_>> = params.iter().map(|v| PgParam(v, &ticks)).collect();
         // &PgParam 实现了 ToSql，因而也实现了 BorrowToSql；它是 Send，可以跨 await 持有
         let args = || pg_params.iter();
         if stmt.columns().is_empty() {
@@ -58,7 +75,7 @@ impl Connection for PgConnection {
             let columns =
                 stmt.columns().iter().map(|c| ColumnMeta::new(c.name(), c.type_().name())).collect();
             let rows = self.client.query_raw(&stmt, args()).await.map_err(map_err)?;
-            Ok(Box::new(PgExec::rows(&mut self.notices, columns, rows, self.lob_limit)))
+            Ok(Box::new(PgExec::rows(&mut self.notices, columns, rows, self.lob_limit, ticks.clone())))
         }
     }
 

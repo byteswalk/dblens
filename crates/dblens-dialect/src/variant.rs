@@ -48,22 +48,28 @@ pub enum Compat {
     /// 人大金仓的 `database_mode = oracle`、openGauss 的 `DBCOMPATIBILITY 'A'`。
     #[serde(rename = "oracle")]
     Oracle,
+    /// 人大金仓的 `database_mode = sqlserver`：大体按 PG 规则，自增列写 `IDENTITY(1, 1)`。
+    #[serde(rename = "sqlserver")]
+    SqlServer,
 }
 
 impl Compat {
-    /// 由探测到的模式名得出兼容模式：人大金仓的 `oracle`、openGauss 的 `A` 是 Oracle 模式，其余按原生处理。
+    /// 由探测到的模式名得出兼容模式：人大金仓的 `oracle`、openGauss 的 `A` 是 Oracle 模式，人大金仓的 `sqlserver`
+    /// 是 SQL Server 模式，其余（含人大金仓的 `mysql`）按原生处理。
     pub fn from_mode(mode: &str) -> Compat {
         if mode.eq_ignore_ascii_case("oracle") || mode.eq_ignore_ascii_case("a") {
             Compat::Oracle
+        } else if mode.eq_ignore_ascii_case("sqlserver") {
+            Compat::SqlServer
         } else {
             Compat::Native
         }
     }
 
-    /// 已适配的模式名：openGauss 的 B、C 和人大金仓的 sqlserver 等返回 false。人大金仓的 mysql 模式按原生规则
-    /// 处理即可（生成的 SQL 避开了它改变语义的 `||`、`numeric`）。
+    /// 已适配的模式名：openGauss 的 B、C 等返回 false。人大金仓的 mysql 模式按原生规则处理即可（生成的 SQL
+    /// 避开了它改变语义的 `||`、`numeric`）。
     pub fn is_adapted_mode(mode: &str) -> bool {
-        ["oracle", "a", "pg", "mysql"].iter().any(|m| mode.eq_ignore_ascii_case(m))
+        ["oracle", "a", "pg", "mysql", "sqlserver"].iter().any(|m| mode.eq_ignore_ascii_case(m))
     }
 }
 

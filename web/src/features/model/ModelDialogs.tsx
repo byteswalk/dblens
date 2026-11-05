@@ -88,6 +88,11 @@ function CreateDialog() {
   const [product, setProduct] = useState<ProductId>('mysql')
   const [compat, setCompat] = useState<Compat>('native')
   const [busy, setBusy] = useState(false)
+  // SQL Server 兼容只有人大金仓有，换成别的产品时回到原生
+  const chooseProduct = (p: ProductId) => {
+    setProduct(p)
+    if (p !== 'kingbase' && compat === 'sqlserver') setCompat('native')
+  }
   const submit = async () => {
     setBusy(true)
     try {
@@ -111,7 +116,7 @@ function CreateDialog() {
           <Input value={name} placeholder={baseName(path)} onChange={(e) => setName(e.target.value)} />
         </Form.Item>
         <Form.Item label={t('model.dialog.product')} extra={t('model.dialog.versionNote')}>
-          <Select value={product} onChange={setProduct} options={PRODUCTS.map((p) => ({ value: p.id, label: productLabel(p.id) }))} />
+          <Select value={product} onChange={chooseProduct} options={PRODUCTS.map((p) => ({ value: p.id, label: productLabel(p.id) }))} />
         </Form.Item>
         {COMPAT_PRODUCTS.includes(product) && (
           <Form.Item label={t('model.dialog.compat')}>
@@ -121,6 +126,7 @@ function CreateDialog() {
               options={[
                 { value: 'native', label: t('model.dialog.compatNative') },
                 { value: 'oracle', label: t('model.dialog.compatOracle') },
+                ...(product === 'kingbase' ? [{ value: 'sqlserver', label: t('model.dialog.compatSqlServer') }] : []),
               ]}
             />
           </Form.Item>

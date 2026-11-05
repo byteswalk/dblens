@@ -181,6 +181,15 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "TIMESTAMPTZ" => L::Timestamp { tz: true, precision: prec(6) },
             "JSON" | "JSONB" => L::Json,
             "UUID" => L::Uuid,
+            // 人大金仓 SQL Server、MySQL 模式的类型（timestamp 在 SQL Server 模式是行版本，format_type 显示为 rowversion）
+            "NVARCHAR" => L::VarChar { len },
+            "NCHAR" => L::Char { len },
+            "DATETIME2" => L::Timestamp { tz: false, precision: prec(7) },
+            "DATETIME" => L::Timestamp { tz: false, precision: prec(3) },
+            "SMALLDATETIME" => L::Timestamp { tz: false, precision: Some(0) },
+            "UNIQUEIDENTIFIER" => L::Uuid,
+            "BINARY" => L::Binary { len },
+            "VARBINARY" => L::VarBinary { len },
             _ => L::Other,
         },
         Family::Oracle => match n {

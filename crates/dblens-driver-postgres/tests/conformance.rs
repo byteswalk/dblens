@@ -154,7 +154,7 @@ fn kingbase_mysql_fixture(params: ConnectParams) -> Fixture {
 }
 
 /// 人大金仓 SQL Server 模式：numeric 不接受 'NaN'，`"char"` 是普通的 char；字符、GUID、日期时间是 sys 模式下的类型。
-/// 它的 time、datetime2 按 100 纳秒计，和同名的 MySQL 模式类型分不开，驱动读不对，不测。
+/// 它的 time、datetime2 按 100 纳秒计，驱动按 OID 识别。
 fn kingbase_sqlserver_fixture(params: ConnectParams) -> Fixture {
     let day = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
     let mut cases: Vec<_> = pg_cases()
@@ -172,6 +172,14 @@ fn kingbase_sqlserver_fixture(params: ConnectParams) -> Fixture {
         (
             "SELECT CAST('2024-02-29 13:45:30' AS datetime)",
             Value::DateTime(day.and_hms_opt(13, 45, 30).unwrap()),
+        ),
+        (
+            "SELECT CAST('2024-02-29 13:45:30.1234567' AS datetime2)",
+            Value::DateTime(day.and_hms_micro_opt(13, 45, 30, 123_456).unwrap()),
+        ),
+        (
+            "SELECT CAST('13:45:30.25' AS time)",
+            Value::Time(chrono::NaiveTime::from_hms_milli_opt(13, 45, 30, 250).unwrap()),
         ),
     ]);
     base(params, cases)

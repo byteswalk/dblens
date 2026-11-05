@@ -24,11 +24,19 @@ pub(crate) struct PgExec<'a> {
     rows: Option<Pin<Box<RowStream>>>,
     state: State,
     lob_limit: usize,
+    /// 按 100 纳秒编码的类型的 OID（人大金仓 SQL Server 模式）。
+    ticks: Vec<u32>,
 }
 
 impl<'a> PgExec<'a> {
     pub(crate) fn affected(notices: &'a mut UnboundedReceiver<String>, n: u64) -> Self {
-        Self { notices, rows: None, state: State::Affected(n), lob_limit: DEFAULT_LOB_PREVIEW_BYTES }
+        Self {
+            notices,
+            rows: None,
+            state: State::Affected(n),
+            lob_limit: DEFAULT_LOB_PREVIEW_BYTES,
+            ticks: Vec::new(),
+        }
     }
 
     pub(crate) fn rows(
@@ -36,13 +44,14 @@ impl<'a> PgExec<'a> {
         columns: Vec<ColumnMeta>,
         rows: RowStream,
         lob_limit: usize,
+        ticks: Vec<u32>,
     ) -> Self {
-        Self { notices, rows: Some(Box::pin(rows)), state: State::Start(columns), lob_limit }
+        Self { notices, rows: Some(Box::pin(rows)), state: State::Start(columns), lob_limit, ticks }
     }
 }
 
-fn convert_row(row: &tokio_postgres::Row, lob_limit: usize) -> Result<Row> {
-    (0..row.len()).map(|i| pg_value(row, i).map(|v| v.cap_large(lob_limit))).collect()
+fn convert_row(row: &tokio_postgres::Row, lob_limit: usize, ticks: &[u32]) -> Result<Row> {
+    (0..row.len()).map(|i| pg_value(row, i, ticks).map(|v| v.cap_large(lob_limit))).collect()
 }
 
 #[async_trait]
@@ -63,7 +72,9 @@ impl ExecStream for PgExec<'_> {
                 let mut ended = false;
                 while rows.len() < max_rows.max(1) {
                     match stream.next().await {
-                        Some(row) => rows.push(convert_row(&row.map_err(map_err)?, self.lob_limit)?),
+                        Some(row) => {
+                            rows.push(convert_row(&row.map_err(map_err)?, self.lob_limit, &self.ticks)?)
+                        }
                         None => {
                             ended = true;
                             break;

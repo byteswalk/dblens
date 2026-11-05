@@ -125,9 +125,10 @@ pub fn keyset_params(last: &[Value]) -> Vec<Value> {
     (0..last.len()).flat_map(|i| last[..=i].iter().cloned()).collect()
 }
 
-/// 达梦、SQL Server 写入自增列前后的开关；其他库为 None（标识列都是 BY DEFAULT，可以直接写）。
+/// 达梦、SQL Server（含人大金仓的 SQL Server 模式）写入自增列前后的开关；其他库为 None（标识列都是
+/// BY DEFAULT，可以直接写）。
 pub fn identity_insert_sql(d: &Dialect, schema: &str, table: &str, on: bool) -> Option<String> {
-    matches!(d.family(), Family::Dameng | Family::SqlServer).then(|| {
+    d.needs_identity_insert().then(|| {
         format!("SET IDENTITY_INSERT {} {}", d.qualified(Some(schema), table), if on { "ON" } else { "OFF" })
     })
 }

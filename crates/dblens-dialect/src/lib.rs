@@ -120,6 +120,11 @@ impl Dialect {
         self.compat == Compat::Oracle
     }
 
+    /// 往自增列写显式值前要 `SET IDENTITY_INSERT … ON`：达梦、SQL Server、人大金仓的 SQL Server 模式。
+    pub fn needs_identity_insert(&self) -> bool {
+        matches!(self.family(), Family::Dameng | Family::SqlServer) || self.compat == Compat::SqlServer
+    }
+
     /// 连上并识别方言后在会话里执行的语句。GaussDB 的 A 模式按 `nls_date_format`（默认 `DD-MON-RR`）解析
     /// 日期，连 `DATE '2024-02-29'` 都会报错，导入、编辑和本工具生成的日期字面量都要用 ISO 格式。
     pub fn session_setup(&self) -> &'static [&'static str] {
@@ -147,6 +152,10 @@ impl Dialect {
     }
 
     pub fn ident(&self, name: &str) -> String {
+        // 人大金仓的 SQL Server 模式另有 SQL Server 的保留字
+        if self.compat == Compat::SqlServer && ident::is_reserved_word(Family::SqlServer, name) {
+            return ident::quote_ident(self.family(), name);
+        }
         ident::ident(self.family(), name)
     }
 
@@ -177,10 +186,11 @@ impl Dialect {
         split_with(self.splitter(), sql)
     }
 
-    /// 分块拆分用的拆分器：人大金仓、openGauss 的 Oracle 兼容模式另外识别 PL/SQL 块。
+    /// 分块拆分用的拆分器：人大金仓、openGauss 的 Oracle 兼容模式另外识别 PL/SQL 块；人大金仓 SQL Server
+    /// 模式的 T-SQL 过程（`CREATE PROCEDURE … AS BEGIN … END`）同样以独占一行的 `/` 结束。
     pub fn splitter(&self) -> StreamSplitter {
         let s = StreamSplitter::new(self.family());
-        if self.oracle_mode() { s.with_oracle_blocks() } else { s }
+        if self.oracle_mode() || self.compat == Compat::SqlServer { s.with_oracle_blocks() } else { s }
     }
 
     /// 用来判断 Oracle 功能的版本。OceanBase 的 Oracle 模式报告的是自己的版本号（如 4.4），不能和 Oracle 比。
@@ -229,6 +239,12 @@ impl Dialect {
         // 达梦 Oracle 兼容模式下 DATE 带时分秒，建出来就是 TIMESTAMP(0)，直接这样写，读回的结构才和规划一致
         if self.variant == Variant::Dameng && self.oracle_mode() && *logical == LogicalType::Date {
             return "TIMESTAMP(0)".into();
+        }
+        // 人大金仓 SQL Server 模式的 timestamp 是行版本，不带时区的时间戳写 datetime2
+        if self.compat == Compat::SqlServer
+            && let LogicalType::Timestamp { tz: false, precision } = logical
+        {
+            return format!("datetime2({})", precision.unwrap_or(6).min(7));
         }
         types::native_type(self.family(), logical)
     }
@@ -410,6 +426,8 @@ mod tests {
         assert_eq!((d.compat(), d.version()), (Compat::Oracle, Some(120100)));
         assert!(d.oracle_mode());
         assert_eq!(kb.refine(&probe("pg", "120001")).compat(), Compat::Native);
+        assert_eq!(kb.refine(&probe("sqlserver", "120001")).compat(), Compat::SqlServer);
+        assert_eq!(kb.refine(&probe("mysql", "120001")).compat(), Compat::Native);
         let og = Dialect::new(Variant::OpenGauss).with_version(Some(70000));
         let d = og.refine(&probe("A", "90204"));
         assert_eq!((d.compat(), d.version()), (Compat::Oracle, Some(90204)));
@@ -468,7 +486,7 @@ mod tests {
                 && Compat::is_adapted_mode("ORACLE")
         );
         assert!(Compat::is_adapted_mode("mysql"));
-        assert!(!Compat::is_adapted_mode("B") && !Compat::is_adapted_mode("sqlserver"));
+        assert!(Compat::is_adapted_mode("sqlserver") && !Compat::is_adapted_mode("B"));
         assert_eq!(pg_version_num(120001), Some(120100));
         assert_eq!(pg_version_num(180006), Some(180600));
         assert_eq!(pg_version_num(90204), Some(90204));

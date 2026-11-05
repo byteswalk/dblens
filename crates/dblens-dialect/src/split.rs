@@ -578,7 +578,8 @@ fn starts_plsql(s: &[u8]) -> bool {
         "DECLARE" | "BEGIN" => true,
         "CREATE" => {
             let mut k = 1;
-            if w(1) == "OR" && w(2) == "REPLACE" {
+            // CREATE OR ALTER：人大金仓 SQL Server 模式的过程写法
+            if w(1) == "OR" && matches!(w(2), "REPLACE" | "ALTER") {
                 k = 3;
             }
             if matches!(w(k), "EDITIONABLE" | "NONEDITIONABLE" | "EDITIONING") {

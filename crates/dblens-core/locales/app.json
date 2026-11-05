@@ -1308,6 +1308,10 @@
     "zh-CN": "生成列表达式 %{expression} 不能转换，改为普通列",
     "en": "Generated column expression %{expression} cannot be converted; migrated as a plain column"
   },
+  "migrate.generated_unsupported": {
+    "zh-CN": "目标库没有生成列，按普通列建，不带表达式 %{expression}",
+    "en": "The target has no generated columns; created as a plain column without the expression %{expression}"
+  },
   "migrate.identity_plain": {
     "zh-CN": "OceanBase 的 Oracle 模式迁完后改不了自增起始值，这一列改成普通列；要自增请迁移后自行建序列",
     "en": "OceanBase Oracle mode cannot restart an identity after the data is loaded, so this becomes a plain column; create a sequence yourself after the migration if you need one"

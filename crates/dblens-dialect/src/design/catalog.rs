@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 
-use crate::{Dialect, Family, Variant};
+use crate::{Compat, Dialect, Family, Variant};
 
 /// 类型的参数形式。`Length` 也用于时间类型的小数秒精度。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -30,6 +30,8 @@ pub struct DesignCaps {
     /// 支持检查约束（MySQL 8.0.16 以前只解析不执行）。
     pub checks: bool,
     pub descending_index: bool,
+    /// 支持生成列（人大金仓的 SQL Server 模式没有）。
+    pub generated: bool,
     /// 能建自增列（Oracle 12c 起才有标识列）。
     pub auto_increment: bool,
     /// 外键可选的动作；空表示不支持这一项（如 Oracle 没有 ON UPDATE）。
@@ -106,6 +108,10 @@ const POSTGRES_TYPES: &[TypeEntry] = &[
 ];
 
 /// 人大金仓、openGauss 的 Oracle 兼容模式另外可选的 Oracle 风格类型（DATE 带时间）。
+/// 人大金仓 SQL Server 模式：timestamp 是行版本，换成 datetime2 等 SQL Server 的类型。
+const PG_SQLSERVER_MODE_TYPES: &[TypeEntry] =
+    &[t("datetime2", L), t("datetime", N), t("nvarchar", L), t("nchar", L), t("uniqueidentifier", N)];
+
 const PG_ORACLE_MODE_TYPES: &[TypeEntry] =
     &[t("NUMBER", P), t("VARCHAR2", L), t("NVARCHAR2", L), t("CLOB", N), t("BLOB", N), t("DATE", N)];
 
@@ -226,6 +232,7 @@ impl Dialect {
                     _ => v >= 80016,
                 },
                 // 8.0 起支持降序索引；TiDB、OceanBase 接受 DESC 但按升序建
+                generated: true,
                 descending_index: match self.variant() {
                     Variant::MariaDb => true,
                     Variant::TiDb | Variant::OceanBase => false,
@@ -244,6 +251,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment,
                 checks: true,
+                generated: self.compat() != Compat::SqlServer,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],
                 on_update: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],
@@ -253,6 +261,13 @@ impl Dialect {
                 },
                 types: if self.oracle_mode() {
                     POSTGRES_TYPES.iter().chain(PG_ORACLE_MODE_TYPES).cloned().collect()
+                } else if self.compat() == Compat::SqlServer {
+                    POSTGRES_TYPES
+                        .iter()
+                        .filter(|e| e.name != "timestamp")
+                        .chain(PG_SQLSERVER_MODE_TYPES)
+                        .cloned()
+                        .collect()
                 } else {
                     POSTGRES_TYPES.to_vec()
                 },
@@ -261,6 +276,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment,
                 checks: true,
+                generated: true,
                 descending_index: self.variant() != Variant::OceanBaseOracle,
                 on_delete: vec!["NO ACTION", "CASCADE", "SET NULL"],
                 on_update: vec![],
@@ -271,6 +287,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment,
                 checks: true,
+                generated: true,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "CASCADE", "SET NULL", "SET DEFAULT"],
                 on_update: vec!["NO ACTION", "CASCADE", "SET NULL", "SET DEFAULT"],
@@ -281,6 +298,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment,
                 checks: true,
+                generated: true,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "CASCADE"],
                 on_update: vec!["NO ACTION"],
@@ -320,6 +338,12 @@ mod tests {
         assert!(kb.types.iter().any(|t| t.name == "VARCHAR2") && kb.types.iter().any(|t| t.name == "jsonb"));
         let kb_pg = Dialect::new(Variant::Kingbase).design_caps();
         assert!(!kb_pg.types.iter().any(|t| t.name == "VARCHAR2"));
+        assert!(kb_pg.generated && kb_pg.types.iter().any(|t| t.name == "timestamp"));
+        // SQL Server 模式：timestamp 是行版本，没有生成列
+        let kb_ms = Dialect::new(Variant::Kingbase).with_compat(Compat::SqlServer).design_caps();
+        assert!(!kb_ms.generated);
+        assert!(!kb_ms.types.iter().any(|t| t.name == "timestamp"));
+        assert!(kb_ms.types.iter().any(|t| t.name == "datetime2"));
         assert!(!Dialect::new(Variant::OpenGauss).design_caps().index_methods.contains(&"BRIN"));
         let dm = Dialect::new(Variant::Dameng).design_caps();
         assert!(dm.types.iter().any(|t| t.name == "VARCHAR" && t.char_unit));

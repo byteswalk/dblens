@@ -92,6 +92,7 @@ impl Driver for PgDriver {
             in_tx: false,
             tls,
             lob_limit: dblens_core::DEFAULT_LOB_PREVIEW_BYTES,
+            tick_types: None,
         }))
     }
 }

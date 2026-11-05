@@ -254,16 +254,18 @@ export default function ColumnsPane({ draft, original, caps, issues, selected, o
       <div className="design-props">
         {sel ? (
           <>
-            <label>
-              {t('design.column.generated')}
-              <Input
-                size="small"
-                value={sel.generated ?? ''}
-                disabled={sel.deleted}
-                placeholder={t('design.column.generatedHint')}
-                onChange={(e) => set(sel.key, { generated: e.target.value || null })}
-              />
-            </label>
+            {caps?.generated !== false && (
+              <label>
+                {t('design.column.generated')}
+                <Input
+                  size="small"
+                  value={sel.generated ?? ''}
+                  disabled={sel.deleted}
+                  placeholder={t('design.column.generatedHint')}
+                  onChange={(e) => set(sel.key, { generated: e.target.value || null })}
+                />
+              </label>
+            )}
             <label>
               {t('design.column.native')}
               <code className={changedFields(sel, original).has('type') ? 'design-changed-text' : ''}>{sel.data_type.native || '-'}</code>

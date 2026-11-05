@@ -42,6 +42,7 @@
     "compat": "兼容模式",
     "compatNative": "原生",
     "compatOracle": "Oracle 兼容",
+    "compatSqlServer": "SQL Server 兼容",
     "profile": "连接",
     "schemas": "Schema",
     "reverseOk": "生成",

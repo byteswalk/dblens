@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use dblens_core::{ColumnType, LogicalType, Value};
 
-use crate::{Dialect, Family};
+use crate::{Compat, Dialect, Family};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Tok {
@@ -371,6 +371,10 @@ pub(super) fn convert_default(
                 format!("CURRENT_TIMESTAMP({p})")
             }
             (Family::MySql, L::Timestamp { .. }) => "CURRENT_TIMESTAMP".into(),
+            // 人大金仓 SQL Server 模式的 datetime2 只接受 CURRENT_TIMESTAMP（LOCALTIMESTAMP、now() 插入时报类型不符）
+            (Family::Postgres, L::Timestamp { tz: false, .. }) if tgt.compat() == Compat::SqlServer => {
+                "CURRENT_TIMESTAMP".into()
+            }
             (Family::Postgres, L::Timestamp { tz: false, .. }) => "LOCALTIMESTAMP".into(),
             (Family::Postgres, L::Timestamp { tz: true, .. }) => "CURRENT_TIMESTAMP".into(),
             (Family::Oracle | Family::Dameng, L::Timestamp { tz: false, precision: Some(0) })

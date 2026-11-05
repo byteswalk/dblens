@@ -156,6 +156,7 @@ WHERE n.nspname = $1
 ORDER BY c.relname, con.conname
 
 -- [indexes] [String("HR"), String("EMP")]
+-- 不写 int2[]、indoption[n]：人大金仓的 SQL Server 模式把方括号当标识符引号（数组类型写内部名 _int2）。
 -- Key columns only (INCLUDE columns, pos > indnkeyatts, are skipped). Indexes backing PK/UNIQUE constraints are excluded
 -- (not those backing FKs: pg_constraint.conindid of an FK points at the *referenced* unique index, so filter contype).
 SELECT c.relname AS table_name,
@@ -164,13 +165,14 @@ SELECT c.relname AS table_name,
        UPPER(am.amname) AS method,
        CASE WHEN k.attnum = 0 THEN pg_catalog.pg_get_indexdef(i.indexrelid, k.pos::int, true) ELSE a.attname END AS column_expr,
        k.pos::int AS position,
-       ((i.indoption[k.pos - 1] & 1) = 1) AS descending
+       ((SELECT o.v FROM pg_catalog.unnest(CAST(i.indoption AS pg_catalog._int2)) WITH ORDINALITY AS o(v, p)
+         WHERE o.p = k.pos) & 1) = 1 AS descending
 FROM pg_catalog.pg_index i
 JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
 JOIN pg_catalog.pg_am am ON am.oid = ic.relam
-CROSS JOIN LATERAL pg_catalog.unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, pos)
+CROSS JOIN LATERAL pg_catalog.unnest(CAST(i.indkey AS pg_catalog._int2)) WITH ORDINALITY AS k(attnum, pos)
 LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum AND k.attnum > 0
 WHERE n.nspname = $1
   AND c.relkind IN ('r', 'p', 'm')

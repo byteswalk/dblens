@@ -13,7 +13,7 @@ use std::time::Instant;
 use dblens_core::schema::{RoutineKind, Table};
 use dblens_core::{LogicalType, Value};
 use dblens_dialect::meta::{self, MetaArgs, MetaKey, MetaRows, TableRows};
-use dblens_dialect::{Dialect, Family, Variant};
+use dblens_dialect::{Compat, Dialect, Family, Variant};
 use dblens_driver::{ConnectParams, Connection, Driver, DriverId, collect_all};
 
 struct Live {
@@ -169,6 +169,8 @@ struct Fx {
     upper_cols: bool,
     /// 检查约束能读回。MySQL 8.0.16 以前只解析不保存。
     checks: bool,
+    /// 有生成列 name_upper（人大金仓 SQL Server 模式没有生成列）。
+    generated: bool,
 }
 
 impl Fx {
@@ -182,6 +184,7 @@ impl Fx {
             identity: true,
             upper_cols: false,
             checks: true,
+            generated: true,
         }
     }
 
@@ -195,6 +198,7 @@ impl Fx {
             identity: true,
             upper_cols: true,
             checks: true,
+            generated: true,
         }
     }
 
@@ -244,7 +248,9 @@ async fn check_common(live: &mut Live, fx: Fx) -> Vec<Table> {
     let name = col("name");
     assert!(!name.nullable && name.default.as_deref().unwrap().contains("无名"), "{name:?}");
     assert_eq!(name.comment.as_deref(), Some("员工姓名"));
-    assert!(has(col("name_upper").generated.as_deref().unwrap(), "name"));
+    if fx.generated {
+        assert!(has(col("name_upper").generated.as_deref().unwrap(), "name"));
+    }
     assert!(col("created").default.is_some());
     let fk = emp.foreign_keys.iter().find(|f| f.ref_table == dept_name).unwrap();
     assert_eq!((fk.columns.clone(), fk.on_delete.as_deref()), (vec![fx.col("dept_id")], Some("CASCADE")));
@@ -491,10 +497,12 @@ async fn postgres_metadata() {
 struct PgFx {
     materialized_views: bool,
     sequence_cache: bool,
+    /// 人大金仓 SQL Server 模式：不建按 PG 类型写的数据类型表 ds_t（类型名的含义不同），没有生成列。
+    sqlserver: bool,
 }
 
 impl PgFx {
-    const FULL: PgFx = PgFx { materialized_views: true, sequence_cache: true };
+    const FULL: PgFx = PgFx { materialized_views: true, sequence_cache: true, sqlserver: false };
 }
 
 /// PG 家族的检查：先做共有的检查，再核对 PG 特有的对象。
@@ -507,7 +515,7 @@ async fn check_pg_family(live: &mut Live, pg: PgFx) {
     };
     assert!(schemas.iter().any(|x| x.name == builtin && x.is_system), "{schemas:?}");
     assert!(schemas.iter().any(|x| x.name == "public" && !x.is_system), "{schemas:?}");
-    let fx = Fx::lower("dblens_meta");
+    let fx = Fx { generated: !pg.sqlserver, ..Fx::lower("dblens_meta") };
     let all = check_common(live, fx).await;
     let s = fx.schema;
 
@@ -521,13 +529,15 @@ async fn check_pg_family(live: &mut Live, pg: PgFx) {
     let func = table(&all, "emp").indexes.iter().find(|i| i.name == "idx_emp_upper").unwrap();
     assert!(func.columns[0].name.contains("lower") && func.columns[1].name == "dept_id");
 
-    let ds = table(&all, "ds_t");
-    assert_eq!(logical(ds, "c_numeric_p"), LogicalType::Decimal { precision: Some(10), scale: Some(2) });
-    assert_eq!(logical(ds, "c_varchar"), LogicalType::VarChar { len: Some(255) });
-    assert_eq!(logical(ds, "c_ts"), LogicalType::Timestamp { tz: false, precision: Some(6) });
-    assert_eq!(logical(ds, "c_tstz3"), LogicalType::Timestamp { tz: true, precision: Some(3) });
-    assert_eq!(logical(ds, "c_jsonb"), LogicalType::Json);
-    assert_eq!(logical(ds, "c_int_arr"), LogicalType::Other);
+    if !pg.sqlserver {
+        let ds = table(&all, "ds_t");
+        assert_eq!(logical(ds, "c_numeric_p"), LogicalType::Decimal { precision: Some(10), scale: Some(2) });
+        assert_eq!(logical(ds, "c_varchar"), LogicalType::VarChar { len: Some(255) });
+        assert_eq!(logical(ds, "c_ts"), LogicalType::Timestamp { tz: false, precision: Some(6) });
+        assert_eq!(logical(ds, "c_tstz3"), LogicalType::Timestamp { tz: true, precision: Some(3) });
+        assert_eq!(logical(ds, "c_jsonb"), LogicalType::Json);
+        assert_eq!(logical(ds, "c_int_arr"), LogicalType::Other);
+    }
 
     let d = live.d;
     let columns = live.rows(MetaKey::Columns, &args(s)).await;
@@ -760,7 +770,8 @@ async fn opengauss_family(env: &str, oracle_mode: bool) {
     } else {
         live.run_script(script).await;
     }
-    check_pg_family(&mut live, PgFx { sequence_cache: false, materialized_views: !gauss }).await;
+    check_pg_family(&mut live, PgFx { sequence_cache: false, materialized_views: !gauss, ..PgFx::FULL })
+        .await;
     if oracle_mode {
         check_oracle_mode_objects(&mut live).await;
     }
@@ -780,7 +791,18 @@ async fn opengauss_a_metadata() {
 async fn kingbase_metadata(env: &str, oracle_mode: bool) {
     let Some(mut live) = connect(env).await else { return };
     assert_eq!((live.d.variant(), live.d.oracle_mode()), (Variant::Kingbase, oracle_mode));
-    let script = include_str!("fixtures/postgres.sql");
+    let mut script = include_str!("fixtures/postgres.sql").to_string();
+    // SQL Server 模式：自增列写 IDENTITY，timestamp 是 rowversion，没有 text[] 这种数组写法；
+    // 数据类型表 ds_t 按 PG 类型写，不建
+    let sqlserver = live.d.compat() == Compat::SqlServer;
+    if sqlserver {
+        script = script
+            .replace("GENERATED BY DEFAULT AS IDENTITY", "IDENTITY(1, 1)")
+            .replace("created timestamp(6) DEFAULT", "created datetime2(6) DEFAULT")
+            .replace("  tags text[],\n", "")
+            .replace("  name_upper text GENERATED ALWAYS AS (upper(name)) STORED,\n", "");
+    }
+    let script = script.as_str();
     let ds =
         script.lines().skip_while(|l| !l.starts_with("CREATE TABLE dblens_meta.ds_t")).collect::<Vec<_>>();
     let ds = ds
@@ -789,9 +811,12 @@ async fn kingbase_metadata(env: &str, oracle_mode: bool) {
 ",
         )
         .replace(", c_numeric_neg numeric(5,-2)", "");
-    let skip = ["mv_dept", "mv_dept_c", "mv_dept_cc"];
+    let mut skip = vec!["mv_dept", "mv_dept_c", "mv_dept_cc"];
+    if sqlserver {
+        skip.extend(["ds_t", "idx_gin"]);
+    }
     live.run_script_with(script, &skip, &[("ds_t", &ds)]).await;
-    check_pg_family(&mut live, PgFx { materialized_views: false, ..PgFx::FULL }).await;
+    check_pg_family(&mut live, PgFx { materialized_views: false, sqlserver, ..PgFx::FULL }).await;
     if oracle_mode {
         check_oracle_mode_objects(&mut live).await;
     }

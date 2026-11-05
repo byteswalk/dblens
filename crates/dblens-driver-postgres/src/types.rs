@@ -106,6 +106,40 @@ impl<'a> FromSql<'a> for PgInterval {
     }
 }
 
+/// 人大金仓 SQL Server 模式的 `time`、`datetime2` 按 100 纳秒计（PG 按微秒），`datetime2` 从 2000-01-01 起算。
+/// 名字和 MySQL 模式的同名类型（按微秒）相同，只能按 OID 区分，由连接按发送函数名查出。这里判断值得去查的类型。
+pub(crate) fn is_tick_candidate(ty: &Type) -> bool {
+    Type::from_oid(ty.oid()).is_none() && matches!(ty.name(), "time" | "datetime2")
+}
+
+fn epoch_2000() -> NaiveDateTime {
+    NaiveDate::from_ymd_opt(2000, 1, 1).unwrap().and_time(NaiveTime::MIN)
+}
+
+fn decode_ticks(ty: &Type, raw: &[u8]) -> std::result::Result<Value, BoxError> {
+    let micros = i64::from_be_bytes(raw.try_into()?) / 10;
+    let delta = chrono::Duration::microseconds(micros);
+    Ok(if ty.name() == "time" {
+        Value::Time(NaiveTime::MIN.overflowing_add_signed(delta).0)
+    } else {
+        Value::DateTime(epoch_2000().checked_add_signed(delta).ok_or("datetime2 out of range")?)
+    })
+}
+
+fn encode_ticks(v: &Value, ty: &Type, out: &mut BytesMut) -> std::result::Result<IsNull, BoxError> {
+    let micros = match v {
+        Value::Null => return Ok(IsNull::Yes),
+        Value::Time(t) => (*t - NaiveTime::MIN).num_microseconds().ok_or("time out of range")?,
+        Value::DateTime(dt) => (*dt - epoch_2000()).num_microseconds().ok_or("datetime2 out of range")?,
+        Value::Date(d) => {
+            (d.and_time(NaiveTime::MIN) - epoch_2000()).num_microseconds().ok_or("date out of range")?
+        }
+        other => return Err(format!("cannot bind {other:?} to {}", ty.name()).into()),
+    };
+    out.extend_from_slice(&(micros * 10).to_be_bytes());
+    Ok(IsNull::No)
+}
+
 /// 不认识的类型：原样取出二进制。
 pub(crate) struct RawValue<'a>(pub &'a [u8]);
 
@@ -194,8 +228,24 @@ fn other_text(raw: &[u8]) -> String {
 }
 
 /// 读取一行中第 `idx` 列的值。
-pub(crate) fn pg_value(row: &Row, idx: usize) -> Result<Value> {
+/// `ticks`：按 100 纳秒编码的类型的 OID（见 `is_tick_candidate`）。
+pub(crate) fn pg_value(row: &Row, idx: usize, ticks: &[u32]) -> Result<Value> {
     let ty = row.columns()[idx].type_().clone();
+    if ticks.contains(&ty.oid()) {
+        let raw =
+            row.try_get::<_, Option<RawValue>>(idx).map_err(|e| Error::internal(Msg::raw(e.to_string())))?;
+        return match raw {
+            None => Ok(Value::Null),
+            Some(r) => decode_ticks(&ty, r.0).map_err(|e| {
+                Error::internal(msg!(
+                    "pg.read_column_failed",
+                    column = idx + 1,
+                    ty = ty.name(),
+                    error = Msg::raw(e.to_string())
+                ))
+            }),
+        };
+    }
     let fail = |e: tokio_postgres::Error| {
         let cause = crate::error::ours(&e).map_or_else(|| Msg::raw(e.to_string()), |inner| inner.to_msg());
         Error::internal(msg!("pg.read_column_failed", column = idx + 1, ty = ty.name(), error = cause))
@@ -248,10 +298,14 @@ pub(crate) fn pg_value(row: &Row, idx: usize) -> Result<Value> {
 
 /// 把 `Value` 绑定为 PG 参数，按目标参数类型做必要的转换。
 #[derive(Debug)]
-pub(crate) struct PgParam<'a>(pub &'a Value);
+/// 第二项是按 100 纳秒编码的类型的 OID（见 `is_tick_candidate`）。
+pub(crate) struct PgParam<'a>(pub &'a Value, pub &'a [u32]);
 
 impl ToSql for PgParam<'_> {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> std::result::Result<IsNull, BoxError> {
+        if self.1.contains(&ty.oid()) {
+            return encode_ticks(self.0, ty, out);
+        }
         // 兼容库的域类型和自定义类型按对应的标准类型编码（人大金仓 Oracle 模式的 date 是 timestamp 上的域）
         if let Some(base) = standard_type(ty).filter(|b| b != ty) {
             return self.to_sql(&base, out);
@@ -267,7 +321,7 @@ impl ToSql for PgParam<'_> {
                 Type::NUMERIC => Err(numeric_param_hint()),
                 _ => i.to_sql(ty, out),
             },
-            Value::UInt(u) => PgParam(&Value::Int(i64::try_from(*u)?)).to_sql(ty, out),
+            Value::UInt(u) => PgParam(&Value::Int(i64::try_from(*u)?), self.1).to_sql(ty, out),
             Value::Float(f) => match *ty {
                 Type::FLOAT4 => (*f as f32).to_sql(ty, out),
                 Type::NUMERIC => Err(numeric_param_hint()),
@@ -315,6 +369,24 @@ mod tests {
             v.extend_from_slice(&d.to_be_bytes());
         }
         v
+    }
+
+    #[test]
+    fn tick_types_round_trip() {
+        let time = Type::new("time".into(), 7755, Kind::Simple, "sys".into());
+        let dt2 = Type::new("datetime2".into(), 7756, Kind::Simple, "sys".into());
+        assert!(is_tick_candidate(&time) && is_tick_candidate(&dt2) && !is_tick_candidate(&Type::TIME));
+        // 13:45:30 是 49530 秒，按 100 纳秒计
+        let raw = (49_530_i64 * 10_000_000).to_be_bytes();
+        assert_eq!(
+            decode_ticks(&time, &raw).unwrap(),
+            Value::Time(NaiveTime::from_hms_opt(13, 45, 30).unwrap())
+        );
+        let dt =
+            NaiveDate::from_ymd_opt(2024, 2, 29).unwrap().and_hms_micro_opt(13, 45, 30, 123_456).unwrap();
+        let mut out = BytesMut::new();
+        encode_ticks(&Value::DateTime(dt), &dt2, &mut out).unwrap();
+        assert_eq!(decode_ticks(&dt2, &out).unwrap(), Value::DateTime(dt));
     }
 
     #[test]

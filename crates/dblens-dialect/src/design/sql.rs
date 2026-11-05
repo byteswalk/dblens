@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use super::diff::{is_expression, text};
 use super::{DesignIssue, Diff, IssueSection, TableChange as C};
-use crate::{Dialect, Family, Variant};
+use crate::{Compat, Dialect, Family, Variant};
 
 /// 一条生成的语句。`changes` 是它对应的变更序号（一项变更也可能生成几条语句）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -72,6 +72,9 @@ impl Dialect {
                     let serial = text(&from.default).is_some_and(|d| d.starts_with("nextval("));
                     if identity && serial {
                         out.push(msg!("design.unsupported.serial", column = to.name));
+                    } else if identity && self.compat() == Compat::SqlServer {
+                        // 人大金仓 SQL Server 模式不能给已有列加、去标识属性
+                        out.push(msg!("design.unsupported.identity", column = to.name));
                     }
                 }
                 Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix => {

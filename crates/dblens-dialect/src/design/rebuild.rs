@@ -223,8 +223,9 @@ impl Dialect {
                 src
             });
         }
-        // 达梦、SQL Server 往自增列写显式值要打开 IDENTITY_INSERT；自增列是新加的（不复制）时不能打开
-        let identity_insert = matches!(self.family(), Family::Dameng | Family::SqlServer)
+        // 达梦、SQL Server（含人大金仓的 SQL Server 模式）往自增列写显式值要打开 IDENTITY_INSERT；
+        // 自增列是新加的（不复制）时不能打开
+        let identity_insert = self.needs_identity_insert()
             && draft.columns.iter().any(|c| c.auto_increment && old_of(&c.name).is_some());
         if identity_insert {
             sql(format!("SET IDENTITY_INSERT {q_tmp} ON"));
