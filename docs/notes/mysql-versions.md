@@ -22,6 +22,7 @@ VM .106 上的 Docker 容器，镜像是华为云 SWR 同步的 Docker Hub 官�
 | 5.7 只解析不保存检查约束，迁移过去读回少了约束 | 目标不执行检查约束时（`design_caps().checks` 为假：MySQL 8.0.16 以前、TiDB）不迁移检查约束，给出提示 |
 | 5.7 接受 `DESC` 但按升序建索引 | 目标不支持降序索引时按升序迁移，给出提示 |
 | 权限页查 `mysql.role_edges`、`default_roles`、`@@partial_revokes`，5.7 都没有 | 权限模板按版本分支：5.7 没有角色，成员关系为空；新增能力位 `roles`，5.7 上拒绝建角色、加入角色，界面隐藏这两个入口 |
+| 迁移来的日期、UUID 默认值写成表达式 `(CURRENT_DATE)`、`(UUID())`，8.0.13 才支持（PG 12、14 验证时发现，见 `postgres-versions.md`） | 目标低于 8.0.13 时不迁移这类默认值，给出提示 |
 | 保留字查 `information_schema.KEYWORDS`（8.0.13 才有） | 5.7 返回空，只用内置表。TiDB 报 8.0.11 但有这张表，单独覆盖 |
 
 ## TLS 改用系统实现

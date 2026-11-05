@@ -1,6 +1,7 @@
 -- PostgreSQL ops queries (M1c3). Also used by KingbaseES, GaussDB and HighGo; openGauss overrides what it
 -- names differently (opengauss.sql). A database that still lacks a view shows its own error.
--- slow_sql needs the pg_stat_statements extension (PostgreSQL 13+ column names).
+-- slow_sql needs the pg_stat_statements extension. Its time columns were renamed in PostgreSQL 13
+-- (mean_time → mean_exec_time …), so they are read by name from to_jsonb(s), which works on both.
 -- 拼字符串写 OPERATOR(pg_catalog.||)：人大金仓的 MySQL 模式把 || 当逻辑或，SQL Server 模式没有这个运算符。
 
 -- [sessions]
@@ -71,10 +72,17 @@ LIMIT 20
 -- name.en: Slow SQL
 -- category: sql
 SELECT LEFT(s.query, 300) AS sql_text, s.calls AS executions,
-       ROUND(s.mean_exec_time::numeric, 2) AS avg_ms,
-       ROUND(s.max_exec_time::numeric, 2) AS max_ms,
-       ROUND(s.total_exec_time::numeric, 2) AS total_ms,
+       ROUND(t.mean_ms, 2) AS avg_ms, ROUND(t.max_ms, 2) AS max_ms, ROUND(t.total_ms, 2) AS total_ms,
        s.rows
 FROM pg_stat_statements s
-ORDER BY s.mean_exec_time DESC
+CROSS JOIN LATERAL (SELECT pg_catalog.to_jsonb(s) AS j) x
+CROSS JOIN LATERAL (
+  SELECT COALESCE(pg_catalog.jsonb_extract_path_text(x.j, 'mean_exec_time'),
+                  pg_catalog.jsonb_extract_path_text(x.j, 'mean_time'))::numeric AS mean_ms,
+         COALESCE(pg_catalog.jsonb_extract_path_text(x.j, 'max_exec_time'),
+                  pg_catalog.jsonb_extract_path_text(x.j, 'max_time'))::numeric AS max_ms,
+         COALESCE(pg_catalog.jsonb_extract_path_text(x.j, 'total_exec_time'),
+                  pg_catalog.jsonb_extract_path_text(x.j, 'total_time'))::numeric AS total_ms
+) t
+ORDER BY t.mean_ms DESC
 LIMIT 20

@@ -488,7 +488,13 @@ async fn sqlserver_metadata() {
 #[tokio::test]
 async fn postgres_metadata() {
     let Some(mut live) = connect("DBLENS_TEST_PG_URL").await else { return };
-    live.run_script(include_str!("fixtures/postgres.sql")).await;
+    let script = include_str!("fixtures/postgres.sql");
+    // 负的小数位数 PG 15 起才有
+    if live.d.version().is_some_and(|v| v < 150000) {
+        live.run_script(&script.replace(", c_numeric_neg numeric(5,-2)", "")).await;
+    } else {
+        live.run_script(script).await;
+    }
     check_pg_family(&mut live, PgFx::FULL).await;
 }
 

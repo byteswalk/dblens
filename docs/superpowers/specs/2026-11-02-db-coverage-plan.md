@@ -79,6 +79,8 @@ MySQL 5.7、8.0；PostgreSQL 12、14。元数据读取写了 8.0.13、8.0.16 以
 
 MySQL 5.7.44、8.0.44 于 2026-11-04 验证，见 `docs/notes/mysql-versions.md`；5.7 的 TLS（服务器只有 DHE、RSA 密钥交换）改用 native-tls 后解决（2026-11-05），Linux x64、ARM64（glibc 2.28）都能编译，x64 实测通过。
 
+PostgreSQL 12.20、14.19 于 2026-11-05 验证，见 `docs/notes/postgres-versions.md`。
+
 ### SQLite
 
 新驱动，单独一个里程碑：本地文件连接，浏览、查询、数据编辑、导入导出、表设计器（SQLite 的 `ALTER TABLE` 能力有限，多数改动要重建表）、结构比对，可作迁移的源和目标。
@@ -98,7 +100,7 @@ MySQL 5.7.44、8.0.44 于 2026-11-04 验证，见 `docs/notes/mysql-versions.md`
 4. openGauss 5.0、6.0.6、7.0.0 LTS。已完成（2026-11-04）
 5. GaussDB 正式适配。已完成（2026-11-03）
 6. 达梦兼容模式和大小写不敏感。已完成（2026-11-03）
-7. PostgreSQL 12、14
+7. PostgreSQL 12、14。已完成（2026-11-05）
 8. SQLite
 
 要用户提供的：金仓、Oracle 19c 等需要登录才能下载的安装包。

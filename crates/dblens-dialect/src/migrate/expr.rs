@@ -342,6 +342,11 @@ pub(super) fn convert_default(
     let toks = tokenize(src.family(), text).ok_or(())?;
     let toks = strip_parens(&toks);
     let logical = &column.logical;
+    let older = |variant: crate::Variant, version: u32| {
+        tgt.variant() == variant && tgt.version().is_some_and(|v| v < version)
+    };
+    // MySQL 8.0.13 起才能用表达式作默认值（括号写法）
+    let mysql_expr = !older(crate::Variant::MySql, 80013);
     let oracle_like = matches!(fam, Family::Oracle | Family::Dameng);
     // SQL Server 的 BIT 也只能写 1、0
     let boolean = |v: bool| -> String {
@@ -356,7 +361,7 @@ pub(super) fn convert_default(
     };
     let today = || -> Result<Option<String>, ()> {
         Ok(Some(match (fam, logical) {
-            (Family::MySql, L::Date) => "(CURRENT_DATE)".into(),
+            (Family::MySql, L::Date) if mysql_expr => "(CURRENT_DATE)".into(),
             (Family::Postgres, L::Date) => "CURRENT_DATE".into(),
             (Family::Oracle, L::Timestamp { .. } | L::Date) => "TRUNC(SYSDATE)".into(),
             (Family::Dameng, L::Date) => "CURDATE()".into(),
@@ -469,8 +474,11 @@ pub(super) fn convert_default(
             Some("CURRENT_DATE" | "CURDATE") => today(),
             Some("UUID" | "GEN_RANDOM_UUID" | "SYS_GUID" | "NEWID" | "UUID_GENERATE_V4") => {
                 match tgt.variant() {
-                    crate::Variant::MySql => Ok(Some("(UUID())".into())),
-                    crate::Variant::Postgres => Ok(Some("gen_random_uuid()".into())),
+                    crate::Variant::MySql if mysql_expr => Ok(Some("(UUID())".into())),
+                    // PG 13 起内置，之前要装 pgcrypto
+                    crate::Variant::Postgres if !older(crate::Variant::Postgres, 130000) => {
+                        Ok(Some("gen_random_uuid()".into()))
+                    }
                     crate::Variant::Oracle => Ok(Some("SYS_GUID()".into())),
                     crate::Variant::SqlServer => Ok(Some("NEWID()".into())),
                     _ => Err(()),
@@ -613,6 +621,23 @@ mod tests {
         assert_eq!(conv(Postgres, MySql, "gen_random_uuid()", "CHAR(36)"), Ok(Some("(UUID())".into())));
         assert_eq!(conv(Postgres, MySql, "upper('x')", "VARCHAR(10)"), Err(()));
         assert_eq!(conv(Postgres, MySql, "nextval('s'::regclass)", "BIGINT"), Err(()));
+    }
+
+    #[test]
+    fn expression_defaults_follow_target_version() {
+        let conv = |src: Variant, tgt: Dialect, text: &str, native: &str| {
+            convert_default(&d(src), &tgt, text, &ty(tgt.variant(), native), &BTreeMap::new())
+        };
+        let my57 = d(Variant::MySql).with_version(Some(50744));
+        let my80 = d(Variant::MySql).with_version(Some(80013));
+        assert_eq!(conv(Variant::Postgres, my57, "gen_random_uuid()", "CHAR(36)"), Err(()));
+        assert_eq!(conv(Variant::Postgres, my57, "CURRENT_DATE", "DATE"), Err(()));
+        assert_eq!(conv(Variant::Postgres, my57, "now()", "DATETIME"), Ok(Some("CURRENT_TIMESTAMP".into())));
+        assert_eq!(conv(Variant::Postgres, my80, "CURRENT_DATE", "DATE"), Ok(Some("(CURRENT_DATE)".into())));
+        let pg12 = d(Variant::Postgres).with_version(Some(120020));
+        let pg13 = d(Variant::Postgres).with_version(Some(130000));
+        assert_eq!(conv(Variant::MySql, pg12, "uuid()", "uuid"), Err(()));
+        assert_eq!(conv(Variant::MySql, pg13, "uuid()", "uuid"), Ok(Some("gen_random_uuid()".into())));
     }
 
     #[test]
