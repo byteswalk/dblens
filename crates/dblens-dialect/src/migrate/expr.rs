@@ -367,6 +367,7 @@ pub(super) fn convert_default(
             (Family::Dameng, L::Date) => "CURDATE()".into(),
             (Family::SqlServer, L::Date) => "CAST(GETDATE() AS DATE)".into(),
             (Family::Informix, L::Date) => "TODAY".into(),
+            (Family::Sqlite, L::Date) => "CURRENT_DATE".into(),
             _ => return Err(()),
         }))
     };
@@ -396,6 +397,9 @@ pub(super) fn convert_default(
                 let native = column.native.trim().to_ascii_uppercase();
                 format!("CURRENT {}", native.strip_prefix("DATETIME ").unwrap_or("YEAR TO SECOND"))
             }
+            // SQLite 的 CURRENT_TIMESTAMP 是 UTC 的文本
+            (Family::Sqlite, L::Timestamp { .. }) => "CURRENT_TIMESTAMP".into(),
+            (Family::Sqlite, L::Time { .. }) => "CURRENT_TIME".into(),
             (_, L::Date) => return today(),
             _ => return Err(()),
         }))
@@ -638,6 +642,22 @@ mod tests {
         let pg13 = d(Variant::Postgres).with_version(Some(130000));
         assert_eq!(conv(Variant::MySql, pg12, "uuid()", "uuid"), Err(()));
         assert_eq!(conv(Variant::MySql, pg13, "uuid()", "uuid"), Ok(Some("gen_random_uuid()".into())));
+    }
+
+    #[test]
+    fn sqlite_current_time_defaults() {
+        let conv = |text: &str, native: &str| {
+            convert_default(
+                &d(Variant::MySql),
+                &d(Variant::Sqlite),
+                text,
+                &ty(Variant::Sqlite, native),
+                &BTreeMap::new(),
+            )
+        };
+        assert_eq!(conv("CURRENT_TIMESTAMP", "DATETIME(3)"), Ok(Some("CURRENT_TIMESTAMP".into())));
+        assert_eq!(conv("(curdate())", "DATE"), Ok(Some("CURRENT_DATE".into())));
+        assert_eq!(conv("uuid()", "UUID"), Err(()));
     }
 
     #[test]

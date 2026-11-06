@@ -39,7 +39,8 @@ VM .106 上的 Docker 容器，镜像是金仓官网的 Docker 包（只含数�
 - `time`、`datetime2` 按 100 纳秒计（PG 按微秒），`datetime2` 从 2000-01-01 起算；名字和 MySQL 模式的同名类型相同，驱动第一次遇到时按发送函数名（`sqlserver_time_send`、`sqlserver_datetime2_send`）查出 OID 再换算。
 - 另有 SQL Server 的保留字，标识符按这张表也加引号；补上 `OUTPUT`、`RAISE`。
 - PL/pgSQL 不能写这个模式建的表，过程用 T-SQL 写（`CREATE [OR ALTER] PROCEDURE … AS BEGIN … END`，`EXEC` 调用）。SQL 文件和编辑器分句时，过程和 Oracle 兼容模式的 PL/SQL 块一样以独占一行的 `/` 结束。
-- `bit`、`money`、`rowversion`、`sql_variant` 等类型原样显示。
+- `bit`、`tinyint`、`money` 有自己的二进制格式（bit 一个字节，tinyint 是 0–255 的无符号字节，money 是 8 字节整数加 4 位小数），驱动和 time、datetime2 一样按发送函数名查出 OID 后读写（2026-11-06）。`rowversion` 读成 8 字节二进制，`xml` 读成文本。逻辑类型：tinyint 按 16 位整数（MySQL 模式同名类型是 -128–127），money 按 decimal(19,4)。设计器的类型列表加了 bit、tinyint、money。
+- `sql_variant` 原样显示；`smallmoney`、`image`、`ntext`、`datetimeoffset` 这个版本没有。
 
 ## 两种模式共同的写法
 

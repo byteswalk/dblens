@@ -126,8 +126,16 @@ const SQLITE_TYPES: &[TypeEntry] = &[
     t("JSON", N),
 ];
 
-const PG_SQLSERVER_MODE_TYPES: &[TypeEntry] =
-    &[t("datetime2", L), t("datetime", N), t("nvarchar", L), t("nchar", L), t("uniqueidentifier", N)];
+const PG_SQLSERVER_MODE_TYPES: &[TypeEntry] = &[
+    t("datetime2", L),
+    t("datetime", N),
+    t("nvarchar", L),
+    t("nchar", L),
+    t("uniqueidentifier", N),
+    t("bit", N),
+    t("tinyint", N),
+    t("money", N),
+];
 
 const PG_ORACLE_MODE_TYPES: &[TypeEntry] =
     &[t("NUMBER", P), t("VARCHAR2", L), t("NVARCHAR2", L), t("CLOB", N), t("BLOB", N), t("DATE", N)];

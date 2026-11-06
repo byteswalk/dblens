@@ -32,7 +32,7 @@ M10a 见 `m10a-sqlite.md`。2026-11-05 与用户确认按推荐方案直接做�
 
 - 方言：设计器 DDL 单元测试、重建脚本快照（`rebuild_sqlite`，另测被引用列改名时拒绝）、迁移单元测试。
 - 服务（临时文件）：设计器完整流程（新建、改列名并改类型触发重建、并发修改被拒、重建挪列并保留触发器、外键、视图和自增接续、失败全部回滚）、导入、模型（反向生成、比对、同步）、规范检查、`lint_tables`。
-- 迁移：SQLite ↔ PG 18、SQLite ↔ 达梦双向，建表、数据、行数和抽样校验、读回结构与草稿一致、自增接续。MySQL 方向写了路线，这次没开 MySQL 测试库。
+- 迁移：SQLite ↔ PG 18、SQLite ↔ 达梦双向，建表、数据、行数和抽样校验、读回结构与草稿一致、自增接续。MySQL 方向用 8.0.44（`my80`）补跑通过（2026-11-06）。
 - 真实文件（用户本机的 17 个 SQLite 库的副本，只读打开，只输出统计）：
   - 元数据和流式读取：约 800 张表、1.2 万列、2700 多个索引、44 万行全部读出（`meta_live.rs` 的 `sqlite_real_files`，设 `DBLENS_TEST_SQLITE_DIR` 时运行）。
   - 迁到新的 SQLite 文件：7 个库、79 张表、约 21 万行，校验一致（`migrate_live.rs` 的 `sqlite_real_files_to_sqlite`）。这一步查出 SQLite 目标的 TEXT 主键被当成大字段而不迁主键，已修。
@@ -44,4 +44,4 @@ M10a 见 `m10a-sqlite.md`。2026-11-05 与用户确认按推荐方案直接做�
 
 - SQLite 的 TEXT 列做键迁到 MySQL、Oracle 等时，目标的长文本不能做键，主键不迁并提示（按原有规则）；没有自动改成 VARCHAR。
 - 引用本表的视图按表名在视图文本里匹配，可能多报。
-- MySQL 方向的迁移路线这次没跑（MySQL 测试库没开）。
+- 迁到 SQLite 时，日期时间的默认值写成 CURRENT_TIMESTAMP、CURRENT_DATE、CURRENT_TIME（UTC 文本）；日期时间类型照写精度（`DATETIME(3)`），读回结构一致。

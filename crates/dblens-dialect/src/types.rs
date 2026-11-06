@@ -190,6 +190,11 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "UNIQUEIDENTIFIER" => L::Uuid,
             "BINARY" => L::Binary { len },
             "VARBINARY" => L::VarBinary { len },
+            // SQL Server 模式：tinyint 是 0–255（MySQL 模式是 -128–127），按 16 位整数都放得下
+            "TINYINT" => L::Int { bits: 16 },
+            "MONEY" => L::Decimal { precision: Some(19), scale: Some(4) },
+            "ROWVERSION" => L::Binary { len: Some(8) },
+            "XML" => L::Text,
             _ => L::Other,
         },
         Family::Oracle => match n {
@@ -646,9 +651,10 @@ pub fn native_type(family: Family, logical: &LogicalType) -> String {
             L::Uuid => "UUID".into(),
             L::Binary { .. } | L::VarBinary { .. } | L::Blob => "BLOB".into(),
             L::Date => "DATE".into(),
-            L::Time { .. } => "TIME".into(),
-            L::Timestamp { tz: false, .. } => "DATETIME".into(),
-            L::Timestamp { tz: true, .. } => "TIMESTAMP".into(),
+            // 精度只是写法（值按文本存），照写，读回的结构与源一致
+            L::Time { precision } => with_len("TIME", precision.map(u32::from)),
+            L::Timestamp { tz: false, precision } => with_len("DATETIME", precision.map(u32::from)),
+            L::Timestamp { tz: true, precision } => with_len("TIMESTAMP", precision.map(u32::from)),
         },
     }
 }

@@ -109,7 +109,127 @@ impl<'a> FromSql<'a> for PgInterval {
 /// 人大金仓 SQL Server 模式的 `time`、`datetime2` 按 100 纳秒计（PG 按微秒），`datetime2` 从 2000-01-01 起算。
 /// 名字和 MySQL 模式的同名类型（按微秒）相同，只能按 OID 区分，由连接按发送函数名查出。这里判断值得去查的类型。
 pub(crate) fn is_tick_candidate(ty: &Type) -> bool {
-    Type::from_oid(ty.oid()).is_none() && matches!(ty.name(), "time" | "datetime2")
+    Type::from_oid(ty.oid()).is_none()
+        && matches!(ty.name(), "time" | "datetime2" | "tinyint" | "bit" | "money")
+}
+
+/// 人大金仓 SQL Server 模式里按自己的二进制格式收发的类型（按发送函数名区分）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SpecialKind {
+    /// time、datetime2：100 纳秒计
+    Ticks,
+    /// tinyint：0–255，一个无符号字节（MySQL 模式的同名类型是有符号的，不在此列）
+    Tinyint,
+    /// bit：一个字节 0/1
+    Bit,
+    /// money：8 字节整数，4 位小数
+    Money,
+}
+
+/// 连接上查出的 SQL Server 模式特有类型的 OID。
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SpecialTypes(Vec<(u32, SpecialKind)>);
+
+impl SpecialTypes {
+    pub(crate) const SEND_FUNCTIONS: &'static str = "'sqlserver_time_send', 'sqlserver_datetime2_send', \
+         'sqlserver_tinyint_send', 'sqlserver_bit_send', 'sqlserver_money_send'";
+
+    pub(crate) fn from_rows(rows: impl IntoIterator<Item = (u32, String)>) -> Self {
+        Self(
+            rows.into_iter()
+                .filter_map(|(oid, send)| {
+                    let kind = match send.as_str() {
+                        "sqlserver_time_send" | "sqlserver_datetime2_send" => SpecialKind::Ticks,
+                        "sqlserver_tinyint_send" => SpecialKind::Tinyint,
+                        "sqlserver_bit_send" => SpecialKind::Bit,
+                        "sqlserver_money_send" => SpecialKind::Money,
+                        _ => return None,
+                    };
+                    Some((oid, kind))
+                })
+                .collect(),
+        )
+    }
+
+    fn kind(&self, oid: u32) -> Option<SpecialKind> {
+        self.0.iter().find(|(o, _)| *o == oid).map(|(_, k)| *k)
+    }
+}
+
+/// money 的整数值（单位万分之一）写成小数文本。
+fn money_text(v: i64) -> String {
+    let sign = if v < 0 { "-" } else { "" };
+    let a = v.unsigned_abs();
+    format!("{sign}{}.{:04}", a / 10_000, a % 10_000)
+}
+
+/// 小数文本 → money 的整数值（单位万分之一），多于 4 位的小数截掉。
+fn money_units(s: &str) -> std::result::Result<i64, BoxError> {
+    let s = s.trim();
+    let (neg, body) = match s.strip_prefix('-') {
+        Some(b) => (true, b),
+        None => (false, s.strip_prefix('+').unwrap_or(s)),
+    };
+    let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+    let frac: String = frac.chars().chain(std::iter::repeat('0')).take(4).collect();
+    let int: i64 = if int.is_empty() { 0 } else { int.parse()? };
+    let v = int.checked_mul(10_000).and_then(|x| x.checked_add(frac.parse::<i64>().ok()?));
+    let v = v.ok_or("money out of range")?;
+    Ok(if neg { -v } else { v })
+}
+
+fn decode_special(kind: SpecialKind, ty: &Type, raw: &[u8]) -> std::result::Result<Value, BoxError> {
+    Ok(match kind {
+        SpecialKind::Ticks => return decode_ticks(ty, raw),
+        SpecialKind::Tinyint => Value::Int(i64::from(*raw.first().ok_or("empty tinyint")?)),
+        SpecialKind::Bit => Value::Bool(*raw.first().ok_or("empty bit")? != 0),
+        SpecialKind::Money => Value::Decimal(money_text(i64::from_be_bytes(raw.try_into()?))),
+    })
+}
+
+fn encode_special(
+    kind: SpecialKind,
+    v: &Value,
+    ty: &Type,
+    out: &mut BytesMut,
+) -> std::result::Result<IsNull, BoxError> {
+    if matches!(v, Value::Null) {
+        return Ok(IsNull::Yes);
+    }
+    let bad = || -> BoxError { format!("cannot bind {v:?} to {}", ty.name()).into() };
+    match kind {
+        SpecialKind::Ticks => return encode_ticks(v, ty, out),
+        SpecialKind::Tinyint => {
+            let n: u8 = match v {
+                Value::Int(i) => u8::try_from(*i)?,
+                Value::UInt(u) => u8::try_from(*u)?,
+                Value::Bool(b) => u8::from(*b),
+                Value::String(s) | Value::Decimal(s) => s.trim().parse()?,
+                _ => return Err(bad()),
+            };
+            out.extend_from_slice(&[n]);
+        }
+        SpecialKind::Bit => {
+            let b = match v {
+                Value::Bool(b) => *b,
+                Value::Int(i) => *i != 0,
+                Value::UInt(u) => *u != 0,
+                Value::String(s) | Value::Decimal(s) => !matches!(s.trim(), "0" | "false" | "FALSE" | ""),
+                _ => return Err(bad()),
+            };
+            out.extend_from_slice(&[u8::from(b)]);
+        }
+        SpecialKind::Money => {
+            let units = match v {
+                Value::Int(i) => i.checked_mul(10_000).ok_or("money out of range")?,
+                Value::Float(f) => money_units(&format!("{f:.4}"))?,
+                Value::String(s) | Value::Decimal(s) => money_units(s)?,
+                _ => return Err(bad()),
+            };
+            out.extend_from_slice(&units.to_be_bytes());
+        }
+    }
+    Ok(IsNull::No)
 }
 
 fn epoch_2000() -> NaiveDateTime {
@@ -163,6 +283,8 @@ fn standard_type(ty: &Type) -> Option<Type> {
     }
     match ty.name() {
         "clob" | "nclob" | "nvarchar2" | "varchar2" | "long" => Some(Type::TEXT),
+        // SQL Server 模式的行版本是 8 个字节
+        "rowversion" => Some(Type::BYTEA),
         // 人大金仓 MySQL、SQL Server 模式 sys 模式下的字符、二进制、GUID 类型（SQL Server 模式的 datetime2 格式不同，不在此列）
         "varcharbyte" | "bpcharbyte" | "nchar" | "nvarchar" => Some(Type::TEXT),
         "binary" | "varbinary" => Some(Type::BYTEA),
@@ -228,15 +350,15 @@ fn other_text(raw: &[u8]) -> String {
 }
 
 /// 读取一行中第 `idx` 列的值。
-/// `ticks`：按 100 纳秒编码的类型的 OID（见 `is_tick_candidate`）。
-pub(crate) fn pg_value(row: &Row, idx: usize, ticks: &[u32]) -> Result<Value> {
+/// `special`：SQL Server 模式特有格式的类型（见 `SpecialTypes`）。
+pub(crate) fn pg_value(row: &Row, idx: usize, special: &SpecialTypes) -> Result<Value> {
     let ty = row.columns()[idx].type_().clone();
-    if ticks.contains(&ty.oid()) {
+    if let Some(kind) = special.kind(ty.oid()) {
         let raw =
             row.try_get::<_, Option<RawValue>>(idx).map_err(|e| Error::internal(Msg::raw(e.to_string())))?;
         return match raw {
             None => Ok(Value::Null),
-            Some(r) => decode_ticks(&ty, r.0).map_err(|e| {
+            Some(r) => decode_special(kind, &ty, r.0).map_err(|e| {
                 Error::internal(msg!(
                     "pg.read_column_failed",
                     column = idx + 1,
@@ -299,12 +421,12 @@ pub(crate) fn pg_value(row: &Row, idx: usize, ticks: &[u32]) -> Result<Value> {
 /// 把 `Value` 绑定为 PG 参数，按目标参数类型做必要的转换。
 #[derive(Debug)]
 /// 第二项是按 100 纳秒编码的类型的 OID（见 `is_tick_candidate`）。
-pub(crate) struct PgParam<'a>(pub &'a Value, pub &'a [u32]);
+pub(crate) struct PgParam<'a>(pub &'a Value, pub &'a SpecialTypes);
 
 impl ToSql for PgParam<'_> {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> std::result::Result<IsNull, BoxError> {
-        if self.1.contains(&ty.oid()) {
-            return encode_ticks(self.0, ty, out);
+        if let Some(kind) = self.1.kind(ty.oid()) {
+            return encode_special(kind, self.0, ty, out);
         }
         // 兼容库的域类型和自定义类型按对应的标准类型编码（人大金仓 Oracle 模式的 date 是 timestamp 上的域）
         if let Some(base) = standard_type(ty).filter(|b| b != ty) {
@@ -357,6 +479,27 @@ fn numeric_param_hint() -> BoxError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sqlserver_money_round_trip() {
+        assert_eq!(money_text(123_456), "12.3456");
+        assert_eq!(money_text(-5_000), "-0.5000");
+        assert_eq!(money_text(i64::MAX), "922337203685477.5807");
+        assert_eq!(money_units("12.3456").unwrap(), 123_456);
+        assert_eq!(money_units("-0.5").unwrap(), -5_000);
+        assert_eq!(money_units(".25").unwrap(), 2_500);
+        assert_eq!(money_units("1.234567").unwrap(), 12_345);
+        assert!(money_units("1e3").is_err());
+        let t = Type::new("tinyint".into(), 90001, tokio_postgres::types::Kind::Simple, "sys".into());
+        assert_eq!(decode_special(SpecialKind::Tinyint, &t, &[200]).unwrap(), Value::Int(200));
+        assert_eq!(decode_special(SpecialKind::Bit, &t, &[1]).unwrap(), Value::Bool(true));
+        let mut out = BytesMut::new();
+        encode_special(SpecialKind::Money, &Value::Decimal("12.3456".into()), &t, &mut out).unwrap();
+        assert_eq!(decode_special(SpecialKind::Money, &t, &out).unwrap(), Value::Decimal("12.3456".into()));
+        let types =
+            SpecialTypes::from_rows([(7, "sqlserver_bit_send".to_string()), (8, "other_send".to_string())]);
+        assert_eq!((types.kind(7), types.kind(8)), (Some(SpecialKind::Bit), None));
+    }
 
     /// 按 PG numeric 二进制格式拼字节：ndigits, weight, sign, dscale, digits...
     fn numeric(weight: i16, sign: u16, dscale: u16, digits: &[i16]) -> Vec<u8> {

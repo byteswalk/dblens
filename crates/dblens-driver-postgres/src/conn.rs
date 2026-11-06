@@ -7,7 +7,7 @@ use tokio_postgres::{Client, NoTls};
 
 use crate::error::map_err;
 use crate::exec::PgExec;
-use crate::types::{PgParam, is_tick_candidate};
+use crate::types::{PgParam, SpecialTypes, is_tick_candidate};
 
 pub struct PgConnection {
     pub(crate) client: Client,
@@ -18,18 +18,23 @@ pub struct PgConnection {
     /// 加密连接时的 TLS 连接器；取消请求也要用它建立连接（服务器可能只接受加密连接）。
     pub(crate) tls: Option<tokio_postgres_rustls::MakeRustlsConnect>,
     pub(crate) lob_limit: usize,
-    /// 按 100 纳秒编码的类型的 OID（人大金仓 SQL Server 模式的 time、datetime2），第一次遇到候选类型时查出。
-    pub(crate) tick_types: Option<Vec<u32>>,
+    /// 人大金仓 SQL Server 模式特有格式的类型（time、datetime2、tinyint、bit、money），第一次遇到候选类型时查出。
+    pub(crate) tick_types: Option<SpecialTypes>,
 }
 
 impl PgConnection {
-    /// 查出按 100 纳秒编码的类型。查询失败（不是人大金仓、事务已出错）时当作没有。
-    async fn load_tick_types(&self) -> Vec<u32> {
-        const SQL: &str = "SELECT t.oid FROM pg_catalog.pg_type t \
-                           WHERE t.typsend::text IN ('sqlserver_time_send', 'sqlserver_datetime2_send')";
-        match self.client.query(SQL, &[]).await {
-            Ok(rows) => rows.iter().filter_map(|r| r.try_get::<_, u32>(0).ok()).collect(),
-            Err(_) => Vec::new(),
+    /// 按发送函数名查出 SQL Server 模式特有格式的类型。查询失败（不是人大金仓、事务已出错）时当作没有。
+    async fn load_tick_types(&self) -> SpecialTypes {
+        let sql = format!(
+            "SELECT t.oid, t.typsend::text FROM pg_catalog.pg_type t WHERE t.typsend::text IN ({})",
+            SpecialTypes::SEND_FUNCTIONS
+        );
+        match self.client.query(&sql, &[]).await {
+            Ok(rows) => SpecialTypes::from_rows(
+                rows.iter()
+                    .filter_map(|r| Some((r.try_get::<_, u32>(0).ok()?, r.try_get::<_, String>(1).ok()?))),
+            ),
+            Err(_) => SpecialTypes::default(),
         }
     }
 

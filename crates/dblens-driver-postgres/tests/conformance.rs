@@ -181,6 +181,10 @@ fn kingbase_sqlserver_fixture(params: ConnectParams) -> Fixture {
             "SELECT CAST('13:45:30.25' AS time)",
             Value::Time(chrono::NaiveTime::from_hms_milli_opt(13, 45, 30, 250).unwrap()),
         ),
+        // SQL Server 模式自己的二进制格式：bit 一个字节，tinyint 无符号，money 是 8 字节整数加 4 位小数
+        ("SELECT CAST(1 AS bit)", Value::Bool(true)),
+        ("SELECT CAST(200 AS tinyint)", Value::Int(200)),
+        ("SELECT CAST(-12.3456 AS money)", Value::Decimal("-12.3456".into())),
     ]);
     base(params, cases)
 }
@@ -193,4 +197,51 @@ mod kingbase_mysql {
 mod kingbase_sqlserver {
     use super::*;
     dblens_driver::conformance_tests!("DBLENS_TEST_KINGBASE_SQLSERVER_URL", kingbase_sqlserver_fixture);
+
+    /// 参数按这几种类型的格式编码，写进去再读回来。
+    #[tokio::test]
+    async fn special_types_as_parameters() {
+        let Some(f) = dblens_driver::conformance::load(
+            "DBLENS_TEST_KINGBASE_SQLSERVER_URL",
+            kingbase_sqlserver_fixture,
+        ) else {
+            return;
+        };
+        let mut c = f.driver.connect(&f.params).await.unwrap();
+        let run = |sql: &'static str| sql;
+        for sql in [
+            run("DROP TABLE IF EXISTS dblens_conf_special"),
+            run("CREATE TABLE dblens_conf_special (id INT PRIMARY KEY, b bit, t tinyint, m money)"),
+        ] {
+            let mut s = c.execute(sql, &[]).await.unwrap();
+            dblens_driver::collect_all(s.as_mut(), 10).await.unwrap();
+        }
+        let params = [
+            Value::Int(1),
+            Value::Bool(true),
+            Value::Int(255),
+            Value::Decimal("922337203685477.5807".into()),
+        ];
+        let mut s =
+            c.execute("INSERT INTO dblens_conf_special VALUES ($1, $2, $3, $4)", &params).await.unwrap();
+        dblens_driver::collect_all(s.as_mut(), 10).await.unwrap();
+        drop(s);
+        let mut s = c
+            .execute("SELECT b, t, m FROM dblens_conf_special WHERE id = $1", &[Value::Int(1)])
+            .await
+            .unwrap();
+        let ev = dblens_driver::collect_all(s.as_mut(), 10).await.unwrap();
+        drop(s);
+        let rows: Vec<_> = ev
+            .into_iter()
+            .filter_map(|e| if let dblens_driver::ExecEvent::Rows(r) = e { Some(r) } else { None })
+            .flatten()
+            .collect();
+        assert_eq!(
+            rows,
+            [vec![Value::Bool(true), Value::Int(255), Value::Decimal("922337203685477.5807".into())]]
+        );
+        let mut s = c.execute("DROP TABLE dblens_conf_special", &[]).await.unwrap();
+        dblens_driver::collect_all(s.as_mut(), 10).await.unwrap();
+    }
 }
