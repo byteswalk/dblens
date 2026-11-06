@@ -32,7 +32,42 @@ pub struct ImportStatement {
     pub rows: Range<usize>,
 }
 
+/// 跳过出错行时逐行重试用的保存点：每行前设保存点，失败回到保存点，整批只提交一次。
+/// `release` 为空的库（Oracle、达梦、SQL Server）没有释放保存点的语句。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RowSavepoint {
+    pub set: &'static str,
+    pub rollback: &'static str,
+    pub release: Option<&'static str>,
+}
+
 impl Dialect {
+    /// 逐行重试用的保存点语句。没有把握的库返回 None，导入改为逐行提交：
+    /// GoldenDB 经分布式代理，GBase 8s 的保存点在不同版本里支持不一。
+    pub fn row_savepoint(&self) -> Option<RowSavepoint> {
+        const NAME_SET: &str = "SAVEPOINT dblens_row";
+        const NAME_ROLLBACK: &str = "ROLLBACK TO SAVEPOINT dblens_row";
+        if self.variant == Variant::GoldenDb {
+            return None;
+        }
+        match self.family() {
+            Family::Informix => None,
+            Family::SqlServer => Some(RowSavepoint {
+                set: "SAVE TRANSACTION dblens_row",
+                rollback: "ROLLBACK TRANSACTION dblens_row",
+                release: None,
+            }),
+            Family::Oracle | Family::Dameng => {
+                Some(RowSavepoint { set: NAME_SET, rollback: NAME_ROLLBACK, release: None })
+            }
+            Family::MySql | Family::Postgres | Family::Sqlite => Some(RowSavepoint {
+                set: NAME_SET,
+                rollback: NAME_ROLLBACK,
+                release: Some("RELEASE SAVEPOINT dblens_row"),
+            }),
+        }
+    }
+
     /// 清空表：`DELETE FROM 表`。不用 TRUNCATE：它在 MySQL、Oracle 中隐式提交，不能回滚。
     pub fn delete_all_sql(&self, schema: &str, table: &str) -> String {
         format!("DELETE FROM {}", self.qualified(Some(schema), table))
@@ -581,5 +616,18 @@ mod tests {
             Dialect::new(Variant::Oracle).delete_all_sql("HR", "orders"),
             r#"DELETE FROM HR."orders""#
         );
+    }
+
+    #[test]
+    fn row_savepoints_per_family() {
+        let sp = |v| Dialect::new(v).row_savepoint();
+        assert_eq!(sp(Variant::Postgres).unwrap().release, Some("RELEASE SAVEPOINT dblens_row"));
+        assert_eq!(sp(Variant::MySql).unwrap().set, "SAVEPOINT dblens_row");
+        assert_eq!(sp(Variant::Sqlite).unwrap().rollback, "ROLLBACK TO SAVEPOINT dblens_row");
+        assert_eq!(sp(Variant::Oracle).unwrap().release, None);
+        assert_eq!(sp(Variant::Dameng).unwrap().release, None);
+        assert_eq!(sp(Variant::SqlServer).unwrap().set, "SAVE TRANSACTION dblens_row");
+        assert_eq!(sp(Variant::GoldenDb), None);
+        assert_eq!(sp(Variant::Gbase8s), None);
     }
 }

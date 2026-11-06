@@ -525,8 +525,52 @@ impl Service {
                     task.update(|s| s.error_line = Some(good[first].0.line));
                     return Err(e);
                 }
+                Some(_) if plan.dialect.row_savepoint().is_some() => {
+                    // 跳过模式：回滚这一批，在一个事务里逐行重试（每行前设保存点，失败回到保存点），整批只提交一次。
+                    // 逐行提交在刷盘慢的机器上很慢（麒麟实机上 SQLite 每次提交约 270 毫秒）
+                    conn.rollback().await?;
+                    let Some(sp) = plan.dialect.row_savepoint() else { unreachable!() };
+                    let mut written = 0u64;
+                    let mut last = None;
+                    for (row, v) in &good {
+                        if task.cancelled() {
+                            return Err(Error::Cancelled);
+                        }
+                        exec(conn, sp.set, &[]).await?;
+                        let mut result = Ok(());
+                        for st in plan.statements(std::slice::from_ref(v))? {
+                            result = exec(conn, &st.sql, &st.params).await.map(|_| ());
+                            if result.is_err() {
+                                break;
+                            }
+                        }
+                        match result {
+                            Ok(()) => {
+                                if let Some(release) = sp.release {
+                                    exec(conn, release, &[]).await?;
+                                }
+                                written += 1;
+                                last = Some(row.line);
+                            }
+                            Err(e) => {
+                                if matches!(e, Error::Cancelled | Error::Connect { .. }) {
+                                    return Err(e);
+                                }
+                                exec(conn, sp.rollback, &[]).await?;
+                                skip_row(task, &mut report, row, &e)?;
+                            }
+                        }
+                    }
+                    conn.commit().await?;
+                    task.update(|s| {
+                        s.progress.rows_written += written;
+                        if last.is_some() {
+                            s.committed_line = last;
+                        }
+                    });
+                }
                 Some(_) => {
-                    // 跳过模式：回滚这一批，逐行重试，每行单独提交
+                    // 跳过模式，库没有可靠的保存点：回滚这一批，逐行重试，每行单独提交
                     conn.rollback().await?;
                     for (row, v) in &good {
                         if task.cancelled() {
@@ -753,7 +797,7 @@ mod tests {
     async fn batches_skip_failed_rows_into_a_report() {
         // 断言的是英文文案，不随系统语言变
         dblens_core::set_default_lang(Some(dblens_core::Lang::En));
-        let (s, p, _, _dir) = service();
+        let (s, p, log, _dir) = service();
         let mut text = String::from("id,name\n1,a\nx,b\n3,FAIL\n4,d\n");
         text += "";
         let (up, path) = s.tasks.begin_upload().unwrap();
@@ -766,6 +810,14 @@ mod tests {
         // 第 3 行转换失败（x 不是整数），第 4 行写入失败；其余两行写入
         assert_eq!((st.progress.rows_written, st.progress.rows_skipped), (2, 2));
         assert_eq!(st.failures.iter().map(|f| f.line).collect::<Vec<_>>(), [3, 4]);
+        // 逐行重试用保存点，整批只提交一次
+        {
+            let log = log.lock().unwrap();
+            let count = |s: &str| log.iter().filter(|l| *l == s).count();
+            assert_eq!(count("execute SAVEPOINT dblens_row"), 3, "{log:?}");
+            assert_eq!(count("execute ROLLBACK TO SAVEPOINT dblens_row"), 1, "{log:?}");
+            assert_eq!(count("commit"), 1, "{log:?}");
+        }
         assert_eq!(st.report.as_deref(), Some("订单-errors.csv"));
         let (file, _) = s.tasks.report(&st.id).unwrap();
         let report = std::fs::read_to_string(file).unwrap();

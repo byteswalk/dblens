@@ -167,6 +167,69 @@ impl Writer<'_> {
         result
     }
 
+    /// 跳过模式下逐行重试一批：一个事务里每行前设保存点，失败回到保存点，最后只提交一次。
+    /// 逐行提交在刷盘慢的机器上很慢。返回写入的行数和跳过的行。
+    async fn retry_with_savepoints(
+        &self,
+        tgt: &mut Box<dyn Connection>,
+        batch: &[Row],
+    ) -> Result<(u64, Vec<SkippedRow>)> {
+        let td = self.ctx.target_dialect;
+        let Some(sp) = td.row_savepoint() else { unreachable!() };
+        let mut written = 0;
+        let mut skipped = Vec::new();
+        let result = async {
+            for row in batch {
+                let r = match self.convert(row) {
+                    Ok(v) => {
+                        exec(tgt, sp.set, &[]).await?;
+                        let mut r = Ok(());
+                        for s in td.import_statements(
+                            self.schema,
+                            self.table,
+                            self.names,
+                            &[v],
+                            WriteMode::Append,
+                        )? {
+                            r = exec(tgt, &s.sql, &s.params).await.map(|_| ());
+                            if r.is_err() {
+                                break;
+                            }
+                        }
+                        match &r {
+                            Ok(()) => {
+                                if let Some(release) = sp.release {
+                                    exec(tgt, release, &[]).await?;
+                                }
+                            }
+                            Err(Error::Cancelled | Error::Connect { .. }) => return r,
+                            Err(_) => {
+                                exec(tgt, sp.rollback, &[]).await?;
+                            }
+                        }
+                        r
+                    }
+                    Err(e) => Err(e),
+                };
+                match r {
+                    Ok(()) => written += 1,
+                    Err(e) => skipped.push(SkippedRow {
+                        table: self.c.source.clone(),
+                        key: key_text(&self.key(row)),
+                        error: e.to_string(),
+                    }),
+                }
+            }
+            tgt.commit().await
+        }
+        .await;
+        if let Err(e) = result {
+            let _ = tgt.rollback().await;
+            return Err(e);
+        }
+        Ok((written, skipped))
+    }
+
     /// 写一批：成功后记下行数和最后的主键。跳过模式下出错的批逐行重试。
     async fn write(&self, tgt: &mut Box<dyn Connection>, batch: &[Row]) -> Result<()> {
         let converted: Result<Vec<Vec<Value>>> = batch.iter().map(|r| self.convert(r)).collect();
@@ -177,6 +240,9 @@ impl Writer<'_> {
         let (written, skipped) = match whole {
             Ok(()) => (batch.len() as u64, vec![]),
             Err(e) if self.on_error == OnError::Stop => return Err(e),
+            Err(_) if self.ctx.target_dialect.row_savepoint().is_some() => {
+                self.retry_with_savepoints(tgt, batch).await?
+            }
             Err(_) => {
                 let mut written = 0;
                 let mut skipped = Vec::new();
