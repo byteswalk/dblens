@@ -93,6 +93,10 @@ fn no_primary_key(ctx: &Ctx, _: &Params) -> Check {
 }
 
 fn comment(ctx: &Ctx, _: &Params) -> Check {
+    // SQLite 没有注释
+    if ctx.family() == Family::Sqlite {
+        return Check::NotApplicable;
+    }
     per_table(ctx, |t| {
         t.comment.as_deref().is_none_or(|c| c.trim().is_empty()).then(|| msg!("lint.issue.no_table_comment"))
     })

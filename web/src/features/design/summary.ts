@@ -77,6 +77,7 @@ export function scriptOf(steps: DesignStep[], driver: DriverId): string {
   return steps
     .map((s) => {
       if (s.kind === 'count_check') return `-- ${t('design.save.countCheck', { source: s.source, target: s.target })}`
+      if (s.kind === 'foreign_key_check') return `-- ${t('design.save.fkCheck', { table: s.table })}`
       const sql = s.sql.trimEnd()
       if (driver === 'sqlserver') return `${sql}\nGO`
       if (sql.endsWith(';')) return plsql ? `${sql}\n/` : sql

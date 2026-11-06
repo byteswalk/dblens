@@ -176,6 +176,9 @@ impl Dialect {
         if self.family() == Family::Informix {
             return self.ifx_table(schema, t) + ";\n";
         }
+        if self.family() == Family::Sqlite {
+            return self.sqlite_create_table(schema, t) + ";\n";
+        }
         let q = self.qualified(Some(schema), &t.name);
         let list = |cols: &[String]| cols.iter().map(|c| self.ident(c)).collect::<Vec<_>>().join(", ");
         let mut items: Vec<String> = Vec::new();

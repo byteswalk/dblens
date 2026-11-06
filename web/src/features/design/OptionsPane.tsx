@@ -10,13 +10,15 @@ import { Cell } from './ColumnsPane'
 import { type Draft, type Issues, moveItem } from './logic'
 import type { RefSource } from './source'
 
-export default function OptionsPane({ source, schema, isNew, draft, storage, issues, onSchema, onChange }: {
+export default function OptionsPane({ source, schema, isNew, draft, storage, issues, comments, onSchema, onChange }: {
   source: RefSource
   schema: string
   isNew: boolean
   draft: Draft
   storage: DesignTableResult['storage'] | null
   issues: Issues
+  /** 库有表注释（SQLite 没有）。 */
+  comments: boolean
   onSchema(schema: string): void
   onChange(fn: (d: Draft) => Draft): void
 }) {
@@ -61,10 +63,12 @@ export default function OptionsPane({ source, schema, isNew, draft, storage, iss
           />
         </Cell>
       </label>
-      <label>
-        {t('design.option.comment')}
-        <Input.TextArea rows={2} value={draft.comment ?? ''} onChange={(e) => onChange((d) => ({ ...d, comment: e.target.value || null }))} />
-      </label>
+      {comments && (
+        <label>
+          {t('design.option.comment')}
+          <Input.TextArea rows={2} value={draft.comment ?? ''} onChange={(e) => onChange((d) => ({ ...d, comment: e.target.value || null }))} />
+        </label>
+      )}
       <label>
         {t('design.option.pkName')}
         <Input

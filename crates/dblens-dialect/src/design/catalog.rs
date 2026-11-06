@@ -32,6 +32,8 @@ pub struct DesignCaps {
     pub descending_index: bool,
     /// 支持生成列（人大金仓的 SQL Server 模式没有）。
     pub generated: bool,
+    /// 表和列有注释（SQLite 没有）。
+    pub comments: bool,
     /// 能建自增列（Oracle 12c 起才有标识列）。
     pub auto_increment: bool,
     /// 外键可选的动作；空表示不支持这一项（如 Oracle 没有 ON UPDATE）。
@@ -247,6 +249,7 @@ impl Dialect {
                     _ => v >= 80016,
                 },
                 // 8.0 起支持降序索引；TiDB、OceanBase 接受 DESC 但按升序建
+                comments: !matches!(self.family(), Family::Sqlite),
                 generated: true,
                 descending_index: match self.variant() {
                     Variant::MariaDb => true,
@@ -266,6 +269,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment,
                 checks: true,
+                comments: !matches!(self.family(), Family::Sqlite),
                 generated: self.compat() != Compat::SqlServer,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],
@@ -291,6 +295,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment,
                 checks: true,
+                comments: !matches!(self.family(), Family::Sqlite),
                 generated: true,
                 descending_index: self.variant() != Variant::OceanBaseOracle,
                 on_delete: vec!["NO ACTION", "CASCADE", "SET NULL"],
@@ -302,6 +307,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment,
                 checks: true,
+                comments: !matches!(self.family(), Family::Sqlite),
                 generated: true,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "CASCADE", "SET NULL", "SET DEFAULT"],
@@ -313,6 +319,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment,
                 checks: true,
+                comments: !matches!(self.family(), Family::Sqlite),
                 generated: true,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "CASCADE"],
@@ -325,6 +332,7 @@ impl Dialect {
                 reorder: false,
                 auto_increment: true,
                 checks: true,
+                comments: !matches!(self.family(), Family::Sqlite),
                 generated: true,
                 descending_index: true,
                 on_delete: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],

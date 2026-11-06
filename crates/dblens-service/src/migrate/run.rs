@@ -107,6 +107,10 @@ impl Ctx {
         if let Some(sql) = self.target_dialect.schema_switch_sql(&self.target_schema()?) {
             exec(&mut c, &sql, &[]).await?;
         }
+        // SQLite：表按并行顺序写入，子表可能先于父表，写入时关闭外键（源数据本身满足外键）
+        for sql in self.target_dialect.design_prelude() {
+            exec(&mut c, sql, &[]).await?;
+        }
         Ok(c)
     }
 

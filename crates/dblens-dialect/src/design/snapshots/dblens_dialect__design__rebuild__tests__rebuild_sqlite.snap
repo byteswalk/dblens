@@ -1,0 +1,22 @@
+---
+source: crates/dblens-dialect/src/design/rebuild.rs
+expression: render(&out)
+---
+CREATE TABLE main.orders_dblens_new (
+    amount DECIMAL(10,2) DEFAULT 0,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_code VARCHAR(50),
+    CONSTRAINT uk_code UNIQUE (order_code),
+    CONSTRAINT fk_parent FOREIGN KEY (order_code) REFERENCES parent (code) ON DELETE CASCADE,
+    CONSTRAINT ck_amount CHECK (amount >= 0)
+)
+INSERT INTO main.orders_dblens_new (amount, id, order_code) SELECT amount, id, code FROM main.orders
+-- COUNT main.orders = main.orders_dblens_new
+▶ DROP TABLE main.orders
+PRAGMA legacy_alter_table = ON
+ALTER TABLE main.orders_dblens_new RENAME TO orders
+PRAGMA legacy_alter_table = OFF
+CREATE INDEX main.ix_amount ON orders (amount DESC)
+CREATE TRIGGER trg AFTER INSERT ON orders BEGIN UPDATE orders SET amount = 0; END
+-- FOREIGN KEY CHECK main.orders
+-- cleanup: DROP TABLE main.orders_dblens_new

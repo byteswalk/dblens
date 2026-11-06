@@ -1001,6 +1001,8 @@ fn text(v: &Value) -> Option<String> {
         Value::Int(i) => Some(i.to_string()),
         Value::UInt(u) => Some(u.to_string()),
         Value::Decimal(s) | Value::String(s) => Some(s.clone()),
+        // SQLite 的 DECIMAL 列按 REAL 存
+        Value::Float(f) => Some(f.to_string()),
         other => Some(format!("{other:?}")),
     }
 }
@@ -1669,8 +1671,11 @@ async fn design_flow(env: &str) {
         DriverId::Oracle => ["NUMBER(19)", "VARCHAR2(20)", "NUMBER(10,2)", "VARCHAR2(40)"],
         DriverId::Dameng => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
         DriverId::SqlServer => ["BIGINT", "NVARCHAR(20)", "DECIMAL(10,2)", "NVARCHAR(40)"],
-        DriverId::Sqlite => unreachable!("SQLite 的表设计器在 M10b"),
+        DriverId::Sqlite => ["INTEGER", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
     };
+    // SQLite 没有注释
+    let comments = live.caps().comments;
+    let cm = |s: &str| comments.then(|| s.to_string());
     let col = |name: &str, native: &str| Column {
         name: n(name),
         ordinal: 0,
@@ -1684,10 +1689,10 @@ async fn design_flow(env: &str) {
     let mut id_col = col("id", types[0]);
     (id_col.nullable, id_col.auto_increment) = (false, true);
     let mut amount = col("amount", types[2]);
-    (amount.default, amount.comment) = (Some("0".into()), Some("金额".into()));
+    (amount.default, amount.comment) = (Some("0".into()), cm("金额"));
     let mut draft = Table {
         name: n("m3_t"),
-        comment: Some("设计器测试".into()),
+        comment: cm("设计器测试"),
         columns: vec![id_col, col("code", types[1]), amount, col("note", types[3])],
         primary_key: Some(PrimaryKey { name: Some(n("pk_m3_t")), columns: vec![n("id")] }),
         uniques: vec![UniqueConstraint { name: Some(n("uk_m3_code")), columns: vec![n("code")] }],
@@ -1758,10 +1763,15 @@ async fn design_flow(env: &str) {
     // GBase 8s 的约束名写在定义之后
     let fk = if live.driver == DriverId::Informix {
         "ALTER TABLE m3_items ADD CONSTRAINT FOREIGN KEY (order_code) REFERENCES m3_t (code) CONSTRAINT fk_m3_items"
+    } else if live.driver == DriverId::Sqlite {
+        // SQLite 建表后不能加外键
+        "DROP TABLE m3_items; CREATE TABLE m3_items (item_id INT PRIMARY KEY, order_code VARCHAR(20)          CONSTRAINT fk_m3_items REFERENCES m3_t (code))"
     } else {
         "ALTER TABLE m3_items ADD CONSTRAINT fk_m3_items FOREIGN KEY (order_code) REFERENCES m3_t (code)"
     };
-    live.run(id, fk).await;
+    for sql in fk.split("; ") {
+        live.run(id, sql).await;
+    }
     live.run(id, "INSERT INTO m3_items VALUES (1, 'a')").await;
     live.run(id, "CREATE VIEW m3_v AS SELECT id, code FROM m3_t").await;
     // 2. 修改：note 改名为 remark 并加长，amount 不可空、改默认值和注释，换索引，加列 extra，改表注释
@@ -1775,9 +1785,9 @@ async fn design_flow(env: &str) {
     d.columns[3].data_type.native = note_type.replace("40", "60");
     d.columns[2].nullable = false;
     d.columns[2].default = Some("1".into());
-    d.columns[2].comment = Some("金额（元）".into());
+    d.columns[2].comment = cm("金额（元）");
     let mut extra = col("extra", &note_type.replace("40", "10"));
-    extra.comment = Some("附加".into());
+    extra.comment = cm("附加");
     d.columns.push(extra);
     d.indexes = vec![Index {
         name: n("ix_m3_remark"),
@@ -1786,11 +1796,16 @@ async fn design_flow(env: &str) {
         unique: false,
         method: None,
     }];
-    d.comment = Some("设计器测试（改）".into());
+    d.comment = cm("设计器测试（改）");
     let renames = Renames { columns: [(n("remark"), n("note"))].into(), ..Default::default() };
     let req = request(Some("m3_t"), d.clone(), renames.clone(), false, Some(t.fingerprint.clone()));
     let p = s.preview_design(&live.profile_id, &req).await.unwrap();
-    assert!(p.errors.is_empty() && !p.rebuild.active && p.rebuild.reasons.is_empty(), "{env}：{p:?}");
+    // SQLite 改类型、改可空都要重建
+    let sqlite = live.driver == DriverId::Sqlite;
+    assert!(
+        p.errors.is_empty() && p.rebuild.active == sqlite && p.rebuild.reasons.is_empty() != sqlite,
+        "{env}：{p:?}"
+    );
     let st = apply(req).await;
     assert_eq!(st.state, TaskState::Done, "{env}：{st:?}");
     let after = s
@@ -1815,7 +1830,10 @@ async fn design_flow(env: &str) {
     assert!(left.is_empty(), "{env}：读回后仍有差异 {left:?}");
 
     let trigger: &[&str] = match live.driver {
-        DriverId::Informix | DriverId::Sqlite => &[],
+        DriverId::Informix => &[],
+        DriverId::Sqlite => &[
+            "CREATE TRIGGER m3_trg AFTER INSERT ON m3_t BEGIN UPDATE m3_t SET remark = 'trg' WHERE id = NEW.id; END",
+        ],
         // TiDB 没有触发器
         DriverId::Mysql if live.variant == Variant::TiDb => &[],
         DriverId::Mysql => {
@@ -1856,7 +1874,7 @@ async fn design_flow(env: &str) {
 
     // 4. 重建：amount 挪到最前、extra 改成数值类型；PG 有依赖视图时拒绝
     live.run(id, "UPDATE m3_t SET extra = '10'").await;
-    if live.driver != DriverId::Mysql {
+    if !matches!(live.driver, DriverId::Mysql | DriverId::Sqlite) {
         live.run(id, "GRANT SELECT ON m3_t TO PUBLIC").await;
     }
     let t =
@@ -1910,8 +1928,8 @@ async fn design_flow(env: &str) {
         "{env}"
     );
     assert_eq!(after.columns[1].auto_increment, !live.old_oracle(), "{env}：自增保留");
-    assert_eq!(after.columns[0].comment.as_deref(), Some("金额（元）"), "{env}");
-    assert_eq!(after.comment.as_deref(), Some("设计器测试（改）"), "{env}");
+    assert_eq!(after.columns[0].comment, cm("金额（元）"), "{env}");
+    assert_eq!(after.comment, cm("设计器测试（改）"), "{env}");
     assert_eq!(after.uniques.len(), 1, "{env}");
     assert_eq!(
         after.indexes.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(),
@@ -1944,8 +1962,8 @@ async fn design_flow(env: &str) {
         let remark = one("SELECT remark FROM m3_t WHERE code = 'd'".into()).await;
         assert_eq!(remark.as_deref(), Some("trg"), "{env}");
     }
-    // 授权恢复（MySQL 的授权按表名记录，不受影响）
-    if live.driver != DriverId::Mysql {
+    // 授权恢复（MySQL 的授权按表名记录，不受影响；SQLite 没有授权）
+    if !matches!(live.driver, DriverId::Mysql | DriverId::Sqlite) {
         let profile = s.profile(&live.profile_id).unwrap();
         let args =
             MetaArgs { schema: Some(live.schema.clone()), table: Some(n("m3_t")), ..Default::default() };
@@ -1994,7 +2012,7 @@ async fn design_flow(env: &str) {
         .table
         .columns
         .len();
-    let rolled_back = matches!(live.driver, DriverId::Postgres | DriverId::SqlServer);
+    let rolled_back = matches!(live.driver, DriverId::Postgres | DriverId::SqlServer | DriverId::Sqlite);
     assert_eq!(cols, if rolled_back { 5 } else { 6 }, "{env}");
 
     cleanup().await;
@@ -2412,6 +2430,7 @@ async fn lint_tables_query_runs_on_every_database() {
         "DBLENS_TEST_OB_ORACLE_URL",
         "DBLENS_TEST_GOLDENDB_URL",
         "DBLENS_TEST_GOLDENDB_MY_URL",
+        SQLITE,
     ];
     for env in envs {
         let Some(live) = setup(env).await else { continue };
@@ -2649,7 +2668,7 @@ async fn goldendb_my_model() {
     model_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
 }
 
-/// SQLite（M10a）：不需要外部服务，每次都在临时文件上跑。表设计器、导入、比对、模型、迁移在 M10b。
+/// SQLite（M10a、M10b）：不需要外部服务，每次都在临时文件上跑。
 mod sqlite {
     use super::*;
 
@@ -2683,19 +2702,66 @@ mod sqlite {
     async fn sql_file() {
         sql_file_flow(SQLITE).await;
     }
+    #[tokio::test]
+    async fn design() {
+        design_flow(SQLITE).await;
+    }
+    #[tokio::test]
+    async fn import() {
+        import_flow(SQLITE).await;
+    }
+    #[tokio::test]
+    async fn model() {
+        model_flow(SQLITE).await;
+    }
 
     #[tokio::test]
-    async fn later_features_are_rejected_and_ddl_is_the_original_text() {
+    async fn design_caps_and_ddl_is_the_original_text() {
         let live = setup(SQLITE).await.unwrap();
         let s = &live.service;
         let id = s.open_session(&live.profile_id).await.unwrap().id;
         live.run(id, "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL CHECK (name <> ''))").await;
         live.run(id, "CREATE INDEX t_name ON t (name)").await;
-        let err = s.design_caps(&live.profile_id).await.unwrap_err();
-        assert!(matches!(err, Error::Invalid { .. }), "{err:?}");
+        let caps = s.design_caps(&live.profile_id).await.unwrap();
+        assert!(!caps.comments && caps.checks && caps.generated, "{caps:?}");
         let profile = s.profile(&live.profile_id).unwrap();
         let ddl = s.metadata.ddl(&profile, "main", DdlKind::Table, "t").await.unwrap();
         assert!(ddl.contains("CHECK (name <> '')") && ddl.contains("CREATE INDEX t_name"), "{ddl}");
+        s.sessions.close(id, false).await.unwrap();
+    }
+
+    /// 规范检查：注释类规则不适用，其他规则照常判出问题。
+    #[tokio::test]
+    async fn lint() {
+        let live = setup(SQLITE).await.unwrap();
+        let s = &live.service;
+        let id = s.open_session(&live.profile_id).await.unwrap().id;
+        live.run(id, "CREATE TABLE NoKey (a INT, b TEXT)").await;
+        let clause = |rule: &str| {
+            serde_json::json!({
+                "id": rule, "section": "table", "text": rule, "enabled": true, "severity": "warning",
+                "rules": [{ "id": rule, "params": {} }]
+            })
+        };
+        let set: dblens_lint::Ruleset = serde_json::from_value(serde_json::json!({
+            "id": "", "name": "m10b", "clauses": [clause("table.comment"), clause("column.comment"), clause("table.primary_key")]
+        }))
+        .unwrap();
+        let ruleset = s.create_lint_ruleset(set).unwrap();
+        let source = dblens_service::LintSource::Database {
+            profile: live.profile_id.clone(),
+            catalog: None,
+            schema: "main".into(),
+        };
+        let task = s.start_lint(dblens_service::LintRequest { ruleset, source }).await.unwrap();
+        let st = wait_task(s, &task).await;
+        let run = s.lint_run(st.lint_run.as_deref().expect("没有检查记录")).unwrap();
+        let result = |rule: &str| run.results.iter().find(|r| r.clause == rule).unwrap();
+        assert!(
+            result("table.comment").issues.is_empty() && result("column.comment").issues.is_empty(),
+            "{run:?}"
+        );
+        assert!(result("table.primary_key").issues.iter().any(|i| i.object == "NoKey"), "{run:?}");
         s.sessions.close(id, false).await.unwrap();
     }
 

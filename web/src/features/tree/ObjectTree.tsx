@@ -331,25 +331,20 @@ export default function ObjectTree() {
     return profiles.find((p) => p.id === profileId)?.driver
   }
 
-  /** SQLite 还不支持的功能（M10b）：菜单项置灰并说明。 */
-  function later(k: NodeKey): { disabled?: boolean; title?: string } {
-    return driverOf(k.profileId) === 'sqlite' ? { disabled: true, title: t('tree.menu.sqliteLater') } : {}
-  }
-
   /** schema 节点：新建表、导入到新表、执行 SQL 文件，后面接分隔线。 */
   function schemaItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 's') return []
     return [
-      { key: 'new-table', label: t('tree.menu.newTable'), ...later(k) },
-      { key: 'import-new', label: t('tree.menu.importNew'), ...later(k) },
+      { key: 'new-table', label: t('tree.menu.newTable') },
+      { key: 'import-new', label: t('tree.menu.importNew') },
       { key: 'sql-file', label: t('tree.menu.sqlFile') },
       { type: 'divider' },
       { key: 'er', label: t('tree.menu.er') },
-      { key: 'compare-model', label: t('tree.menu.compareModel'), ...later(k) },
-      { key: 'save-model', label: t('tree.menu.saveAsModel'), ...later(k) },
+      { key: 'compare-model', label: t('tree.menu.compareModel') },
+      { key: 'save-model', label: t('tree.menu.saveAsModel') },
       { key: 'export-doc', label: t('tree.menu.exportDoc') },
-      { key: 'lint', label: t('tree.menu.lint'), ...later(k) },
-      { key: 'migrate', label: t('tree.menu.migrate'), ...later(k) },
+      { key: 'lint', label: t('tree.menu.lint') },
+      { key: 'migrate', label: t('tree.menu.migrate') },
       { type: 'divider' },
     ]
   }
@@ -360,8 +355,8 @@ export default function ObjectTree() {
     const items: NonNullable<MenuProps['items']> = []
     const target = targetKind(k.kind)
     if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
-    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design'), ...later(k) })
-    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import'), ...later(k) })
+    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design') })
+    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import') })
     if (target) items.push({ key: 'export-data', label: t('tree.menu.exportData') })
     if (ddlKind(k.kind, k.routineKind)) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     if (target) {

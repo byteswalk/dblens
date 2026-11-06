@@ -321,6 +321,10 @@ pub(crate) fn complete_table(table: &mut Table, create_sql: Option<&str>) {
     }
     table.checks = parsed.checks;
     for c in &mut table.columns {
+        // rowid 的别名不会是 NULL，目录里却报可空
+        if c.auto_increment {
+            c.nullable = false;
+        }
         if c.generated.is_some()
             && let Some(expr) = parsed.generated.get(&c.name.to_lowercase())
         {

@@ -79,6 +79,10 @@ fn native(c: &Column) -> String {
 }
 
 fn comment(ctx: &Ctx, _: &Params) -> Check {
+    // SQLite 没有注释
+    if ctx.family() == Family::Sqlite {
+        return Check::NotApplicable;
+    }
     per_column(ctx, |_, c| {
         c.comment.as_deref().is_none_or(|x| x.trim().is_empty()).then(|| msg!("lint.issue.no_column_comment"))
     })

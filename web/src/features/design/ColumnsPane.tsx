@@ -197,12 +197,17 @@ export default function ColumnsPane({ draft, original, caps, issues, selected, o
         />
       ),
     },
-    {
-      title: t('design.column.comment'),
-      render: (_: unknown, c: DraftColumn) => (
-        <Input size="small" variant="borderless" value={c.comment ?? ''} disabled={c.deleted} onChange={(e) => set(c.key, { comment: e.target.value || null })} />
-      ),
-    },
+    // SQLite 没有注释
+    ...(caps?.comments === false
+      ? []
+      : [
+          {
+            title: t('design.column.comment'),
+            render: (_: unknown, c: DraftColumn) => (
+              <Input size="small" variant="borderless" value={c.comment ?? ''} disabled={c.deleted} onChange={(e) => set(c.key, { comment: e.target.value || null })} />
+            ),
+          },
+        ]),
   ]
 
   const state = sel ? columnState(sel, original) : null

@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use dblens_core::Result;
-use dblens_core::schema::{Index, Sequence, Table};
+use dblens_core::schema::{Index, IndexColumn, Sequence, Table};
 use serde::{Deserialize, Serialize};
 
 use super::MigrationDraft;
@@ -74,6 +74,8 @@ pub fn migration_script(
     for s in draft.sequences.iter().filter(|s| !s.exists) {
         first.push(stmt(1, StatementKind::Sequence, &s.source, vec![], sequence_sql(tgt, schema, &s.target)));
     }
+    // SQLite 建表后不能加约束：唯一、检查、外键写在建表语句里
+    let inline = tgt.family() == Family::Sqlite;
     for t in &draft.tables {
         let action = if t.exists {
             existing.get(&t.source).copied().unwrap_or(ExistingAction::Skip)
@@ -95,12 +97,16 @@ pub fn migration_script(
                     drop_sql(tgt, schema, &t.target.name),
                 ));
             }
-            let mut base = Table {
-                uniques: vec![],
-                foreign_keys: vec![],
-                checks: vec![],
-                indexes: vec![],
-                ..t.target.clone()
+            let mut base = if inline {
+                Table { indexes: vec![], ..t.target.clone() }
+            } else {
+                Table {
+                    uniques: vec![],
+                    foreign_keys: vec![],
+                    checks: vec![],
+                    indexes: vec![],
+                    ..t.target.clone()
+                }
             };
             if tgt.family() == Family::SqlServer {
                 for c in &mut base.columns {
@@ -139,14 +145,33 @@ pub fn migration_script(
             }
         }
         for u in &t.target.uniques {
-            if has(&keys, &u.columns) {
+            if has(&keys, &u.columns) || (inline && !missing_only) {
                 continue;
             }
-            for s in design(tgt, schema, name, TableChange::AddUnique { unique: u.clone() })? {
+            // SQLite 已有的表上只能建唯一索引
+            let change = if inline {
+                let index = Index {
+                    name: u.name.clone().unwrap_or_else(|| format!("{name}_{}_key", u.columns.join("_"))),
+                    columns: u
+                        .columns
+                        .iter()
+                        .map(|c| IndexColumn { name: c.clone(), descending: false })
+                        .collect(),
+                    unique: true,
+                    method: None,
+                };
+                TableChange::AddIndex { index }
+            } else {
+                TableChange::AddUnique { unique: u.clone() }
+            };
+            for s in design(tgt, schema, name, change)? {
                 second.push(stmt(2, StatementKind::Unique, &t.source, own.clone(), s));
             }
         }
         for c in &t.target.checks {
+            if inline {
+                continue;
+            }
             if missing_only {
                 let named = c.name.as_ref().is_some_and(|n| {
                     present.is_some_and(|p| {
@@ -162,7 +187,7 @@ pub fn migration_script(
                 second.push(stmt(2, StatementKind::Check, &t.source, own.clone(), s));
             }
         }
-        for f in &t.target.foreign_keys {
+        for f in t.target.foreign_keys.iter().filter(|_| !inline) {
             let exists = missing_only
                 && present.is_some_and(|p| {
                     p.foreign_keys.iter().any(|x| {

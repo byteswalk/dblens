@@ -106,7 +106,6 @@ impl Service {
             return Err(Error::invalid(msg!("model.dir_not_empty", path = root.display())));
         }
         let dialect = self.metadata.dialect(&profile).await?;
-        crate::later::ensure_full(&dialect)?;
         let task = self.tasks.create(TaskKind::Reverse)?;
         let mut id = String::new();
         task.update(|s| {

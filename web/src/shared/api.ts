@@ -1037,6 +1037,8 @@ export interface DesignCaps {
   checks: boolean
   descending_index: boolean
   /** 支持生成列（人大金仓的 SQL Server 模式没有） */
+  /** 表和列有注释（SQLite 没有）。 */
+  comments: boolean
   generated: boolean
   auto_increment: boolean
   on_delete: string[]
@@ -1102,6 +1104,7 @@ export interface DesignIssue {
 export type DesignStep =
   | { kind: 'sql'; sql: string; changes: number[] }
   | { kind: 'count_check'; source: string; target: string; changes: number[] }
+  | { kind: 'foreign_key_check'; schema: string; table: string; changes: number[] }
 
 export interface DesignPreview {
   errors: DesignIssue[]

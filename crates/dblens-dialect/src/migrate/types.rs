@@ -127,7 +127,9 @@ fn equivalent(tgt: &Dialect, a: &LogicalType, b: &LogicalType) -> bool {
 /// 目标中不能建索引、主键的大字段类型：MySQL、Oracle、达梦的 TEXT/CLOB/BLOB/JSON。
 pub(super) fn is_lob(tgt: &Dialect, l: &LogicalType) -> bool {
     use LogicalType as L;
-    tgt.family() != Family::Postgres && matches!(l, L::Text | L::Blob | L::Json | L::VarChar { len: None })
+    // PG、SQLite 的长文本、二进制列可以做键、建索引
+    !matches!(tgt.family(), Family::Postgres | Family::Sqlite)
+        && matches!(l, L::Text | L::Blob | L::Json | L::VarChar { len: None })
 }
 
 /// 目标库能否建自增列：Oracle 12c 起才有标识列，其余都可以。

@@ -119,7 +119,8 @@
     "copy": "Copy SQL",
     "copied": "Copied",
     "openInTab": "Open in new query tab",
-    "execute": "Run"
+    "execute": "Run",
+    "fkCheck": "Check foreign keys: {{table}}"
   },
   "run": {
     "running": "Running: {{done}} / {{total}}",

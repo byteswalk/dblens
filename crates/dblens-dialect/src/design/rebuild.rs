@@ -38,6 +38,11 @@ pub enum RebuildStep {
         source: String,
         target: String,
     },
+    /// 核对这张表的外键（SQLite 的 `PRAGMA foreign_key_check`），有不满足的行即停止（由程序执行）。
+    ForeignKeyCheck {
+        schema: String,
+        table: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -71,6 +76,82 @@ fn short_hash(s: &str) -> String {
 }
 
 impl Dialect {
+    /// SQLite 的重建（官方文档"ALTER TABLE"一节的做法）：建带全部约束的新表、复制、核对行数、删旧表、改名、
+    /// 重建索引和触发器、核对外键。整个改动在一个事务中，执行前已关闭外键（`design_prelude`），
+    /// 所以删除旧表不会触发子表的 ON DELETE；改名时临时打开 legacy_alter_table，引用旧表的视图不会挡住改名。
+    fn sqlite_rebuild(
+        &self,
+        schema: &str,
+        original: &Table,
+        draft: &Table,
+        renames: &Renames,
+        ctx: &RebuildContext,
+    ) -> Result<RebuildOutcome> {
+        let old_of = |name: &str| -> Option<String> {
+            let old = renames.columns.get(name).map_or(name, String::as_str);
+            original.columns.iter().any(|c| c.name == old).then(|| old.to_string())
+        };
+        // 其他表的外键按列名引用本表：被引用的列不能删，也不能改名
+        for rk in &ctx.referencing {
+            for c in &rk.key.ref_columns {
+                if !draft
+                    .columns
+                    .iter()
+                    .any(|d| d.name == *c && old_of(&d.name).as_deref() == Some(c.as_str()))
+                {
+                    return Ok(RebuildOutcome::Refused {
+                        reason: msg!("design.rebuild.referenced_column", table = rk.table, column = c),
+                    });
+                }
+            }
+        }
+        let name = &draft.name;
+        let q = self.qualified(Some(schema), name);
+        let tmp = self.temp_table_name(name);
+        let q_tmp = self.qualified(Some(schema), &tmp);
+        let mut steps = Vec::new();
+        let sql = |steps: &mut Vec<RebuildStep>, s: String| steps.push(RebuildStep::Sql { sql: s });
+
+        sql(&mut steps, self.sqlite_create_table(schema, &Table { name: tmp.clone(), ..draft.clone() }));
+        // SQLite 写入时按列的亲和性转换，不套 CAST（CAST 会把转不了的文本变成 0）
+        let (mut targets, mut sources) = (Vec::new(), Vec::new());
+        for c in draft.columns.iter().filter(|c| c.generated.is_none()) {
+            if let Some(old) = old_of(&c.name) {
+                targets.push(self.ident(&c.name));
+                sources.push(self.ident(&old));
+            }
+        }
+        sql(
+            &mut steps,
+            format!("INSERT INTO {q_tmp} ({}) SELECT {} FROM {q}", targets.join(", "), sources.join(", ")),
+        );
+        steps.push(RebuildStep::CountCheck { source: q.clone(), target: q_tmp.clone() });
+        let drop_at = steps.len();
+        sql(&mut steps, format!("DROP TABLE {q}"));
+        sql(&mut steps, "PRAGMA legacy_alter_table = ON".into());
+        sql(&mut steps, format!("ALTER TABLE {q_tmp} RENAME TO {}", self.ident(name)));
+        sql(&mut steps, "PRAGMA legacy_alter_table = OFF".into());
+        for x in &draft.indexes {
+            sql(&mut steps, self.sqlite_index(schema, name, x));
+        }
+        for t in &ctx.triggers {
+            sql(&mut steps, t.trim().trim_end_matches(';').to_string());
+        }
+        steps.push(RebuildStep::ForeignKeyCheck { schema: schema.to_string(), table: name.clone() });
+        // 外键在开始事务前由程序关闭，不在脚本里：手动执行时要自己先关
+        let mut warnings = vec![msg!("design.rebuild.no_writes"), msg!("sqlite.design.manual_fk_off")];
+        if !ctx.views.is_empty() {
+            let views = ctx.views.iter().map(|v| v.name.clone()).collect::<Vec<_>>().join(", ");
+            warnings.push(msg!("sqlite.design.views", views = views));
+        }
+        Ok(RebuildOutcome::Script(Rebuild {
+            steps,
+            drop_at,
+            cleanup: format!("DROP TABLE {q_tmp}"),
+            warnings,
+        }))
+    }
+
     /// 标识符的最大字节数。
     fn max_ident(&self) -> usize {
         match self.family() {
@@ -130,6 +211,9 @@ impl Dialect {
         ctx: &RebuildContext,
     ) -> Result<RebuildOutcome> {
         let refuse = |reason| Ok(RebuildOutcome::Refused { reason });
+        if self.family() == Family::Sqlite {
+            return self.sqlite_rebuild(schema, original, draft, renames, ctx);
+        }
         if original.partition.is_some() {
             return refuse(msg!("design.rebuild.partitioned"));
         }
@@ -387,6 +471,9 @@ mod tests {
                     RebuildStep::CountCheck { source, target } => {
                         format!("{mark}-- COUNT {source} = {target}")
                     }
+                    RebuildStep::ForeignKeyCheck { schema, table } => {
+                        format!("{mark}-- FOREIGN KEY CHECK {schema}.{table}")
+                    }
                 }
             })
             .collect();
@@ -474,6 +561,13 @@ mod tests {
                 "nvarchar(50)",
                 "CREATE TRIGGER dbo.trg ON dbo.orders AFTER INSERT AS BEGIN SET NOCOUNT ON; END",
             ),
+            (
+                Variant::Sqlite,
+                "main",
+                ["INTEGER", "VARCHAR(20)", "DECIMAL(10,2)"],
+                "VARCHAR(50)",
+                "CREATE TRIGGER trg AFTER INSERT ON orders BEGIN UPDATE orders SET amount = 0; END",
+            ),
         ];
         for (v, schema, types, varchar, trigger) in cases {
             let d = Dialect::new(v);
@@ -489,6 +583,12 @@ mod tests {
                     name: "v_orders".into(),
                     materialized: false,
                 }];
+            }
+            if v == Variant::Sqlite {
+                // 子表的外键按列名引用本表：被引用的列改了名就不能重建
+                let refused = d.rebuild(schema, &orig, &draft, &renames, &c).unwrap();
+                assert!(matches!(refused, RebuildOutcome::Refused { .. }), "{refused:?}");
+                c.referencing.clear();
             }
             let out = d.rebuild(schema, &orig, &draft, &renames, &c).unwrap();
             insta::assert_snapshot!(format!("rebuild_{v:?}").to_lowercase(), render(&out));

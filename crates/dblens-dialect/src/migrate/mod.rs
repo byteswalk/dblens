@@ -351,7 +351,8 @@ impl Context<'_> {
             mapping.push(ColumnMapping { source: c.name.clone(), target: Some(cname.clone()) });
             columns.push((c, cov, cname));
         }
-        let comments = self.settings.options.comments;
+        // SQLite 没有注释
+        let comments = self.settings.options.comments && self.tgt.design_caps().comments;
         let mut out_cols = Vec::new();
         for (i, (c, cov, cname)) in columns.into_iter().enumerate() {
             out_cols.push(self.column(c, &cov, cname, i as u32 + 1, &cols, comments, n));
@@ -423,6 +424,13 @@ impl Context<'_> {
         }
         if t.partition.is_some() {
             n.push(None, None, NoteLevel::Lossy, msg!("migrate.partition"));
+        }
+        // 主键列在各库都不可空；SQLite 的非 rowid 主键在目录里报可空，迁出去时改正
+        if let Some(pk) = &target.primary_key {
+            let keys = pk.columns.clone();
+            for c in target.columns.iter_mut().filter(|c| keys.contains(&c.name)) {
+                c.nullable = false;
+            }
         }
         (target, mapping)
     }

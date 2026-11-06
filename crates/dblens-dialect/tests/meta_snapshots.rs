@@ -49,14 +49,8 @@ fn every_family_covers_the_common_keys() {
         let d = Dialect::new(v);
         for key in MetaKey::ALL {
             let optional = match key {
-                // SQLite 没有过程、权限、保留字表；设计器和规范检查在 M10b
-                MetaKey::Routines
-                | MetaKey::RoutineSource
-                | MetaKey::DependentViews
-                | MetaKey::Grants
-                | MetaKey::ReferencingKeys
-                | MetaKey::ReservedWords
-                | MetaKey::LintTables
+                // SQLite 没有过程、权限、保留字表
+                MetaKey::Routines | MetaKey::RoutineSource | MetaKey::Grants | MetaKey::ReservedWords
                     if v == Variant::Sqlite =>
                 {
                     true

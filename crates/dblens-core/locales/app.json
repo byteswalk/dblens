@@ -128,6 +128,10 @@
     "zh-CN": "表达式不能为空",
     "en": "Expression is required"
   },
+  "design.fk_check_failed": {
+    "zh-CN": "外键核对没有通过：%{count} 行不满足外键，改动已撤销",
+    "en": "Foreign key check failed: %{count} rows violate foreign keys; the change was rolled back"
+  },
   "design.has_errors": {
     "zh-CN": "设计中有错误，请先修正",
     "en": "The design has errors; fix them first"
@@ -1948,6 +1952,34 @@
     "zh-CN": "无法打开数据库文件（不存在、没有权限或所在文件夹不存在）：%{error}",
     "en": "Cannot open the database file (missing, no permission, or its folder does not exist): %{error}"
   },
+  "sqlite.design.add_column": {
+    "zh-CN": "SQLite 不能直接加列 %{column}（非空却没有默认值、默认值不是常量、生成列或自增）",
+    "en": "SQLite cannot add column %{column} in place (NOT NULL without a default, a non-constant default, a generated or auto-increment column)"
+  },
+  "sqlite.design.alter_column": {
+    "zh-CN": "SQLite 不能修改已有列 %{column} 的定义",
+    "en": "SQLite cannot change the definition of existing column %{column}"
+  },
+  "sqlite.design.auto_increment": {
+    "zh-CN": "自增列 %{column} 必须是表上唯一的主键列（SQLite 的自增就是 rowid）",
+    "en": "Auto-increment column %{column} must be the only primary key column (SQLite auto-increment is the rowid)"
+  },
+  "sqlite.design.constraints": {
+    "zh-CN": "SQLite 不能在建表后增删主键、唯一、检查约束和外键",
+    "en": "SQLite cannot add or drop primary keys, unique and check constraints or foreign keys after the table is created"
+  },
+  "sqlite.design.manual_fk_off": {
+    "zh-CN": "DBLENS 执行前会先关闭外键；手动执行这个脚本时，先在事务外执行 PRAGMA foreign_keys = OFF，否则删除旧表会级联删除子表的数据",
+    "en": "DBLENS turns foreign keys off before running this; if you run the script yourself, first run PRAGMA foreign_keys = OFF outside a transaction, or dropping the old table cascades into child tables"
+  },
+  "sqlite.design.needs_rebuild": {
+    "zh-CN": "这项改动要重建表",
+    "en": "This change needs a table rebuild"
+  },
+  "sqlite.design.views": {
+    "zh-CN": "视图按名字引用表：%{views}。改了列名或删了列时，这些视图要自己修改",
+    "en": "Views reference the table by name: %{views}. If you renamed or dropped columns, update these views yourself"
+  },
   "sqlite.desktop_only": {
     "zh-CN": "只有桌面版能打开 SQLite 数据库文件",
     "en": "SQLite database files can only be opened in the desktop app"
@@ -1967,10 +1999,6 @@
   "sqlite.file_required": {
     "zh-CN": "请选择 SQLite 数据库文件",
     "en": "Choose the SQLite database file"
-  },
-  "sqlite.later": {
-    "zh-CN": "SQLite 暂不支持这项功能（表设计器、导入、比对、模型、迁移、规范检查在下一步提供）",
-    "en": "This feature is not available for SQLite yet (table designer, import, compare, models, migration and lint come next)"
   },
   "sqlite.not_a_database": {
     "zh-CN": "不是 SQLite 数据库文件，或文件已加密：%{error}",

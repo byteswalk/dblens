@@ -9,6 +9,7 @@ mod oracle;
 mod postgres;
 mod rebuild;
 mod sql;
+mod sqlite;
 pub(crate) mod sqlserver;
 
 use std::collections::BTreeMap;

@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use dblens_core::schema::Table;
 use dblens_core::{LogicalType, Value};
+use dblens_dialect::meta::MetaKey;
 use dblens_dialect::migrate::{ColumnOverride, ExistingAction};
 use dblens_dialect::{Compat, Dialect, Variant};
 use dblens_driver::{ConnectParams, DriverId};
@@ -49,18 +50,39 @@ impl End {
     }
 
     fn has_sequences(&self) -> bool {
-        self.driver != DriverId::Mysql
+        !matches!(self.driver, DriverId::Mysql | DriverId::Sqlite)
     }
 }
 
 /// 一个服务中建两个连接配置；任一环境变量没有设置时返回 None。
+/// SQLite 不需要外部服务：没设环境变量时用临时目录里的新文件。
+const SQLITE: &str = "DBLENS_TEST_SQLITE_URL";
+
 async fn setup(envs: [&str; 2]) -> Option<(Arc<Service>, Vec<End>, tempfile::TempDir)> {
-    let urls: Vec<String> = envs.iter().map(|e| std::env::var(e).ok()).collect::<Option<_>>()?;
     let dir = tempfile::tempdir().unwrap();
+    let sqlite_url = || {
+        let file = dir.path().join("mig.db").to_string_lossy().replace('\\', "/");
+        format!("sqlite:///{}?create=1", file.trim_start_matches('/'))
+    };
+    let urls: Vec<String> = envs
+        .iter()
+        .map(|e| std::env::var(e).ok().or_else(|| (*e == SQLITE).then(sqlite_url)))
+        .collect::<Option<_>>()?;
+    Some(setup_urls(dir, envs.map(String::from), urls).await)
+}
+
+/// 用给出的连接串建两个连接配置。`names` 是连接配置的名字（报告里用）。
+async fn setup_urls(
+    dir: tempfile::TempDir,
+    names: [String; 2],
+    urls: Vec<String>,
+) -> (Arc<Service>, Vec<End>, tempfile::TempDir) {
+    let envs = names;
     let store = Arc::new(Store::open(dir.path()).unwrap());
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
     secrets.init_vault("测试主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
+    registry.allow_local_files(true);
     let service = Arc::new(Service::with_parts(store, secrets, registry.clone(), Arc::new(DefaultPolicy)));
     service.migrations.set_dir(dir.path().join("migrations"));
     let mut ends = Vec::new();
@@ -113,7 +135,7 @@ async fn setup(envs: [&str; 2]) -> Option<(Arc<Service>, Vec<End>, tempfile::Tem
             compat: summary.compat,
         });
     }
-    Some((service, ends, dir))
+    (service, ends, dir)
 }
 
 /// 在一端执行若干语句，返回最后一个结果集的第一个值；`tolerate` 为 true 时忽略失败（清理用）。
@@ -192,7 +214,27 @@ fn source_ddl(end: &End, p: &str) -> Vec<String> {
     let d10 = "(SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 \
                UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)";
     match end.driver {
-        DriverId::Sqlite => unreachable!("SQLite 的迁移在 M10b"),
+        DriverId::Sqlite => vec![
+            format!(
+                "CREATE TABLE {p}_cust (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR(50) NOT NULL DEFAULT 'n/a',                  active BOOLEAN DEFAULT 1, created DATETIME DEFAULT CURRENT_TIMESTAMP, amount DECIMAL(12,2) DEFAULT 0, note TEXT,                  CONSTRAINT {p}_ck_amount CHECK (amount >= 0), CONSTRAINT {p}_uk_name UNIQUE (name))"
+            ),
+            format!("CREATE INDEX {p}_ix_created ON {p}_cust (created)"),
+            format!(
+                "CREATE TABLE {p}_ord (id INT PRIMARY KEY, cust_id BIGINT, qty INT, status VARCHAR(10) DEFAULT 'new',                  CONSTRAINT {p}_ck_qty CHECK (qty > 0),                  CONSTRAINT {p}_fk_cust FOREIGN KEY (cust_id) REFERENCES {p}_cust (id) ON DELETE CASCADE)"
+            ),
+            format!(
+                "CREATE TABLE {p}_types (id INT PRIMARY KEY, txt VARCHAR(100), big TEXT, amount DECIMAL(12,2), ratio DOUBLE,                  flag BOOLEAN, day DATE, ts DATETIME, bin BLOB)"
+            ),
+            format!(
+                "INSERT INTO {p}_cust (name, amount, note) SELECT 'name' || g, g * 1.5, '备注' || g                  FROM (WITH RECURSIVE c(g) AS (SELECT 1 UNION ALL SELECT g + 1 FROM c WHERE g < {n}) SELECT g FROM c)"
+            ),
+            format!(
+                "INSERT INTO {p}_ord (id, cust_id, qty, status) VALUES (1, 1, 2, 'paid'), (2, 3, 1, 'new')"
+            ),
+            format!(
+                "INSERT INTO {p}_types VALUES (1, '中文 abc', replace(hex(zeroblob(1500)), '0', 'y'), 1234.5, 0.25, 1, '2026-01-02',                  '2026-01-02 03:04:05.678', x'0102ff'), (2, 'x''q', 'z', -0.01, NULL, 0, NULL, NULL, NULL),                  (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
+            ),
+        ],
         DriverId::Informix => vec![
             format!(
                 "CREATE TABLE {p}_cust (id BIGSERIAL PRIMARY KEY CONSTRAINT {p}_pk_cust, name VARCHAR(50) DEFAULT 'n/a' NOT NULL, \
@@ -794,6 +836,12 @@ routes! {
     pg_to_sqlserver: "DBLENS_TEST_PG_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6pg";
     oracle_to_sqlserver: "DBLENS_TEST_ORACLE_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6or";
     dameng_to_sqlserver: "DBLENS_TEST_DM_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6dm";
+    sqlite_to_pg: "DBLENS_TEST_SQLITE_URL" => "DBLENS_TEST_PG_URL", "m10sq";
+    sqlite_to_dameng: "DBLENS_TEST_SQLITE_URL" => "DBLENS_TEST_DM_URL", "m10sq";
+    sqlite_to_mysql: "DBLENS_TEST_SQLITE_URL" => "DBLENS_TEST_MYSQL_URL", "m10sq";
+    pg_to_sqlite: "DBLENS_TEST_PG_URL" => "DBLENS_TEST_SQLITE_URL", "m10pg";
+    dameng_to_sqlite: "DBLENS_TEST_DM_URL" => "DBLENS_TEST_SQLITE_URL", "m10dm";
+    mysql_to_sqlite: "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_SQLITE_URL", "m10my";
 }
 
 /// 续传和跳过：每种目标家族各一条。
@@ -819,4 +867,95 @@ special! {
     skip_pg_to_dameng: skip_flow, "DBLENS_TEST_PG_URL" => "DBLENS_TEST_DM_URL", "m5sd";
     resume_pg_to_sqlserver: resume_flow, "DBLENS_TEST_PG_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6rp";
     skip_mysql_to_sqlserver: skip_flow, "DBLENS_TEST_MYSQL_URL" => "DBLENS_TEST_SQLSERVER_URL", "m6sm";
+}
+
+/// 真实的 SQLite 文件（DBLENS_TEST_SQLITE_DIR，只读打开）迁到临时目录里的新 SQLite 文件：全部表建成、
+/// 行数和抽样一致。数据只在本机临时目录之间流动；只输出统计。
+#[tokio::test]
+async fn sqlite_real_files_to_sqlite() {
+    let Ok(dir) = std::env::var("DBLENS_TEST_SQLITE_DIR") else { return };
+    for file in [
+        "contact.db",
+        "session.db",
+        "general.db",
+        "emoticon.db",
+        "favorite.db",
+        "sns.db",
+        "message_resource.db",
+    ] {
+        let path = Path::new(&dir).join(file);
+        if !path.exists() {
+            continue;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let url = |p: &Path, opt: &str| {
+            format!("sqlite:///{}?{opt}", p.to_string_lossy().replace('\\', "/").trim_start_matches('/'))
+        };
+        let urls = vec![url(&path, "read_only=1"), url(&tmp.path().join("out.db"), "create=1")];
+        let (s, ends, _keep) = setup_urls(tmp, [file.to_string(), format!("{file} 副本")], urls).await;
+        let (src, tgt) = (&ends[0], &ends[1]);
+        let sp = s.profile(&src.profile).unwrap();
+        let tables: Vec<String> = s
+            .metadata
+            .objects(&sp, "main", MetaKey::Tables, None)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|o| o.name)
+            .collect();
+        let data = DataOptions { batch_size: 1000, parallel: 2, on_error: OnError::Stop, sample: 100 };
+        let mut p = plan(src, tgt, &tables, None, data);
+        p.tables = Some(tables.clone());
+        let preview = s.preview_migration(&p).await.unwrap();
+        let notes: Vec<String> = preview
+            .draft
+            .notes
+            .iter()
+            .map(|n| {
+                format!("{:?} {}.{:?} {:?}: {}", n.level, n.object, n.column, n.item, n.message.current())
+            })
+            .collect();
+        assert!(
+            preview.problems.is_empty(),
+            "{file}：{:?}
+{}",
+            preview.problems,
+            notes.join(
+                "
+"
+            )
+        );
+        let started = std::time::Instant::now();
+        let id = s.start_migration(p).await.unwrap();
+        let st = wait(&s, &id).await;
+        let failures: Vec<String> = st
+            .failures
+            .iter()
+            .map(|f| {
+                format!(
+                    "{}
+  {}",
+                    f.text, f.error
+                )
+            })
+            .collect();
+        assert_eq!(st.state, TaskState::Done, "{file}：{failures:?}");
+        let m = st.migration.unwrap();
+        let mut rows = 0;
+        for t in &m.tables {
+            let v = t.verify.as_ref().unwrap();
+            assert!(
+                v.target_rows == v.expected_rows && v.mismatches.is_empty(),
+                "{file} {}：{v:?}",
+                t.source
+            );
+            rows += t.rows;
+        }
+        eprintln!(
+            "{file}：{} 张表，{rows} 行，提示 {} 条，{} ms",
+            m.tables.len(),
+            preview.draft.notes.len(),
+            started.elapsed().as_millis()
+        );
+    }
 }

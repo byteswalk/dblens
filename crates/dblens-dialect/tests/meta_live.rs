@@ -1092,3 +1092,78 @@ async fn sqlite_metadata() {
         fetch(&mut live.conn, &q.sql, &[]).await;
     }
 }
+
+/// 用真实的 SQLite 文件检查（只读打开）：DBLENS_TEST_SQLITE_DIR 指向一个目录，里面每个 `.db` 都走一遍元数据读取、
+/// 查看 DDL、运维查询，并流式读完每张表。只输出统计，不输出数据内容。
+#[tokio::test]
+async fn sqlite_real_files() {
+    let Ok(dir) = std::env::var("DBLENS_TEST_SQLITE_DIR") else { return };
+    let mut files: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "db"))
+        .collect();
+    files.sort();
+    for path in files {
+        let file = path.to_string_lossy().replace('\\', "/");
+        let started = Instant::now();
+        let mut live = connect_url(&format!("sqlite:///{}?read_only=1", file.trim_start_matches('/'))).await;
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let schemas = meta::schemas(&live.rows(MetaKey::Schemas, &MetaArgs::default()).await).unwrap();
+        assert_eq!(schemas.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["main"], "{name}");
+        let tables = live.tables("main", None).await;
+        let listed =
+            meta::objects(MetaKey::Tables, &live.rows(MetaKey::Tables, &args("main")).await).unwrap();
+        assert_eq!(tables.len(), listed.len(), "{name}");
+        let d = live.d;
+        let columns = live.rows(MetaKey::Columns, &args("main")).await;
+        let views =
+            meta::views(&d, MetaKey::Views, &live.rows(MetaKey::Views, &args("main")).await, &columns)
+                .unwrap();
+        let (mut cols, mut other, mut checks, mut idx, mut trg, mut empty_idx_col) = (0, 0, 0, 0, 0, 0);
+        for t in &tables {
+            cols += t.columns.len();
+            other += t.columns.iter().filter(|c| c.data_type.logical == LogicalType::Other).count();
+            checks += t.checks.len();
+            idx += t.indexes.len();
+            trg += t.triggers.len();
+            empty_idx_col += t.indexes.iter().flat_map(|i| &i.columns).filter(|c| c.name.is_empty()).count();
+            let q = d.ddl_query(dblens_dialect::DdlKind::Table, "main", &t.name).unwrap().unwrap();
+            let ddl = dblens_dialect::ddl_text(&fetch(&mut live.conn, &q.sql, &q.params).await).unwrap();
+            assert!(ddl.contains("CREATE"), "{name} {}", t.name);
+        }
+        for q in d.ops_queries() {
+            fetch(&mut live.conn, &q.sql, &[]).await;
+        }
+        let meta_ms = started.elapsed().as_millis();
+        // 流式读完每张表：值的转换不出错，大字段截断为预览
+        let (mut rows, mut lobs, mut blobs) = (0u64, 0u64, 0u64);
+        let read = Instant::now();
+        for t in &tables {
+            let sql = format!("SELECT * FROM {}", d.qualified(Some("main"), &t.name));
+            let mut stream =
+                live.conn.execute(&sql, &[]).await.unwrap_or_else(|e| panic!("{name} {}: {e}", t.name));
+            while let Some(ev) = stream.next(2000).await.unwrap_or_else(|e| panic!("{name} {}: {e}", t.name))
+            {
+                if let dblens_driver::ExecEvent::Rows(batch) = ev {
+                    rows += batch.len() as u64;
+                    for v in batch.iter().flatten() {
+                        match v {
+                            Value::Lob(_) => lobs += 1,
+                            Value::Bytes(_) => blobs += 1,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "{name}: {} 表 {} 视图 {cols} 列（无类型 {other}） 检查 {checks} 索引 {idx}（表达式列未读出 {empty_idx_col}） 触发器 {trg}；\
+             元数据 {meta_ms} ms；{rows} 行（二进制 {blobs}，大字段预览 {lobs}）读取 {} ms",
+            tables.len(),
+            views.len(),
+            read.elapsed().as_millis()
+        );
+        assert_eq!(empty_idx_col, 0, "{name}");
+    }
+}

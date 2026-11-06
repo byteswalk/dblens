@@ -299,6 +299,7 @@ export default function DesignView({ tab, profiles }: { tab: QueryTab; profiles:
                 draft={state.draft}
                 storage={state.storage}
                 issues={issues}
+                comments={caps.data?.comments !== false}
                 onSchema={setSchema}
                 onChange={edit}
               />

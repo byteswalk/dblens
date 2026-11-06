@@ -139,10 +139,39 @@ WHERE m.type = 'trigger'
 {% endif %}
 ORDER BY m.tbl_name, m.name
 
+-- [referencing_keys]
+-- Table designer rebuild: foreign keys of OTHER tables that reference this table.
+SELECT {{ bind("schema") }} AS table_schema,
+       m.name AS table_name,
+       printf('fk:%04d', fk.id) AS constraint_name,
+       fk."from" AS column_name,
+       fk.seq + 1 AS position,
+       COALESCE(fk."to", (SELECT p.name FROM pragma_table_xinfo(fk."table", {{ bind("schema") }}) p
+                          WHERE p.pk = fk.seq + 1)) AS ref_column,
+       fk.on_delete,
+       fk.on_update
+FROM {{ schema_ident }}.sqlite_schema m
+JOIN pragma_foreign_key_list(m.name, {{ bind("schema") }}) fk
+WHERE m.type = 'table' AND fk."table" = {{ bind("table") }} COLLATE NOCASE AND m.name <> {{ bind("table") }}
+ORDER BY m.name, fk.id, fk.seq
+
+-- [dependent_views]
+-- Views reference tables by name; a view whose text mentions the table is reported (may over-report).
+SELECT {{ bind("schema") }} AS schema_name, m.name, 'VIEW' AS kind
+FROM {{ schema_ident }}.sqlite_schema m
+WHERE m.type = 'view' AND instr(lower(m.sql), lower({{ bind("table") }})) > 0
+ORDER BY m.name
+
 -- [view_definition]
 SELECT m.sql AS definition
 FROM {{ schema_ident }}.sqlite_schema m
 WHERE m.type = 'view' AND m.name = {{ bind("name") }}
+
+-- [lint_tables]
+-- Design lint: no engine or charset; no cheap row estimate.
+SELECT m.name, NULL AS engine, NULL AS "charset", NULL AS row_count
+FROM {{ schema_ident }}.sqlite_schema m
+WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite!_%' ESCAPE '!'
 
 -- [table_storage]
 -- No cheap row estimate (sqlite_stat1 exists only after ANALYZE); the ops page has sizes from dbstat.

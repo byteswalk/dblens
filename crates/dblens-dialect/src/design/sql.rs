@@ -23,7 +23,13 @@ pub(crate) fn stmt(change: usize, sql: String) -> DesignStatement {
 impl Dialect {
     /// 整个改动能否放在一个事务中执行：PG 家族和 SQL Server 的 DDL 可以回滚。
     pub fn design_transactional(&self) -> bool {
-        matches!(self.family(), Family::Postgres | Family::SqlServer)
+        matches!(self.family(), Family::Postgres | Family::SqlServer | Family::Sqlite)
+    }
+
+    /// 改结构、迁移写入前（开始事务之前）要执行的语句：SQLite 关闭外键（事务中改不了），否则重建表删除旧表时
+    /// 会触发子表的 ON DELETE，迁移时子表可能先于父表写入。都用新连接执行，不影响其他连接。
+    pub fn design_prelude(&self) -> &'static [&'static str] {
+        if self.family() == Family::Sqlite { &["PRAGMA foreign_keys = OFF"] } else { &[] }
     }
 
     /// 执行前要提示的副作用。
@@ -35,6 +41,9 @@ impl Dialect {
     /// 校验草稿：通用检查（`validate`）加上这个库做不到的设置。
     pub fn design_issues(&self, draft: &Table) -> Vec<DesignIssue> {
         let mut out = super::validate(draft);
+        if self.family() == Family::Sqlite {
+            out.extend(self.sqlite_issues(draft));
+        }
         if !self.design_caps().auto_increment {
             for (i, c) in draft.columns.iter().enumerate().filter(|(_, c)| c.auto_increment) {
                 out.push(DesignIssue::new(
@@ -59,12 +68,16 @@ impl Dialect {
         {
             out.push(msg!("design.unsupported.clustered_pk"));
         }
+        if self.family() == Family::Sqlite {
+            out.extend(self.sqlite_unsupported(&diff.changes));
+            return out;
+        }
         for ch in &diff.changes {
             let C::AlterColumn { from, to, .. } = ch else { continue };
             let generated = text(&from.generated) != text(&to.generated);
             let identity = from.auto_increment != to.auto_increment;
             match self.family() {
-                Family::MySql => {}
+                Family::MySql | Family::Sqlite => {}
                 Family::Postgres => {
                     if generated {
                         out.push(msg!("design.unsupported.generated", column = to.name));
@@ -77,7 +90,7 @@ impl Dialect {
                         out.push(msg!("design.unsupported.identity", column = to.name));
                     }
                 }
-                Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix | Family::Sqlite => {
+                Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix => {
                     if generated {
                         out.push(msg!("design.unsupported.generated", column = to.name));
                     }
@@ -98,7 +111,7 @@ impl Dialect {
             Family::Oracle | Family::Dameng => self.oracle_design(schema, table, &diff.changes),
             Family::SqlServer => self.sqlserver_design(schema, table, &diff.changes),
             Family::Informix => self.informix_design(schema, table, &diff.changes),
-            Family::Sqlite => Err(dblens_core::Error::invalid(msg!("sqlite.later"))),
+            Family::Sqlite => self.sqlite_design(schema, table, &diff.changes),
         }
     }
 

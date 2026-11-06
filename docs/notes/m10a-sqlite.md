@@ -7,7 +7,7 @@
 - 新 crate `dblens-driver-sqlite`：rusqlite 0.41.1（`bundled`，静态编入 SQLite，自带 dbstat），经阻塞适配器每连接一个线程。没有新增依赖（rusqlite 原来就用于本地存储）。
 - 方言：`Family::Sqlite`、`Variant::Sqlite`，元数据模板 `sql/sqlite.sql`，运维模板 `sql/ops/sqlite.sql`，建对象原文的读取在 `meta/sqlite.rs`。
 - 服务：`DriverRegistry::allow_local_files`，接口层按 `ApiConfig::local_files` 设置（桌面版、只监听本机的服务器版为真）；为假时 SQLite 驱动不可用，产品列表不出现。审计版的引擎不设置，所以不开放。
-- M10b 的功能在服务层报 `sqlite.later`（`later.rs`），前端菜单置灰，比对和迁移的连接列表不出现 SQLite。
+- M10b 的功能在服务层报 `sqlite.later`（`later.rs`），前端菜单置灰，比对和迁移的连接列表不出现 SQLite。M10b 完成后这些拦截已去掉（`m10b-sqlite.md`）。
 
 ## 行为
 

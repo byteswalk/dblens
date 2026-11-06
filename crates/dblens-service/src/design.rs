@@ -123,6 +123,9 @@ impl Part {
                     RebuildStep::CountCheck { source, target } => {
                         format!("SELECT COUNT(*) FROM {source}; SELECT COUNT(*) FROM {target}")
                     }
+                    RebuildStep::ForeignKeyCheck { schema, table } => {
+                        format!("SELECT * FROM pragma_foreign_key_check('{table}', '{schema}')")
+                    }
                 })
                 .collect(),
         }
@@ -156,7 +159,6 @@ impl Service {
     pub async fn design_caps(&self, profile_id: &str) -> Result<DesignCaps> {
         let profile = self.profile(profile_id)?;
         let dialect = self.metadata.dialect(&profile).await?;
-        crate::later::ensure_full(&dialect)?;
         Ok(dialect.design_caps())
     }
 
@@ -233,7 +235,6 @@ impl Service {
     async fn prepare_design(&self, profile_id: &str, req: &DesignRequest) -> Result<Prepared> {
         let profile = self.scoped_profile(profile_id, req.catalog.as_deref())?;
         let dialect = self.metadata.dialect(&profile).await?;
-        crate::later::ensure_full(&dialect)?;
         let mut draft = req.draft.clone();
         if let Some(name) = &req.name {
             // 已有表不能改名
@@ -325,7 +326,7 @@ impl Service {
             .iter()
             .filter_map(|s| match &s.step {
                 RebuildStep::Sql { sql } => Some(sql.clone()),
-                RebuildStep::CountCheck { .. } => None,
+                RebuildStep::CountCheck { .. } | RebuildStep::ForeignKeyCheck { .. } => None,
             })
             .collect();
         (preview.denied, preview.confirm) =
@@ -478,6 +479,9 @@ impl Run<'_> {
             if let Some(sql) = self.dialect.schema_switch_sql(self.schema) {
                 exec(&mut conn, &sql, &[]).await?;
             }
+            for sql in self.dialect.design_prelude() {
+                exec(&mut conn, sql, &[]).await?;
+            }
             if transactional {
                 conn.set_autocommit(false).await?;
             }
@@ -544,6 +548,19 @@ impl Run<'_> {
                             Ok(())
                         } else {
                             Err(Error::invalid(msg!("design.count_mismatch", source = a, target = b)))
+                        }
+                    }
+                    .await
+                }
+                RebuildStep::ForeignKeyCheck { schema, table } => {
+                    async {
+                        let lit = |s: &str| self.dialect.literal(&dblens_core::Value::String(s.into()));
+                        let source = format!("pragma_foreign_key_check({}, {})", lit(table)?, lit(schema)?);
+                        let n = self.count(conn, &source).await?;
+                        if n == 0 {
+                            Ok(())
+                        } else {
+                            Err(Error::invalid(msg!("design.fk_check_failed", count = n)))
                         }
                     }
                     .await
@@ -667,7 +684,9 @@ mod tests {
             .iter()
             .map(|s| match &s.step {
                 RebuildStep::Sql { sql } => sql.clone(),
-                RebuildStep::CountCheck { .. } => panic!("新建表不会核对行数"),
+                RebuildStep::CountCheck { .. } | RebuildStep::ForeignKeyCheck { .. } => {
+                    panic!("新建表不会核对")
+                }
             })
             .collect()
     }

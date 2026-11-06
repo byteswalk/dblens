@@ -76,22 +76,27 @@ export default function IndexesPane({ draft, original, caps, issues, onChange }:
           align: 'center',
           render: (_, x) => <Checkbox checked={x.unique} disabled={x.deleted} onChange={(e) => set(x.key, { unique: e.target.checked })} />,
         },
-        {
-          title: t('design.index.method'),
-          width: 140,
-          render: (_, x) => (
-            <Select
-              size="small"
-              variant="borderless"
-              style={{ width: '100%' }}
-              value={x.method ?? undefined}
-              allowClear
-              disabled={x.deleted}
-              options={(caps?.index_methods ?? []).map((m) => ({ value: m }))}
-              onChange={(m?: string) => set(x.key, { method: m ?? null })}
-            />
-          ),
-        },
+        // SQLite 没有索引方法可选
+        ...(caps?.index_methods.length === 0
+          ? []
+          : [
+              {
+                title: t('design.index.method'),
+                width: 140,
+                render: (_: unknown, x: DraftIndex) => (
+                  <Select
+                    size="small"
+                    variant="borderless"
+                    style={{ width: '100%' }}
+                    value={x.method ?? undefined}
+                    allowClear
+                    disabled={x.deleted}
+                    options={(caps?.index_methods ?? []).map((m) => ({ value: m }))}
+                    onChange={(m?: string) => set(x.key, { method: m ?? null })}
+                  />
+                ),
+              },
+            ]),
       ]}
     />
   )

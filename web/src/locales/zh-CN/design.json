@@ -118,7 +118,8 @@
     "copy": "复制 SQL",
     "copied": "已复制",
     "openInTab": "在新查询标签中打开",
-    "execute": "执行"
+    "execute": "执行",
+    "fkCheck": "核对外键：{{table}}"
   },
   "run": {
     "running": "正在执行：{{done}} / {{total}}",

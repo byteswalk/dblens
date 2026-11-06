@@ -635,7 +635,8 @@ pub fn native_type(family: Family, logical: &LogicalType) -> String {
         // 名字只影响亲和性，按常见写法给出，长度、精度照写（SQLite 不检查）
         Family::Sqlite => match logical {
             L::Bool => "BOOLEAN".into(),
-            L::Int { .. } | L::UInt { .. } => "INTEGER".into(),
+            // 不写 INTEGER：单列的 INTEGER 主键会成为 rowid 的别名（自增），自增列由设计器另写
+            L::Int { bits } | L::UInt { bits } => if *bits <= 32 { "INT" } else { "BIGINT" }.into(),
             L::Float { .. } => "REAL".into(),
             L::Decimal { precision, scale } => decimal_native(family, *precision, *scale),
             L::Char { len } => with_len("CHAR", *len),

@@ -46,8 +46,6 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
   const runner = runnerFor(api, tab.id)
   const rt = useTabRuntime(tab.id)
   const profile = profiles.find((p) => p.id === tab.profileId)
-  // SQLite 的导入和表设计器在 M10b
-  const sqliteLater = profile?.driver === 'sqlite'
   const data = tab.data!
   const [filter, setFilter] = useState(data.filter ?? '')
   const [total, setTotal] = useState<string | null>(null)
@@ -241,8 +239,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           <Button
             size="small"
             icon={<IconUpload size={14} />}
-            disabled={!profile || sqliteLater}
-            title={sqliteLater ? t('tree.menu.sqliteLater') : undefined}
+            disabled={!profile}
             onClick={() =>
               useImportDialogs
                 .getState()
@@ -256,8 +253,7 @@ export default function DataView({ tab, profiles }: { tab: QueryTab; profiles: P
           <Button
             size="small"
             icon={<IconTableOptions size={14} />}
-            disabled={!profile || sqliteLater}
-            title={sqliteLater ? t('tree.menu.sqliteLater') : undefined}
+            disabled={!profile}
             onClick={() => useTabs.getState().openDesign(tab.profileId, { schema: data.schema, table: data.object })}
           >
             {t('editor.data.design')}
