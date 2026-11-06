@@ -1592,6 +1592,10 @@
     "zh-CN": "请从 https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE 下载 gbasedbtjdbc，改名为 gbasedbtjdbc.jar 后放到一个目录，再在设置中选择该目录",
     "en": "Download gbasedbtjdbc from https://www.gbase.cn/download/gbase-8s-1?category=DRIVER_PACKAGE, rename it to gbasedbtjdbc.jar, put it in a folder and choose that folder in Settings"
   },
+  "oracle.linux_library_path": {
+    "zh-CN": "%{error}（Linux 上只在连接设置里指定 Instant Client 目录还不够：请把该目录加入 LD_LIBRARY_PATH 或用 ldconfig 注册，再重新启动 DBLENS）",
+    "en": "%{error} (On Linux, setting the Instant Client directory in the connection is not enough: add it to LD_LIBRARY_PATH or register it with ldconfig, then restart DBLENS)"
+  },
   "native.install.oracle_client": {
     "zh-CN": "请安装 Oracle Instant Client（Basic 或 Basic Light），然后在连接设置中指定其目录，或设置 ORACLE_HOME / PATH",
     "en": "Install Oracle Instant Client (Basic or Basic Light), then set its directory in the connection settings, or set ORACLE_HOME / PATH"
