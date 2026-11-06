@@ -165,10 +165,15 @@ export default function ConnectionDialog() {
 
   const pickFile = async () => {
     if (!desktop) return
-    const path = await desktop.openDialog([
+    const filters = [
       { name: 'SQLite', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] },
       { name: t('connections.sqlite.allFiles'), extensions: ['*'] },
-    ])
+    ]
+    // 系统"打开"对话框只接受已存在的文件；勾了"不存在时新建"就用"另存为"对话框，才能输入新文件名
+    const path =
+      form.createFile && !form.readOnly
+        ? await desktop.saveDialog(form.database.split(/[\\/]/).pop() || 'app.db', filters)
+        : await desktop.openDialog(filters)
     if (path) setForm((f) => ({ ...f, database: path, name: f.name || path.split(/[\\/]/).pop() || '' }))
   }
 
