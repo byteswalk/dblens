@@ -126,15 +126,44 @@ pub async fn save_dialog(app: AppHandle, default_name: String, filters: Vec<File
     dialog.blocking_save_file().and_then(|p| p.into_path().ok()).map(|p| p.display().to_string())
 }
 
-/// 系统"打开"对话框（导入、执行 SQL 文件时选择文件）。用户取消时返回 None。
+/// 系统"打开"对话框（导入、执行 SQL 文件、选择 SQLite 文件）。用户取消时返回 None。
+///
+/// `directory`、`file_name` 是打开时所在的目录和预填的文件名。`allow_new` 为真时也接受不存在的文件名
+/// （新建 SQLite 库）：Windows 上是去掉"文件必须存在"的"打开"对话框；其他系统没有这个选项，
+/// 改用"另存为"对话框，选中已有文件时系统会先问一次是否替换（只是打开，不会清空文件）。
 #[tauri::command]
-pub async fn open_dialog(app: AppHandle, filters: Vec<FileFilter>) -> Option<String> {
+pub async fn open_dialog(
+    app: AppHandle,
+    filters: Vec<FileFilter>,
+    directory: Option<String>,
+    file_name: Option<String>,
+    allow_new: Option<bool>,
+) -> Option<String> {
+    let directory = directory.filter(|d| Path::new(d).is_dir());
+    let allow_new = allow_new.unwrap_or(false);
+    #[cfg(windows)]
+    if allow_new {
+        let owner = app.get_webview_window(window::MAIN).and_then(|w| w.hwnd().ok()).map(|h| h.0 as isize);
+        let default_extension =
+            filters.first().and_then(|f| f.extensions.first()).filter(|e| *e != "*").cloned();
+        return crate::win_dialog::pick_file_allow_new(
+            owner,
+            crate::win_dialog::Options { filters, directory, file_name, default_extension },
+        );
+    }
     let mut dialog = app.dialog().file();
     for f in &filters {
         let exts: Vec<&str> = f.extensions.iter().map(String::as_str).collect();
         dialog = dialog.add_filter(&f.name, &exts);
     }
-    dialog.blocking_pick_file().and_then(|p| p.into_path().ok()).map(|p| p.display().to_string())
+    if let Some(dir) = directory {
+        dialog = dialog.set_directory(dir);
+    }
+    if let Some(name) = file_name.filter(|n| !n.is_empty()) {
+        dialog = dialog.set_file_name(name);
+    }
+    let picked = if allow_new { dialog.blocking_save_file() } else { dialog.blocking_pick_file() };
+    picked.and_then(|p| p.into_path().ok()).map(|p| p.display().to_string())
 }
 
 /// 系统"选择文件夹"对话框（打开、新建模型时选目录）。用户取消时返回 None。

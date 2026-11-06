@@ -27,6 +27,12 @@ export type WindowAction =
 /** 与 Rust 端 `shell::EVENT` 一致。 */
 export const SHELL_EVENT = 'dblens://shell'
 
+export interface OpenDialogOptions {
+  directory?: string
+  fileName?: string
+  allowNew?: boolean
+}
+
 export interface DesktopShell {
   info(): Promise<ShellInfo>
   action(a: WindowAction): Promise<void>
@@ -36,8 +42,11 @@ export interface DesktopShell {
   /** 系统"另存为"对话框；用户取消时为 null。 */
   saveDialog(defaultName: string, filters: { name: string; extensions: string[] }[]): Promise<string | null>
   revealInFolder(path: string): Promise<void>
-  /** 系统"打开"对话框；用户取消时为 null。 */
-  openDialog(filters: { name: string; extensions: string[] }[]): Promise<string | null>
+  /**
+   * 系统"打开"对话框；用户取消时为 null。`directory`、`fileName` 是打开时的目录和预填文件名；
+   * `allowNew` 为真时也接受不存在的文件名（新建 SQLite 库）。
+   */
+  openDialog(filters: { name: string; extensions: string[] }[], options?: OpenDialogOptions): Promise<string | null>
   /** 系统"选择文件夹"对话框（模型目录）；用户取消时为 null。 */
   folderDialog(): Promise<string | null>
 }
@@ -55,7 +64,7 @@ function createDesktopShell(): DesktopShell {
     onChange: async (cb) => listen<ShellInfo>(SHELL_EVENT, (e) => cb(e.payload)),
     saveDialog: (defaultName, filters) => invoke<string | null>('save_dialog', { defaultName, filters }),
     revealInFolder: (path) => invoke('reveal_in_folder', { path }),
-    openDialog: (filters) => invoke<string | null>('open_dialog', { filters }),
+    openDialog: (filters, options) => invoke<string | null>('open_dialog', { filters, ...options }),
     folderDialog: () => invoke<string | null>('folder_dialog'),
   }
 }

@@ -94,6 +94,25 @@ export function isFileDb(driver: DriverId): boolean {
   return driver === 'sqlite'
 }
 
+/** 把填写的文件路径拆成所在目录和文件名，供文件对话框定位；没有目录部分时只给文件名。 */
+export function splitFilePath(path: string): { directory?: string; fileName?: string } {
+  const p = path.trim()
+  const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'))
+  const fileName = p.slice(i + 1) || undefined
+  if (i < 0) return { fileName }
+  let directory = p.slice(0, i)
+  // 盘符根目录要带上分隔符（`C:` 指的是该盘的当前目录），`/x.db` 的目录是 `/`
+  if (directory === '' || /^[A-Za-z]:$/.test(directory)) directory += p[i]
+  return { directory, fileName }
+}
+
+/** 选好文件后填入路径；名称没填，或还是上一个文件的文件名（自动填的）时，跟着换成新文件名。 */
+export function pickedFile<F extends Pick<ConnectionForm, 'name' | 'database'>>(f: F, path: string): F {
+  const previous = splitFilePath(f.database).fileName
+  const auto = f.name === '' || f.name === previous
+  return { ...f, database: path, name: auto ? (splitFilePath(path).fileName ?? '') : f.name }
+}
+
 export function emptyForm(id: ProductId = 'mysql'): ConnectionForm {
   const p = product(id)
   return {

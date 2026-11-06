@@ -22,9 +22,11 @@ import {
   fromProfile,
   isFileDb,
   needsCredentials,
+  pickedFile,
   serverText,
   supportsTls,
   serverNotes,
+  splitFilePath,
   switchProduct,
   toProfileInput,
   validate,
@@ -99,6 +101,7 @@ export default function ConnectionDialog() {
   const [errors, setErrors] = useState<Errors>({})
   const [result, setResult] = useState<{ ok: ServerSummary } | { error: string } | null>(null)
   const [busy, setBusy] = useState<'test' | 'save' | null>(null)
+  const [tab, setTab] = useState('general')
   // SQLite 只在能打开本机文件时（桌面版）出现在产品列表里
   const { data: drivers } = useQuery({ queryKey: ['drivers'], queryFn: () => api.drivers(), enabled: connectionDialog !== null })
   const sqliteReady = drivers?.some((d) => d.id === 'sqlite' && d.available) ?? false
@@ -106,6 +109,7 @@ export default function ConnectionDialog() {
   useEffect(() => {
     setErrors({})
     setResult(null)
+    setTab('general')
     if (!connectionDialog) return
     if (editingId === null) {
       setForm(emptyForm())
@@ -169,12 +173,10 @@ export default function ConnectionDialog() {
       { name: 'SQLite', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] },
       { name: t('connections.sqlite.allFiles'), extensions: ['*'] },
     ]
-    // 系统"打开"对话框只接受已存在的文件；勾了"不存在时新建"就用"另存为"对话框，才能输入新文件名
-    const path =
-      form.createFile && !form.readOnly
-        ? await desktop.saveDialog(form.database.split(/[\\/]/).pop() || 'app.db', filters)
-        : await desktop.openDialog(filters)
-    if (path) setForm((f) => ({ ...f, database: path, name: f.name || path.split(/[\\/]/).pop() || '' }))
+    // 从当前填的文件所在目录打开；勾了"不存在时新建"时也接受新文件名
+    const current = splitFilePath(form.database)
+    const path = await desktop.openDialog(filters, { ...current, allowNew: form.createFile && !form.readOnly })
+    if (path) setForm((f) => pickedFile(f, path))
   }
 
   const fileGeneral = (
@@ -416,9 +418,13 @@ export default function ConnectionDialog() {
         <Form className="grow" layout="horizontal" labelCol={{ flex: '100px' }} labelAlign="left">
           <Tabs
             size="small"
+            // 停在 SSL/TLS 页时换成本地文件库，这一页没有了，回到常规页（文件路径在那里）
+            activeKey={tab === 'tls' && isFileDb(form.driver) ? 'general' : tab}
+            onChange={setTab}
             items={[
               { key: 'general', label: t('connections.dialog.tabGeneral'), children: general },
-              { key: 'tls', label: 'SSL/TLS', children: tls },
+              // 本地文件库没有网络连接，不显示 SSL/TLS 页
+              ...(isFileDb(form.driver) ? [] : [{ key: 'tls', label: 'SSL/TLS', children: tls }]),
               { key: 'advanced', label: t('connections.dialog.tabAdvanced'), children: advanced },
             ]}
           />

@@ -8,9 +8,11 @@ import {
   driverLabel,
   emptyForm,
   fromProfile,
+  pickedFile,
   profileKind,
   serverNotes,
   serverText,
+  splitFilePath,
   switchDriver,
   switchProduct,
   toProfileInput,
@@ -224,5 +226,33 @@ describe('JDBC 客户端', () => {
   it('默认用原生客户端，不写选项', () => {
     const input = toProfileInput({ ...emptyForm('dameng'), name: 'd', host: 'h', user: 'u' })
     expect(input.options).not.toHaveProperty('client')
+  })
+})
+
+describe('splitFilePath', () => {
+  it('拆出目录和文件名', () => {
+    expect(splitFilePath('C:\\data\\app.db')).toEqual({ directory: 'C:\\data', fileName: 'app.db' })
+    expect(splitFilePath('/home/u/app.db')).toEqual({ directory: '/home/u', fileName: 'app.db' })
+  })
+
+  it('根目录保留分隔符', () => {
+    expect(splitFilePath('C:\\app.db')).toEqual({ directory: 'C:\\', fileName: 'app.db' })
+    expect(splitFilePath('/app.db')).toEqual({ directory: '/', fileName: 'app.db' })
+  })
+
+  it('没有目录或没填时', () => {
+    expect(splitFilePath('app.db')).toEqual({ fileName: 'app.db' })
+    expect(splitFilePath('  ')).toEqual({ fileName: undefined })
+  })
+})
+
+describe('pickedFile', () => {
+  it('名称没填或是上一个文件名时跟着换', () => {
+    expect(pickedFile({ name: '', database: '' }, '/d/a.db')).toEqual({ name: 'a.db', database: '/d/a.db' })
+    expect(pickedFile({ name: 'a.db', database: '/d/a.db' }, '/d/b.db')).toEqual({ name: 'b.db', database: '/d/b.db' })
+  })
+
+  it('用户自己起的名称不动', () => {
+    expect(pickedFile({ name: '订单库', database: '/d/a.db' }, '/d/b.db')).toEqual({ name: '订单库', database: '/d/b.db' })
   })
 })

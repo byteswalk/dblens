@@ -10,6 +10,8 @@ mod json_file;
 mod logging;
 mod shell;
 mod update;
+#[cfg(windows)]
+mod win_dialog;
 mod window;
 mod window_state;
 

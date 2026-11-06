@@ -36,9 +36,9 @@ afterEach(() => {
   useUi.setState({ connectionDialog: null })
 })
 
-function setup() {
+function setup(drivers: { id: string; available: boolean }[] = []) {
   const api = {
-    drivers: vi.fn(async () => []),
+    drivers: vi.fn(async () => drivers),
     secrets: vi.fn(),
     testConnection: vi.fn(async () => ({
       product: 'MySQL',
@@ -89,5 +89,14 @@ describe('连接对话框', () => {
       'pw',
     )
     expect(await screen.findByText('连接成功：MySQL 9.7.4，识别为 MySQL')).toBeTruthy()
+  })
+
+  it('SQLite 是本机文件，没有 SSL/TLS 页；停在那一页时回到常规页', async () => {
+    setup([{ id: 'sqlite', available: true }])
+    await userEvent.click(await screen.findByRole('tab', { name: 'SSL/TLS' }))
+    await userEvent.click(await screen.findByText('SQLite'))
+    expect(await screen.findByText('数据库文件')).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'SSL/TLS' })).toBeNull()
+    expect(screen.getByRole('tab', { name: '常规' }).getAttribute('aria-selected')).toBe('true')
   })
 })
