@@ -1217,9 +1217,9 @@ fn upload(s: &Service, name: &str, content: &str) -> FileSource {
     FileSource::Upload { upload: id }
 }
 
-/// 等后台任务结束（或进入等待确认）。
+/// 等后台任务结束（或进入等待确认）。上限 10 分钟：刷盘慢的机器上 SQLite 逐行提交要几分钟。
 async fn wait_task(s: &Service, id: &str) -> TaskStatus {
-    for _ in 0..6000 {
+    for _ in 0..30_000 {
         let st = s.tasks.status(id).unwrap();
         if st.state != TaskState::Running {
             return st;

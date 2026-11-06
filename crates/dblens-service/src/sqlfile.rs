@@ -540,7 +540,13 @@ mod tests {
         assert_eq!(executed(&log).last().unwrap(), "INSERT INTO t VALUES (59999, '数59999')");
         let id =
             s.start_sql_file(request(&dev, upload(&s, "SELECT 1; SLEEP; SELECT 2")), false).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        // 等第一条执行完再取消：慢机器（ARM 上的调试版）50 毫秒内可能还没开始
+        for _ in 0..500 {
+            if s.tasks.status(&id).unwrap().progress.statements_done >= 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
         s.tasks.cancel_or_remove(&id).await.unwrap();
         let st = wait(&s, &id).await;
         assert_eq!((st.state, st.progress.statements_done), (TaskState::Cancelled, 1));

@@ -177,7 +177,7 @@ impl Secrets {
                 Err(e) => Err(Error::internal(msg!("secret.keyring_read_failed", error = e))),
             },
             SecretBackend::Vault => {
-                let key = self.key()?;
+                // 先查有没有存过：没存密码的连接（SQLite 文件、不保存密码）在密码库锁着时也能打开
                 let row: Option<(Vec<u8>, Vec<u8>)> = self.store.with(|c| {
                     c.query_row(
                         "SELECT nonce, cipher FROM secrets WHERE profile_id = ?1",
@@ -189,6 +189,7 @@ impl Secrets {
                 match row {
                     None => Ok(None),
                     Some((nonce, cipher)) => {
+                        let key = self.key()?;
                         let plain = open(&key, &nonce, &cipher)
                             .ok_or_else(|| crypto_err(msg!("secret.op.decrypt")))?;
                         String::from_utf8(plain).map(Some).map_err(|_| crypto_err(msg!("secret.op.decrypt")))
@@ -253,6 +254,8 @@ mod tests {
             SecretStatus { backend: SecretBackend::Vault, vault_initialized: false, unlocked: false }
         );
         assert!(matches!(s.set(&id, "pw"), Err(Error::Locked)));
+        // 没存过密码的连接（如 SQLite 文件）不用先设主密码
+        assert_eq!(s.get(&id).unwrap(), None);
         assert!(matches!(s.unlock("x"), Err(Error::Invalid { .. })));
         assert!(matches!(s.init_vault(""), Err(Error::Invalid { .. })));
         s.init_vault("主密码").unwrap();
@@ -283,6 +286,9 @@ mod tests {
         assert_eq!(again.get(&id).unwrap().as_deref(), Some("p@ss 中文2"));
         again.lock().unwrap();
         assert!(matches!(again.get(&id), Err(Error::Locked)));
+        // 锁着时，没存密码的连接照样能取到“无”
+        let other = store.create_profile(input("q")).unwrap().id;
+        assert_eq!(again.get(&other).unwrap(), None);
 
         again.unlock("主密码").unwrap();
         again.delete(&id).unwrap();
