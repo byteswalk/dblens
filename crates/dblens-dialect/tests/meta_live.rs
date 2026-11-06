@@ -609,6 +609,8 @@ const ORACLE11_EMP: &str = "CREATE TABLE META_EMP (
 )";
 /// 11g 没有的：标识列、23ai 的类型；和虚拟列同表达式的函数索引报 ORA-54018。
 const ORACLE11_SKIP: [&str; 3] = ["ds_23", "idt", "idx_upper"];
+/// 12c～21c 没有 23ai 的类型；虚拟列和 UPPER(name) 同表达式，函数索引报 ORA-54018（23ai 允许）。
+const ORACLE19_SKIP: [&str; 2] = ["ds_23", "idx_upper"];
 /// XE 版没有分区和位图索引。
 const ORACLE_XE_SKIP: [&str; 3] = ["part", "part_list", "idx_bitmap"];
 
@@ -622,6 +624,8 @@ async fn oracle_metadata() {
         let skip: Vec<&str> =
             ORACLE11_SKIP.iter().chain(if xe { &ORACLE_XE_SKIP[..] } else { &[] }).copied().collect();
         live.run_script_with(fixture, &skip, &[("dept", ORACLE11_DEPT), ("emp", ORACLE11_EMP)]).await;
+    } else if live.d.oracle_release().is_some_and(|v| v < 230000) {
+        live.run_script_with(fixture, &ORACLE19_SKIP, &[]).await;
     } else {
         live.run_script(fixture).await;
     }

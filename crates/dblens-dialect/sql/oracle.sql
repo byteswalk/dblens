@@ -210,22 +210,23 @@ SELECT i.table_name AS table_name,
        i.index_name AS index_name,
        CASE WHEN i.uniqueness = 'UNIQUE' THEN 'Y' ELSE 'N' END AS is_unique,
        CASE WHEN i.index_type LIKE 'FUNCTION-BASED %' THEN SUBSTR(i.index_type, 16) ELSE i.index_type END AS method,
-{% if version >= 120200 %}
+-- ALL_TAB_COLS.DATA_DEFAULT_VC 是 23ai 才有的（19c 没有），更早的版本从 ALL_IND_EXPRESSIONS 读 LONG 表达式
+{% if version >= 230000 %}
        COALESCE(RTRIM(tc.data_default_vc, CHR(32) || CHR(9) || CHR(10) || CHR(13)), ic.column_name) AS column_expr,
 {% else %}
        ic.column_name AS column_expr,
 {% endif %}
        ic.column_position AS position,
        CASE WHEN ic.descend = 'DESC' THEN 'Y' ELSE 'N' END AS descending
-{% if version < 120200 %}
+{% if version < 230000 %}
        , ie.column_expression AS column_expression
 {% endif %}
 FROM all_indexes i
 JOIN all_ind_columns ic ON ic.index_owner = i.owner AND ic.index_name = i.index_name
-{% if version < 120200 %}
+{% if version < 230000 %}
 LEFT JOIN all_ind_expressions ie ON ie.index_owner = ic.index_owner AND ie.index_name = ic.index_name AND ie.column_position = ic.column_position
 {% endif %}
-{% if version >= 120200 %}
+{% if version >= 230000 %}
 LEFT JOIN all_tab_cols tc ON tc.owner = i.table_owner AND tc.table_name = i.table_name AND tc.column_name = ic.column_name
      AND tc.virtual_column = 'YES' AND tc.hidden_column = 'YES'
 {% endif %}

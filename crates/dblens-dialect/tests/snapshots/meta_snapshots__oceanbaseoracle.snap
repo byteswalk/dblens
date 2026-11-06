@@ -161,6 +161,7 @@ SELECT i.table_name AS table_name,
        i.index_name AS index_name,
        CASE WHEN i.uniqueness = 'UNIQUE' THEN 'Y' ELSE 'N' END AS is_unique,
        CASE WHEN i.index_type LIKE 'FUNCTION-BASED %' THEN SUBSTR(i.index_type, 16) ELSE i.index_type END AS method,
+-- ALL_TAB_COLS.DATA_DEFAULT_VC 是 23ai 才有的（19c 没有），更早的版本从 ALL_IND_EXPRESSIONS 读 LONG 表达式
        COALESCE(RTRIM(tc.data_default_vc, CHR(32) || CHR(9) || CHR(10) || CHR(13)), ic.column_name) AS column_expr,
        ic.column_position AS position,
        CASE WHEN ic.descend = 'DESC' THEN 'Y' ELSE 'N' END AS descending
