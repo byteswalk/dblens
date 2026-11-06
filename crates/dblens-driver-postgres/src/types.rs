@@ -63,6 +63,71 @@ pub(crate) fn decode_numeric(raw: &[u8]) -> std::result::Result<String, BoxError
     Ok(s)
 }
 
+/// 把十进制文本编码成 PG numeric 的二进制格式（`decode_numeric` 的逆过程）。接受符号、小数点、指数和 NaN；
+/// 文本不是数字时返回 None。PG 14 以前没有 numeric 的无穷大，这里也不编码。
+pub(crate) fn encode_numeric(text: &str) -> Option<Vec<u8>> {
+    let t = text.trim();
+    if t.eq_ignore_ascii_case("nan") {
+        return Some(
+            [0i16.to_be_bytes(), 0i16.to_be_bytes(), 0xC000u16.to_be_bytes(), 0u16.to_be_bytes()].concat(),
+        );
+    }
+    let (neg, body) = match t.as_bytes().first()? {
+        b'-' => (true, &t[1..]),
+        b'+' => (false, &t[1..]),
+        _ => (false, t),
+    };
+    let (mantissa, exp) = match body.find(['e', 'E']) {
+        Some(i) => (&body[..i], body[i + 1..].parse::<i32>().ok()?),
+        None => (body, 0),
+    };
+    let (ip, fp) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    if ip.is_empty() && fp.is_empty() || !ip.bytes().chain(fp.bytes()).all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    // 把指数并进去：小数点右移 exp 位
+    let mut digits: String = format!("{ip}{fp}");
+    let mut point = i64::try_from(ip.len()).ok()? + i64::from(exp);
+    if point < 0 {
+        digits.insert_str(0, &"0".repeat(usize::try_from(-point).ok()?));
+        point = 0;
+    }
+    let point = usize::try_from(point).ok()?;
+    if digits.len() < point {
+        digits.push_str(&"0".repeat(point - digits.len()));
+    }
+    let (int_part, frac_part) = digits.split_at(point);
+    let dscale = u16::try_from(frac_part.len()).ok()?;
+    let int_part = int_part.trim_start_matches('0');
+    // 按 4 位一组：整数部分左补零，小数部分右补零
+    let int_pad = (4 - int_part.len() % 4) % 4;
+    let frac_pad = (4 - frac_part.len() % 4) % 4;
+    let all = format!("{}{int_part}{frac_part}{}", "0".repeat(int_pad), "0".repeat(frac_pad));
+    let mut groups: Vec<i16> =
+        all.as_bytes().chunks(4).map(|c| std::str::from_utf8(c).unwrap().parse().unwrap()).collect();
+    let mut weight = i32::try_from((int_pad + int_part.len()) / 4).ok()? - 1;
+    while groups.first() == Some(&0) {
+        groups.remove(0);
+        weight -= 1;
+    }
+    while groups.last() == Some(&0) {
+        groups.pop();
+    }
+    if groups.is_empty() {
+        weight = 0;
+    }
+    let sign: u16 = if neg && !groups.is_empty() { 0x4000 } else { 0 };
+    let mut out = Vec::with_capacity(8 + groups.len() * 2);
+    out.extend_from_slice(&i16::try_from(groups.len()).ok()?.to_be_bytes());
+    out.extend_from_slice(&i16::try_from(weight).ok()?.to_be_bytes());
+    out.extend_from_slice(&sign.to_be_bytes());
+    out.extend_from_slice(&dscale.to_be_bytes());
+    for g in groups {
+        out.extend_from_slice(&g.to_be_bytes());
+    }
+    Some(out)
+}
+
 /// 把 PG interval（月、天、微秒）格式化为文本。
 pub(crate) fn format_interval(months: i32, days: i32, micros: i64) -> String {
     let sign = if micros < 0 { "-" } else { "" };
@@ -440,16 +505,18 @@ impl ToSql for PgParam<'_> {
                 Type::INT4 => i32::try_from(*i)?.to_sql(ty, out),
                 Type::FLOAT4 => (*i as f32).to_sql(ty, out),
                 Type::FLOAT8 => (*i as f64).to_sql(ty, out),
-                Type::NUMERIC => Err(numeric_param_hint()),
+                Type::NUMERIC => numeric_to_sql(&i.to_string(), out),
                 _ => i.to_sql(ty, out),
             },
             Value::UInt(u) => PgParam(&Value::Int(i64::try_from(*u)?), self.1).to_sql(ty, out),
             Value::Float(f) => match *ty {
                 Type::FLOAT4 => (*f as f32).to_sql(ty, out),
+                Type::NUMERIC if f.is_finite() => numeric_to_sql(&f.to_string(), out),
+                Type::NUMERIC if f.is_nan() => numeric_to_sql("NaN", out),
                 Type::NUMERIC => Err(numeric_param_hint()),
                 _ => f.to_sql(ty, out),
             },
-            Value::Decimal(_) if *ty == Type::NUMERIC => Err(numeric_param_hint()),
+            Value::String(d) | Value::Decimal(d) if *ty == Type::NUMERIC => numeric_to_sql(d, out),
             Value::String(s) | Value::Decimal(s) | Value::Interval(s) => s.as_str().to_sql(ty, out),
             Value::Bytes(b) => b.as_slice().to_sql(ty, out),
             Value::Date(d) if *ty == Type::TIMESTAMP => d.and_time(chrono::NaiveTime::MIN).to_sql(ty, out),
@@ -472,6 +539,12 @@ impl ToSql for PgParam<'_> {
     to_sql_checked!();
 }
 
+fn numeric_to_sql(text: &str, out: &mut BytesMut) -> std::result::Result<IsNull, BoxError> {
+    let bytes = encode_numeric(text).ok_or_else(numeric_param_hint)?;
+    out.extend_from_slice(&bytes);
+    Ok(IsNull::No)
+}
+
 fn numeric_param_hint() -> BoxError {
     Error::invalid(msg!("pg.numeric_param")).into()
 }
@@ -479,6 +552,36 @@ fn numeric_param_hint() -> BoxError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numeric_encode_round_trip() {
+        for (text, back) in [
+            ("0", "0"),
+            ("1", "1"),
+            ("-1", "-1"),
+            ("10000", "10000"),
+            ("123456789012345678901234567890", "123456789012345678901234567890"),
+            ("1234.5", "1234.5"),
+            ("-0.01", "-0.01"),
+            ("0.0001", "0.0001"),
+            ("0.00001", "0.00001"),
+            ("12.30", "12.30"),
+            ("+7", "7"),
+            (".25", "0.25"),
+            ("5.", "5"),
+            ("1e3", "1000"),
+            ("1.5e-3", "0.0015"),
+            ("-2.5E2", "-250"),
+            ("-0.000", "0.000"),
+            ("NaN", "NaN"),
+        ] {
+            let raw = encode_numeric(text).unwrap_or_else(|| panic!("{text}"));
+            assert_eq!(decode_numeric(&raw).unwrap(), back, "{text}");
+        }
+        for bad in ["", "-", ".", "abc", "1.2.3", "1e", "Infinity", "1 2"] {
+            assert!(encode_numeric(bad).is_none(), "{bad}");
+        }
+    }
 
     #[test]
     fn sqlserver_money_round_trip() {

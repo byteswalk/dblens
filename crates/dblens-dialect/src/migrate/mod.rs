@@ -447,9 +447,17 @@ impl Context<'_> {
         n: &mut Notes,
     ) -> Column {
         let at = Some(c.name.as_str());
+        // 自增列下面会改成整数，映射成定点数时的提示（如 DECIMAL(65,30)）不再适用
+        let to_int = c.auto_increment
+            && ov.data_type.is_none()
+            && types::identity_supported(self.tgt)
+            && self.tgt.variant() != Variant::OceanBaseOracle
+            && types::identity_to_int(self.tgt, &c.data_type.logical);
         let (native, logical) =
             types::column_type(self.src, self.tgt, c, ov, &self.settings.type_rules, |l, m| {
-                n.push(at, None, l, m)
+                if !to_int {
+                    n.push(at, None, l, m)
+                }
             });
         let mut out = Column {
             name,
@@ -489,7 +497,8 @@ impl Context<'_> {
                 out.auto_increment = true;
                 if ov.data_type.is_none() {
                     let ColumnType { native, logical } = out.data_type.clone();
-                    let (native, logical) = types::identity_type(self.tgt, native, logical);
+                    let (native, logical) =
+                        types::identity_type(self.tgt, &c.data_type.logical, native, logical);
                     out.data_type = ColumnType { native, logical };
                 }
             } else {

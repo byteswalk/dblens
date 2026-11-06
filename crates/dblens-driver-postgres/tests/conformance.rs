@@ -101,9 +101,64 @@ fn oracle_mode_fixture(params: ConnectParams) -> Fixture {
     base(params, oracle_mode_cases())
 }
 
+/// 整数、浮点、定点值直接绑定到 numeric 列（不在 SQL 里写类型转换），读回来核对。
+/// GaussDB 的 A 模式把 BIGINT 标识列存成 numeric，按整数写入时走这条路。
+async fn numeric_params(env: &str, fixture: fn(ConnectParams) -> Fixture) {
+    let Some(f) = dblens_driver::conformance::load(env, fixture) else { return };
+    let mut c = f.driver.connect(&f.params).await.unwrap();
+    async fn exec(c: &mut Box<dyn dblens_driver::Connection>, sql: &str, p: &[Value]) -> Vec<Vec<Value>> {
+        let mut s = c.execute(sql, p).await.unwrap();
+        let ev = dblens_driver::collect_all(s.as_mut(), 100).await.unwrap();
+        ev.into_iter()
+            .filter_map(|e| if let dblens_driver::ExecEvent::Rows(r) = e { Some(r) } else { None })
+            .flatten()
+            .collect()
+    }
+    exec(&mut c, "DROP TABLE IF EXISTS dblens_conf_numeric", &[]).await;
+    exec(&mut c, "CREATE TABLE dblens_conf_numeric (id INT PRIMARY KEY, n NUMERIC, d NUMERIC(12,2))", &[])
+        .await;
+    let rows = [
+        (1, Value::Int(9_007_199_254_740_993), Value::Int(-7)),
+        (2, Value::Float(0.25), Value::Float(1234.5)),
+        (3, Value::Decimal("-123456789012345678901234567890.000123".into()), Value::Decimal("0.01".into())),
+        (4, Value::String("1e3".into()), Value::Null),
+    ];
+    for (id, n, d) in &rows {
+        exec(
+            &mut c,
+            "INSERT INTO dblens_conf_numeric VALUES ($1, $2, $3)",
+            &[Value::Int(*id), n.clone(), d.clone()],
+        )
+        .await;
+    }
+    let got = exec(&mut c, "SELECT n, d FROM dblens_conf_numeric ORDER BY id", &[]).await;
+    let text = |v: &str| Value::Decimal(v.into());
+    assert_eq!(
+        got,
+        [
+            vec![text("9007199254740993"), text("-7.00")],
+            vec![text("0.25"), text("1234.50")],
+            vec![text("-123456789012345678901234567890.000123"), text("0.01")],
+            vec![text("1000"), Value::Null],
+        ]
+    );
+    let bad_params = [Value::Int(5), Value::String("abc".into())];
+    let bad = match c.execute("INSERT INTO dblens_conf_numeric VALUES ($1, $2, NULL)", &bad_params).await {
+        Err(_) => true,
+        Ok(mut s) => dblens_driver::collect_all(s.as_mut(), 10).await.is_err(),
+    };
+    assert!(bad, "不是数字的文本要报错");
+    exec(&mut c, "DROP TABLE dblens_conf_numeric", &[]).await;
+}
+
 mod postgres {
     use super::*;
     dblens_driver::conformance_tests!("DBLENS_TEST_PG_URL", pg_fixture);
+
+    #[tokio::test]
+    async fn numeric_parameters() {
+        numeric_params("DBLENS_TEST_PG_URL", pg_fixture).await;
+    }
 }
 
 mod opengauss {
@@ -120,11 +175,21 @@ mod opengauss_sha {
 mod opengauss_a {
     use super::*;
     dblens_driver::conformance_tests!("DBLENS_TEST_OPENGAUSS_A_URL", oracle_mode_fixture);
+
+    #[tokio::test]
+    async fn numeric_parameters() {
+        numeric_params("DBLENS_TEST_OPENGAUSS_A_URL", oracle_mode_fixture).await;
+    }
 }
 
 mod kingbase {
     use super::*;
     dblens_driver::conformance_tests!("DBLENS_TEST_KINGBASE_URL", oracle_mode_fixture);
+
+    #[tokio::test]
+    async fn numeric_parameters() {
+        numeric_params("DBLENS_TEST_KINGBASE_URL", oracle_mode_fixture).await;
+    }
 }
 
 mod kingbase_pg {

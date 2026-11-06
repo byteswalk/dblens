@@ -68,14 +68,24 @@ fn integer_number(src: &Dialect, tgt: &Dialect, logical: LogicalType) -> Logical
     }
 }
 
-/// 自增列在目标中必须是整数：小数位为 0 的定点数改成 64 位整数。
-pub(super) fn identity_type(tgt: &Dialect, native: String, logical: LogicalType) -> (String, LogicalType) {
-    match logical {
-        LogicalType::Decimal { scale: None | Some(0), .. } if tgt.family() != Family::Oracle => {
-            let l = LogicalType::Int { bits: 64 };
-            (tgt.native_type(&l), l)
-        }
-        other => (native, other),
+/// 自增列在目标中必须是整数：源是小数位为 0 或不限精度的定点数时改成 64 位整数。
+/// 看源类型：不限精度的 NUMERIC（GaussDB 的 A 模式把 BIGINT 标识列存成这样）映射后会带上小数位，如 MySQL 的 DECIMAL(65,30)。
+pub(super) fn identity_to_int(tgt: &Dialect, src: &LogicalType) -> bool {
+    matches!(src, LogicalType::Decimal { scale: None | Some(0), .. }) && tgt.family() != Family::Oracle
+}
+
+/// 自增列的目标类型，见 `identity_to_int`。
+pub(super) fn identity_type(
+    tgt: &Dialect,
+    src: &LogicalType,
+    native: String,
+    logical: LogicalType,
+) -> (String, LogicalType) {
+    if identity_to_int(tgt, src) {
+        let l = LogicalType::Int { bits: 64 };
+        (tgt.native_type(&l), l)
+    } else {
+        (native, logical)
     }
 }
 

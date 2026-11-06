@@ -1685,8 +1685,8 @@
     "en": "Malformed numeric data"
   },
   "pg.numeric_param": {
-    "zh-CN": "暂不支持直接绑定 NUMERIC 参数，请在 SQL 中写成 $1::text::numeric",
-    "en": "NUMERIC parameters cannot be bound directly yet; write $1::text::numeric in the SQL"
+    "zh-CN": "参数值不是有效的 NUMERIC 数值（不支持无穷大）",
+    "en": "The parameter is not a valid NUMERIC value (infinity is not supported)"
   },
   "pg.read_column_failed": {
     "zh-CN": "读取第 %{column} 列（%{ty}）失败：%{error}",

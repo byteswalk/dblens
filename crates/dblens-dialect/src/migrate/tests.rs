@@ -427,3 +427,26 @@ fn kingbase_number_cast_becomes_numeric() {
     assert_eq!(kingbase_number_casts("x::number_t > (1)::number"), "x::number_t > (1)::numeric");
     assert_eq!(kingbase_number_casts("a > 0"), "a > 0");
 }
+
+/// GaussDB 的 A 模式把 BIGINT 标识列存成不限精度的 NUMERIC：迁到 MySQL 是 BIGINT 自增，不报定点数的有损提示。
+#[test]
+fn unbounded_numeric_identity_becomes_bigint() {
+    let (mut tables, sequences) = pg_source();
+    tables[0].columns[0].data_type = ColumnType {
+        native: "numeric".into(),
+        logical: LogicalType::Decimal { precision: None, scale: None },
+    };
+    let i = input(Variant::GaussDb, Variant::MySql, &tables, &sequences);
+    let draft = migrate(&i, &MigrationSettings::default());
+    let id = &draft.tables[0].target.columns[0];
+    assert!(id.auto_increment);
+    assert_eq!(id.data_type.logical, LogicalType::Int { bits: 64 });
+    assert_eq!(id.data_type.native, "BIGINT");
+    let notes: Vec<_> = draft
+        .notes
+        .iter()
+        .filter(|n| n.object == "customers" && n.column.as_deref() == Some("id"))
+        .map(|n| n.message.render(Lang::En))
+        .collect();
+    assert!(notes.is_empty(), "{notes:?}");
+}

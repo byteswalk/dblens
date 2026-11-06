@@ -20,7 +20,9 @@
 ## 测试
 
 - 工作区全量测试在 A、PG 两种模式下都通过：驱动一致性、元数据、数据编辑、导入导出、表设计、权限（两层角色的成员关系能读到）、服务层和 API 全流程。
-- 迁移：GaussDB 两种模式到 PostgreSQL、达梦都通过。到 MySQL、Oracle 的路线这次没起目标库，没有跑。
+- 迁移：GaussDB 两种模式到 PostgreSQL、达梦都通过。2026-11-05 补跑到 MySQL 9.7、Oracle 19c 和 Oracle 19c 到 GaussDB 的路线，修了两个问题后全部通过：
+  - A 模式把 `BIGINT` 标识列存成不限精度的 `numeric`。迁到 MySQL 时映射成 `DECIMAL(65,30) AUTO_INCREMENT`，MySQL 报 1063。自增列的类型改为看源类型：小数位为 0 或不限精度的定点数一律迁成 BIGINT，也不再报定点数的有损提示。
+  - 迁入 A 模式时目标标识列同样是 `numeric`，写数据时按计划里的 BIGINT 绑定整数参数，PG 驱动不能直接绑定 numeric，整表写入失败，最后加外键时报 23503。PG 驱动现在把整数、浮点、定点和数字文本按 numeric 的二进制格式编码，numeric 参数可以直接绑定。
 - 回归：openGauss（PG、A、SHA256 账号）、PostgreSQL、达梦全量通过。
 - 测试夹具对 GaussDB 的差异：触发器写 `EXECUTE PROCEDURE`；不建表继承、域；表默认用 Ustore 存储，不支持 GIN 索引和物化视图，也不建。
 
@@ -28,4 +30,5 @@
 
 - GaussDB 默认 Ustore 表不支持 GIN 索引、物化视图，设计器和对象操作里不拦，由数据库报错。
 - A 模式会话的日期格式被改成 ISO，用户在 SQL 编辑器里写 `TO_DATE('01-JAN-24')` 这类依赖默认格式的语句要自己写格式或改会话设置。
+- A 模式的 `BIGINT` 标识列读回来是 `NUMERIC`（数据库的行为），迁移校验对这一点放宽。
 - 只测了开发者版这一个版本。下载页有新版时再换装复测。

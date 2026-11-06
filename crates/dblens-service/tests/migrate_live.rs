@@ -578,13 +578,20 @@ async fn migrate_flow(src_env: &str, tgt_env: &str, p: &str) {
         assert_eq!(got.len(), 1, "{route}：{} 没有建成", t.target.name);
         let got = Table { triggers: vec![], ..got.remove(0) };
         // GoldenDB 的 Oracle 兼容模式下，目录把 DATE 列报成 datetime，SHOW CREATE TABLE 才是 date
+        // GaussDB 的 A 模式把 BIGINT 标识列存成不限精度的 NUMERIC
+        let gaussdb_a = dialect.variant() == Variant::GaussDb && dialect.compat() == Compat::Oracle;
         let same = |lines: Vec<String>| -> Vec<String> {
-            if !tgt_env.contains("GOLDENDB") {
-                return lines;
-            }
             lines
                 .into_iter()
-                .map(|l| l.replace("Timestamp { tz: false, precision: Some(0) }", "Date"))
+                .map(|l| {
+                    if tgt_env.contains("GOLDENDB") {
+                        l.replace("Timestamp { tz: false, precision: Some(0) }", "Date")
+                    } else if gaussdb_a && l.contains(" auto=true ") {
+                        l.replace("Decimal { precision: None, scale: None }", "Int { bits: 64 }")
+                    } else {
+                        l
+                    }
+                })
                 .collect()
         };
         assert_eq!(

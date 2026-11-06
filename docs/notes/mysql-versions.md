@@ -38,7 +38,7 @@ VM .106 上的 Docker 容器，镜像是华为云 SWR 同步的 Docker Hub 官�
 - Linux 构建（2026-11-05，在 VM .106 的 `rust:1.99-bookworm` 容器里，依赖用 `cargo vendor` 带过去）：
   - 原生编译和 cargo-zigbuild（v0.24.0，zig 0.17.0）按 glibc 2.28 交叉编译 x64、ARM64 都能编出来。静态编入 OpenSSL 要求构建环境有 perl 和 make，这个镜像自带。
   - 二进制不链接系统的 libssl、libcrypto，最高引用 GLIBC_2.28，ARM64 版依赖的只有 libc、libm、libpthread、libdl。
-  - x64 版（原生和 glibc 2.28 交叉编译的）在 Linux 上连 MySQL 5.7、8.0 的 TLS 测试和驱动一致性测试都通过。ARM64 版没有运行（VM 上没有 qemu）。
+  - x64 版（原生和 glibc 2.28 交叉编译的）在 Linux 上连 MySQL 5.7、8.0 的 TLS 测试和驱动一致性测试都通过。ARM64 版 2026-11-05 在一次性的 Debian 容器里用 qemu-aarch64 7.2 用户态运行：MySQL 5.7、8.0、9.7 的 TLS 测试和 5.7 上的驱动一致性测试（40 个）都通过。qemu 只证明指令集和链接没问题，不代替 ARM64 实机。
 
 ## 测试
 
