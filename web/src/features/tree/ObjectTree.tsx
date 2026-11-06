@@ -303,7 +303,8 @@ export default function ObjectTree() {
       ? [
           { key: 'new-query', label: t('tree.menu.newQuery'), extra: 'Ctrl+T' },
           { key: 'sql-file', label: t('tree.menu.sqlFile') },
-          { key: 'privileges', label: t('tree.menu.privileges') },
+          // SQLite 没有账号和权限
+          ...(driverOf(menuNode.profileId) === 'sqlite' ? [] : [{ key: 'privileges', label: t('tree.menu.privileges') }]),
           { type: 'divider' },
           { key: 'edit', label: t('tree.menu.editConnection') },
           { key: 'duplicate', label: t('tree.menu.duplicateConnection') },
@@ -326,20 +327,29 @@ export default function ObjectTree() {
     (i) => i?.type === 'divider',
   )
 
+  function driverOf(profileId: string) {
+    return profiles.find((p) => p.id === profileId)?.driver
+  }
+
+  /** SQLite 还不支持的功能（M10b）：菜单项置灰并说明。 */
+  function later(k: NodeKey): { disabled?: boolean; title?: string } {
+    return driverOf(k.profileId) === 'sqlite' ? { disabled: true, title: t('tree.menu.sqliteLater') } : {}
+  }
+
   /** schema 节点：新建表、导入到新表、执行 SQL 文件，后面接分隔线。 */
   function schemaItems(k: NodeKey): NonNullable<MenuProps['items']> {
     if (k.type !== 's') return []
     return [
-      { key: 'new-table', label: t('tree.menu.newTable') },
-      { key: 'import-new', label: t('tree.menu.importNew') },
+      { key: 'new-table', label: t('tree.menu.newTable'), ...later(k) },
+      { key: 'import-new', label: t('tree.menu.importNew'), ...later(k) },
       { key: 'sql-file', label: t('tree.menu.sqlFile') },
       { type: 'divider' },
       { key: 'er', label: t('tree.menu.er') },
-      { key: 'compare-model', label: t('tree.menu.compareModel') },
-      { key: 'save-model', label: t('tree.menu.saveAsModel') },
+      { key: 'compare-model', label: t('tree.menu.compareModel'), ...later(k) },
+      { key: 'save-model', label: t('tree.menu.saveAsModel'), ...later(k) },
       { key: 'export-doc', label: t('tree.menu.exportDoc') },
-      { key: 'lint', label: t('tree.menu.lint') },
-      { key: 'migrate', label: t('tree.menu.migrate') },
+      { key: 'lint', label: t('tree.menu.lint'), ...later(k) },
+      { key: 'migrate', label: t('tree.menu.migrate'), ...later(k) },
       { type: 'divider' },
     ]
   }
@@ -350,8 +360,8 @@ export default function ObjectTree() {
     const items: NonNullable<MenuProps['items']> = []
     const target = targetKind(k.kind)
     if (target) items.push({ key: 'view-data', label: t('tree.menu.viewData') })
-    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design') })
-    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import') })
+    if (target === 'table') items.push({ key: 'design', label: t('tree.menu.design'), ...later(k) })
+    if (target === 'table') items.push({ key: 'import', label: t('tree.menu.import'), ...later(k) })
     if (target) items.push({ key: 'export-data', label: t('tree.menu.exportData') })
     if (ddlKind(k.kind, k.routineKind)) items.push({ key: 'ddl', label: t('tree.menu.viewDdl') })
     if (target) {
@@ -359,7 +369,8 @@ export default function ObjectTree() {
       const children = generateMenu(target, relations) as NonNullable<MenuProps['items']>
       items.push({ key: 'gen-menu', label: t('tree.menu.generate'), children })
     }
-    if (target) items.push({ key: 'who-can-access', label: t('tree.menu.whoCanAccess') })
+    // SQLite 没有权限
+    if (target && driverOf(k.profileId) !== 'sqlite') items.push({ key: 'who-can-access', label: t('tree.menu.whoCanAccess') })
     return items.length ? [...items, { type: 'divider' }] : []
   }
 

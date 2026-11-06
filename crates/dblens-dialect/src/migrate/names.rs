@@ -23,7 +23,7 @@ impl NameCase {
         match target.family() {
             Family::Oracle | Family::Dameng => NameCase::Upper,
             Family::Postgres | Family::Informix => NameCase::Lower,
-            Family::MySql | Family::SqlServer => NameCase::Keep,
+            Family::MySql | Family::SqlServer | Family::Sqlite => NameCase::Keep,
         }
     }
 
@@ -49,6 +49,8 @@ pub fn max_ident_len(target: &Dialect) -> usize {
             }
         }
         Family::Dameng | Family::SqlServer | Family::Informix => 128,
+        // 没有长度限制，按常见上限
+        Family::Sqlite => 128,
     }
 }
 

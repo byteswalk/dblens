@@ -19,6 +19,7 @@ pub fn explain(family: Family, sql: &str) -> Vec<String> {
         ],
         Family::Dameng => vec![format!("EXPLAIN FOR {sql}")],
         Family::MySql | Family::Postgres => vec![format!("EXPLAIN {sql}")],
+        Family::Sqlite => vec![format!("EXPLAIN QUERY PLAN {sql}")],
         Family::SqlServer => vec!["SET SHOWPLAN_ALL ON".to_string(), sql.to_string()],
         // SET EXPLAIN 写到服务器文件，读不回来；能力声明为不支持，界面不会发起
         Family::Informix => vec![],
@@ -38,6 +39,8 @@ pub fn current_schema(family: Family) -> &'static str {
         Family::Oracle | Family::Dameng => "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL",
         Family::SqlServer => "SELECT DB_NAME()",
         Family::Informix => "SELECT TRIM(DBINFO('dbname')) FROM sysmaster:sysdual",
+        // 没有“当前库”：不带前缀的名字先找 temp，再找 main 和 ATTACH 的库
+        Family::Sqlite => "SELECT 'main'",
     }
 }
 
@@ -50,6 +53,8 @@ pub fn set_schema(family: Family, schema: &str) -> String {
         Family::Oracle | Family::Dameng => format!("ALTER SESSION SET CURRENT_SCHEMA = {name}"),
         // 和 SQL Server 一样，会话的"当前 schema"是当前数据库
         Family::Informix => format!("DATABASE {name}"),
+        // 不能切换；界面不会对 SQLite 发起切换（schema 选择器只用于补全和对象树定位）
+        Family::Sqlite => "SELECT 1".to_string(),
     }
 }
 

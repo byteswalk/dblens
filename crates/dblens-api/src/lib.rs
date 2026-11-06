@@ -175,6 +175,8 @@ pub fn api_routes() -> Router<AppState> {
 
 /// 单机版的全部接口：令牌鉴权。
 pub fn router(service: Arc<Service>, config: ApiConfig) -> Router {
+    // 能打开本机文件时才能用 SQLite（数据库就是本机文件）
+    service.registry.allow_local_files(config.local_files);
     let state = AppState { service, config: Arc::new(config) };
     let api = api_routes()
         .route("/capabilities", get(routes::capabilities))

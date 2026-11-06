@@ -329,6 +329,7 @@ impl Context<'_> {
             Family::Dameng => digits("CONS"),
             Family::SqlServer => ["PK__", "UQ__", "FK__", "CK__", "DF__"].iter().any(|p| n.starts_with(p)),
             Family::Postgres | Family::Informix => false,
+            Family::Sqlite => n.starts_with("sqlite_autoindex_"),
         };
         (!system).then(|| self.case.apply(n))
     }

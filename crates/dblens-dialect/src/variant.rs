@@ -19,6 +19,8 @@ pub enum Family {
     SqlServer,
     #[serde(rename = "informix")]
     Informix,
+    #[serde(rename = "sqlite")]
+    Sqlite,
 }
 
 impl Family {
@@ -112,6 +114,8 @@ pub enum Variant {
     SqlServer,
     #[serde(rename = "gbase8s")]
     Gbase8s,
+    #[serde(rename = "sqlite")]
+    Sqlite,
 }
 
 impl Variant {
@@ -132,6 +136,7 @@ impl Variant {
             Variant::Dameng => Family::Dameng,
             Variant::SqlServer => Family::SqlServer,
             Variant::Gbase8s => Family::Informix,
+            Variant::Sqlite => Family::Sqlite,
         }
     }
 
@@ -154,6 +159,7 @@ impl Variant {
             Variant::Dameng => msg!("variant.dameng"),
             Variant::SqlServer => Msg::raw("SQL Server"),
             Variant::Gbase8s => msg!("variant.gbase8s"),
+            Variant::Sqlite => Msg::raw("SQLite"),
         }
     }
 
@@ -166,6 +172,7 @@ impl Variant {
             DriverId::Dameng => Variant::Dameng,
             DriverId::SqlServer => Variant::SqlServer,
             DriverId::Informix => Variant::Gbase8s,
+            DriverId::Sqlite => Variant::Sqlite,
         }
     }
 

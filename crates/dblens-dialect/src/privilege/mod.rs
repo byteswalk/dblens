@@ -188,6 +188,8 @@ fn base_file(family: Family) -> &'static str {
         Family::Dameng => DAMENG,
         Family::SqlServer => SQLSERVER,
         Family::Informix => INFORMIX,
+        // 没有账号和权限
+        Family::Sqlite => "",
     }
 }
 
@@ -270,6 +272,14 @@ mod tests {
     fn every_variant_has_the_required_sections() {
         for &v in &ALL_VARIANTS {
             let d = Dialect::new(v);
+            // SQLite 没有账号和权限
+            if v == Variant::Sqlite {
+                assert!(
+                    d.privilege_query(PrivSection::Principals, PrivTier::Full, &args()).unwrap().is_none()
+                );
+                assert!(!d.privilege_caps().write);
+                continue;
+            }
             for s in [
                 PrivSection::Principals,
                 PrivSection::Memberships,

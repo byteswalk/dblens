@@ -29,6 +29,7 @@ const GOLDENDB: &str = include_str!("../sql/ops/goldendb.sql");
 const OPENGAUSS: &str = include_str!("../sql/ops/opengauss.sql");
 const SQLSERVER: &str = include_str!("../sql/ops/sqlserver.sql");
 const INFORMIX: &str = include_str!("../sql/ops/informix.sql");
+const SQLITE: &str = include_str!("../sql/ops/sqlite.sql");
 
 /// 运维查询的分类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -121,6 +122,7 @@ fn base_file(family: Family) -> &'static str {
         Family::Dameng => DAMENG,
         Family::SqlServer => SQLSERVER,
         Family::Informix => INFORMIX,
+        Family::Sqlite => SQLITE,
     }
 }
 
@@ -170,8 +172,12 @@ mod tests {
     fn every_variant_has_all_queries() {
         for &v in &crate::meta::template::ALL_VARIANTS {
             let qs = Dialect::new(v).ops_queries();
-            // GBase 8s 没有慢 SQL 的来源
-            let keys = if v == Variant::Gbase8s { &KEYS[..5] } else { &KEYS[..] };
+            // GBase 8s 没有慢 SQL 的来源；SQLite 只有存储
+            let keys = match v {
+                Variant::Gbase8s => &KEYS[..5],
+                Variant::Sqlite => &KEYS[3..5],
+                _ => &KEYS[..],
+            };
             assert_eq!(qs.iter().map(|q| q.key.as_str()).collect::<Vec<_>>(), keys, "{v:?}");
             for q in qs {
                 assert!(!q.sql.is_empty() && !q.sql.contains("-- ["), "{v:?} {}", q.key);

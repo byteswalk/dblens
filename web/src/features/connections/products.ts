@@ -19,6 +19,7 @@ export type ProductId =
   | 'dameng'
   | 'sqlserver'
   | 'gbase8s'
+  | 'sqlite'
 
 export interface Product {
   id: ProductId
@@ -41,12 +42,14 @@ export const PRODUCTS: Product[] = [
   { id: 'dameng', driver: 'dameng', port: 5236 },
   { id: 'sqlserver', driver: 'sqlserver', port: 1433 },
   { id: 'gbase8s', driver: 'informix', port: 9088 },
+  // 本机文件，没有端口；只有桌面版可用
+  { id: 'sqlite', driver: 'sqlite', port: 0 },
 ]
 
 /** 界面上的分组：国产库一组，其他一组。 */
 export const PRODUCT_GROUPS: { key: 'domestic' | 'other'; products: ProductId[] }[] = [
   { key: 'domestic', products: ['dameng', 'kingbase', 'gaussdb', 'opengauss', 'oceanbase', 'oceanbase_oracle', 'goldendb', 'tidb', 'gbase8s'] },
-  { key: 'other', products: ['mysql', 'mariadb', 'postgres', 'oracle', 'sqlserver'] },
+  { key: 'other', products: ['mysql', 'mariadb', 'postgres', 'oracle', 'sqlserver', 'sqlite'] },
 ]
 
 export function product(id: ProductId): Product {

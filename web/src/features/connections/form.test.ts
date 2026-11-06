@@ -164,16 +164,36 @@ describe('连接表单', () => {
   })
 
   it('驱动名称、字段名、校验信息按调用时的界面语言翻译', async () => {
-    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM', 'SQL Server', 'GBase 8s'])
+    expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL 系', 'PostgreSQL 系', 'Oracle', '达梦 DM', 'SQL Server', 'GBase 8s', 'SQLite'])
     try {
       await i18n.changeLanguage('en')
-      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)', 'SQL Server', 'GBase 8s'])
+      expect(DRIVER_IDS.map(driverLabel)).toEqual(['MySQL family', 'PostgreSQL family', 'Oracle', 'DM (Dameng)', 'SQL Server', 'GBase 8s', 'SQLite'])
       expect(databaseLabel('oracle')).toBe('Service Name')
       expect(validate(emptyForm()).name).toBe('Enter a connection name')
       expect(validate({ ...emptyForm(), extra: 'bad' }).extra).toBe('Unrecognized line: bad (expected key=value)')
     } finally {
       await i18n.changeLanguage('zh-CN')
     }
+  })
+})
+
+describe('SQLite', () => {
+  const f = { ...emptyForm('sqlite'), name: 'app' }
+
+  it('只要文件，不要主机、端口、账号', () => {
+    expect(validate(f).database).toBeTruthy()
+    const ok = { ...f, database: 'D:/data/app.db' }
+    expect(validate(ok)).toEqual({})
+    const input = toProfileInput({ ...ok, readOnly: true, createFile: true })
+    expect([input.host, input.port, input.user, input.database]).toEqual(['', 0, '', 'D:/data/app.db'])
+    // 只读时不新建文件
+    expect(input.options).toEqual({ read_only: '1' })
+    expect(toProfileInput({ ...ok, createFile: true }).options).toEqual({ create: '1' })
+  })
+
+  it('从连接配置读回选项', () => {
+    const back = fromProfile({ id: '1', ...toProfileInput({ ...f, database: '/a.db', createFile: true }), variant: null }, false)
+    expect([back.product, back.createFile, back.readOnly, back.extra]).toEqual(['sqlite', true, false, ''])
   })
 })
 

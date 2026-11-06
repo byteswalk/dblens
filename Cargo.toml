@@ -23,6 +23,7 @@ dblens-driver-mysql = { path = "crates/dblens-driver-mysql" }
 dblens-driver-oracle = { path = "crates/dblens-driver-oracle" }
 dblens-driver-postgres = { path = "crates/dblens-driver-postgres" }
 dblens-driver-sqlserver = { path = "crates/dblens-driver-sqlserver" }
+dblens-driver-sqlite = { path = "crates/dblens-driver-sqlite" }
 dblens-lint = { path = "crates/dblens-lint" }
 
 argon2 = "0.6.0"
@@ -49,7 +50,7 @@ oracle = { version = "0.6.3", features = ["chrono"] }
 percent-encoding = "2.3.2"
 quick-xml = "0.42.0"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
-rusqlite = { version = "0.41.0", features = ["bundled"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 rust_xlsxwriter = { version = "0.101.0", default-features = false, features = ["constant_memory", "chrono"] }
 rust-i18n = "4.2.4"
 rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }

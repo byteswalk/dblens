@@ -22,6 +22,7 @@ export function editorLanguage(driver: DriverId, compat?: Compat | null): 'mysql
       return 'plsql'
     case 'sqlserver':
     case 'informix':
+    case 'sqlite':
       return 'sql'
   }
 }
@@ -48,6 +49,8 @@ export function formatterLanguage(driver: DriverId, variant?: string | null): Fo
       return 'transactsql'
     case 'informix':
       return 'sql'
+    case 'sqlite':
+      return 'sqlite'
   }
 }
 
@@ -77,6 +80,7 @@ const VARIANT_NAMES: Record<string, string> = {
   oracle: 'Oracle',
   sqlserver: 'SQL Server',
   gbase8s: 'GBase 8s',
+  sqlite: 'SQLite',
 }
 
 /** 变体的简短名称（状态栏、对象树用）；达梦的名称随界面语言。不认识的变体返回 undefined。 */

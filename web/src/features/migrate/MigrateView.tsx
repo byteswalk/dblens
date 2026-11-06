@@ -74,7 +74,7 @@ function EndPicker({ label, value, profiles, onChange }: {
         onChange={(profile) => onChange({ profile, schema: '' })}
         showSearch
         optionFilterProp="label"
-        options={profiles.map((p) => ({ value: p.id, label: p.name }))}
+        options={profiles.filter((p) => p.driver !== 'sqlite').map((p) => ({ value: p.id, label: p.name }))}
       />
       <Select
         size="small"

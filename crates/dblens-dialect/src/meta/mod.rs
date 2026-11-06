@@ -5,6 +5,7 @@
 mod assemble;
 pub mod coltype;
 mod rows;
+mod sqlite;
 pub(crate) mod template;
 
 use serde::{Deserialize, Serialize};

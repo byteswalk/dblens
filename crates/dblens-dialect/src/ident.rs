@@ -58,7 +58,7 @@ const INFORMIX_RESERVED: &[&str] = &[
 pub fn quote_ident(family: Family, name: &str) -> String {
     match family {
         Family::MySql => format!("`{}`", name.replace('`', "``")),
-        Family::Postgres | Family::Oracle | Family::Dameng | Family::Informix => {
+        Family::Postgres | Family::Oracle | Family::Dameng | Family::Informix | Family::Sqlite => {
             format!("\"{}\"", name.replace('"', "\"\""))
         }
         Family::SqlServer => format!("[{}]", name.replace(']', "]]")),
@@ -76,7 +76,7 @@ pub fn placeholder(family: Family, index: usize) -> String {
     match family {
         Family::Postgres => format!("${index}"),
         Family::Oracle => format!(":{index}"),
-        Family::MySql | Family::Dameng | Family::Informix => "?".to_string(),
+        Family::MySql | Family::Dameng | Family::Informix | Family::Sqlite => "?".to_string(),
         Family::SqlServer => format!("@P{index}"),
     }
 }
@@ -85,7 +85,7 @@ pub fn placeholder(family: Family, index: usize) -> String {
 pub fn needs_quote(family: Family, name: &str) -> bool {
     let Some(first) = name.chars().next() else { return true };
     let first_ok = match family {
-        Family::MySql | Family::Postgres | Family::SqlServer | Family::Informix => {
+        Family::MySql | Family::Postgres | Family::SqlServer | Family::Informix | Family::Sqlite => {
             first.is_ascii_alphabetic() || first == '_'
         }
         Family::Oracle | Family::Dameng => first.is_ascii_alphabetic(),
@@ -98,7 +98,8 @@ pub fn needs_quote(family: Family, name: &str) -> bool {
         return true;
     }
     let case_ok = match family {
-        Family::MySql | Family::SqlServer => true,
+        // SQLite 的标识符不分大小写，也不折叠
+        Family::MySql | Family::SqlServer | Family::Sqlite => true,
         Family::Postgres | Family::Informix => !name.chars().any(|c| c.is_ascii_uppercase()),
         Family::Oracle | Family::Dameng => !name.chars().any(|c| c.is_ascii_lowercase()),
     };
@@ -112,7 +113,7 @@ pub fn is_reserved_word(family: Family, name: &str) -> bool {
 
 fn is_reserved(family: Family, upper: &str) -> bool {
     // PUBLIC 只在 Oracle/达梦中是保留字；PG 的 public 是常见的默认模式名，MySQL 中也不是保留字
-    if upper == "PUBLIC" && matches!(family, Family::Postgres | Family::MySql) {
+    if upper == "PUBLIC" && matches!(family, Family::Postgres | Family::MySql | Family::Sqlite) {
         return false;
     }
     RESERVED.binary_search(&upper).is_ok()

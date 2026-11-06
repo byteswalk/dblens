@@ -122,6 +122,21 @@ impl Dialect {
                 | DdlKind::Procedure => Ok(None),
                 _ => Err(unsupported()),
             },
+            // SQLite：sqlite_schema 里存着建对象时的原文；表连同它的索引、触发器一起给出
+            Family::Sqlite => {
+                let master = format!("{}.sqlite_schema", self.quote_ident(schema));
+                let filter = match kind {
+                    DdlKind::Table => "tbl_name = ?",
+                    DdlKind::View => "name = ? AND type = 'view'",
+                    _ => return Err(unsupported()),
+                };
+                query(
+                    format!(
+                        "SELECT group_concat(sql || ';', char(10) || char(10)) AS ddl FROM                          (SELECT sql FROM {master} WHERE {filter} AND sql IS NOT NULL                          ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'view' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, name)"
+                    ),
+                    vec![Value::String(name.into())],
+                )
+            }
             // SQL Server：视图的模块定义就是完整的 CREATE VIEW；同义词由系统视图拼出；表、序列用结构模型，函数、过程用程序源码。
             // 名字用两段名交给 OBJECT_ID（在当前库中查找，调用方先切到对象所在的库）
             Family::SqlServer => {

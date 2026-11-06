@@ -281,6 +281,8 @@ pub(super) fn is_generated(d: &Dialect, table: &str, name: &str) -> bool {
         Family::SqlServer => ["PK__", "UQ__", "FK__", "CK__", "DF__"].iter().any(|p| upper.starts_with(p)),
         // 系统生成的约束名形如 u123_45、r123_45
         Family::Informix => false,
+        // 没写名字的唯一约束、主键背后的索引
+        Family::Sqlite => name.starts_with("sqlite_autoindex_"),
         Family::Postgres => {
             let prefix = format!("{}_", table.to_ascii_lowercase());
             let n = name.to_ascii_lowercase();

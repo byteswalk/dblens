@@ -121,7 +121,7 @@ function SidePicker({ label, value, profiles, onChange }: {
           onChange={(p) => onChange({ kind: 'database', profile: p, schema: '' })}
           showSearch
           optionFilterProp="label"
-          options={profiles.map((p) => ({ value: p.id, label: p.name }))}
+          options={profiles.filter((p) => p.driver !== 'sqlite').map((p) => ({ value: p.id, label: p.name }))}
         />
       )}
       <Select

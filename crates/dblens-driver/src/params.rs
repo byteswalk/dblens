@@ -17,6 +17,7 @@ pub enum DriverId {
     #[serde(rename = "sqlserver")]
     SqlServer,
     Informix,
+    Sqlite,
 }
 
 /// 建立连接所需的参数。
@@ -26,7 +27,8 @@ pub struct ConnectParams {
     pub port: u16,
     pub user: String,
     pub password: String,
-    /// MySQL：默认库；PG：数据库名；Oracle：服务名；达梦：可为空；SQL Server：登录后的初始库，可为空。
+    /// MySQL：默认库；PG：数据库名；Oracle：服务名；达梦：可为空；SQL Server：登录后的初始库，可为空；
+    /// SQLite：数据库文件的绝对路径。
     pub database: Option<String>,
     /// 驱动特有的选项。
     pub options: BTreeMap<String, String>,
@@ -51,10 +53,13 @@ impl ConnectParams {
     pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
     /// 解析 `scheme://user:pass@host:port/database?k=v`。主要用于测试和命令行。
-    /// 支持的 scheme：mysql、mariadb、postgres、postgresql、oracle、dm、dameng、sqlserver、mssql、gbase、informix。
+    /// 支持的 scheme：mysql、mariadb、postgres、postgresql、oracle、dm、dameng、sqlserver、mssql、gbase、informix、sqlite。
     /// 选项 `connect_timeout` 的单位为秒。
     pub fn from_url(s: &str) -> Result<(DriverId, ConnectParams)> {
         let u = url::Url::parse(s).map_err(|e| Error::connect(msg!("params.invalid_url", error = e)))?;
+        if u.scheme() == "sqlite" {
+            return Ok((DriverId::Sqlite, Self::sqlite_from_url(&u)));
+        }
         let (id, default_port) = match u.scheme() {
             "mysql" | "mariadb" => (DriverId::Mysql, 3306),
             "postgres" | "postgresql" => (DriverId::Postgres, 5432),
@@ -87,6 +92,29 @@ impl ConnectParams {
                 connect_timeout,
             },
         ))
+    }
+}
+
+impl ConnectParams {
+    /// `sqlite:///绝对路径?选项`：Windows 路径写成 `sqlite:///C:/data/app.db`。
+    fn sqlite_from_url(u: &url::Url) -> ConnectParams {
+        let path = percent_decode_str(u.path()).decode_utf8_lossy().into_owned();
+        // `/C:/x.db` 去掉开头的 `/`
+        let b = path.as_bytes();
+        let path = if b.len() > 2 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' {
+            path[1..].to_string()
+        } else {
+            path
+        };
+        ConnectParams {
+            host: String::new(),
+            port: 0,
+            user: String::new(),
+            password: String::new(),
+            database: Some(path).filter(|p| !p.is_empty()),
+            options: u.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect(),
+            connect_timeout: Self::DEFAULT_CONNECT_TIMEOUT,
+        }
     }
 }
 
@@ -197,6 +225,15 @@ mod tests {
                 .map(|d| serde_json::to_string(d).unwrap())
                 .collect();
         assert_eq!(names, ["\"mysql\"", "\"postgres\"", "\"oracle\"", "\"dameng\"", "\"sqlserver\""]);
+    }
+
+    #[test]
+    fn parses_sqlite_url() {
+        let (id, p) = ConnectParams::from_url("sqlite:///C:/data/%E6%95%B0.db?read_only=1").unwrap();
+        assert_eq!((id, p.database.as_deref()), (DriverId::Sqlite, Some("C:/data/数.db")));
+        assert_eq!(p.options["read_only"], "1");
+        let (_, p) = ConnectParams::from_url("sqlite:///home/u/a.db").unwrap();
+        assert_eq!(p.database.as_deref(), Some("/home/u/a.db"));
     }
 
     #[test]

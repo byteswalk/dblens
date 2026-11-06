@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use dblens_core::{Error, Msg, Result, msg};
 use dblens_dialect::meta::{MetaArgs, MetaKey, MetaRows};
@@ -56,7 +57,9 @@ fn native_lib(id: DriverId) -> Option<(NativeLib, &'static str)> {
     match id {
         DriverId::Oracle => Some((NativeLib::OracleClient, "oracle_client_lib_dir")),
         DriverId::Informix => Some((NativeLib::GbaseJdbc, "jdbc_dir")),
-        DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer | DriverId::Dameng => None,
+        DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer | DriverId::Dameng | DriverId::Sqlite => {
+            None
+        }
     }
 }
 
@@ -72,6 +75,7 @@ fn display_name(id: DriverId) -> Msg {
         DriverId::Dameng => msg!("variant.dameng"),
         DriverId::SqlServer => Msg::raw("SQL Server"),
         DriverId::Informix => msg!("variant.gbase8s"),
+        DriverId::Sqlite => Msg::raw("SQLite"),
     }
 }
 
@@ -80,6 +84,9 @@ pub struct DriverRegistry {
     drivers: Vec<Box<dyn Driver>>,
     /// 连接选项 `client=jdbc` 时改用的驱动（Oracle、GoldenDB），不需要原生客户端。
     jdbc_drivers: Vec<Box<dyn Driver>>,
+    /// 页面和服务在同一台机器上（桌面版、只监听本机的服务器版），可以打开本机文件：只有这时才能用 SQLite，
+    /// 否则远程用户就能读写服务器上的任意文件。由接口层按 `ApiConfig::local_files` 设置，默认关闭。
+    local_files: AtomicBool,
 }
 
 /// 这个连接走 JDBC 桥接，不用原生客户端。
@@ -103,6 +110,8 @@ impl DriverRegistry {
             Box::new(dblens_driver_sqlserver::SqlServerDriver),
             #[cfg(feature = "informix")]
             Box::new(dblens_driver_jdbc::GbaseDriver),
+            #[cfg(feature = "sqlite")]
+            Box::new(dblens_driver_sqlite::SqliteDriver),
         ];
         let mut registry = Self::with_drivers(store, drivers);
         #[cfg(feature = "informix")]
@@ -117,7 +126,7 @@ impl DriverRegistry {
 
     /// 指定驱动集合，供测试注入假驱动。
     pub fn with_drivers(store: Arc<Store>, drivers: Vec<Box<dyn Driver>>) -> Self {
-        Self { store, drivers, jdbc_drivers: Vec::new() }
+        Self { store, drivers, jdbc_drivers: Vec::new(), local_files: AtomicBool::new(false) }
     }
 
     /// 这个连接配置要用的驱动。
@@ -131,7 +140,19 @@ impl DriverRegistry {
         self.driver(id)
     }
 
+    /// 允许（或禁止）打开本机文件的驱动（SQLite）。
+    pub fn allow_local_files(&self, on: bool) {
+        self.local_files.store(on, Ordering::Relaxed);
+    }
+
+    fn local_files(&self) -> bool {
+        self.local_files.load(Ordering::Relaxed)
+    }
+
     pub fn driver(&self, id: DriverId) -> Result<&dyn Driver> {
+        if id == DriverId::Sqlite && !self.local_files() {
+            return Err(Error::DriverUnavailable { hint: msg!("sqlite.desktop_only") });
+        }
         self.drivers.iter().find(|d| d.id() == id).map(|d| d.as_ref()).ok_or_else(|| {
             Error::DriverUnavailable { hint: msg!("registry.not_compiled", driver = display_name(id)) }
         })
@@ -171,6 +192,7 @@ impl DriverRegistry {
             DriverId::Dameng,
             DriverId::SqlServer,
             DriverId::Informix,
+            DriverId::Sqlite,
         ]
         .into_iter()
         .map(|id| self.status(id))
@@ -189,6 +211,10 @@ impl DriverRegistry {
             suggested_lib_dir: None,
             hint: (!compiled).then(|| msg!("registry.not_compiled", driver = display_name(id))),
         };
+        if compiled && id == DriverId::Sqlite && !self.local_files() {
+            s.available = false;
+            s.hint = Some(msg!("sqlite.desktop_only"));
+        }
         if let (true, Some((lib, _))) = (compiled, native_lib(id)) {
             match self.lib_dir(id)? {
                 Some(dir) if dir.join(lib.file_name()).is_file() => s.lib_dir = Some(dir),
@@ -316,7 +342,7 @@ mod tests {
         let (_, r) = registry();
         let s = r.status(DriverId::Postgres).unwrap();
         assert!(s.compiled && s.available && !s.needs_native_lib && s.hint.is_none());
-        assert_eq!(r.statuses().unwrap().len(), 6);
+        assert_eq!(r.statuses().unwrap().len(), 7);
         let ms = r.status(DriverId::SqlServer).unwrap();
         assert!(ms.compiled && ms.available && !ms.needs_native_lib, "{ms:?}");
         assert!(matches!(r.set_lib_dir(DriverId::Mysql, None), Err(Error::Invalid { .. })));
@@ -356,6 +382,17 @@ mod tests {
 
         r.set_lib_dir(DriverId::Oracle, None).unwrap();
         assert_eq!(r.lib_dir(DriverId::Oracle).unwrap(), None);
+    }
+
+    #[test]
+    fn sqlite_needs_local_files() {
+        let (_, r) = registry();
+        let s = r.status(DriverId::Sqlite).unwrap();
+        assert!(s.compiled && !s.available && s.hint.is_some(), "{s:?}");
+        assert!(matches!(r.driver(DriverId::Sqlite), Err(Error::DriverUnavailable { .. })));
+        r.allow_local_files(true);
+        assert!(r.status(DriverId::Sqlite).unwrap().available);
+        assert!(r.driver(DriverId::Sqlite).is_ok());
     }
 
     #[test]

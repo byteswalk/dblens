@@ -85,6 +85,7 @@ async fn setup(envs: [&str; 2]) -> Option<(Arc<Service>, Vec<End>, tempfile::Tem
             }
             DriverId::SqlServer => "dbo".to_string(),
             DriverId::Informix => params.user.clone(),
+            DriverId::Sqlite => "main".to_string(),
         };
         let input = ProfileInput {
             name: env.to_string(),
@@ -153,7 +154,7 @@ fn drops(end: &End, names: &[String], seq: &str) -> Vec<String> {
             DriverId::Dameng | DriverId::Postgres => format!("DROP TABLE IF EXISTS \"{n}\" CASCADE"),
             DriverId::Mysql => format!("DROP TABLE IF EXISTS `{n}`"),
             DriverId::SqlServer => format!("DROP TABLE IF EXISTS [{n}]"),
-            DriverId::Informix => format!("DROP TABLE IF EXISTS \"{n}\""),
+            DriverId::Informix | DriverId::Sqlite => format!("DROP TABLE IF EXISTS \"{n}\""),
         })
         .collect();
     if end.old_oracle() {
@@ -166,7 +167,7 @@ fn drops(end: &End, names: &[String], seq: &str) -> Vec<String> {
             "BEGIN EXECUTE IMMEDIATE 'DROP SEQUENCE \"{seq}\"'; EXCEPTION WHEN OTHERS THEN NULL; END;"
         ),
         DriverId::Dameng | DriverId::Postgres => format!("DROP SEQUENCE IF EXISTS \"{seq}\""),
-        DriverId::Mysql => "SELECT 1".into(),
+        DriverId::Mysql | DriverId::Sqlite => "SELECT 1".into(),
         DriverId::SqlServer => format!("DROP SEQUENCE IF EXISTS [{seq}]"),
         DriverId::Informix => format!("DROP SEQUENCE IF EXISTS \"{seq}\""),
     });
@@ -191,6 +192,7 @@ fn source_ddl(end: &End, p: &str) -> Vec<String> {
     let d10 = "(SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 \
                UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)";
     match end.driver {
+        DriverId::Sqlite => unreachable!("SQLite 的迁移在 M10b"),
         DriverId::Informix => vec![
             format!(
                 "CREATE TABLE {p}_cust (id BIGSERIAL PRIMARY KEY CONSTRAINT {p}_pk_cust, name VARCHAR(50) DEFAULT 'n/a' NOT NULL, \

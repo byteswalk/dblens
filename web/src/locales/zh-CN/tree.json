@@ -62,7 +62,8 @@
     "newTable": "新建表",
     "exportDoc": "导出文档…",
     "migrate": "迁移到…",
-    "lint": "规范检查"
+    "lint": "规范检查",
+    "sqliteLater": "SQLite 暂不支持这项功能，计划在下一步（M10b）提供"
   },
   "duplicate": {
     "name": "{{name}} 副本",

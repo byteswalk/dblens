@@ -143,7 +143,7 @@ pub(super) fn fk_action_supported(tgt: &Dialect, what: &str, action: &str) -> bo
         Family::Informix => what == "DELETE" && action == "CASCADE",
         Family::MySql => action != "SET DEFAULT",
         Family::SqlServer => action != "RESTRICT",
-        Family::Postgres => true,
+        Family::Postgres | Family::Sqlite => true,
     }
 }
 

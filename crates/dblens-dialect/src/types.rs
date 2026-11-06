@@ -261,6 +261,7 @@ pub fn logical_type(family: Family, native: &str) -> LogicalType {
             "INTERVAL" => L::Interval,
             _ => L::Other,
         },
+        Family::Sqlite => sqlite_logical(n, len, precision, decimal()),
         // SQL Server 的 (MAX) 长度解析为 None
         Family::SqlServer => match n {
             "BIT" => L::Bool,
@@ -320,6 +321,7 @@ fn decimal_native(family: Family, precision: Option<u32>, scale: Option<i32>) ->
         // SQL Server 的 DECIMAL 不写参数是 (18,0)，无限定的源类型给 (38,10)
         Family::SqlServer => ("DECIMAL", "DECIMAL(38,10)", 38),
         Family::Informix => ("DECIMAL", "DECIMAL(32,10)", 32),
+        Family::Sqlite => ("NUMERIC", "NUMERIC", 1000),
     };
     // 精度 0 在各库都无效，按无限定处理
     let precision = precision.filter(|&p| p > 0);
@@ -354,6 +356,7 @@ fn decimal_native(family: Family, precision: Option<u32>, scale: Option<i32>) ->
             Family::Dameng => "DEC".into(),
             Family::SqlServer => "DECIMAL(38,10)".into(),
             Family::Informix => "DECIMAL(32,10)".into(),
+            Family::Sqlite => "NUMERIC".into(),
         };
     }
     if family == Family::MySql {
@@ -629,6 +632,51 @@ pub fn native_type(family: Family, logical: &LogicalType) -> String {
             L::Interval => "VARCHAR(100)".into(),
             L::Uuid => "CHAR(36)".into(),
         },
+        // 名字只影响亲和性，按常见写法给出，长度、精度照写（SQLite 不检查）
+        Family::Sqlite => match logical {
+            L::Bool => "BOOLEAN".into(),
+            L::Int { .. } | L::UInt { .. } => "INTEGER".into(),
+            L::Float { .. } => "REAL".into(),
+            L::Decimal { precision, scale } => decimal_native(family, *precision, *scale),
+            L::Char { len } => with_len("CHAR", *len),
+            L::VarChar { len } => with_len("VARCHAR", *len),
+            L::Text | L::Interval | L::Other => "TEXT".into(),
+            L::Json => "JSON".into(),
+            L::Uuid => "UUID".into(),
+            L::Binary { .. } | L::VarBinary { .. } | L::Blob => "BLOB".into(),
+            L::Date => "DATE".into(),
+            L::Time { .. } => "TIME".into(),
+            L::Timestamp { tz: false, .. } => "DATETIME".into(),
+            L::Timestamp { tz: true, .. } => "TIMESTAMP".into(),
+        },
+    }
+}
+
+/// SQLite 的声明类型 → 逻辑类型：常见的名字按名字映射，其余按 SQLite 的亲和性规则
+/// （含 INT → 整数；含 CHAR、CLOB、TEXT → 文本；含 BLOB 或没写 → 二进制或其他；含 REAL、FLOA、DOUB → 浮点）。
+fn sqlite_logical(n: &str, len: Option<u32>, precision: Option<u8>, decimal: LogicalType) -> LogicalType {
+    use LogicalType as L;
+    match n {
+        "BOOLEAN" | "BOOL" => L::Bool,
+        "TINYINT" => L::Int { bits: 8 },
+        "SMALLINT" | "INT2" => L::Int { bits: 16 },
+        "MEDIUMINT" => L::Int { bits: 24 },
+        "INT" | "INT4" => L::Int { bits: 32 },
+        "DECIMAL" | "NUMERIC" => decimal,
+        "CHAR" | "NCHAR" | "CHARACTER" | "NATIVE CHARACTER" => L::Char { len },
+        "TEXT" | "CLOB" => L::Text,
+        "DATE" => L::Date,
+        "TIME" => L::Time { precision },
+        "DATETIME" | "TIMESTAMP" => L::Timestamp { tz: false, precision },
+        "JSON" => L::Json,
+        "UUID" | "GUID" => L::Uuid,
+        "BLOB" => L::Blob,
+        _ if n.contains("INT") => L::Int { bits: 64 },
+        _ if n.contains("CHAR") => L::VarChar { len },
+        _ if n.contains("CLOB") || n.contains("TEXT") => L::Text,
+        _ if n.contains("BLOB") => L::Blob,
+        _ if n.contains("REAL") || n.contains("FLOA") || n.contains("DOUB") => L::Float { bits: 64 },
+        _ => L::Other,
     }
 }
 

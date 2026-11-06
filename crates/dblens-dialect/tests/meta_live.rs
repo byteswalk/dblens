@@ -30,8 +30,11 @@ async fn fetch(conn: &mut Box<dyn Connection>, sql: &str, params: &[Value]) -> M
 }
 
 async fn connect(env: &str) -> Option<Live> {
-    let url = std::env::var(env).ok()?;
-    let (id, params) = ConnectParams::from_url(&url).unwrap();
+    Some(connect_url(&std::env::var(env).ok()?).await)
+}
+
+async fn connect_url(url: &str) -> Live {
+    let (id, params) = ConnectParams::from_url(url).unwrap();
     let driver: Box<dyn Driver> = match id {
         DriverId::Mysql => Box::new(dblens_driver_mysql::MySqlDriver),
         DriverId::Postgres => Box::new(dblens_driver_postgres::PgDriver),
@@ -39,6 +42,7 @@ async fn connect(env: &str) -> Option<Live> {
         DriverId::Dameng => Box::new(dblens_driver_jdbc::DamengJdbcDriver),
         DriverId::SqlServer => Box::new(dblens_driver_sqlserver::SqlServerDriver),
         DriverId::Informix => Box::new(dblens_driver_jdbc::GbaseDriver),
+        DriverId::Sqlite => Box::new(dblens_driver_sqlite::SqliteDriver),
     };
     let mut conn = driver.connect(&params).await.unwrap();
     let info = conn.server_info().await.unwrap();
@@ -51,7 +55,7 @@ async fn connect(env: &str) -> Option<Live> {
         let mut stream = conn.execute(sql, &[]).await.unwrap();
         collect_all(stream.as_mut(), 1).await.unwrap();
     }
-    Some(Live { conn, d, banner: info.version })
+    Live { conn, d, banner: info.version }
 }
 
 fn args(schema: &str) -> MetaArgs {
@@ -962,6 +966,129 @@ async fn gbase8s_metadata() {
     meta::table_storage(&live.rows(MetaKey::TableStorage, &storage).await).unwrap();
 
     for q in live.d.ops_queries() {
+        fetch(&mut live.conn, &q.sql, &[]).await;
+    }
+}
+
+/// SQLite 不需要外部服务：每次都在临时文件上跑。
+#[tokio::test]
+async fn sqlite_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("meta.db").to_string_lossy().replace('\\', "/");
+    let mut live = connect_url(&format!("sqlite:///{}?create=1", file.trim_start_matches('/'))).await;
+    assert_eq!((live.d.variant(), live.d.family()), (Variant::Sqlite, Family::Sqlite));
+    live.run_script(include_str!("fixtures/sqlite.sql")).await;
+    let s = "main";
+
+    let schemas = meta::schemas(&live.rows(MetaKey::Schemas, &MetaArgs::default()).await).unwrap();
+    assert_eq!(schemas.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["main", "aux"]);
+    let tables = meta::objects(MetaKey::Tables, &live.rows(MetaKey::Tables, &args(s)).await).unwrap();
+    assert_eq!(
+        tables.iter().map(|o| o.name.as_str()).collect::<Vec<_>>(),
+        ["dept", "emp", "kv"],
+        "sqlite_sequence 不列出"
+    );
+    let filtered = MetaArgs { filter: Some("EM".into()), ..args(s) };
+    assert_eq!(
+        meta::objects(MetaKey::Tables, &live.rows(MetaKey::Tables, &filtered).await).unwrap().len(),
+        1
+    );
+    let aux = live.tables("aux", None).await;
+    assert_eq!(aux[0].name, "other");
+    assert!(aux[0].columns[0].auto_increment);
+
+    let all = live.tables(s, None).await;
+    let dept = table(&all, "dept");
+    assert!(dept.columns[0].auto_increment, "{:?}", dept.columns[0]);
+    assert_eq!(
+        dept.primary_key.as_ref().map(|p| (p.name.clone(), p.columns.clone())),
+        Some((None, vec!["id".into()]))
+    );
+    assert_eq!(dept.uniques[0].name.as_deref(), Some("uq_dept_name"));
+    assert_eq!(dept.uniques[0].columns, ["name"]);
+    assert_eq!(
+        dept.checks.iter().map(|c| (c.name.clone(), c.expression.as_str())).collect::<Vec<_>>(),
+        [(None, "budget >= 0")]
+    );
+    assert_eq!(logical(dept, "budget"), LogicalType::Decimal { precision: Some(12), scale: Some(2) });
+    assert_eq!(dept.columns[2].default.as_deref(), Some("0"));
+
+    let emp = table(&all, "emp");
+    let col = |n: &str| emp.columns.iter().find(|c| c.name == n).unwrap_or_else(|| panic!("没有列 {n}"));
+    assert!(!col("id").auto_increment, "复合主键里的 INTEGER 不是 rowid 别名");
+    assert_eq!(emp.primary_key.as_ref().unwrap().name.as_deref(), Some("pk_emp"));
+    assert_eq!(emp.primary_key.as_ref().unwrap().columns, ["id", "seq"]);
+    assert_eq!(col("name").default.as_deref(), Some("'无名'"));
+    assert!(!col("name").nullable && col("salary").nullable);
+    assert_eq!(col("hired").default.as_deref(), Some("date('now')"));
+    assert_eq!(logical(emp, "active"), LogicalType::Bool);
+    assert_eq!(logical(emp, "hired"), LogicalType::Date);
+    assert_eq!(logical(emp, "updated"), LogicalType::Timestamp { tz: false, precision: None });
+    assert_eq!(logical(emp, "doc"), LogicalType::Json);
+    assert_eq!(logical(emp, "photo"), LogicalType::Blob);
+    assert_eq!(logical(emp, "salary"), LogicalType::Float { bits: 64 });
+    assert_eq!(logical(emp, "untyped"), LogicalType::Other);
+    assert_eq!(col("name_upper").generated.as_deref(), Some("upper(name)"));
+    assert_eq!(col("double_salary").generated.as_deref(), Some("salary * 2"));
+    assert_eq!(col("name").generated, None);
+    let fk = &emp.foreign_keys[0];
+    assert_eq!(
+        (
+            fk.name.as_deref(),
+            fk.ref_table.as_str(),
+            fk.ref_columns.clone(),
+            fk.on_delete.as_deref(),
+            fk.on_update.as_deref()
+        ),
+        (Some("fk_emp_dept"), "dept", vec!["id".to_string()], Some("CASCADE"), None)
+    );
+    assert_eq!(fk.ref_schema.as_deref(), Some(s));
+    assert_eq!(
+        (emp.uniques[0].name.clone(), emp.uniques[0].columns.clone()),
+        (None, vec!["dept_id".into(), "name".into()])
+    );
+    assert_eq!(emp.checks.iter().map(|c| c.name.as_deref()).collect::<Vec<_>>(), [Some("ck_salary")]);
+    let idx = &emp.indexes[0];
+    assert_eq!(idx.name, "idx_emp_name");
+    assert_eq!(
+        idx.columns.iter().map(|c| (c.name.as_str(), c.descending)).collect::<Vec<_>>(),
+        [("lower(name)", true), ("hired", false)]
+    );
+    assert!(!idx.unique);
+    let trg = &emp.triggers[0];
+    assert_eq!(
+        (trg.name.as_str(), trg.timing.as_deref(), trg.events.clone()),
+        ("trg_emp_au", Some("AFTER"), vec!["UPDATE".to_string()])
+    );
+    assert!(trg.definition.as_deref().unwrap().contains("CASE WHEN"));
+
+    let kv = table(&all, "kv");
+    assert!(!kv.columns[0].auto_increment && kv.primary_key.is_some());
+    let one = live.tables(s, Some("emp")).await;
+    assert_eq!(&one[0], emp);
+
+    let d = live.d;
+    let columns = live.rows(MetaKey::Columns, &args(s)).await;
+    let views =
+        meta::views(&d, MetaKey::Views, &live.rows(MetaKey::Views, &args(s)).await, &columns).unwrap();
+    assert_eq!(views[0].columns.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["id", "name", "dept"]);
+    let def = MetaArgs { name: Some("v_emp".into()), ..args(s) };
+    let text = meta::source_text(MetaKey::ViewDefinition, &live.rows(MetaKey::ViewDefinition, &def).await)
+        .unwrap()
+        .unwrap();
+    assert!(text.starts_with("CREATE VIEW v_emp"), "{text}");
+    let q = d.ddl_query(dblens_dialect::DdlKind::Table, s, "emp").unwrap().unwrap();
+    let ddl = dblens_dialect::ddl_text(&fetch(&mut live.conn, &q.sql, &q.params).await).unwrap();
+    assert!(
+        ddl.starts_with("CREATE TABLE \"emp\"")
+            && ddl.contains("CREATE INDEX idx_emp_name")
+            && ddl.contains("CREATE TRIGGER"),
+        "{ddl}"
+    );
+    for key in [MetaKey::Sequences, MetaKey::Routines, MetaKey::Synonyms, MetaKey::MaterializedViews] {
+        assert!(!d.has_meta(key), "{key:?}");
+    }
+    for q in d.ops_queries() {
         fetch(&mut live.conn, &q.sql, &[]).await;
     }
 }

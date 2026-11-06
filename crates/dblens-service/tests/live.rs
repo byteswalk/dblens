@@ -50,15 +50,27 @@ struct Live {
 
 const LIB_OPTIONS: [&str; 2] = ["oracle_client_lib_dir", "jdbc_dir"];
 
+/// SQLite 不需要外部服务：没设环境变量时用临时目录里的新文件。
+const SQLITE: &str = "DBLENS_TEST_SQLITE_URL";
+
 async fn setup(env: &str) -> Option<Live> {
-    let url = std::env::var(env).ok()?;
-    let (driver, params) = ConnectParams::from_url(&url).unwrap();
     let dir = tempfile::tempdir().unwrap();
+    let url = match std::env::var(env) {
+        Ok(url) => url,
+        Err(_) if env == SQLITE => {
+            let file = dir.path().join("svc.db").to_string_lossy().replace('\\', "/");
+            format!("sqlite:///{}?create=1", file.trim_start_matches('/'))
+        }
+        Err(_) => return None,
+    };
+    let (driver, params) = ConnectParams::from_url(&url).unwrap();
     let store = Arc::new(Store::open(dir.path()).unwrap());
     // 测试不写系统钥匙串
     let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
     secrets.init_vault("测试主密码").unwrap();
     let registry = Arc::new(DriverRegistry::new(store.clone()));
+    // 测试相当于桌面版：可以打开本机文件
+    registry.allow_local_files(true);
     let via_jdbc = driver == DriverId::Dameng || params.options.get("client").is_some_and(|c| c == "jdbc");
     for option in LIB_OPTIONS.iter().filter(|_| !via_jdbc) {
         if let Some(lib) = params.options.get(*option) {
@@ -77,6 +89,7 @@ async fn setup(env: &str) -> Option<Live> {
         }
         DriverId::SqlServer => "dbo".to_string(),
         DriverId::Informix => params.user.clone(),
+        DriverId::Sqlite => "main".to_string(),
     };
     let database = params.database.clone();
     let input = ProfileInput {
@@ -142,7 +155,9 @@ impl Live {
     fn dual(&self, expr: &str) -> String {
         match self.driver {
             DriverId::Oracle | DriverId::Dameng => format!("SELECT {expr} FROM DUAL"),
-            DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer => format!("SELECT {expr}"),
+            DriverId::Mysql | DriverId::Postgres | DriverId::SqlServer | DriverId::Sqlite => {
+                format!("SELECT {expr}")
+            }
             DriverId::Informix => format!("SELECT {expr} FROM sysmaster:sysdual"),
         }
     }
@@ -270,6 +285,8 @@ async fn workbench_flow(env: &str) {
         DriverId::Oracle | DriverId::Dameng => "SYS",
         DriverId::SqlServer => "master",
         DriverId::Informix => "sysmaster",
+        // 不能切换：切到 main 自身
+        DriverId::Sqlite => "main",
     };
     // GoldenDB 的代理不能 USE information_schema
     let other = if env.contains("GOLDENDB") { "_gdb_query_rewrite" } else { other };
@@ -847,6 +864,12 @@ async fn export_flow(env: &str) {
     let dir = tempfile::tempdir().unwrap();
     let (big, rows_sql, rows) = match live.driver {
         DriverId::Informix => unreachable!("GBase 8s 没跑这个流程"),
+        // hex(zeroblob(n)) 是 2n 个 0，两个一组换成“数”
+        DriverId::Sqlite => (
+            "SELECT 1 AS id, '中文' AS name, replace(hex(zeroblob(100000)), '00', '数') AS txt, 100000 AS len",
+            "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 2500) SELECT n FROM t",
+            2500,
+        ),
         // GoldenDB 把大的文本表达式标成 MEDIUMBLOB，转换后才是文本
         DriverId::Mysql if env.contains("GOLDENDB") => (
             "SELECT 1 AS id, '中文' AS name, CONVERT(REPEAT('数', 100000) USING utf8mb4) AS txt, CHAR_LENGTH(REPEAT('数', 100000)) AS len",
@@ -1030,6 +1053,9 @@ async fn editing_flow(env: &str) {
         DriverId::SqlServer => {
             "CREATE TABLE m2_t (id INT IDENTITY(1, 1) PRIMARY KEY, code NVARCHAR(10) NOT NULL UNIQUE, \
              name NVARCHAR(20), qty INT DEFAULT 5, price DECIMAL(10, 2))"
+        }
+        DriverId::Sqlite => {
+            "CREATE TABLE m2_t (id INTEGER PRIMARY KEY, code VARCHAR(10) NOT NULL UNIQUE, name VARCHAR(20), qty INT DEFAULT 5, price DECIMAL(10, 2))"
         }
     };
     live.run(id, create).await;
@@ -1483,6 +1509,19 @@ async fn sql_file_flow(env: &str) {
              CREATE OR REPLACE PROCEDURE m2b_p IS\nBEGIN\n  INSERT INTO m2b_f VALUES (1);\n  INSERT INTO m2b_f VALUES (2);\nEND;\n/\n\
              BEGIN m2b_p; END;\n/\nINSERT INTO m2b_f VALUES (3);\nDROP PROCEDURE m2b_p;\n"
         }
+        // SQLite 没有过程：插入 1 时由触发器补 2，触发器体里的 ; 不能拆开
+        DriverId::Sqlite => {
+            "DROP TABLE IF EXISTS m2b_f;
+CREATE TABLE m2b_f (a INT);
+             CREATE TRIGGER m2b_t AFTER INSERT ON m2b_f WHEN NEW.a = 1
+BEGIN
+  INSERT INTO m2b_f VALUES (2);
+END;
+             INSERT INTO m2b_f VALUES (1);
+INSERT INTO m2b_f VALUES (3);
+DROP TRIGGER m2b_t;
+"
+        }
         // SQL Server：按 GO 分批，CREATE PROCEDURE 单独一批
         DriverId::SqlServer => {
             "DROP TABLE IF EXISTS m2b_f\nDROP PROCEDURE IF EXISTS m2b_p\nCREATE TABLE m2b_f (a INT)\nGO\n\
@@ -1630,6 +1669,7 @@ async fn design_flow(env: &str) {
         DriverId::Oracle => ["NUMBER(19)", "VARCHAR2(20)", "NUMBER(10,2)", "VARCHAR2(40)"],
         DriverId::Dameng => ["BIGINT", "VARCHAR(20)", "DECIMAL(10,2)", "VARCHAR(40)"],
         DriverId::SqlServer => ["BIGINT", "NVARCHAR(20)", "DECIMAL(10,2)", "NVARCHAR(40)"],
+        DriverId::Sqlite => unreachable!("SQLite 的表设计器在 M10b"),
     };
     let col = |name: &str, native: &str| Column {
         name: n(name),
@@ -1775,7 +1815,7 @@ async fn design_flow(env: &str) {
     assert!(left.is_empty(), "{env}：读回后仍有差异 {left:?}");
 
     let trigger: &[&str] = match live.driver {
-        DriverId::Informix => &[],
+        DriverId::Informix | DriverId::Sqlite => &[],
         // TiDB 没有触发器
         DriverId::Mysql if live.variant == Variant::TiDb => &[],
         DriverId::Mysql => {
@@ -1828,7 +1868,7 @@ async fn design_flow(env: &str) {
         DriverId::Mysql => "INT",
         DriverId::Postgres => "integer",
         DriverId::Oracle => "NUMBER(10)",
-        DriverId::Dameng | DriverId::SqlServer | DriverId::Informix => "INT",
+        DriverId::Dameng | DriverId::SqlServer | DriverId::Informix | DriverId::Sqlite => "INT",
     };
     d.columns[4].data_type.native = number.into();
     let req = request(Some("m3_t"), d.clone(), Renames::default(), true, Some(t.fingerprint.clone()));
@@ -2220,7 +2260,9 @@ async fn model_flow(env: &str) {
     let other: Option<&'static str> = match live.driver {
         DriverId::Postgres => Some("m4_b"),
         DriverId::Mysql => Some("dblens_test_m4b"),
-        DriverId::Oracle | DriverId::Dameng | DriverId::SqlServer | DriverId::Informix => None,
+        DriverId::Oracle | DriverId::Dameng | DriverId::SqlServer | DriverId::Informix | DriverId::Sqlite => {
+            None
+        }
     };
     let created = match other {
         Some(o) => {
@@ -2605,4 +2647,80 @@ async fn goldendb_my_design() {
 #[tokio::test]
 async fn goldendb_my_model() {
     model_flow("DBLENS_TEST_GOLDENDB_MY_URL").await;
+}
+
+/// SQLite（M10a）：不需要外部服务，每次都在临时文件上跑。表设计器、导入、比对、模型、迁移在 M10b。
+mod sqlite {
+    use super::*;
+
+    const SLOW: &str = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT max(x) FROM c";
+
+    #[tokio::test]
+    async fn flow() {
+        full_flow(SQLITE).await;
+    }
+    #[tokio::test]
+    async fn workbench() {
+        workbench_flow(SQLITE).await;
+    }
+    #[tokio::test]
+    async fn cancel() {
+        cancel_flow(SQLITE, SLOW).await;
+    }
+    #[tokio::test]
+    async fn ops() {
+        ops_flow(SQLITE, &[]).await;
+    }
+    #[tokio::test]
+    async fn export() {
+        export_flow(SQLITE).await;
+    }
+    #[tokio::test]
+    async fn editing() {
+        editing_flow(SQLITE).await;
+    }
+    #[tokio::test]
+    async fn sql_file() {
+        sql_file_flow(SQLITE).await;
+    }
+
+    #[tokio::test]
+    async fn later_features_are_rejected_and_ddl_is_the_original_text() {
+        let live = setup(SQLITE).await.unwrap();
+        let s = &live.service;
+        let id = s.open_session(&live.profile_id).await.unwrap().id;
+        live.run(id, "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL CHECK (name <> ''))").await;
+        live.run(id, "CREATE INDEX t_name ON t (name)").await;
+        let err = s.design_caps(&live.profile_id).await.unwrap_err();
+        assert!(matches!(err, Error::Invalid { .. }), "{err:?}");
+        let profile = s.profile(&live.profile_id).unwrap();
+        let ddl = s.metadata.ddl(&profile, "main", DdlKind::Table, "t").await.unwrap();
+        assert!(ddl.contains("CHECK (name <> '')") && ddl.contains("CREATE INDEX t_name"), "{ddl}");
+        s.sessions.close(id, false).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rejected_without_local_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(dir.path()).unwrap());
+        let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
+        secrets.init_vault("测试主密码").unwrap();
+        let registry = Arc::new(DriverRegistry::new(store.clone()));
+        let service = Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy));
+        let input = ProfileInput {
+            name: "sqlite".into(),
+            driver: DriverId::Sqlite,
+            host: String::new(),
+            port: 0,
+            user: String::new(),
+            database: Some(dir.path().join("x.db").to_string_lossy().into_owned()),
+            options: [("create".to_string(), "1".to_string())].into(),
+            environment: Environment::None,
+            color: None,
+            connect_timeout_secs: 10,
+            product: None,
+        };
+        let err = service.test_connection(input, "").await.unwrap_err();
+        assert!(matches!(err, Error::DriverUnavailable { .. }), "{err:?}");
+    }
 }

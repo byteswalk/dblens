@@ -27,6 +27,10 @@
     "informix": {
       "label": "GBase 8s",
       "note": "Connects through the JDBC driver and needs gbasedbtjdbc.jar; browse by database after connecting"
+    },
+    "sqlite": {
+      "label": "SQLite",
+      "note": "A database file on this computer, opened with the bundled SQLite."
     }
   },
   "product": {
@@ -82,6 +86,10 @@
     "gbase8s": {
       "label": "GBase 8s",
       "note": "Default port 9088; the server name is the instance GBASEDBTSERVER"
+    },
+    "sqlite": {
+      "label": "SQLite",
+      "note": "A database file on this computer; only the desktop app can open it."
     }
   },
   "databaseLabel": {
@@ -90,7 +98,8 @@
     "oracle": "Service Name",
     "dameng": "Schema",
     "sqlserver": "Default database",
-    "informix": "Database"
+    "informix": "Database",
+    "sqlite": "Database file"
   },
   "validate": {
     "nameRequired": "Enter a connection name",
@@ -100,7 +109,8 @@
     "serviceOrSidRequired": "Enter a service name or SID",
     "timeoutRange": "Timeout must be between 1 and 600 seconds",
     "extraBadLine": "Unrecognized line: {{line}} (expected key=value)",
-    "serverNameRequired": "Enter the server name"
+    "serverNameRequired": "Enter the server name",
+    "fileRequired": "Choose the database file"
   },
   "env": {
     "none": "None",
@@ -199,5 +209,14 @@
     "dir": "JDBC driver folder",
     "dirPlaceholder": "Leave empty to use the bundled driver",
     "goldendbDirPlaceholder": "Folder holding the gdb-mysql-connector-java driver jar"
+  },
+  "sqlite": {
+    "file": "Database file",
+    "filePlaceholder": "Full path of the file, e.g. D:\\data\\app.db",
+    "choose": "Choose…",
+    "allFiles": "All files",
+    "options": "Open",
+    "readOnly": "Read only",
+    "create": "Create if missing"
   }
 }

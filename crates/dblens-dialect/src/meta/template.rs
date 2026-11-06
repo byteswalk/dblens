@@ -27,8 +27,9 @@ const OCEANBASE_ORACLE: &str = include_str!("../../sql/oceanbase_oracle.sql");
 const GOLDENDB: &str = include_str!("../../sql/goldendb.sql");
 const SQLSERVER: &str = include_str!("../../sql/sqlserver.sql");
 const INFORMIX: &str = include_str!("../../sql/informix.sql");
+const SQLITE: &str = include_str!("../../sql/sqlite.sql");
 
-pub(crate) const ALL_VARIANTS: [Variant; 16] = [
+pub(crate) const ALL_VARIANTS: [Variant; 17] = [
     Variant::MySql,
     Variant::MariaDb,
     Variant::TiDb,
@@ -45,6 +46,7 @@ pub(crate) const ALL_VARIANTS: [Variant; 16] = [
     Variant::Dameng,
     Variant::SqlServer,
     Variant::Gbase8s,
+    Variant::Sqlite,
 ];
 
 /// 把模板文件按 `-- [key]` 行拆成 key → 模板正文。
@@ -77,6 +79,7 @@ fn base_file(family: Family) -> &'static str {
         Family::Dameng => DAMENG,
         Family::SqlServer => SQLSERVER,
         Family::Informix => INFORMIX,
+        Family::Sqlite => SQLITE,
     }
 }
 

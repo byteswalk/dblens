@@ -27,6 +27,10 @@
     "informix": {
       "label": "GBase 8s",
       "note": "通过 JDBC 驱动连接，需要 gbasedbtjdbc.jar；连接后按库浏览"
+    },
+    "sqlite": {
+      "label": "SQLite",
+      "note": "本机的数据库文件，用程序自带的 SQLite 打开。"
     }
   },
   "product": {
@@ -82,6 +86,10 @@
     "gbase8s": {
       "label": "GBase 8s",
       "note": "默认端口 9088；服务器名是实例的 GBASEDBTSERVER"
+    },
+    "sqlite": {
+      "label": "SQLite",
+      "note": "本机的数据库文件，只有桌面版能打开。"
     }
   },
   "databaseLabel": {
@@ -90,7 +98,8 @@
     "oracle": "服务名",
     "dameng": "模式",
     "sqlserver": "默认库",
-    "informix": "数据库"
+    "informix": "数据库",
+    "sqlite": "数据库文件"
   },
   "validate": {
     "nameRequired": "填写连接名称",
@@ -100,7 +109,8 @@
     "serviceOrSidRequired": "填写服务名或 SID",
     "timeoutRange": "超时在 1–600 秒之间",
     "extraBadLine": "无法识别的一行：{{line}}（格式为 键=值）",
-    "serverNameRequired": "请填写服务器名"
+    "serverNameRequired": "请填写服务器名",
+    "fileRequired": "请选择数据库文件"
   },
   "env": {
     "none": "无",
@@ -199,5 +209,14 @@
     "dir": "JDBC 驱动目录",
     "dirPlaceholder": "留空时用内置的驱动",
     "goldendbDirPlaceholder": "放 gdb-mysql-connector-java 驱动 jar 的目录"
+  },
+  "sqlite": {
+    "file": "数据库文件",
+    "filePlaceholder": "文件的完整路径，如 D:\\data\\app.db",
+    "choose": "选择…",
+    "allFiles": "所有文件",
+    "options": "打开方式",
+    "readOnly": "只读打开",
+    "create": "文件不存在时新建"
   }
 }

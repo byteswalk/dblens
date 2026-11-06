@@ -242,7 +242,7 @@ impl Dialect {
         let family = self.family();
         let gauss = matches!(self.variant(), Variant::OpenGauss | Variant::GaussDb);
         PrivCaps {
-            write: true,
+            write: family != Family::Sqlite,
             os_accounts: family == Family::Informix,
             lock: family != Family::Postgres || gauss,
             roles: !(self.variant() == Variant::MySql && self.version().is_some_and(|v| v < 80000)),

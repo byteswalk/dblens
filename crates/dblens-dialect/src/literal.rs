@@ -30,6 +30,10 @@ pub fn literal(family: Family, v: &Value) -> Result<String> {
         Value::DateTime(dt) if family == Family::SqlServer => {
             format!("CAST('{}' AS DATETIME2)", dt.format("%Y-%m-%dT%H:%M:%S%.f"))
         }
+        // SQLite 没有日期类型：写成日期函数能识别的文本
+        Value::Date(d) if family == Family::Sqlite => format!("'{}'", d.format("%Y-%m-%d")),
+        Value::Time(t) if family == Family::Sqlite => format!("'{}'", t.format("%H:%M:%S%.f")),
+        Value::DateTime(dt) if family == Family::Sqlite => format!("'{}'", dt.format("%Y-%m-%d %H:%M:%S%.f")),
         // 文本日期的解释受 DBDATE 影响，用 MDY 才不依赖环境
         Value::Date(d) if family == Family::Informix => {
             format!("MDY({}, {}, {})", d.format("%-m"), d.format("%-d"), d.format("%Y"))
@@ -60,6 +64,7 @@ pub fn literal(family: Family, v: &Value) -> Result<String> {
             Family::SqlServer => {
                 format!("CAST('{}' AS DATETIMEOFFSET)", dt.format("%Y-%m-%dT%H:%M:%S%.f%:z"))
             }
+            Family::Sqlite => format!("'{}'", dt.format("%Y-%m-%d %H:%M:%S%.f%:z")),
             // 没有带时区的类型，和 MySQL 一样写本地时间
             Family::Informix => {
                 format!("DATETIME({}) YEAR TO FRACTION(5)", dt.naive_local().format("%Y-%m-%d %H:%M:%S%.5f"))
@@ -78,7 +83,7 @@ fn float_literal(family: Family, f: f64) -> Result<String> {
         return match family {
             Family::Postgres => Ok("'NaN'::float8".to_string()),
             Family::Oracle => Ok("BINARY_DOUBLE_NAN".to_string()),
-            Family::MySql | Family::Dameng | Family::SqlServer | Family::Informix => {
+            Family::MySql | Family::Dameng | Family::SqlServer | Family::Informix | Family::Sqlite => {
                 Err(Error::invalid(msg!("literal.nan")))
             }
         };
@@ -89,7 +94,7 @@ fn float_literal(family: Family, f: f64) -> Result<String> {
             (Family::Postgres, false) => Ok("'-Infinity'::float8".to_string()),
             (Family::Oracle, true) => Ok("BINARY_DOUBLE_INFINITY".to_string()),
             (Family::Oracle, false) => Ok("-BINARY_DOUBLE_INFINITY".to_string()),
-            (Family::MySql | Family::Dameng | Family::SqlServer | Family::Informix, _) => {
+            (Family::MySql | Family::Dameng | Family::SqlServer | Family::Informix | Family::Sqlite, _) => {
                 Err(Error::invalid(msg!("literal.infinity")))
             }
         };
@@ -145,7 +150,7 @@ fn string_literal(family: Family, s: &str) -> Result<String> {
         Family::MySql if s.contains('\\') || s.contains('\0') => {
             format!("_utf8mb4 X'{}'", hex_upper(s.as_bytes()))
         }
-        Family::MySql | Family::Dameng | Family::Informix => quoted(s),
+        Family::MySql | Family::Dameng | Family::Informix | Family::Sqlite => quoted(s),
         Family::Postgres if s.contains('\\') => {
             format!("E'{}'", s.replace('\\', "\\\\").replace('\'', "''"))
         }
@@ -198,7 +203,7 @@ fn hex_upper(b: &[u8]) -> String {
 fn bytes_literal(family: Family, b: &[u8]) -> Result<String> {
     let hex = hex_upper(b);
     Ok(match family {
-        Family::MySql => format!("X'{hex}'"),
+        Family::MySql | Family::Sqlite => format!("X'{hex}'"),
         Family::Postgres => format!("decode('{hex}','hex')"),
         Family::Oracle => {
             if b.len() > ORACLE_RAW_MAX {
@@ -227,7 +232,7 @@ pub fn paginate(family: Family, sql: &str, offset: u64, limit: u64) -> String {
         Family::Oracle | Family::SqlServer => {
             format!("{inner}\nOFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY")
         }
-        Family::MySql | Family::Postgres | Family::Dameng => {
+        Family::MySql | Family::Postgres | Family::Dameng | Family::Sqlite => {
             format!("{inner}\nLIMIT {limit} OFFSET {offset}")
         }
         // SKIP、FIRST 紧跟在 SELECT 之后；不以 SELECT 开头的查询（WITH）不支持

@@ -5,7 +5,7 @@ use dblens_dialect::meta::{MetaArgs, MetaKey};
 use dblens_dialect::{Dialect, Family, Variant};
 
 /// 有自己的模板覆盖文件的变体（PolarDB、GaussDB、HighGo 沿用家族模板）。
-const VARIANTS: [Variant; 12] = [
+const VARIANTS: [Variant; 13] = [
     Variant::MySql,
     Variant::MariaDb,
     Variant::TiDb,
@@ -18,6 +18,7 @@ const VARIANTS: [Variant; 12] = [
     Variant::Dameng,
     Variant::SqlServer,
     Variant::Gbase8s,
+    Variant::Sqlite,
 ];
 
 #[test]
@@ -48,6 +49,18 @@ fn every_family_covers_the_common_keys() {
         let d = Dialect::new(v);
         for key in MetaKey::ALL {
             let optional = match key {
+                // SQLite 没有过程、权限、保留字表；设计器和规范检查在 M10b
+                MetaKey::Routines
+                | MetaKey::RoutineSource
+                | MetaKey::DependentViews
+                | MetaKey::Grants
+                | MetaKey::ReferencingKeys
+                | MetaKey::ReservedWords
+                | MetaKey::LintTables
+                    if v == Variant::Sqlite =>
+                {
+                    true
+                }
                 // 只有 SQL Server、GBase 8s 有数据库这一层
                 MetaKey::Catalogs => !matches!(v.family(), Family::SqlServer | Family::Informix),
                 MetaKey::MaterializedViews

@@ -166,6 +166,9 @@ async fn flow(env: &str, tls: bool) {
             "SELECT TOP (900) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n \
              FROM sys.all_columns a CROSS JOIN sys.all_columns b ORDER BY n"
         }
+        DriverId::Sqlite => {
+            "WITH RECURSIVE t (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 900) SELECT n FROM t"
+        }
         DriverId::Informix => {
             "SELECT FIRST 900 ROW_NUMBER() OVER (ORDER BY a.tabid, b.tabid) AS n              FROM systables a, systables b ORDER BY n"
         }
@@ -314,4 +317,36 @@ async fn kingbase() {
 #[tokio::test]
 async fn kingbase_pg() {
     flow("DBLENS_TEST_KINGBASE_PG_URL", false).await;
+}
+
+/// SQLite 只有能打开本机文件时（桌面版、只监听本机的服务器版）才能用：数据库就是服务端机器上的文件。
+#[tokio::test]
+async fn sqlite_needs_local_files() {
+    for local_files in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(dir.path()).unwrap());
+        let secrets = Arc::new(Secrets::with_backend(store.clone(), SecretBackend::Vault));
+        secrets.init_vault("主密码").unwrap();
+        let registry = Arc::new(DriverRegistry::new(store.clone()));
+        let service = Arc::new(Service::with_parts(store, secrets, registry, Arc::new(DefaultPolicy)));
+        let app = router(
+            service,
+            ApiConfig { token: TOKEN.into(), allowed_origins: vec![], local_files, max_result_rows: None },
+        );
+        let (_, drivers) = call(&app, "GET", "/api/drivers", None).await;
+        let sqlite = drivers.as_array().unwrap().iter().find(|d| d["id"] == "sqlite").unwrap().clone();
+        assert_eq!(sqlite["available"], json!(local_files), "{sqlite}");
+        let file = dir.path().join("api.db").to_string_lossy().into_owned();
+        let profile = json!({
+            "name": "sqlite", "driver": "sqlite", "host": "", "port": 0, "user": "",
+            "database": file, "options": {"create": "1"},
+        });
+        let (st, summary) =
+            call(&app, "POST", "/api/profiles/test", Some(json!({"profile": profile, "password": ""}))).await;
+        if local_files {
+            assert_eq!((st, summary["variant"].clone()), (StatusCode::OK, json!("sqlite")), "{summary}");
+        } else {
+            assert!(st.is_client_error() || st.is_server_error(), "{st} {summary}");
+        }
+    }
 }

@@ -41,6 +41,9 @@ export interface ConnectionForm {
   /** 只用于 GBase 8s：服务器名（必填）、DB_LOCALE。 */
   serverName: string
   dbLocale: string
+  /** 只用于 SQLite：只读打开；文件不存在时新建。数据库文件的路径放在 database。 */
+  readOnly: boolean
+  createFile: boolean
   timeoutSecs: number
   /** 其他驱动参数，一行一个 `键=值`。 */
   extra: string
@@ -57,7 +60,7 @@ export function usesJdbc(f: { driver: DriverId; client: ClientKind; product?: Pr
   )
 }
 
-export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng', 'sqlserver', 'informix']
+export const DRIVER_IDS: DriverId[] = ['mysql', 'postgres', 'oracle', 'dameng', 'sqlserver', 'informix', 'sqlite']
 
 /** 驱动的显示名称（如「MySQL 系」）。 */
 export function driverLabel(driver: DriverId): string {
@@ -69,7 +72,7 @@ export function driverNote(driver: DriverId): string {
   return t(`connections.driver.${driver}.note`)
 }
 
-export const DEFAULT_PORTS: Record<DriverId, number> = { mysql: 3306, postgres: 5432, oracle: 1521, dameng: 5236, sqlserver: 1433, informix: 9088 }
+export const DEFAULT_PORTS: Record<DriverId, number> = { mysql: 3306, postgres: 5432, oracle: 1521, dameng: 5236, sqlserver: 1433, informix: 9088, sqlite: 0 }
 
 /** 「数据库」一栏在各驱动下的含义。 */
 export function databaseLabel(driver: DriverId): string {
@@ -81,9 +84,14 @@ export function supportsTls(driver: DriverId): boolean {
   return driver === 'mysql' || driver === 'postgres' || driver === 'sqlserver'
 }
 
-/** 当前 Windows 用户认证不需要填用户名和密码。 */
+/** 当前 Windows 用户认证、SQLite 不需要填用户名和密码。 */
 export function needsCredentials(f: Pick<ConnectionForm, 'driver' | 'sqlAuth'>): boolean {
-  return !(f.driver === 'sqlserver' && f.sqlAuth === 'integrated')
+  return !(f.driver === 'sqlserver' && f.sqlAuth === 'integrated') && f.driver !== 'sqlite'
+}
+
+/** 库就是本机文件（SQLite）：没有主机、端口、账号。 */
+export function isFileDb(driver: DriverId): boolean {
+  return driver === 'sqlite'
 }
 
 export function emptyForm(id: ProductId = 'mysql'): ConnectionForm {
@@ -109,6 +117,8 @@ export function emptyForm(id: ProductId = 'mysql'): ConnectionForm {
     jdbcDir: '',
     serverName: '',
     dbLocale: '',
+    readOnly: false,
+    createFile: false,
     trustCert: false,
     timeoutSecs: 10,
     extra: '',
@@ -128,7 +138,7 @@ export function switchProduct(f: ConnectionForm, id: ProductId): ConnectionForm 
   return { ...switchDriver(f, next.driver), product: id, port }
 }
 
-const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'client', 'jdbc_kind', 'jdbc_dir', 'server_name', 'db_locale', 'trust_server_certificate']
+const KNOWN_OPTIONS = ['tls', 'tls_ca', 'sid', 'auth', 'instance', 'client', 'jdbc_kind', 'jdbc_dir', 'server_name', 'db_locale', 'trust_server_certificate', 'read_only', 'create']
 
 export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
   const opts = p.options ?? {}
@@ -158,6 +168,8 @@ export function fromProfile(p: Profile, hasPassword: boolean): ConnectionForm {
     jdbcDir: opts.jdbc_dir ?? '',
     serverName: opts.server_name ?? '',
     dbLocale: opts.db_locale ?? '',
+    readOnly: opts.read_only === '1',
+    createFile: opts.create === '1',
     trustCert: opts.trust_server_certificate === 'true',
     timeoutSecs: p.connect_timeout_secs ?? 10,
     extra,
@@ -195,6 +207,23 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
     if (f.serverName.trim()) options.server_name = f.serverName.trim()
     if (f.dbLocale.trim()) options.db_locale = f.dbLocale.trim()
   }
+  if (isFileDb(f.driver)) {
+    if (f.readOnly) options.read_only = '1'
+    if (f.createFile && !f.readOnly) options.create = '1'
+    return {
+      name: f.name.trim(),
+      driver: f.driver,
+      host: '',
+      port: 0,
+      user: '',
+      database: f.database.trim() || null,
+      options,
+      environment: f.environment,
+      color: f.color.trim() || null,
+      connect_timeout_secs: f.timeoutSecs,
+      product: f.product,
+    }
+  }
   return {
     name: f.name.trim(),
     driver: f.driver,
@@ -214,8 +243,12 @@ export function toProfileInput(f: ConnectionForm): ProfileInput {
 export function validate(f: ConnectionForm): Partial<Record<keyof ConnectionForm, string>> {
   const e: Partial<Record<keyof ConnectionForm, string>> = {}
   if (!f.name.trim()) e.name = t('connections.validate.nameRequired')
-  if (!f.host.trim()) e.host = t('connections.validate.hostRequired')
-  if (!Number.isInteger(f.port) || f.port < 1 || f.port > 65535) e.port = t('connections.validate.portRange')
+  if (isFileDb(f.driver)) {
+    if (!f.database.trim()) e.database = t('connections.validate.fileRequired')
+  } else {
+    if (!f.host.trim()) e.host = t('connections.validate.hostRequired')
+    if (!Number.isInteger(f.port) || f.port < 1 || f.port > 65535) e.port = t('connections.validate.portRange')
+  }
   if (needsCredentials(f) && !f.user.trim()) e.user = t('connections.validate.userRequired')
   if (f.driver === 'informix' && !f.serverName.trim()) e.serverName = t('connections.validate.serverNameRequired')
   if (f.driver === 'oracle' && f.product !== 'oceanbase_oracle' && !f.database.trim() && !f.oracleSid.trim()) {

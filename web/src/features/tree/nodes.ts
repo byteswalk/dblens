@@ -31,7 +31,9 @@ export function categoryLabel(kind: CategoryKind): string {
 /** 各类数据库在对象树中显示的分类，与 dblens-dialect 中各方言的元数据模板对应。 */
 export function categoriesFor(driver: DriverId): Category[] {
   const kinds: CategoryKind[] =
-    driver === 'mysql'
+    driver === 'sqlite'
+      ? ['tables', 'views']
+      : driver === 'mysql'
       ? ['tables', 'views', 'routines']
       : driver === 'postgres'
         ? ['tables', 'views', 'materialized_views', 'routines', 'sequences']

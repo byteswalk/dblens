@@ -138,6 +138,7 @@ pub(crate) fn driver_name(d: DriverId) -> &'static str {
         DriverId::Dameng => "dameng",
         DriverId::SqlServer => "sqlserver",
         DriverId::Informix => "informix",
+        DriverId::Sqlite => "sqlite",
     }
 }
 
@@ -149,6 +150,7 @@ fn parse_driver(s: &str) -> rusqlite::Result<DriverId> {
         "dameng" => Ok(DriverId::Dameng),
         "sqlserver" => Ok(DriverId::SqlServer),
         "informix" => Ok(DriverId::Informix),
+        "sqlite" => Ok(DriverId::Sqlite),
         other => {
             Err(rusqlite::Error::InvalidColumnType(2, format!("driver={other}"), rusqlite::types::Type::Text))
         }
@@ -159,11 +161,18 @@ fn validate(p: &ProfileInput) -> Result<()> {
     if p.name.trim().is_empty() {
         return Err(Error::invalid(msg!("profile.name_required")));
     }
-    if p.host.trim().is_empty() {
-        return Err(Error::invalid(msg!("profile.host_required")));
-    }
-    if p.port == 0 {
-        return Err(Error::invalid(msg!("profile.port_zero")));
+    // SQLite 没有主机、端口，库就是文件
+    if p.driver == DriverId::Sqlite {
+        if p.database.as_deref().is_none_or(|d| d.trim().is_empty()) {
+            return Err(Error::invalid(msg!("sqlite.file_required")));
+        }
+    } else {
+        if p.host.trim().is_empty() {
+            return Err(Error::invalid(msg!("profile.host_required")));
+        }
+        if p.port == 0 {
+            return Err(Error::invalid(msg!("profile.port_zero")));
+        }
     }
     if p.connect_timeout_secs == 0 || p.connect_timeout_secs > 3600 {
         return Err(Error::invalid(msg!("profile.timeout_range")));

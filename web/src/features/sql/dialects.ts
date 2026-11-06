@@ -30,6 +30,8 @@ export function sqlDialect(driver: DriverId, variant?: string | null, compat?: C
     case 'sqlserver':
       return { dialect: 'tsql', strict, grammar: 'T-SQL' }
     case 'informix':
+    // SQLite 的写法（双引号名字、LIMIT、||）与 PG 接近
+    case 'sqlite':
       return { dialect: 'postgres', strict: false, grammar: 'PostgreSQL' }
   }
 }

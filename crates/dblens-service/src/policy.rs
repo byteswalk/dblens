@@ -12,7 +12,7 @@ use dblens_core::{Error, Msg, Result, msg};
 use dblens_dialect::{Dialect, Family};
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ObjectName, Statement, visit_relations};
-use sqlparser::dialect::{GenericDialect, MsSqlDialect, MySqlDialect, PostgreSqlDialect};
+use sqlparser::dialect::{GenericDialect, MsSqlDialect, MySqlDialect, PostgreSqlDialect, SQLiteDialect};
 use sqlparser::parser::Parser;
 
 use crate::operator::Operator;
@@ -257,6 +257,7 @@ pub fn referenced_tables(dialect: &Dialect, sql: &str) -> Option<Vec<ObjectRef>>
         Family::MySql => Parser::parse_sql(&MySqlDialect {}, sql).ok()?,
         Family::Postgres => Parser::parse_sql(&PostgreSqlDialect {}, sql).ok()?,
         Family::SqlServer => Parser::parse_sql(&MsSqlDialect {}, sql).ok()?,
+        Family::Sqlite => Parser::parse_sql(&SQLiteDialect {}, sql).ok()?,
         Family::Oracle | Family::Dameng | Family::Informix => return None,
     };
     let mut out = Vec::new();
@@ -283,6 +284,7 @@ pub fn classify(dialect: &Dialect, sql: &str) -> StatementInfo {
     let parsed = match dialect.family() {
         Family::MySql => Parser::parse_sql(&MySqlDialect {}, sql).ok(),
         Family::Postgres => Parser::parse_sql(&PostgreSqlDialect {}, sql).ok(),
+        Family::Sqlite => Parser::parse_sql(&SQLiteDialect {}, sql).ok(),
         Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix => None,
     };
     let (has_where, objects) = match parsed.as_deref() {

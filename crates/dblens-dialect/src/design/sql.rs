@@ -77,7 +77,7 @@ impl Dialect {
                         out.push(msg!("design.unsupported.identity", column = to.name));
                     }
                 }
-                Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix => {
+                Family::Oracle | Family::Dameng | Family::SqlServer | Family::Informix | Family::Sqlite => {
                     if generated {
                         out.push(msg!("design.unsupported.generated", column = to.name));
                     }
@@ -98,6 +98,7 @@ impl Dialect {
             Family::Oracle | Family::Dameng => self.oracle_design(schema, table, &diff.changes),
             Family::SqlServer => self.sqlserver_design(schema, table, &diff.changes),
             Family::Informix => self.informix_design(schema, table, &diff.changes),
+            Family::Sqlite => Err(dblens_core::Error::invalid(msg!("sqlite.later"))),
         }
     }
 

@@ -109,6 +109,21 @@ const POSTGRES_TYPES: &[TypeEntry] = &[
 
 /// 人大金仓、openGauss 的 Oracle 兼容模式另外可选的 Oracle 风格类型（DATE 带时间）。
 /// 人大金仓 SQL Server 模式：timestamp 是行版本，换成 datetime2 等 SQL Server 的类型。
+/// SQLite：名字只决定亲和性，列出常用写法。
+const SQLITE_TYPES: &[TypeEntry] = &[
+    t("INTEGER", N),
+    t("REAL", N),
+    t("TEXT", N),
+    t("BLOB", N),
+    t("NUMERIC", P),
+    t("BOOLEAN", N),
+    t("VARCHAR", L),
+    t("CHAR", L),
+    t("DATE", N),
+    t("DATETIME", N),
+    t("JSON", N),
+];
+
 const PG_SQLSERVER_MODE_TYPES: &[TypeEntry] =
     &[t("datetime2", L), t("datetime", N), t("nvarchar", L), t("nchar", L), t("uniqueidentifier", N)];
 
@@ -304,6 +319,18 @@ impl Dialect {
                 on_update: vec!["NO ACTION"],
                 index_methods: vec!["NORMAL"],
                 types: GBASE_TYPES.to_vec(),
+            },
+            // 表设计器在 M10b 实现；多数改动要重建表
+            Family::Sqlite => DesignCaps {
+                reorder: false,
+                auto_increment: true,
+                checks: true,
+                generated: true,
+                descending_index: true,
+                on_delete: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],
+                on_update: vec!["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"],
+                index_methods: vec![],
+                types: SQLITE_TYPES.to_vec(),
             },
         }
     }

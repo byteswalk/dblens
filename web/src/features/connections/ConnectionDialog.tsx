@@ -11,6 +11,7 @@ import { useApi } from '../../app/context'
 import { useUi } from '../../app/ui'
 import DbIcon from '../../shared/DbIcon'
 import type { DriverId, Environment, ServerSummary } from '../../shared/api'
+import { desktop } from '../../shared/shell'
 import {
   type ClientKind,
   type ConnectionForm,
@@ -19,6 +20,7 @@ import {
   driverNote,
   emptyForm,
   fromProfile,
+  isFileDb,
   needsCredentials,
   serverText,
   supportsTls,
@@ -97,6 +99,9 @@ export default function ConnectionDialog() {
   const [errors, setErrors] = useState<Errors>({})
   const [result, setResult] = useState<{ ok: ServerSummary } | { error: string } | null>(null)
   const [busy, setBusy] = useState<'test' | 'save' | null>(null)
+  // SQLite 只在能打开本机文件时（桌面版）出现在产品列表里
+  const { data: drivers } = useQuery({ queryKey: ['drivers'], queryFn: () => api.drivers(), enabled: connectionDialog !== null })
+  const sqliteReady = drivers?.some((d) => d.id === 'sqlite' && d.available) ?? false
 
   useEffect(() => {
     setErrors({})
@@ -158,7 +163,48 @@ export default function ConnectionDialog() {
 
   const oceanbaseOracle = form.product === 'oceanbase_oracle'
 
-  const general = (
+  const pickFile = async () => {
+    if (!desktop) return
+    const path = await desktop.openDialog([
+      { name: 'SQLite', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] },
+      { name: t('connections.sqlite.allFiles'), extensions: ['*'] },
+    ])
+    if (path) setForm((f) => ({ ...f, database: path, name: f.name || path.split(/[\\/]/).pop() || '' }))
+  }
+
+  const fileGeneral = (
+    <>
+      <Field label={t('connections.general.name')} error={errors.name}>
+        <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="app.db" />
+      </Field>
+      <Field label={t('connections.sqlite.file')} error={errors.database}>
+        <Space.Compact style={{ width: '100%' }}>
+          <Input value={form.database} onChange={(e) => set('database', e.target.value)} placeholder={t('connections.sqlite.filePlaceholder')} />
+          {desktop && <Button onClick={() => void pickFile()}>{t('connections.sqlite.choose')}</Button>}
+        </Space.Compact>
+      </Field>
+      <Field label={t('connections.sqlite.options')}>
+        <Space direction="vertical" size={2}>
+          <Checkbox checked={form.readOnly} onChange={(e) => set('readOnly', e.target.checked)}>
+            {t('connections.sqlite.readOnly')}
+          </Checkbox>
+          <Checkbox checked={form.createFile} disabled={form.readOnly} onChange={(e) => set('createFile', e.target.checked)}>
+            {t('connections.sqlite.create')}
+          </Checkbox>
+        </Space>
+      </Field>
+      <Field label={t('connections.general.environment')}>
+        <Radio.Group
+          optionType="button"
+          value={form.environment}
+          onChange={(e) => set('environment', e.target.value)}
+          options={ENVS.map((value) => ({ value, label: t(`connections.env.${value}`) }))}
+        />
+      </Field>
+    </>
+  )
+
+  const general = isFileDb(form.driver) ? fileGeneral : (
     <>
       {!usesJdbc(form) && <NativeLibNotice driver={form.driver} />}
       <Field label={t('connections.general.name')} error={errors.name}>
@@ -271,9 +317,11 @@ export default function ConnectionDialog() {
 
   const advanced = (
     <>
-      <Field label={t('connections.advanced.timeout')} error={errors.timeoutSecs}>
-        <InputNumber min={1} max={600} value={form.timeoutSecs} onChange={(v) => set('timeoutSecs', v ?? 0)} />
-      </Field>
+      {!isFileDb(form.driver) && (
+        <Field label={t('connections.advanced.timeout')} error={errors.timeoutSecs}>
+          <InputNumber min={1} max={600} value={form.timeoutSecs} onChange={(v) => set('timeoutSecs', v ?? 0)} />
+        </Field>
+      )}
       {form.driver === 'oracle' && form.product !== 'oceanbase_oracle' && (
         <Field label={t('connections.client.label')}>
           <Segmented
@@ -337,7 +385,7 @@ export default function ConnectionDialog() {
           {PRODUCT_GROUPS.map((g) => (
             <div key={g.key}>
               <div className="product-group">{t(`connections.dialog.group.${g.key}`)}</div>
-              {g.products.map(product).map((p) => (
+              {g.products.map(product).filter((p) => p.id !== 'sqlite' || sqliteReady || form.product === 'sqlite').map((p) => (
                 <div
                   key={p.id}
                   className="row"

@@ -1,0 +1,19 @@
+[package]
+name = "dblens-driver-sqlite"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+dblens-core.workspace = true
+dblens-driver.workspace = true
+rusqlite = { workspace = true, features = ["column_decltype"] }
+tokio.workspace = true
+
+[dev-dependencies]
+dblens-driver = { workspace = true, features = ["conformance"] }
+tempfile.workspace = true
+tokio.workspace = true

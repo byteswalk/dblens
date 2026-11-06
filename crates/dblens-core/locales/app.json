@@ -1944,6 +1944,42 @@
     "zh-CN": "成功 %{ok} 条，失败 %{failed} 条，影响 %{affected} 行，用时 %{seconds} 秒",
     "en": "%{ok} succeeded, %{failed} failed, %{affected} rows affected, %{seconds} s"
   },
+  "sqlite.cannot_open": {
+    "zh-CN": "无法打开数据库文件（不存在、没有权限或所在文件夹不存在）：%{error}",
+    "en": "Cannot open the database file (missing, no permission, or its folder does not exist): %{error}"
+  },
+  "sqlite.desktop_only": {
+    "zh-CN": "只有桌面版能打开 SQLite 数据库文件",
+    "en": "SQLite database files can only be opened in the desktop app"
+  },
+  "sqlite.file_is_dir": {
+    "zh-CN": "%{file} 是文件夹，不是数据库文件",
+    "en": "%{file} is a folder, not a database file"
+  },
+  "sqlite.file_missing": {
+    "zh-CN": "数据库文件不存在：%{file}（要新建请勾选“文件不存在时新建”）",
+    "en": "The database file does not exist: %{file} (check \"Create if missing\" to create it)"
+  },
+  "sqlite.file_not_absolute": {
+    "zh-CN": "数据库文件要写绝对路径：%{file}",
+    "en": "The database file must be an absolute path: %{file}"
+  },
+  "sqlite.file_required": {
+    "zh-CN": "请选择 SQLite 数据库文件",
+    "en": "Choose the SQLite database file"
+  },
+  "sqlite.later": {
+    "zh-CN": "SQLite 暂不支持这项功能（表设计器、导入、比对、模型、迁移、规范检查在下一步提供）",
+    "en": "This feature is not available for SQLite yet (table designer, import, compare, models, migration and lint come next)"
+  },
+  "sqlite.not_a_database": {
+    "zh-CN": "不是 SQLite 数据库文件，或文件已加密：%{error}",
+    "en": "Not an SQLite database file, or the file is encrypted: %{error}"
+  },
+  "sqlite.param_count": {
+    "zh-CN": "参数个数不对：给了 %{given} 个，语句需要 %{expected} 个",
+    "en": "Wrong number of parameters: %{given} given, the statement needs %{expected}"
+  },
   "sqlserver.bad_auth": {
     "zh-CN": "不认识的认证方式：%{value}",
     "en": "Unknown authentication method: %{value}"

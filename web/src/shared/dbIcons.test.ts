@@ -20,12 +20,13 @@ const VARIANTS = [
   'dameng',
   'sqlserver',
   'gbase8s',
+  'sqlite',
 ]
 
 describe('数据库图标', () => {
   it('每个变体都有图标：官方 logo 或官方标识，其余是字标', () => {
     expect(Object.keys(VARIANT_ICONS).sort()).toEqual([...VARIANTS].sort())
-    for (const v of ['mysql', 'mariadb', 'tidb', 'postgres']) expect(VARIANT_ICONS[v].kind).toBe('logo')
+    for (const v of ['mysql', 'mariadb', 'tidb', 'postgres', 'sqlite']) expect(VARIANT_ICONS[v].kind).toBe('logo')
     for (const v of ['oceanbase', 'kingbase', 'opengauss', 'oracle', 'dameng', 'sqlserver'])
       expect(VARIANT_ICONS[v].kind).toBe('art')
     expect(dbIcon('postgres', 'gaussdb').kind).toBe('logo')

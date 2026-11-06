@@ -60,6 +60,8 @@ pub struct StreamSplitter {
     oracle_blocks: bool,
     /// Informix：当前语句是这种过程（`PROCEDURE` 或 `FUNCTION`），要等到对应的 `END`。
     routine: Option<&'static str>,
+    /// SQLite：当前语句是 `CREATE TRIGGER`，触发器体 `BEGIN … END` 里的 `;` 不拆分。
+    trigger: bool,
     /// 尚未拆完的文本，从全文的 `base` 处开始：比当前语句的开头多留几个字节，供向前查看（标识符、行首）。
     buf: String,
     base: usize,
@@ -99,6 +101,7 @@ impl StreamSplitter {
             family,
             oracle_blocks: false,
             routine: None,
+            trigger: false,
             buf: String::new(),
             base: 0,
             i: 0,
@@ -159,6 +162,32 @@ impl StreamSplitter {
         ["PROCEDURE", "FUNCTION"].into_iter().find(|k| kind.eq_ignore_ascii_case(k))
     }
 
+    /// SQLite 的触发器体还没结束：`END` 的个数少于 `BEGIN` 与 `CASE` 之和（`CASE … END` 也用 END 收尾）。
+    fn in_sqlite_trigger(&self) -> bool {
+        if !self.trigger {
+            return false;
+        }
+        let (mut open, mut end) = (0usize, 0usize);
+        for w in code_words(&self.buf.as_bytes()[self.stmt_start..self.i]) {
+            if w.eq_ignore_ascii_case(b"BEGIN") || w.eq_ignore_ascii_case(b"CASE") {
+                open += 1;
+            } else if w.eq_ignore_ascii_case(b"END") {
+                end += 1;
+            }
+        }
+        open == 0 || end < open
+    }
+
+    /// 语句是否以 `CREATE [TEMP | TEMPORARY] TRIGGER` 开头（SQLite）。
+    fn sqlite_trigger_at(&self) -> bool {
+        if self.family != Family::Sqlite {
+            return false;
+        }
+        let (words, _) = leading_words(&self.buf.as_bytes()[self.i..], 3);
+        let w = |k: usize| words.get(k).map(String::as_str).unwrap_or("");
+        w(0) == "CREATE" && (w(1) == "TRIGGER" || (matches!(w(1), "TEMP" | "TEMPORARY") && w(2) == "TRIGGER"))
+    }
+
     fn plsql(&self) -> bool {
         matches!(self.family, Family::Oracle | Family::Dameng) || self.oracle_blocks
     }
@@ -204,7 +233,11 @@ impl StreamSplitter {
             }
             let rest = &self.buf.as_bytes()[self.i..];
             // SQL Server 只按 GO 分批
-            if !self.block && self.family != Family::SqlServer && !self.in_informix_routine() {
+            if !self.block
+                && self.family != Family::SqlServer
+                && !self.in_informix_routine()
+                && !self.in_sqlite_trigger()
+            {
                 if rest.starts_with(&self.delimiter) {
                     let end = self.i;
                     self.i += self.delimiter.len();
@@ -219,7 +252,7 @@ impl StreamSplitter {
             let c = self.char_here();
             if !is_blank(c) {
                 // 判断 PL/SQL 块要看开头的几个关键字
-                let needs_words = self.plsql() || self.family == Family::Informix;
+                let needs_words = self.plsql() || matches!(self.family, Family::Informix | Family::Sqlite);
                 if !self.has_code && !eof && needs_words && !words_complete(rest, 6) {
                     return;
                 }
@@ -240,6 +273,7 @@ impl StreamSplitter {
             self.has_code = true;
             self.block = self.plsql() && starts_plsql(&self.buf.as_bytes()[self.i..]);
             self.routine = self.informix_routine_at();
+            self.trigger = self.sqlite_trigger_at();
         }
     }
 
@@ -265,6 +299,7 @@ impl StreamSplitter {
         self.stmt_start = self.i;
         self.has_code = false;
         self.block = false;
+        self.trigger = false;
     }
 
     /// 行首命令：MySQL 的 `DELIMITER xx`，Oracle/达梦单独一行的 `/`，SQL Server 单独一行的 `GO [n]`。
@@ -591,6 +626,38 @@ fn starts_plsql(s: &[u8]) -> bool {
     }
 }
 
+/// 代码中的单词（跳过字符串、带引号的名字和注释）。
+fn code_words(b: &[u8]) -> Vec<&[u8]> {
+    let mut out = Vec::new();
+    let mut j = 0;
+    while j < b.len() {
+        let c = b[j];
+        if c == b'\'' || c == b'"' || c == b'`' || c == b'[' {
+            let close = if c == b'[' { b']' } else { c };
+            j += 1;
+            while j < b.len() && b[j] != close {
+                j += 1;
+            }
+            j += 1;
+        } else if b[j..].starts_with(b"--") {
+            while j < b.len() && b[j] != b'\n' {
+                j += 1;
+            }
+        } else if b[j..].starts_with(b"/*") {
+            j = b[j + 2..].windows(2).position(|w| w == b"*/").map_or(b.len(), |p| j + 2 + p + 2);
+        } else if is_ident_byte(c) {
+            let start = j;
+            while j < b.len() && is_ident_byte(b[j]) {
+                j += 1;
+            }
+            out.push(&b[start..j]);
+        } else {
+            j += 1;
+        }
+    }
+    out
+}
+
 /// 开头的 n 个单词是否已经完整：取词停在文本末尾之前（末尾的单词可能还没读完）。
 fn words_complete(s: &[u8], n: usize) -> bool {
     leading_words(s, n).1 < s.len()
@@ -627,6 +694,22 @@ mod tests {
             assert_eq!(&sql[s.start..s.end], s.text, "偏移量与文本不一致：{s:?}");
         }
         out.into_iter().map(|s| s.text).collect()
+    }
+
+    #[test]
+    fn sqlite_trigger_body_is_one_statement() {
+        let sql = "CREATE TABLE t (a);
+                   CREATE TEMP TRIGGER tr AFTER INSERT ON t BEGIN
+                     UPDATE t SET a = CASE WHEN a > 0 THEN 'end;' ELSE 0 END; -- END;
+                     INSERT INTO log VALUES ('x');
+                   END;
+                   SELECT 1; ;SELECT 2";
+        let out = texts(sql, Family::Sqlite);
+        assert_eq!(out.len(), 4, "{out:?}");
+        assert!(out[1].starts_with("CREATE TEMP TRIGGER") && out[1].ends_with("END"), "{out:?}");
+        assert_eq!(&out[2..], ["SELECT 1", "SELECT 2"]);
+        // 其他库照常在 ; 处拆开
+        assert_eq!(texts("CREATE TRIGGER x BEGIN a; END;", Family::MySql).len(), 2);
     }
 
     #[test]

@@ -136,5 +136,7 @@ export function defaultSchema(driver: DriverId, user: string, database?: string 
       return 'dbo'
     case 'informix':
       return user
+    case 'sqlite':
+      return 'main'
   }
 }

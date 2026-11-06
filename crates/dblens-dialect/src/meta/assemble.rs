@@ -228,10 +228,39 @@ pub fn tables(d: &Dialect, rows: &TableRows) -> Result<Vec<Table>> {
                     definition: r.text("definition"),
                 })
                 .collect();
+            if d.family() == Family::Sqlite {
+                complete_sqlite(&mut table, check_rows, indexes.get(&name).unwrap_or(&none));
+            }
             table.name = name;
             table
         })
         .collect())
+}
+
+/// SQLite：系统目录缺的部分从建对象的原文里读（见 `meta::sqlite`）。`checks` 结果是每张表一行建表语句。
+fn complete_sqlite(table: &mut Table, check_rows: &[MetaRow], index_rows: &[MetaRow]) {
+    let create = check_rows.first().and_then(|r| r.str("expression"));
+    super::sqlite::complete_table(table, create.as_deref());
+    // 表达式索引列：系统目录只给出 cid -2，表达式在建索引语句里
+    for run in runs(index_rows, "index_name") {
+        let Some(index) = table.indexes.iter_mut().find(|i| i.name == run[0].name("index_name")) else {
+            continue;
+        };
+        for (col, r) in index.columns.iter_mut().zip(&run) {
+            if col.name.is_empty()
+                && let (Some(sql), Some(pos)) = (r.str("index_sql"), r.int("position"))
+            {
+                col.name = super::sqlite::index_column(&sql, pos as usize).unwrap_or_default();
+            }
+        }
+    }
+    for t in &mut table.triggers {
+        if let Some(def) = &t.definition {
+            let (timing, events) = super::sqlite::trigger_header(def);
+            t.timing = Some(timing);
+            t.events = events;
+        }
+    }
 }
 
 /// Oracle 的降序索引列以表达式 `"CREATED"` 的形式出现，只是一个带引号的列名时去掉引号。
