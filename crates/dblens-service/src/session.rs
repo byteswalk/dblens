@@ -439,6 +439,24 @@ impl SessionManager {
             .remove(&id);
         result
     }
+
+    /// 关闭某个操作者的全部会话（先取消正在执行的语句，未提交的修改回滚），返回关闭的个数。
+    /// 审计版在账号被禁用、改密码或会话被吊销时调用，免得他的数据库连接一直占着。
+    pub async fn close_owned_by(&self, owner: &str) -> usize {
+        let ids: Vec<SessionId> = match self.sessions.lock() {
+            Ok(s) => s.iter().filter(|(_, h)| h.owner == owner).map(|(id, _)| *id).collect(),
+            Err(_) => return 0,
+        };
+        let op = Operator { id: owner.to_string(), name: owner.to_string() };
+        for &id in &ids {
+            Operator::scope(op.clone(), async {
+                let _ = self.cancel(id).await;
+                let _ = self.close(id, false).await;
+            })
+            .await;
+        }
+        ids.len()
+    }
 }
 
 struct Actor {
@@ -993,6 +1011,23 @@ mod tests {
         let id =
             m.open(&profile, Box::new(FakeConn::new(log.clone())), Dialect::new(Variant::Postgres)).unwrap();
         (id, log)
+    }
+
+    #[tokio::test]
+    async fn close_owned_by_only_closes_that_operators_sessions() {
+        let (m, _) = manager();
+        let as_op = |id: &str| Operator { id: id.into(), name: id.into() };
+        let (a1, log_a) = Operator::scope(as_op("alice"), async { open(&m, Environment::Dev) }).await;
+        let (a2, _) = Operator::scope(as_op("alice"), async { open(&m, Environment::Dev) }).await;
+        let (b, _) = Operator::scope(as_op("bob"), async { open(&m, Environment::Dev) }).await;
+        assert_eq!(m.close_owned_by("alice").await, 2);
+        assert!(log_a.lock().unwrap().iter().any(|l| l == "close"), "{:?}", log_a.lock().unwrap());
+        Operator::scope(as_op("alice"), async {
+            assert!(m.info(a1).is_err() && m.info(a2).is_err());
+        })
+        .await;
+        Operator::scope(as_op("bob"), async { assert!(m.info(b).is_ok()) }).await;
+        assert_eq!(m.close_owned_by("nobody").await, 0);
     }
 
     #[tokio::test]
