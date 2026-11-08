@@ -2,7 +2,7 @@
 
 ## 桌面手动测试（Windows）
 
-测试包：`target/release/bundle/nsis/DBLens_0.1.0_x64-setup.exe`（不含更新签名）。
+测试包：`target/release/bundle/nsis/DBLENS_0.1.0_x64-setup.exe`（不含更新签名）。2026-11-07 从 `6899162` 重打：精简 JRE 用 Temurin 21.0.13（OpenJDK），带 ojdbc11、达梦、OceanBase 驱动，57MB；静默安装、启动（窗口标题“DBLENS 数洞”）、静默卸载（数据目录保留）已验证。
 
 - [ ] 安装、启动、窗口位置记忆，卸载后数据目录保留
 - [ ] 新建连接：按产品选择；SQL Server 的"当前 Windows 用户"认证；命名实例
